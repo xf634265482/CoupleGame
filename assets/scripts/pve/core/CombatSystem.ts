@@ -13,6 +13,17 @@
 import { addAnima, traitCount } from './AnimaSystem';
 import { canAfford, spend } from './ApSystem';
 import { equipTraitAtkBonus, equipTraitDefBonus } from './EquipTraitEffects';
+import {
+  bloodlustStackHeal,
+  executionerBonus,
+  hasCleave,
+  hasFinalCharge,
+  hasVengeanceTrait,
+  lowHpAttackMultiplier,
+  painToleranceReduction,
+  rageStrikeStackBonus,
+  vengeanceBonus,
+} from './StrengthenEffects';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
   BASE_ATTACK,
@@ -92,6 +103,9 @@ export function playerAttackPower(player: RunPlayer): { damage: number; range: n
   if (traits.includes('awakened_power_shot')) rawAttack += 15; // 觉醒·强弓（射手·强击型）
   rawAttack += player.treeBonuses?.attackBonus ?? 0;        // 命运树 B1 武者直觉
   rawAttack += equipTraitAtkBonus(player);                  // 装备词条 equip_atk_up（AC-401，每件 +1，可叠加）
+  rawAttack += rageStrikeStackBonus(traits);                // 怒击连击/专注蓄力/连斩（可叠加×5，+层数×0.5）
+
+  rawAttack *= lowHpAttackMultiplier(traits, player);       // 绝境一击系(HP≤25%→×2) × 进阶系(HP≤30%→×1.5)
 
   return {
     damage: Math.max(10, Math.round(rawAttack)),
@@ -160,6 +174,9 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   if (monster.aiState !== 'CHASE') {
     damage += traitCount(traits, 'assassin_heart') * 20; // ROGUE 刺客之心（可叠加）
   }
+  damage += executionerBonus(traits, monster); // 处刑者/收割者/致命一击：目标 HP≤20% 时 +3
+  const vengeanceActive = vengeanceBonus(traits, floor) > 0;
+  damage += vengeanceBonus(traits, floor); // 复仇/回马枪/夜枭反击：受击后下次攻击 +5（一次性消耗）
 
   // 觉醒·狂热(awakened_frenzy)：上次击杀后下一击必定暴击（×3）
   const frenzyTriggered = traits.includes('awakened_frenzy') && (floor.frenzyPending ?? false);
@@ -193,16 +210,21 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     if (bloodRageCount > 0) {
       playerHp = Math.min(state.player.maxHp, playerHp + bloodRageCount * 20); // BERSERKER 血怒（可叠加）
     }
+    const bloodlustHeal = bloodlustStackHeal(traits);
+    if (bloodlustHeal > 0) {
+      playerHp = Math.min(state.player.maxHp, playerHp + bloodlustHeal); // 嗜血本能/续命箭/放血（可叠加×5，+层数 HP）
+    }
   }
   if (frenzyTriggered) {
     playerHp = Math.min(state.player.maxHp, playerHp + 20); // 觉醒·狂热回血
   }
 
-  // ── floorState 状态位更新（背刺消耗 / 影袭计数 / 狂热标记）──
+  // ── floorState 状态位更新（背刺消耗 / 影袭计数 / 狂热标记 / 复仇消耗）──
   let nextFloorState = {
     ...floor,
     ap: spend(floor.ap, 'ATTACK'),
     rngState: rng.state(),
+    ...(vengeanceActive ? { vengeanceReady: false } : {}),
   };
   if (backstabActive) {
     if (hasShadowStrike) {
@@ -231,8 +253,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   nextState = resolveHit(nextState, monsterId, damage, events);
 
-  // ── 觉醒·横扫(awakened_cleave)：对目标周围相邻怪物造成50%溅射伤害 ──
-  if (traits.includes('awakened_cleave')) {
+  // ── 横扫/散射/震荡波(cleave 系) + 觉醒·横扫(awakened_cleave)：对目标周围相邻怪物造成50%溅射伤害 ──
+  if (traits.includes('awakened_cleave') || hasCleave(traits)) {
     const splashDamage = Math.max(10, Math.round(damage * 0.5));
     const adjacentIds = floor.monsters
       .filter((m) => m.id !== monsterId && m.aiState !== 'DEAD' && manhattan(m.pos, monster.pos) === 1)
@@ -323,8 +345,9 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // ── 装备减伤（ARMOR 槽，AC-17 + equip_def_up 词条，AC-402）──
   const armorReduction = (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player);
   const rawDamage = monster.attack;
-  // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）
-  const damage = Math.max(10, Math.round(Math.max(0, rawDamage - armorReduction) * damageMult));
+  // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
+  const reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult;
+  const damage = Math.max(10, Math.round(reducedDamage - painToleranceReduction(traits, reducedDamage)));
 
   let hp = Math.max(0, state.player.hp - damage);
   let dead = hp <= 0;
@@ -336,6 +359,15 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     dead = false;
     undyingTriggered = true;
   }
+
+  // ── 复仇系(vengeance/retreat_shot/retribution)：受击后下次主动攻击 +5 伤害 ──
+  const vengeanceTriggered = !dead && hasVengeanceTrait(traits);
+
+  // ── 进阶 oneShot(final_charge/last_arrow/desperate_gambit)：本层首次 HP≤30% 时 AP+3 ──
+  const finalChargeTriggered = !dead
+    && hasFinalCharge(traits)
+    && hp / state.player.maxHp <= 0.3
+    && (floor.finalChargeAvailable ?? true);
 
   const events: PveEvent[] = [...revealEvents, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: monsterId }];
   if (dead) events.push({ type: 'PLAYER_DEAD' });
@@ -371,7 +403,10 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
         status: dead ? ('DEAD' as const) : floor.status,
         revealed,
         monsters: nextMonsters,
+        ap: finalChargeTriggered ? floor.ap + 3 : floor.ap, // 进阶 oneShot：本层首次 HP≤30% 时 AP+3
         ...(undyingTriggered ? { undyingAvailable: false } : {}),
+        ...(vengeanceTriggered ? { vengeanceReady: true } : {}),
+        ...(finalChargeTriggered ? { finalChargeAvailable: false } : {}),
         ...(isFrost
           ? { playerMoveApPenaltyRounds: (floor.playerMoveApPenaltyRounds ?? 0) + FROST_MOVE_PENALTY_ROUNDS }
           : {}),

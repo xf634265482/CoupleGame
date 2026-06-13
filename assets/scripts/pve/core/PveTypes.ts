@@ -172,6 +172,10 @@ export interface FloorState {
   lavaLordPhase2?: boolean;
   /** 熔岩潮汐回合计数器：phase2 期间每回合 +1，达到 CHAPTER4_LAVA_TIDE_INTERVAL 时刷新潮汐并归零。 */
   lavaTideCounter?: number;
+  /** 复仇类词条（vengeance/retreat_shot/retribution）：受到怪物攻击后置 true，下次主动攻击消耗并 +5 伤害。 */
+  vengeanceReady?: boolean;
+  /** 进阶 oneShot（final_charge/last_arrow/desperate_gambit）：本层首次 HP≤30% 时触发 AP+3，触发后置 false（默认 true）。 */
+  finalChargeAvailable?: boolean;
 }
 
 // ── 远征总状态（存档根对象） ───────────────────────────
