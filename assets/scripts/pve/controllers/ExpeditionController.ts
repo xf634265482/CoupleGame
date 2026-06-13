@@ -276,6 +276,18 @@ function describeForLog(
       return { kind: 'LOOT', text: `⚒️ 铁匠洗炼 ${SLOT_CN[ev.slot] ?? ev.slot}（词条 → ${ev.newTrait}）` };
     case 'HEAVY_STRIKE_RESOLVED':
       return { kind: 'ENEMY_ACT', text: '💥 蓄力重击发动！橙圈为本次实际命中范围' };
+    case 'SAND_PIT_STEPPED':
+      return { kind: 'PLAYER_HURT', text: '🏜️ 陷入沙坑！移动 AP +1' };
+    case 'ICE_WALL_BROKEN':
+      return { kind: 'PLAYER_ACT', text: `❄️ 击碎冰墙！获得 ${ev.anima} 灵气` };
+    case 'LAVA_TIDE_SPAWNED':
+      return { kind: 'ENEMY_ACT', text: `🌋 熔岩潮汐！${ev.tiles.length} 格被熔岩覆盖` };
+    case 'LAVA_TILE_DAMAGED':
+      return { kind: 'PLAYER_HURT', text: `🔥 被熔岩烫伤！-${ev.damage} HP` };
+    case 'MIRROR_SPAWNED':
+      return { kind: 'ENEMY_ACT', text: '👥 命运镜像现身！' };
+    case 'MIRROR_KILLED':
+      return { kind: 'PLAYER_ACT', text: '✨ 击碎镜像！' };
     default:
       return null;
   }
@@ -360,6 +372,18 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 强化完成：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}`;
     case 'BLACKSMITH_REROLL':
       return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 词条洗炼完成`;
+    case 'SAND_PIT_STEPPED':
+      return '🏜️ 陷入沙坑！移动 AP +1';
+    case 'ICE_WALL_BROKEN':
+      return `❄️ 击碎冰墙！获得 ${ev.anima} 灵气`;
+    case 'LAVA_TIDE_SPAWNED':
+      return `🌋 熔岩潮汐！${ev.tiles.length} 格被熔岩覆盖（持续 ${ev.duration} 回合）`;
+    case 'LAVA_TILE_DAMAGED':
+      return `🔥 被熔岩烫伤！-${ev.damage} HP`;
+    case 'MIRROR_SPAWNED':
+      return '👥 命运镜像现身！';
+    case 'MIRROR_KILLED':
+      return '✨ 击碎镜像！';
     default:
       return null;
   }

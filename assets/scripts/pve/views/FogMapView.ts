@@ -4,6 +4,7 @@
 // M1 无美术资源：用 Graphics 色块 + Label 文字图标占位渲染。
 
 import { Color, EventTouch, Graphics, Label, Node, UITransform, Vec3 } from 'cc';
+import { CHAPTER3_ICE_WALL_HP } from '../core/PveConstants';
 import type { Coord, FloorState } from '../core/PveTypes';
 
 const FOG_COLOR = new Color(18, 20, 28, 235);
@@ -33,6 +34,10 @@ const GLYPH: Record<string, CellGlyph> = {
   ENTITY_ALTAR: { text: '坛', color: new Color(220, 160, 160, 255) },
   ENTITY_FRAGMENT: { text: '碎', color: new Color(180, 230, 130, 255) },
   ENTITY_ROCK: { text: '石', color: new Color(170, 170, 180, 255) },
+  ENTITY_SAND_PIT: { text: '坑', color: new Color(200, 170, 110, 255) },
+  ENTITY_ICE_WALL: { text: '冰', color: new Color(150, 220, 245, 255) },
+  ENTITY_LAVA_TILE: { text: '焰', color: new Color(255, 120, 60, 255) },
+  MONSTER_FATE_MIRROR: { text: '影', color: new Color(170, 120, 220, 255) },
 };
 
 type CellRenderState = { revealed: boolean; content: string };
@@ -42,9 +47,15 @@ function cellContentKey(floor: FloorState, x: number, y: number): string {
   const monster = floor.monsters.find(
     (m) => m.aiState !== 'DEAD' && m.pos.x === x && m.pos.y === y,
   );
-  if (monster) return `MONSTER_${monster.type}`;
+  if (monster) {
+    if (monster.bossId === 'FATE_MIRROR') return 'MONSTER_FATE_MIRROR';
+    return `MONSTER_${monster.type}`;
+  }
   const entity = floor.entities.find((e) => !e.consumed && e.pos.x === x && e.pos.y === y);
-  if (entity) return `ENTITY_${entity.type}`;
+  if (entity) {
+    if (entity.type === 'ICE_WALL') return `ENTITY_ICE_WALL:${entity.hp ?? 0}`;
+    return `ENTITY_${entity.type}`;
+  }
   return 'EMPTY';
 }
 
@@ -131,6 +142,18 @@ export class FogMapView {
         lbl.verticalAlign = Label.VerticalAlign.CENTER;
         lbl.string = '';
 
+        const hpLabelN = new Node('HpLabel');
+        hpLabelN.setParent(n);
+        hpLabelN.setPosition(this._cellSize * 0.22, -this._cellSize * 0.32, 0);
+        hpLabelN.addComponent(UITransform).setContentSize(this._cellSize * 0.6, this._cellSize * 0.3);
+        const hpLbl = hpLabelN.addComponent(Label);
+        hpLbl.fontSize = Math.round(this._cellSize * 0.22);
+        hpLbl.lineHeight = Math.round(this._cellSize * 0.24);
+        hpLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
+        hpLbl.verticalAlign = Label.VerticalAlign.MIDDLE;
+        hpLbl.color = new Color(220, 230, 240, 255);
+        hpLbl.string = '';
+
         const coord: Coord = { x, y };
         n.on(Node.EventType.TOUCH_END, (_e: EventTouch) => this._callbacks.onCellTap?.(coord));
 
@@ -146,6 +169,7 @@ export class FogMapView {
   private _paintCell(node: Node, sz: number, revealed: boolean, content: string): void {
     const g = node.getComponent(Graphics);
     const lbl = node.getChildByName('Glyph')?.getComponent(Label);
+    const hpLbl = node.getChildByName('HpLabel')?.getComponent(Label);
     if (!g) return;
     g.clear();
 
@@ -154,6 +178,7 @@ export class FogMapView {
       g.rect(-sz / 2, -sz / 2, sz, sz);
       g.fill();
       if (lbl) lbl.string = '';
+      if (hpLbl) hpLbl.string = '';
       return;
     }
 
@@ -164,7 +189,8 @@ export class FogMapView {
     g.rect(-sz / 2 + 0.5, -sz / 2 + 0.5, sz - 1, sz - 1);
     g.stroke();
 
-    const glyph = GLYPH[content];
+    const [glyphKey, hpText] = content.split(':');
+    const glyph = GLYPH[glyphKey];
     if (lbl) {
       if (glyph) {
         lbl.string = glyph.text;
@@ -172,6 +198,9 @@ export class FogMapView {
       } else {
         lbl.string = '';
       }
+    }
+    if (hpLbl) {
+      hpLbl.string = glyphKey === 'ENTITY_ICE_WALL' && hpText ? `${hpText}/${CHAPTER3_ICE_WALL_HP}` : '';
     }
   }
 
