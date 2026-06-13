@@ -31,7 +31,7 @@ import type { Direction } from '../core/MovementSystem';
 import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, DEV_SKIP_TO_FLOOR, isBossFloor, TOTAL_FLOORS } from '../core/PveConstants';
 import type { ClassId } from '../core/PveConstants';
 import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta } from '../core/PveTypes';
-import { loadPveSave, loadPveMeta, savePveFloor, settlePveRun, updatePveMeta } from '../../network/PveService';
+import { loadPveSave, loadPveMeta, startRun, savePveFloor, settlePveRun, updatePveMeta } from '../../network/PveService';
 import type { PveSaveVO } from '../../network/PveService';
 import { FogMapView } from '../views/FogMapView';
 import { PveCharacterPanel } from '../views/PveCharacterPanel';
@@ -514,7 +514,7 @@ export class ExpeditionController extends Component {
       const { save } = saveRes.value;
 
       if (!save) {
-        this._beginNewRun();
+        await this._beginNewRun();
       } else if (save.floor >= TOTAL_FLOORS) {
         this._toast?.toast('正在补发上次远征的通关结算…');
         await this._settle(save.runSeed, save.floor, 'COMPLETED');
@@ -525,13 +525,21 @@ export class ExpeditionController extends Component {
       }
     } catch (err) {
       this._toast?.toast(`加载存档失败，已开启新远征：${err instanceof Error ? err.message : String(err)}`);
-      this._beginNewRun();
+      await this._beginNewRun();
     }
     this._busy = false;
   }
 
-  private _beginNewRun(): void {
-    const seed = Math.floor(Math.random() * 0x7fffffff) || 1;
+  /** 开启新远征：runSeed 由服务端 startRun 生成（→ AC-503/504，客户端不可重试套取有利地图）。 */
+  private async _beginNewRun(): Promise<void> {
+    let seed: number;
+    try {
+      const res = await startRun();
+      seed = res.runSeed;
+    } catch (err) {
+      this._toast?.toast(`开始远征失败，请检查网络：${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     this._state = startExpedition(seed, this._meta ?? undefined);
     // ── 开发调试：跳层 ────────────────────────────────────
     if (DEV_SKIP_TO_FLOOR > 1) {

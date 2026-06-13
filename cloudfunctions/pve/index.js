@@ -1,0 +1,63 @@
+const cloud = require('wx-server-sdk');
+const { resolveOpenId, requireUser } = require('./common/auth');
+const { getUserByOpenId } = require('./common/db');
+const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
+const { loadMeta, updateMeta, unlockTreeNode } = require('./common/pve/PveMeta');
+
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+
+/** pve 云函数 → 命运远征存档与结算（design ddl-sql.md / AC-11, AC-14） */
+exports.main = async (event = {}) => {
+  try {
+    const openId = resolveOpenId(cloud.getWXContext(), event);
+    if (!openId) {
+      return { ok: false, code: 'NO_OPENID', message: '无法获取 OPENID' };
+    }
+
+    const user = await requireUser(openId, getUserByOpenId);
+    const { action } = event;
+
+    if (action === 'loadSave') {
+      const { save } = await loadActiveSave(user);
+      return { ok: true, save };
+    }
+
+    if (action === 'startRun') {
+      const { runSeed, resume } = await startRun(user);
+      return { ok: true, runSeed, resume };
+    }
+
+    if (action === 'saveFloor') {
+      const { save } = await saveFloorProgress(user, event.report || {});
+      return { ok: true, save };
+    }
+
+    if (action === 'settleRun') {
+      const { rewards } = await settleExpedition(user, event.report || {});
+      return { ok: true, rewards };
+    }
+
+    if (action === 'loadMeta') {
+      const { meta } = await loadMeta(user);
+      return { ok: true, meta };
+    }
+
+    if (action === 'updateMeta') {
+      await updateMeta(user, event.report || {});
+      return { ok: true };
+    }
+
+    if (action === 'unlockTreeNode') {
+      const { meta } = await unlockTreeNode(user, event.nodeId);
+      return { ok: true, meta };
+    }
+
+    return { ok: false, code: 'UNKNOWN_ACTION', message: `未知 action: ${action}` };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err.code || 'PVE_ERROR',
+      message: err.message || String(err),
+    };
+  }
+};
