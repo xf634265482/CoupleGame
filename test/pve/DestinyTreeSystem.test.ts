@@ -227,7 +227,19 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       ]);
     });
 
-    it('已拥有该词条时为去重 no-op（仍移出队列）', () => {
+    it('oneShot 词条已拥有时为去重 no-op（仍移出队列）', () => {
+      const state = makeExpeditionState({ playerOverrides: { classTraits: ['undying'] } });
+      const withPending = {
+        ...state,
+        pendingTreeChoices: [{ source: 'E3' as const, kind: 'TRAIT' as const, traitOptions: ['undying', 'berserk'] }],
+      };
+
+      const result = resolveTreeChoice(withPending, 0);
+      expect(result.state.player.classTraits).toEqual(['undying']);
+      expect(result.state.pendingTreeChoices).toEqual([]);
+    });
+
+    it('可叠加词条已拥有时仍可再选一层（计入 classTraits）', () => {
       const state = makeExpeditionState({ playerOverrides: { classTraits: ['life_steal'] } });
       const withPending = {
         ...state,
@@ -235,7 +247,7 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       };
 
       const result = resolveTreeChoice(withPending, 0);
-      expect(result.state.player.classTraits).toEqual(['life_steal']);
+      expect(result.state.player.classTraits).toEqual(['life_steal', 'life_steal']);
       expect(result.state.pendingTreeChoices).toEqual([]);
     });
 

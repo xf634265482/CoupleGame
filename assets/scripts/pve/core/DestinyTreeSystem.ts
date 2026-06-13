@@ -8,7 +8,7 @@
 // 纯函数，零框架依赖；E2/E3「三选一」走 ApplyResult + PendingTreeChoice 队列模式，
 // 与 ANIMA_STRENGTHEN 的 3 选 1 模式一致。
 
-import { strengthenPoolForClass } from './AnimaSystem';
+import { applyStrengthen, strengthenPoolForClass } from './AnimaSystem';
 import { equipItem, rollEquipment } from './EquipmentSystem';
 import {
   ADVANCABLE_CLASSES,
@@ -196,21 +196,16 @@ export function resolveTreeChoice(state: ExpeditionState, choiceIndex: number): 
     };
   }
 
-  // TRAIT
+  // TRAIT：复用 applyStrengthen 以保证 stack 上限 / oneShot 去重 / 立即生效属性（iron_skin_stack 等）与
+  // ANIMA_STRENGTHEN 路径一致（AC-405/406）。
   const options = choice.traitOptions ?? [];
   const selected = options[choiceIndex];
   if (!selected) return noop(state);
 
-  const alreadyHas = state.player.classTraits.includes(selected);
+  const applied = applyStrengthen({ ...state, pendingTreeChoices: remaining }, selected);
   return {
-    state: {
-      ...state,
-      player: alreadyHas
-        ? state.player
-        : { ...state.player, classTraits: [...state.player.classTraits, selected] },
-      pendingTreeChoices: remaining,
-    },
-    events: [{ type: 'TREE_CHOICE_RESOLVED', source: choice.source, kind: 'TRAIT', selected }],
+    state: applied.state,
+    events: [...applied.events, { type: 'TREE_CHOICE_RESOLVED', source: choice.source, kind: 'TRAIT', selected }],
   };
 }
 
