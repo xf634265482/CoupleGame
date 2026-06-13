@@ -16,7 +16,7 @@ import {
 } from './bosses/GoblinChief';
 import { VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
 import { shoesStealthReduction } from './EquipmentSystem';
-import { fateGuardianAttack } from './bosses/FateGuardian';
+import { fateGuardianAttack, spawnFateMirror } from './bosses/FateGuardian';
 import { frostGiantAttack } from './bosses/FrostGiant';
 import { lavaLordAttack, lavaTideStep } from './bosses/LavaLord';
 import { isBurrowTurn, sandwormBurrow, sandwormQueenAttack } from './bosses/SandwormQueen';
@@ -227,6 +227,12 @@ function stepOneMonster(state: ExpeditionState, monsterId: string): ApplyResult 
     const tide = lavaTideStep(state, monsterId);
     const result = stepOneMonsterCore(tide.state, monsterId);
     return { state: result.state, events: [...tide.events, ...result.events] };
+  }
+
+  if (monster.type === 'BOSS' && monster.bossId === 'FATE_GUARDIAN') {
+    const mirror = spawnFateMirror(state, monsterId);
+    const result = stepOneMonsterCore(mirror.state, monsterId);
+    return { state: result.state, events: [...mirror.events, ...result.events] };
   }
 
   return stepOneMonsterCore(state, monsterId);

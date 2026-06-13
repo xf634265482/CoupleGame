@@ -71,6 +71,7 @@ export function spawnPortal(state: ExpeditionState, bossMonsterId: string): Appl
   const floor = state.floorState;
   const boss = floor.monsters.find((m) => m.id === bossMonsterId);
   if (!boss || boss.type !== 'BOSS' || boss.aiState !== 'DEAD') return noop(state);
+  if (boss.bossId === 'FATE_MIRROR') return noop(state);
   if (!floor.hasKey) return noop(state);
   if (floor.entities.some((e) => e.type === 'PORTAL')) return noop(state);
 

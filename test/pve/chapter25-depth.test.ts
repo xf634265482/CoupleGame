@@ -470,9 +470,83 @@ describe('chapter25-depth: LavaLord 熔岩潮汐', () => {
 });
 
 describe('chapter25-depth: FateGuardian 镜像分身', () => {
-  it.todo('Boss HP > 33% 时不生成镜像');
-  it.todo('Boss HP 落到 33% 时下一回合生成镜像');
-  it.todo('已存在镜像时不重复生成');
-  it.todo('杀死镜像不生成传送门（spawnPortal 只看真 Boss）');
-  it.todo('镜像攻击力 = Boss 攻击 × CHAPTER5_MIRROR_ATTACK_MULT');
+  const { spawnFateMirror } = require('../../assets/scripts/pve/core/bosses/FateGuardian') as typeof import('../../assets/scripts/pve/core/bosses/FateGuardian');
+  const { spawnPortal } = require('../../assets/scripts/pve/core/FloorRules') as typeof import('../../assets/scripts/pve/core/FloorRules');
+  const {
+    CHAPTER5_MIRROR_ATTACK_MULT,
+    CHAPTER5_MIRROR_HP,
+    FATE_MIRROR_BOSS_ID,
+  } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
+
+  function makeBoss(hp: number, overrides: Partial<import('../../assets/scripts/pve/core/PveTypes').Monster> = {}) {
+    return {
+      id: 'boss', type: 'BOSS' as const, bossId: 'FATE_GUARDIAN', pos: { x: 5, y: 5 },
+      hp, maxHp: 300, attack: 60, range: 1, aggroRadius: 99, aiState: 'CHASE' as const,
+      ...overrides,
+    };
+  }
+
+  it('Boss HP > 33% 时不生成镜像', () => {
+    const state = makeExpeditionState({
+      chapter: 5,
+      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(101)] },
+    });
+    const result = spawnFateMirror(state, 'boss');
+    expect(result.events).toHaveLength(0);
+    expect(result.state.floorState.monsters.some((m) => m.bossId === FATE_MIRROR_BOSS_ID)).toBe(false);
+  });
+
+  it('Boss HP 落到 33% 时下一回合生成镜像', () => {
+    const state = makeExpeditionState({
+      chapter: 5,
+      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99)] },
+    });
+    const result = spawnFateMirror(state, 'boss');
+    expect(result.events.some((e) => e.type === 'MIRROR_SPAWNED')).toBe(true);
+    const mirror = result.state.floorState.monsters.find((m) => m.bossId === FATE_MIRROR_BOSS_ID);
+    expect(mirror).toBeDefined();
+    expect(mirror!.hp).toBe(CHAPTER5_MIRROR_HP);
+    expect(mirror!.maxHp).toBe(CHAPTER5_MIRROR_HP);
+  });
+
+  it('已存在镜像时不重复生成', () => {
+    const mirror = {
+      id: 'mirror_5', type: 'BOSS' as const, bossId: FATE_MIRROR_BOSS_ID, pos: { x: 4, y: 5 },
+      hp: CHAPTER5_MIRROR_HP, maxHp: CHAPTER5_MIRROR_HP, attack: 30, range: 1, aggroRadius: 99, aiState: 'CHASE' as const,
+    };
+    const state = makeExpeditionState({
+      chapter: 5,
+      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99), mirror] },
+    });
+    const result = spawnFateMirror(state, 'boss');
+    expect(result.events).toHaveLength(0);
+    expect(result.state.floorState.monsters.filter((m) => m.bossId === FATE_MIRROR_BOSS_ID)).toHaveLength(1);
+  });
+
+  it('杀死镜像不生成传送门（spawnPortal 只看真 Boss）', () => {
+    const deadMirror = {
+      id: 'mirror_5', type: 'BOSS' as const, bossId: FATE_MIRROR_BOSS_ID, pos: { x: 4, y: 5 },
+      hp: 0, maxHp: CHAPTER5_MIRROR_HP, attack: 30, range: 1, aggroRadius: 99, aiState: 'DEAD' as const,
+    };
+    const state = makeExpeditionState({
+      chapter: 5,
+      floorOverrides: {
+        size: 10, player: { x: 0, y: 0 }, hasKey: true,
+        monsters: [makeBoss(99), deadMirror],
+      },
+    });
+    const result = spawnPortal(state, 'mirror_5');
+    expect(result.events).toHaveLength(0);
+    expect(result.state.floorState.entities.some((e) => e.type === 'PORTAL')).toBe(false);
+  });
+
+  it('镜像攻击力 = Boss 攻击 × CHAPTER5_MIRROR_ATTACK_MULT', () => {
+    const state = makeExpeditionState({
+      chapter: 5,
+      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99, { attack: 60 })] },
+    });
+    const result = spawnFateMirror(state, 'boss');
+    const mirror = result.state.floorState.monsters.find((m) => m.bossId === FATE_MIRROR_BOSS_ID);
+    expect(mirror!.attack).toBe(Math.round(60 * CHAPTER5_MIRROR_ATTACK_MULT));
+  });
 });

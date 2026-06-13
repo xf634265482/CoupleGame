@@ -61,9 +61,13 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
 
   if (dead) {
     events.push({ type: 'KILL', monsterId: targetId, monsterType: monster.type });
-    const dropResult = applyMonsterKillDrop(next, targetId);
-    next = dropResult.state;
-    events.push(...dropResult.events);
+    if (monster.bossId === 'FATE_MIRROR') {
+      events.push({ type: 'MIRROR_KILLED', mirrorId: targetId });
+    } else {
+      const dropResult = applyMonsterKillDrop(next, targetId);
+      next = dropResult.state;
+      events.push(...dropResult.events);
+    }
   }
 
   return next;
