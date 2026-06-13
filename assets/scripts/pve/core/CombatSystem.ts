@@ -12,6 +12,7 @@
 
 import { addAnima, traitCount } from './AnimaSystem';
 import { canAfford, spend } from './ApSystem';
+import { equipTraitAtkBonus, equipTraitDefBonus } from './EquipTraitEffects';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
   BASE_ATTACK,
@@ -90,6 +91,7 @@ export function playerAttackPower(player: RunPlayer): { damage: number; range: n
   rawAttack += traitCount(traits, 'strengthen_attack_up') * 5; // ADVENTURER 强化攻击（可叠加）
   if (traits.includes('awakened_power_shot')) rawAttack += 15; // 觉醒·强弓（射手·强击型）
   rawAttack += player.treeBonuses?.attackBonus ?? 0;        // 命运树 B1 武者直觉
+  rawAttack += equipTraitAtkBonus(player);                  // 装备词条 equip_atk_up（AC-401，每件 +1，可叠加）
 
   return {
     damage: Math.max(10, Math.round(rawAttack)),
@@ -318,8 +320,8 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     };
   }
 
-  // ── 装备减伤（ARMOR 槽，AC-17）──
-  const armorReduction = state.player.equipment.ARMOR?.baseStat ?? 0;
+  // ── 装备减伤（ARMOR 槽，AC-17 + equip_def_up 词条，AC-402）──
+  const armorReduction = (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player);
   const rawDamage = monster.attack;
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）
   const damage = Math.max(10, Math.round(Math.max(0, rawDamage - armorReduction) * damageMult));
