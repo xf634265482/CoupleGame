@@ -1,5 +1,8 @@
 import { isBurrowTurn, sandwormBurrow, sandwormQueenAttack } from '../../assets/scripts/pve/core/bosses/SandwormQueen';
-import { SANDWORM_BURROW_INTERVAL } from '../../assets/scripts/pve/core/PveConstants';
+import {
+  SANDWORM_BURROW_INTERVAL,
+  SANDWORM_DYNAMIC_PIT_DURATION,
+} from '../../assets/scripts/pve/core/PveConstants';
 import { makeExpeditionState, makeMonster } from './helpers';
 
 function makeBossState(playerHp = 20, bossOverrides = {}) {
@@ -38,12 +41,25 @@ describe('SandwormQueen', () => {
   });
 
   describe('sandwormBurrow', () => {
-    it('设置 isBurrowed=true，emit BOSS_BURROWED', () => {
+    it('设置 isBurrowed=true，emit BOSS_BURROWED + 在身侧翻起动态流沙坑（反风筝）', () => {
       const state = makeBossState();
       const result = sandwormBurrow(state, 'boss');
       const boss = result.state.floorState.monsters.find((m) => m.id === 'boss');
       expect(boss?.isBurrowed).toBe(true);
-      expect(result.events).toEqual([{ type: 'BOSS_BURROWED', bossId: 'boss' }]);
+      expect(result.events.some((e) => e.type === 'BOSS_BURROWED')).toBe(true);
+
+      // 动态流沙坑：带 remaining，由 endTurn 倒计时移除（区别于静态永久沙坑）
+      const tide = result.events.find((e) => e.type === 'SAND_TIDE_SPAWNED');
+      expect(tide).toBeDefined();
+      const dynPits = result.state.floorState.entities.filter(
+        (e) => e.type === 'SAND_PIT' && e.remaining !== undefined,
+      );
+      expect(dynPits.length).toBeGreaterThan(0);
+      expect(dynPits.every((p) => p.remaining === SANDWORM_DYNAMIC_PIT_DURATION)).toBe(true);
+      // 动态坑在 boss 身侧（Chebyshev ≤1），不与玩家/boss 重叠
+      for (const p of dynPits) {
+        expect(Math.max(Math.abs(p.pos.x - 4), Math.abs(p.pos.y - 5))).toBe(1);
+      }
     });
   });
 

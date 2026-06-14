@@ -277,7 +277,8 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
     });
     const result = sandwormBurrow(state, 'boss');
     expect(result.state.floorState.monsters[0].isBurrowed).toBe(true);
-    expect(result.events).toEqual([{ type: 'BOSS_BURROWED', bossId: 'boss' }]);
+    // 潜地同时翻起动态流沙坑（反风筝）：事件含 BOSS_BURROWED + 可能的 SAND_TIDE_SPAWNED
+    expect(result.events.some((e) => e.type === 'BOSS_BURROWED')).toBe(true);
   });
 });
 

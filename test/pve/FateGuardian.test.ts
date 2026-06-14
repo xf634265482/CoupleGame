@@ -1,13 +1,24 @@
-import { fateGuardianAttack, fateGuardianEvade } from '../../assets/scripts/pve/core/bosses/FateGuardian';
+import {
+  fateGuardianAttack,
+  fateProphecyStep,
+  isProphecyTurn,
+} from '../../assets/scripts/pve/core/bosses/FateGuardian';
+import { FATE_PROPHECY_INTERVAL } from '../../assets/scripts/pve/core/PveConstants';
 import { makeExpeditionState, makeMonster } from './helpers';
+import type { Coord } from '../../assets/scripts/pve/core/PveTypes';
 
-function makeBossState(playerHp: number, playerMaxHp = 200) {
+function makeBossState(
+  playerHp: number,
+  playerMaxHp = 200,
+  turn = 1,
+  fateProphecy?: { center: Coord },
+) {
   return makeExpeditionState({
     chapter: 5,
     floorOverrides: {
       player: { x: 4, y: 4 },
       ap: 10,
-      turn: 1,
+      turn,
       monsters: [
         makeMonster('boss', { x: 4, y: 5 }, {
           type: 'BOSS',
@@ -19,58 +30,67 @@ function makeBossState(playerHp: number, playerMaxHp = 200) {
           aggroRadius: 99,
         }),
       ],
+      ...(fateProphecy ? { fateProphecy } : {}),
     },
     playerOverrides: { hp: playerHp, maxHp: playerMaxHp },
   });
 }
 
 describe('FateGuardian', () => {
-  describe('fateGuardianAttack — 双倍伤害（HP > 50%）', () => {
+  describe('fateGuardianAttack — 高血双倍（保留）', () => {
     it('玩家 HP > 50% 时造成 2 倍有效伤害', () => {
       const state = makeBossState(200, 200); // HP = 100%
       const result = fateGuardianAttack(state, 'boss');
-
       const damaged = result.events.find((e) => e.type === 'PLAYER_DAMAGED');
-      expect(damaged).toBeDefined();
-      if (damaged && damaged.type === 'PLAYER_DAMAGED') {
-        // boss.attack=30, 无护甲 → 正常 30, 双倍 60
-        expect(damaged.damage).toBe(60);
-      }
+      expect(damaged && damaged.type === 'PLAYER_DAMAGED' ? damaged.damage : 0).toBe(60);
     });
 
     it('玩家 HP ≤ 50% 时造成普通伤害', () => {
       const state = makeBossState(100, 200); // HP = 50%
       const result = fateGuardianAttack(state, 'boss');
-
       const damaged = result.events.find((e) => e.type === 'PLAYER_DAMAGED');
-      expect(damaged).toBeDefined();
-      if (damaged && damaged.type === 'PLAYER_DAMAGED') {
-        // boss.attack=30, 无护甲 → 正常 30
-        expect(damaged.damage).toBe(30);
-      }
+      expect(damaged && damaged.type === 'PLAYER_DAMAGED' ? damaged.damage : 0).toBe(30);
     });
   });
 
-  describe('fateGuardianEvade', () => {
-    it('玩家 HP > 50% 时不触发闪避', () => {
-      const state = makeBossState(200, 200);
-      const result = fateGuardianEvade(state, 'boss');
-      expect(result.dodged).toBe(false);
+  describe('命运预言（反风筝，替代随机闪避）', () => {
+    it(`isProphecyTurn 每 ${FATE_PROPHECY_INTERVAL} 回合触发`, () => {
+      expect(isProphecyTurn(0)).toBe(false);
+      expect(isProphecyTurn(FATE_PROPHECY_INTERVAL)).toBe(true);
+      expect(isProphecyTurn(FATE_PROPHECY_INTERVAL * 2)).toBe(true);
+      expect(isProphecyTurn(FATE_PROPHECY_INTERVAL + 1)).toBe(false);
     });
 
-    it('玩家 HP ≤ 50% 时存在闪避概率（确定性：相同种子→相同结果）', () => {
-      const stateA = makeBossState(100, 200);
-      const stateB = makeBossState(100, 200);
-      const rA = fateGuardianEvade(stateA, 'boss');
-      const rB = fateGuardianEvade(stateB, 'boss');
-      // 确定性：同种子同状态→同结果
-      expect(rA.dodged).toBe(rB.dodged);
+    it('预言回合无待定预言 → 标记玩家当前格（PROPHECY_MARKED + 写入 fateProphecy）', () => {
+      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL);
+      const result = fateProphecyStep(state, 'boss');
+      expect(result.events).toEqual([{ type: 'PROPHECY_MARKED', center: { x: 4, y: 4 } }]);
+      expect(result.state.floorState.fateProphecy).toEqual({ center: { x: 4, y: 4 } });
     });
 
-    it('BOSS 不存在或已死亡时不触发闪避', () => {
-      const state = makeBossState(100, 200);
-      const r = fateGuardianEvade(state, 'nonexistent');
-      expect(r.dodged).toBe(false);
+    it('存在待定预言且玩家仍在 3×3 内 → 结算 attack×1 伤害 + PROPHECY_RESOLVED，清空预言', () => {
+      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL + 1, { center: { x: 4, y: 4 } });
+      const result = fateProphecyStep(state, 'boss');
+      expect(result.events.some((e) => e.type === 'PROPHECY_RESOLVED')).toBe(true);
+      const dmg = result.events.find((e) => e.type === 'PLAYER_DAMAGED');
+      expect(dmg && dmg.type === 'PLAYER_DAMAGED' ? dmg.damage : 0).toBe(30); // 30 × 1.0
+      expect(result.state.player.hp).toBe(170);
+      expect(result.state.floorState.fateProphecy).toBeUndefined();
+    });
+
+    it('结算时玩家已走出 3×3 → 仅 PROPHECY_RESOLVED，无伤害', () => {
+      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL + 1, { center: { x: 0, y: 0 } });
+      const result = fateProphecyStep(state, 'boss');
+      expect(result.events).toEqual([{ type: 'PROPHECY_RESOLVED', center: { x: 0, y: 0 } }]);
+      expect(result.state.player.hp).toBe(200);
+      expect(result.state.floorState.fateProphecy).toBeUndefined();
+    });
+
+    it('非预言回合且无待定预言 → no-op', () => {
+      const state = makeBossState(200, 200, 1);
+      const result = fateProphecyStep(state, 'boss');
+      expect(result.events).toEqual([]);
+      expect(result.state.floorState.fateProphecy).toBeUndefined();
     });
   });
 });
