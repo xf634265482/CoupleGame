@@ -1,0 +1,6 @@
+{
+  "api_job_id": "64021667-ec93-49fa-8ce7-b153e91a651d",
+  "status": "queued",
+  "poll_interval_seconds": 3,
+  "poll_url": "https://api.meowa.ai/api/hd-gen/jobs?id=64021667-ec93-49fa-8ce7-b153e91a651d"
+}

@@ -1,0 +1,33 @@
+{
+  "api_job_id": "84d08eb1-d7f2-42a2-8e23-a2a4032518d2",
+  "status": "success",
+  "stage": "completed",
+  "error": "",
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "84d08eb1-d7f2-42a2-8e23-a2a4032518d2"
+  },
+  "output": {
+    "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-05/03%3A39%3A16-84d08eb1-d7f2-42a2-8e23-a2a4032518d2/sprite_00.png",
+    "final_sprite_paths": [
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-05/03%3A39%3A16-84d08eb1-d7f2-42a2-8e23-a2a4032518d2/sprite_00.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-05/03%3A39%3A16-84d08eb1-d7f2-42a2-8e23-a2a4032518d2/sprite_01.png"
+    ],
+    "prompt_detail": "正面视角，Q版蘑菇头法师，头戴圆润的红底白点蘑菇帽，面带微笑，身穿浅色圆润长袍，手持一根细长木质法杖；正面视角，Q版游侠，头戴绿色尖顶兜帽，帽檐插着白色羽毛，面部被兜帽遮掩，身穿绿色紧身衣，手持一张木质长弓，身体圆润可爱。",
+    "sprite_pack_names": [
+      "蘑菇头法师",
+      "游侠"
+    ],
+    "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-05/03%3A39%3A16-84d08eb1-d7f2-42a2-8e23-a2a4032518d2/sprite_00.png",
+    "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-05/03%3A39%3A16-84d08eb1-d7f2-42a2-8e23-a2a4032518d2/sprite_pack_preview.png"
+  }
+}

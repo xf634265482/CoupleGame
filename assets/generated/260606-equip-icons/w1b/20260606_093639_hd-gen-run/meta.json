@@ -1,0 +1,96 @@
+{
+  "command": "hd-gen-run",
+  "started_at": "2026-06-06T09:36:39",
+  "finished_at": "2026-06-06T09:36:41",
+  "run_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\w1b\\20260606_093639_hd-gen-run",
+  "work_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\w1b",
+  "effective_output_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\out1b\\rapid_shoes",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 900,
+      "poll_interval": 3.0,
+      "work_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\w1b",
+      "output_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\out1b",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-run",
+      "template_name": "cute_cartoon_icon",
+      "requirement": "1 game item icon: cyan lightning fast running sneakers inside rounded square weathered grey stone frame, hand-painted chunky mobile game style matching reference.",
+      "template_config": "{\"target_count\":1,\"hd_remove_bg_mode\":\"single\"}",
+      "job_name": "rapid_shoes",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\board\\cells\\cell_gold.png",
+      "reference_files": [],
+      "project_id": null,
+      "thread_id": null
+    },
+    "payload": {
+      "template_name": "cute_cartoon_icon",
+      "requirement": "1 game item icon: cyan lightning fast running sneakers inside rounded square weathered grey stone frame, hand-painted chunky mobile game style matching reference.",
+      "template_config": {
+        "target_count": 1,
+        "hd_remove_bg_mode": "single"
+      },
+      "job_name": "rapid_shoes",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\board\\cells\\cell_gold.png",
+      "reference_files": [],
+      "project_id": null,
+      "thread_id": null
+    }
+  },
+  "response": {
+    "submit": {
+      "api_job_id": "818e7484-fd58-4339-ae1e-1ac097471a9e",
+      "status": "queued",
+      "poll_interval_seconds": 3,
+      "poll_url": "https://api.meowa.ai/api/hd-gen/jobs?id=818e7484-fd58-4339-ae1e-1ac097471a9e"
+    },
+    "final": {
+      "api_job_id": "818e7484-fd58-4339-ae1e-1ac097471a9e",
+      "status": "failure",
+      "stage": "failed",
+      "error": "Not enough reference images for the fixed HD 4x4 grid: target_count=1 requires at least 15 references, but only 12 were provided.",
+      "progress": {
+        "label": "失败",
+        "percent": 100
+      },
+      "queue": {
+        "position": 0,
+        "estimated_wait_seconds": 0
+      },
+      "credit_refund": {
+        "refunded": true,
+        "amount": 20,
+        "reference_id": "818e7484-fd58-4339-ae1e-1ac097471a9e"
+      }
+    }
+  },
+  "downloads": [
+    {
+      "type": "json",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\out1b\\rapid_shoes\\submit_response.json"
+    },
+    {
+      "type": "json",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\out1b\\rapid_shoes\\job_response.json"
+    }
+  ],
+  "error": ""
+}

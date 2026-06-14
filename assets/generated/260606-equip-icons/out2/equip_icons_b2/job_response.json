@@ -1,0 +1,37 @@
+{
+  "api_job_id": "6d3fc874-b255-424b-a841-33ccfbf2c1f7",
+  "status": "success",
+  "stage": "completed",
+  "error": "",
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "6d3fc874-b255-424b-a841-33ccfbf2c1f7"
+  },
+  "output": {
+    "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_00.png",
+    "final_sprite_paths": [
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_00.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_01.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_02.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_03.png"
+    ],
+    "prompt_detail": "金属捕兽夹，带有锋利锯齿，置于风化灰色圆角方形石框内；白色医疗包，表面绘有红色十字图案，置于风化灰色圆角方形石框内；绿色药水瓶，瓶内液体呈现放射状星芒核心，置于风化灰色圆角方形石框内；深红色宝石，表面带有不规则裂纹与暗红光带，置于风化灰色圆角方形石框内",
+    "sprite_pack_names": [
+      "金属捕兽夹",
+      "医疗包",
+      "绿色药水瓶",
+      "红色宝石"
+    ],
+    "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_00.png",
+    "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A37%3A07-6d3fc874-b255-424b-a841-33ccfbf2c1f7/sprite_pack_preview.png"
+  }
+}

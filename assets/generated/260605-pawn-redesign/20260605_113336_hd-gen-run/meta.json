@@ -1,0 +1,43 @@
+{
+  "command": "hd-gen-run",
+  "started_at": "2026-06-05T11:33:36",
+  "finished_at": "2026-06-05T11:33:48",
+  "run_dir": "assets\\generated\\260605-pawn-redesign\\20260605_113336_hd-gen-run",
+  "work_dir": "assets\\generated\\260605-pawn-redesign",
+  "effective_output_dir": "assets\\generated\\260605-pawn-redesign",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 600,
+      "poll_interval": 10.0,
+      "work_dir": "assets/generated/260605-pawn-redesign",
+      "output_dir": "assets/generated/260605-pawn-redesign",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-run",
+      "template_name": "hd_char_1",
+      "requirement": "Create 4 transparent PNG chibi fantasy board-game pawns matching the provided mobile game reference style with about 90 percent similarity: cute squat big-head small-body characters, thick dark outline, soft cel-shaded highlights, rounded toy-like shapes, simple readable silhouette, front view, slight 3/4 angle acceptable, no card frame, no status ribbon, isolated full body, transparent background. Four distinct units: 1 silver helmet knight with axe, 2 green goblin sword saint with red scarf and curved sword, 3 mushroom-headed mage holding a wand, 4 green hooded ranger holding bow. Keep the same cute proportions, outline thickness, shadow style and color saturation as the reference.",
+      "template_config": "{\"direction\":\"front\",\"target_count\":4,\"hd_remove_bg_mode\":\"batch\"}",
+      "job_name": "",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "C:\\Users\\lin\\.cursor\\projects\\d-GameSpace-CoupleGame\\assets\\c__Users_lin_AppData_Roaming_Cursor_User_workspaceStorage_5666e20f10e4832bcc2f1a19833fc512_images_image-b1b85fef-a356-4c1b-b770-c75db2f647bc.png",
+      "reference_files": [],
+      "project_id": null,
+      "thread_id": null
+    },
+    "payload": {}
+  },
+  "response": null,
+  "downloads": [],
+  "error": "[WinError 3] 系统找不到指定的路径。: 'assets\\\\generated\\\\260605-pawn-redesign\\\\Create_4_transparent_PNG_chibi_fantasy_board-game_pawns_matching_the_provided_mobile_game_reference_style_with_about_90_percent_similarity_cute_squat_big-head_small-body_characters_thick_dark_outline_soft_cel-shaded_highlights_rounded_toy-like_shapes_simple_readable_silhouette_front_view_slight_3_4_angle_acceptable_no_card_frame_no_status_ribbon_isolated_full_body_transparent_background_Four_distinct_units_1_silver_helmet_knight_with_axe_2_green_goblin_sword_saint_with_red_scarf_and_curved_sword_3_mushroom-headed_mage_holding_a_wand_4_green_hooded_ranger_holding_bow_Keep_the_same_cute_proportions_outline_thickness_shadow_style_and_color_saturation_as_the_reference'"
+}

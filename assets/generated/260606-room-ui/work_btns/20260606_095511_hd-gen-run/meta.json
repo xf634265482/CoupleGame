@@ -1,0 +1,148 @@
+{
+  "command": "hd-gen-run",
+  "started_at": "2026-06-06T09:55:11",
+  "finished_at": "2026-06-06T09:55:34",
+  "run_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\work_btns\\20260606_095511_hd-gen-run",
+  "work_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\work_btns",
+  "effective_output_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 900,
+      "poll_interval": 3.0,
+      "work_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\work_btns",
+      "output_dir": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-run",
+      "template_name": "cute_cartoon_icon",
+      "requirement": "4 room page UI elements matching reference lobby buttons about 90% style: horizontal pill buttons with blue gradient, dark outline, corner rivets, beveled edges, NO text, transparent background between elements. 1) start game button wide 320x88 ratio, strong red-orange gradient variant for primary action. 2) invite/share button same size, bright blue gradient like reference. 3) leave/exit button slightly shorter 260x76 ratio, muted grey-blue secondary style. 4) large room main panel 900x560 ratio, semi-transparent dark blue glass panel with ornate border for 2x2 player grid area.",
+      "template_config": "{\"target_count\":4,\"hd_remove_bg_mode\":\"batch\"}",
+      "job_name": "room_btns",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\lobby\\btn_lobby_create_9s.png",
+      "reference_files": [
+        "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\lobby\\btn_lobby_join_9s.png"
+      ],
+      "project_id": null,
+      "thread_id": null
+    },
+    "payload": {
+      "template_name": "cute_cartoon_icon",
+      "requirement": "4 room page UI elements matching reference lobby buttons about 90% style: horizontal pill buttons with blue gradient, dark outline, corner rivets, beveled edges, NO text, transparent background between elements. 1) start game button wide 320x88 ratio, strong red-orange gradient variant for primary action. 2) invite/share button same size, bright blue gradient like reference. 3) leave/exit button slightly shorter 260x76 ratio, muted grey-blue secondary style. 4) large room main panel 900x560 ratio, semi-transparent dark blue glass panel with ornate border for 2x2 player grid area.",
+      "template_config": {
+        "target_count": 4,
+        "hd_remove_bg_mode": "batch"
+      },
+      "job_name": "room_btns",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\lobby\\btn_lobby_create_9s.png",
+      "reference_files": [
+        "D:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\lobby\\btn_lobby_join_9s.png"
+      ],
+      "project_id": null,
+      "thread_id": null
+    }
+  },
+  "response": {
+    "submit": {
+      "api_job_id": "37e2063a-c6dc-49b5-a101-b1275d1a0e97",
+      "status": "queued",
+      "poll_interval_seconds": 3,
+      "poll_url": "https://api.meowa.ai/api/hd-gen/jobs?id=37e2063a-c6dc-49b5-a101-b1275d1a0e97"
+    },
+    "final": {
+      "api_job_id": "37e2063a-c6dc-49b5-a101-b1275d1a0e97",
+      "status": "success",
+      "stage": "completed",
+      "error": "",
+      "progress": {
+        "label": "已完成",
+        "percent": 100
+      },
+      "queue": {
+        "position": 0,
+        "estimated_wait_seconds": 0
+      },
+      "credit_refund": {
+        "refunded": false,
+        "amount": 0,
+        "reference_id": "37e2063a-c6dc-49b5-a101-b1275d1a0e97"
+      },
+      "output": {
+        "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+        "final_sprite_paths": [
+          "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+          "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_01.png",
+          "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_02.png",
+          "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_03.png"
+        ],
+        "prompt_detail": "宽长胶囊形按钮，红橙色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；宽长胶囊形按钮，亮蓝色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；较短胶囊形按钮，灰蓝色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；大型长方形面板，半透明深蓝色玻璃质感，边缘带有华丽装饰边框，内部划分为四个等大的玩家区域网格",
+        "sprite_pack_names": [
+          "红橙色胶囊按钮",
+          "亮蓝色胶囊按钮",
+          "灰蓝色胶囊按钮",
+          "深蓝色玻璃面板"
+        ],
+        "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+        "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_pack_preview.png"
+      }
+    }
+  },
+  "downloads": [
+    {
+      "type": "json",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\submit_response.json"
+    },
+    {
+      "type": "json",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\job_response.json"
+    },
+    {
+      "type": "url_download",
+      "key": "output.url",
+      "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\sprite_00.png"
+    },
+    {
+      "type": "url_download",
+      "key": "output.final_sprite_paths[1]",
+      "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_01.png",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\sprite_01.png"
+    },
+    {
+      "type": "url_download",
+      "key": "output.final_sprite_paths[2]",
+      "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_02.png",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\sprite_02.png"
+    },
+    {
+      "type": "url_download",
+      "key": "output.final_sprite_paths[3]",
+      "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_03.png",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\sprite_03.png"
+    },
+    {
+      "type": "url_download",
+      "key": "output.sprite_pack_preview_path",
+      "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_pack_preview.png",
+      "path": "D:\\GameSpace\\CoupleGame\\assets\\generated\\260606-room-ui\\gen_btns\\room_btns\\sprite_pack_preview.png"
+    }
+  ],
+  "error": ""
+}

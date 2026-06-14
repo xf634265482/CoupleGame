@@ -1,0 +1,37 @@
+{
+  "api_job_id": "64021667-ec93-49fa-8ce7-b153e91a651d",
+  "status": "success",
+  "stage": "completed",
+  "error": "",
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "64021667-ec93-49fa-8ce7-b153e91a651d"
+  },
+  "output": {
+    "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_00.png",
+    "final_sprite_paths": [
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_00.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_01.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_02.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_03.png"
+    ],
+    "prompt_detail": "正面视角，宽大的银色金属边框，四角饰有金色卷草纹与蓝色宝石，内部为半透明淡紫色矩形面板；正面视角，灰色铆钉金属边框，内部为灰暗的奇幻浮岛背景，中心绘有空白人形剪影，底部带有深色圆角矩形装饰条；正面视角，亮蓝色边框，内部为色彩鲜艳的奇幻浮岛背景，中心留白用于角色放置，底部带有蓝色长条形名牌底座；正面视角，蓝色渐变长条形徽章，左侧绘有金色皇冠图标，右侧留有空白区域用于放置装饰性几何纹样。",
+    "sprite_pack_names": [
+      "银色金属宝石边框",
+      "灰色铆钉浮岛边框",
+      "蓝色奇幻浮岛边框",
+      "蓝色皇冠徽章"
+    ],
+    "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_00.png",
+    "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/03%3A08%3A53-64021667-ec93-49fa-8ce7-b153e91a651d/sprite_pack_preview.png"
+  }
+}

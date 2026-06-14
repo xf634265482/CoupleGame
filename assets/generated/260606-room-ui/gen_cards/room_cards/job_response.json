@@ -1,0 +1,37 @@
+{
+  "api_job_id": "fc8b959f-8114-41b4-8610-5caf50605858",
+  "status": "success",
+  "stage": "completed",
+  "error": "",
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "fc8b959f-8114-41b4-8610-5caf50605858"
+  },
+  "output": {
+    "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_00.png",
+    "final_sprite_paths": [
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_00.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_01.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_02.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_03.png"
+    ],
+    "prompt_detail": "正面视角，深海军蓝边框的宽矩形卡片，内部为暗灰蓝色面板，带有虚线内框与中心加号图标剪影，四角饰有金属铆钉；正面视角，深海军蓝边框的宽矩形卡片，内部为明亮蓝青色面板，边缘环绕金色高光边框；正面视角，深海军蓝边框的宽药丸形徽章，内部为暖橙金色渐变面板，中心刻有金色皇冠图标；正面视角，深海军蓝边框的宽药丸形徽章，内部为紫青色渐变面板，中心刻有机器人芯片图标",
+    "sprite_pack_names": [
+      "加号铆钉卡片",
+      "金色边框卡片",
+      "皇冠徽章",
+      "芯片徽章"
+    ],
+    "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_00.png",
+    "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A33-fc8b959f-8114-41b4-8610-5caf50605858/sprite_pack_preview.png"
+  }
+}

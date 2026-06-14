@@ -1,0 +1,118 @@
+{
+  "job_id": "workflow-music_generator-90a58c50072a4dd996f22bc0",
+  "job_type": "workflow",
+  "status": "success",
+  "stage": "completed",
+  "animation_type": null,
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "result": {
+    "job_name": "083403_default_loop_friendly_cozy_party_board_game_BGM",
+    "run_dir": "https://storage.googleapis.com/meowart-bucket/music-generator/output/2026-06-04/08:34:17-workflow-music_generator-90a58c50072a4dd996f22bc0/",
+    "metadata_path": "https://storage.googleapis.com/meowart-bucket/music-generator/output/2026-06-04/08:34:17-workflow-music_generator-90a58c50072a4dd996f22bc0/metadata.json",
+    "metadata": {
+      "run_dir": "https://storage.googleapis.com/meowart-bucket/music-generator/output/2026-06-04/08:34:17-workflow-music_generator-90a58c50072a4dd996f22bc0/",
+      "raw_prompt": "微信联机派对棋盘游戏背景音乐：轻松治愈、温暖明亮、略带俏皮冒险感；横版跑图发育与好友对战，节奏舒缓不紧张、绝不压抑；以木吉他、卡林巴、长笛、轻柔弦乐为主，无歌词无人声，适合循环播放 loop-friendly cozy party board game BGM",
+      "name": "Cozy Board Game Adventure",
+      "summary": "A 2-minute loop-friendly, cozy, and bright BGM in G major at 105 BPM, featuring acoustic guitar, kalimba, flute, and light strings, perfect for a casual party board game. Instrumental only, no vocals.",
+      "timestamps_detail": "[0:00 - 0:40] Intro & Theme: Intensity: 2/10.\nA warm and inviting opening featuring a gentle, finger-picked acoustic guitar melody layered with sparkling, rhythmic kalimba notes. The atmosphere is cozy and curious, suggesting the start of a lighthearted adventure. A soft, steady pulse is provided by light pizzicato strings, keeping the rhythm relaxed and unobtrusive. The mood is bright and welcoming, evoking the feeling of gathering around a game table.\n\n[0:40 - 1:20] Main Development: Intensity: 3/10.\nThe arrangement expands slightly as a playful, airy flute melody enters, weaving through the guitar and kalimba textures. The rhythm remains steady and comfortable, with subtle, soft percussion like light wooden clicks or a distant shaker adding a sense of gentle movement. The interaction between the instruments feels like friendly exploration and lighthearted competition. The melody is catchy and repetitive, designed to loop seamlessly without becoming distracting.\n\n[1:20 - 2:00] Loop Outro: Intensity: 2/10.\nThe track gradually simplifies, stripping away the flute and percussion layers to return to the core acoustic guitar and kalimba motif. The energy softens, creating a calm, reflective space that prepares the listener for the loop back to the beginning. The final bars are gentle and open-ended, ensuring a smooth transition back to the start of the track without any jarring changes. The atmosphere remains consistently warm, bright, and safe throughout.",
+      "duration_seconds": 180,
+      "loop": true,
+      "audio_generate": true,
+      "demo": true,
+      "provider": "lyria",
+      "generation_mode": "music_audio",
+      "prepare_only": false,
+      "audio_path": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+      "audio_paths": [
+        "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3"
+      ],
+      "audios": [
+        {
+          "type": "music",
+          "label": "Cozy Board Game Adventure",
+          "name": "Cozy Board Game Adventure",
+          "path": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+          "content_type": "audio/mpeg",
+          "duration_seconds": 30,
+          "provider": "lyria"
+        }
+      ],
+      "content_type": "audio/mpeg",
+      "audio_bytes": 744609,
+      "model": "lyria-3-clip-preview",
+      "request_id": "fzghatf0H7HjjuMPwpaf8Q0",
+      "elapsed_seconds": 9.741,
+      "reference_image_paths": [
+        "/app/scripts/output/job-inputs/workflows/music_generator_workflow-music_generator-90a58c50072a4dd996f22bc0_reference_01.png"
+      ],
+      "reference_image_count": 1,
+      "prompt_result": {
+        "raw_prompt": "微信联机派对棋盘游戏背景音乐：轻松治愈、温暖明亮、略带俏皮冒险感；横版跑图发育与好友对战，节奏舒缓不紧张、绝不压抑；以木吉他、卡林巴、长笛、轻柔弦乐为主，无歌词无人声，适合循环播放 loop-friendly cozy party board game BGM",
+        "name": "Cozy Board Game Adventure",
+        "summary": "A 2-minute loop-friendly, cozy, and bright BGM in G major at 105 BPM, featuring acoustic guitar, kalimba, flute, and light strings, perfect for a casual party board game. Instrumental only, no vocals.",
+        "timestamps_detail": "[0:00 - 0:40] Intro & Theme: Intensity: 2/10.\nA warm and inviting opening featuring a gentle, finger-picked acoustic guitar melody layered with sparkling, rhythmic kalimba notes. The atmosphere is cozy and curious, suggesting the start of a lighthearted adventure. A soft, steady pulse is provided by light pizzicato strings, keeping the rhythm relaxed and unobtrusive. The mood is bright and welcoming, evoking the feeling of gathering around a game table.\n\n[0:40 - 1:20] Main Development: Intensity: 3/10.\nThe arrangement expands slightly as a playful, airy flute melody enters, weaving through the guitar and kalimba textures. The rhythm remains steady and comfortable, with subtle, soft percussion like light wooden clicks or a distant shaker adding a sense of gentle movement. The interaction between the instruments feels like friendly exploration and lighthearted competition. The melody is catchy and repetitive, designed to loop seamlessly without becoming distracting.\n\n[1:20 - 2:00] Loop Outro: Intensity: 2/10.\nThe track gradually simplifies, stripping away the flute and percussion layers to return to the core acoustic guitar and kalimba motif. The energy softens, creating a calm, reflective space that prepares the listener for the loop back to the beginning. The final bars are gentle and open-ended, ensuring a smooth transition back to the start of the track without any jarring changes. The atmosphere remains consistently warm, bright, and safe throughout.",
+        "reference_image_count": 1,
+        "runner": {
+          "success": true,
+          "fallback_used": false,
+          "attempts": [
+            {
+              "attempt": 1,
+              "ok": true,
+              "tool_called": true
+            }
+          ],
+          "error": "",
+          "tool_args": {
+            "name": "Cozy Board Game Adventure",
+            "timestamps_detail": "[0:00 - 0:40] Intro & Theme: Intensity: 2/10.\nA warm and inviting opening featuring a gentle, finger-picked acoustic guitar melody layered with sparkling, rhythmic kalimba notes. The atmosphere is cozy and curious, suggesting the start of a lighthearted adventure. A soft, steady pulse is provided by light pizzicato strings, keeping the rhythm relaxed and unobtrusive. The mood is bright and welcoming, evoking the feeling of gathering around a game table.\n\n[0:40 - 1:20] Main Development: Intensity: 3/10.\nThe arrangement expands slightly as a playful, airy flute melody enters, weaving through the guitar and kalimba textures. The rhythm remains steady and comfortable, with subtle, soft percussion like light wooden clicks or a distant shaker adding a sense of gentle movement. The interaction between the instruments feels like friendly exploration and lighthearted competition. The melody is catchy and repetitive, designed to loop seamlessly without becoming distracting.\n\n[1:20 - 2:00] Loop Outro: Intensity: 2/10.\nThe track gradually simplifies, stripping away the flute and percussion layers to return to the core acoustic guitar and kalimba motif. The energy softens, creating a calm, reflective space that prepares the listener for the loop back to the beginning. The final bars are gentle and open-ended, ensuring a smooth transition back to the start of the track without any jarring changes. The atmosphere remains consistently warm, bright, and safe throughout.",
+            "summary": "A 2-minute loop-friendly, cozy, and bright BGM in G major at 105 BPM, featuring acoustic guitar, kalimba, flute, and light strings, perfect for a casual party board game. Instrumental only, no vocals."
+          }
+        }
+      },
+      "storage": "local",
+      "workflow_id": "music_generator",
+      "template_id": "default",
+      "operator_chain": [
+        "music_prompt_rewrite",
+        "music_audio_generation"
+      ]
+    },
+    "name": "Cozy Board Game Adventure",
+    "summary": "A 2-minute loop-friendly, cozy, and bright BGM in G major at 105 BPM, featuring acoustic guitar, kalimba, flute, and light strings, perfect for a casual party board game. Instrumental only, no vocals.",
+    "timestamps_detail": "[0:00 - 0:40] Intro & Theme: Intensity: 2/10.\nA warm and inviting opening featuring a gentle, finger-picked acoustic guitar melody layered with sparkling, rhythmic kalimba notes. The atmosphere is cozy and curious, suggesting the start of a lighthearted adventure. A soft, steady pulse is provided by light pizzicato strings, keeping the rhythm relaxed and unobtrusive. The mood is bright and welcoming, evoking the feeling of gathering around a game table.\n\n[0:40 - 1:20] Main Development: Intensity: 3/10.\nThe arrangement expands slightly as a playful, airy flute melody enters, weaving through the guitar and kalimba textures. The rhythm remains steady and comfortable, with subtle, soft percussion like light wooden clicks or a distant shaker adding a sense of gentle movement. The interaction between the instruments feels like friendly exploration and lighthearted competition. The melody is catchy and repetitive, designed to loop seamlessly without becoming distracting.\n\n[1:20 - 2:00] Loop Outro: Intensity: 2/10.\nThe track gradually simplifies, stripping away the flute and percussion layers to return to the core acoustic guitar and kalimba motif. The energy softens, creating a calm, reflective space that prepares the listener for the loop back to the beginning. The final bars are gentle and open-ended, ensuring a smooth transition back to the start of the track without any jarring changes. The atmosphere remains consistently warm, bright, and safe throughout.",
+    "audio_path": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+    "audio_paths": [
+      "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3"
+    ],
+    "audios": [
+      {
+        "type": "music",
+        "label": "Cozy Board Game Adventure",
+        "name": "Cozy Board Game Adventure",
+        "path": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+        "content_type": "audio/mpeg",
+        "duration_seconds": 30,
+        "provider": "lyria"
+      }
+    ],
+    "url": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+    "gcs_url": "https://media.meowa.ai/public/music-generator/output/2026-06-04/08%3A34%3A17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy%20Board%20Game%20Adventure.mp3",
+    "gcs_blob_name": "music-generator/output/2026-06-04/08:34:17-workflow-music_generator-90a58c50072a4dd996f22bc0/Cozy Board Game Adventure.mp3",
+    "gcs_run_prefix": "https://storage.googleapis.com/meowart-bucket/music-generator/output/2026-06-04/08:34:17-workflow-music_generator-90a58c50072a4dd996f22bc0/",
+    "storage": "gcs"
+  },
+  "error": "",
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "workflow-music_generator-90a58c50072a4dd996f22bc0"
+  }
+}

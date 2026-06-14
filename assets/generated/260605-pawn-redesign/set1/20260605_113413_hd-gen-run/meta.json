@@ -1,0 +1,43 @@
+{
+  "command": "hd-gen-run",
+  "started_at": "2026-06-05T11:34:13",
+  "finished_at": "2026-06-05T11:34:47",
+  "run_dir": "assets\\generated\\260605-pawn-redesign\\set1\\20260605_113413_hd-gen-run",
+  "work_dir": "assets\\generated\\260605-pawn-redesign\\set1",
+  "effective_output_dir": "assets\\generated\\260605-pawn-redesign\\set1",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 600,
+      "poll_interval": 10.0,
+      "work_dir": "assets/generated/260605-pawn-redesign/set1",
+      "output_dir": "assets/generated/260605-pawn-redesign/set1",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-run",
+      "template_name": "hd_char_1",
+      "requirement": "Reference-style chibi board pawns: silver helmet knight with axe, green goblin sword saint with red scarf and curved sword. Thick dark outline, cute squat big-head small-body, soft cel shading, rounded toy shape, transparent PNG, no card frame.",
+      "template_config": "{\"direction\":\"front\",\"target_count\":2,\"hd_remove_bg_mode\":\"batch\"}",
+      "job_name": "",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "C:\\Users\\lin\\.cursor\\projects\\d-GameSpace-CoupleGame\\assets\\c__Users_lin_AppData_Roaming_Cursor_User_workspaceStorage_5666e20f10e4832bcc2f1a19833fc512_images_image-b1b85fef-a356-4c1b-b770-c75db2f647bc.png",
+      "reference_files": [],
+      "project_id": null,
+      "thread_id": null
+    },
+    "payload": {}
+  },
+  "response": null,
+  "downloads": [],
+  "error": "[WinError 3] 系统找不到指定的路径。: 'assets\\\\generated\\\\260605-pawn-redesign\\\\set1\\\\Reference-style_chibi_board_pawns_silver_helmet_knight_with_axe_green_goblin_sword_saint_with_red_scarf_and_curved_sword_Thick_dark_outline_cute_squat_big-head_small-body_soft_cel_shading_rounded_toy_shape_transparent_PNG_no_card_frame'"
+}

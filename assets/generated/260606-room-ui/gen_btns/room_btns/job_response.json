@@ -1,0 +1,37 @@
+{
+  "api_job_id": "37e2063a-c6dc-49b5-a101-b1275d1a0e97",
+  "status": "success",
+  "stage": "completed",
+  "error": "",
+  "progress": {
+    "label": "已完成",
+    "percent": 100
+  },
+  "queue": {
+    "position": 0,
+    "estimated_wait_seconds": 0
+  },
+  "credit_refund": {
+    "refunded": false,
+    "amount": 0,
+    "reference_id": "37e2063a-c6dc-49b5-a101-b1275d1a0e97"
+  },
+  "output": {
+    "url": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+    "final_sprite_paths": [
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_01.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_02.png",
+      "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_03.png"
+    ],
+    "prompt_detail": "宽长胶囊形按钮，红橙色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；宽长胶囊形按钮，亮蓝色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；较短胶囊形按钮，灰蓝色渐变填充，深色粗轮廓，四角带有金属铆钉，边缘有斜面高光；大型长方形面板，半透明深蓝色玻璃质感，边缘带有华丽装饰边框，内部划分为四个等大的玩家区域网格",
+    "sprite_pack_names": [
+      "红橙色胶囊按钮",
+      "亮蓝色胶囊按钮",
+      "灰蓝色胶囊按钮",
+      "深蓝色玻璃面板"
+    ],
+    "sprite_crop_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_00.png",
+    "sprite_pack_preview_path": "https://media.meowa.ai/public/hd-gen/output/2026-06-06/01%3A55%3A28-37e2063a-c6dc-49b5-a101-b1275d1a0e97/sprite_pack_preview.png"
+  }
+}

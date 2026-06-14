@@ -1,0 +1,43 @@
+{
+  "command": "hd-gen-run",
+  "started_at": "2026-06-06T09:34:56",
+  "finished_at": "2026-06-06T09:34:56",
+  "run_dir": "d:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\work1\\20260606_093456_hd-gen-run",
+  "work_dir": "d:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\work1",
+  "effective_output_dir": "d:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\batch1",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 900,
+      "poll_interval": 3.0,
+      "work_dir": "d:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\work1",
+      "output_dir": "d:\\GameSpace\\CoupleGame\\assets\\generated\\260606-equip-icons\\batch1",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-run",
+      "template_name": "cute_cartoon_icon",
+      "requirement": "8 game item icons for a casual fantasy board game. Each icon: centered object inside a rounded square weathered grey stone frame with beveled edges, thick dark outline, hand-painted chunky mobile game style matching the reference about 90% similarity. Saturated functional colors, readable at 48px. Objects left to right top row then bottom row: 1 silver medieval sword, 2 blue pistol gun, 3 orange rocket launcher, 4 knight helmet. Bottom row: 5 chest plate armor, 6 brown marching boots, 7 cyan lightning fast running shoes, 8 two red dice. Transparent background, no text, no watermark.",
+      "template_config": "{target_count:8,hd_remove_bg_mode:batch}",
+      "job_name": "",
+      "model_name": "gemini-3.1-flash-image-preview",
+      "resolution": "",
+      "aspect_ratio": "1:1",
+      "temperature": 0.0,
+      "hd_remove_bg_mode": "",
+      "include_base64": false,
+      "reference_file": "d:\\GameSpace\\CoupleGame\\assets\\resources\\art\\ui\\board\\cells\\cell_gold.png",
+      "reference_files": [],
+      "project_id": null,
+      "thread_id": null
+    },
+    "payload": {}
+  },
+  "response": null,
+  "downloads": [],
+  "error": "template_config must be valid JSON: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+}
