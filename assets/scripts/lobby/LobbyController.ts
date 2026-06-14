@@ -1388,10 +1388,15 @@ export class LobbyController extends Component {
     this._menuRoot.setPosition(0, shift * 0.6, 0);
   }
 
-  /** 大厅 → 其他场景切换：立即显示 spinner，10s 未完成则提示网络较慢（AC-501）。 */
+  /**
+   * 大厅 → 其他场景切换：立即显示 spinner，10s 未完成则提示网络较慢（AC-501）。
+   * loadScene 延后一帧执行——若目标场景已在包内缓存，loadScene 几乎同步销毁当前
+   * 场景（包括刚挂载的遮罩节点），spinner 会一帧都未渡染就被销毁；延后一帧让
+   * spinner 先完成一次渲染。
+   */
   private _gotoScene(text: string, load: () => void): void {
     LoadingOverlay.show(this.node, text, () => this._setStatus('加载较慢，请检查网络'));
-    load();
+    this.scheduleOnce(load, 0);
   }
 
   private _setStatus(text: string) {
