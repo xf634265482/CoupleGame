@@ -51,6 +51,13 @@
 2. **项目 → 构建发布** → 平台选 **微信小游戏**
 3. 填入 AppID → 构建
 4. 输出目录默认 `build/wechatgame/`
+5. 构建后执行（或启用扩展 `wechatgame-post-patch` 自动执行）：
+
+```bash
+node scripts/patch-wechatgame-config.js
+```
+
+真机资源与分包细节见 `.cursor/rules/cocos-wechatgame-subpackage.mdc`。
 
 ### Cocos 首场景
 
@@ -88,6 +95,22 @@ CoupleGame/
 └── project.config.json  # 微信开发者工具配置
 ```
 
+## 文档索引（游戏说明在哪）
+
+| 你想查什么 | 路径 |
+|------------|------|
+| **项目入门、构建、云函数** | 本文件 `README.md` |
+| **联机派对初版：设计 / 计划 / 任务** | `specs/260526-online-party-board-game/`（`design.md`、`plan.md`、`tasks.md`） |
+| **战斗棋盘改版：玩法、验收、双端联调** | `specs/260529-combat-board-game-rework/`（`design.md`、`acceptance-checklist.md`、`dual-device-debug.md`） |
+| **UI 美术接入、大厅/棋盘视觉、真机分包（当前版本）** | `specs/260603-ui-entry/README.md`、`ui-asset-checklist.md` |
+| **出门联测、不用预览二维码** | `specs/260603-ui-entry/mobile-testing.md` |
+| **微信构建 patch 规则（防改坏）** | `.cursor/rules/cocos-wechatgame-subpackage.mdc` |
+| **云数据库与索引** | `cloud/database/`、`specs/*/ddl-sql.md` |
+| **云函数 common 同步** | `cloudfunctions/common/README.md` |
+
+当前 **UI / 真机资源** 迭代说明以 `specs/260603-ui-entry/README.md` 为准；**棋盘规则与 AC** 仍以 `specs/260529-combat-board-game-rework/design.md` 为准。
+
 ## 任务进度
 
-见 `specs/260526-online-party-board-game/tasks.md`
+- 初版联机：`specs/260526-online-party-board-game/tasks.md`
+- 战斗改版：`specs/260529-combat-board-game-rework/tasks.md`
