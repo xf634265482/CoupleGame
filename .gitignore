@@ -16,6 +16,9 @@ node_modules/
 # 本地微信 AppID / 云环境 ID（勿提交）
 config/wechat.local.json
 
+# MeowArt / 其他本地密钥（勿提交）
+.env
+
 #//////////////////////////
 # VSCode
 #//////////////////////////

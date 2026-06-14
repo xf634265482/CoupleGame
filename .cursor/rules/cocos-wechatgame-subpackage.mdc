@@ -1,0 +1,145 @@
+---
+description: Cocos Creator 微信小游戏 resources 分包与 post-build 补丁（真机已验证，勿改坏）
+globs: scripts/patch-wechatgame-config.js,config/wechatgame.game.json,build/wechatgame/**,assets/resources.meta,assets/scripts/ui/UiAssets.ts,assets/scripts/ui/SceneUiBackground.ts,assets/scripts/core/GameApp.ts,assets/scripts/audio/BgmController.ts,assets/scenes/**/*.scene
+alwaysApply: false
+---
+
+# WeChat `resources` 分包与真机补丁（已验证）
+
+本项目 Cocos Creator 3.8 输出 `build/wechatgame`，将 `assets/resources` 打成名为 `resources` 的**微信分包**。修改 `scripts/patch-wechatgame-config.js` 或 `engine-adapter.js` 字符串替换时务必遵守下文，改完必须 `node --check` 通过。
+
+## 发布流程（每次必做）
+
+1. Cocos Creator → 构建 **wechatgame**（改 `assets/scripts/**` 后必须重建，`main/index.js` 才会更新）
+2. 大图先压缩：`python scripts/compress-ui-large-assets.py`（背景 ≤400KB/张，原图在 `*.pngbak`）
+3. 项目根执行：`node scripts/patch-wechatgame-config.js`
+4. 确认日志含：`build structure OK`、`critical native manifest`、`est. main ~xxxx KB`（**须 < 4096 KB**）
+5. 微信开发者工具 → **清缓存** → 真机调试
+
+**禁止**在未跑 patch 的情况下直接改 `build/wechatgame` 当正式包；**禁止**用 junction 把整包 `assets/resources` 指回分包。
+
+## 2026-06 真机 UI/BGM 事故复盘（必读）
+
+### 现象
+
+- 真机只有占位色块 / 黑屏 / 缺 BGM
+- 控制台：`Error 4930`、`readFile:fail no such file`、`stat:fail` … `subpackages/resources/native/...`
+- 开发者工具预览正常，**仅真机**复现
+
+### 根因（三层）
+
+1. **分包 `native` 不可按主包方式读**  
+   真机上 `wx.readFile` / `copyFile` 对 `subpackages/resources/native/...` 常失败；`bundle.load` → `downloadDomImage` 直读分包路径会 **Error 4930**。
+
+2. **主包 4MB 硬限制**  
+   未压缩时单张背景 ~2MB，不可能把全部 UI native 放进主包。须先 `compress-ui-large-assets.py` 再 `copyCriticalNativeToMain`。
+
+3. **补丁顺序曾写错**  
+   `copyCriticalNativeToMain` 若在 `ensureResourcesEntryScripts` **之前**执行，会被 `stripped assets/resources/native` 删掉。正确顺序：先写 stub → **再**复制 critical native。
+
+### 已验证可行方案
+
+| 资源 | 策略 |
+|------|------|
+| 大厅/房间 UI、棋盘 UI、BGM | `copyCriticalNativeToMain` → 主包 `assets/resources/native/` |
+| `bg_lobby` | 主包（压缩后 ~272KB） |
+| `bg_board` | **主包**（压缩 ~200KB）；棋盘首屏须即时显示 |
+| `bg_room` / `bg_settlement` / `settlement/*` | **分包**；主包 1×1 占位 PNG（IDE 编译）；运行时走分包 |
+| `icons/*` | **主包**（说明弹窗/HUD 角标；分包 copyFile 真机常失败且每次重试 ~2s） |
+| BGM | 主包 mp3（96kbps 压缩 ~500KB）+ 真机 `InnerAudioContext`（**勿** `bundle.load` 分包 mp3） |
+
+### 运行时加载（`UiAssets.ts` / `BgmController.ts`）
+
+1. `wx.loadSubpackage({ name: 'resources' })` — success 即继续，**禁止**阻塞 fs 探针分包 native
+2. `assetManager.loadBundle('resources')` — **禁止** `loadBundle('subpackages/resources')`
+3. **真机 UI**：`loadWechatNativeSprite` 主包路径优先 → 分包 `copyFile` 重试；**禁止**真机 `bundle.load` 读分包贴图（4930）
+4. **真机 BGM**：`playWechatBgm` / `InnerAudioContext` 读主包 mp3；**禁止** `bundle.load('audio/bgm_main')` 走分包 stat
+5. `downloadDomImage` 补丁：**仅**去掉 URL 前导 `/`；**禁止** readFile 拦截分包贴图
+
+### 改坏后的典型回归
+
+- 去掉 `copyCriticalNativeToMain` 或恢复 `packOptions.ignore` 忽略主包 native → 大厅按钮/棋盘 UI 全挂
+- 真机恢复 `bundle.load` 优先 → 4930 刷屏
+- `patchCompiledCriticalNativePaths` 把 `assets/resources/native` 重写成 `subpackages/...` → 主包路径失效
+- `copyCriticalNativeToMain` 在 strip stub **之前** → 主包 native 被删空
+
+## 补丁后目录结构
+
+```
+build/wechatgame/
+  assets/resources/              ← 主包 stub
+    index.js, game.js, config.json
+    import/                      ← 从分包复制（JSON 索引）
+    native/                      ← copyCriticalNativeToMain（大厅/棋盘 UI + icons + bg_lobby + BGM）
+  subpackages/resources/         ← 全量重资源（含大背景、结算；icons 亦有副本供 devtools）
+    import/, native/, config.json, index.js, game.js
+```
+
+| 内容 | 位置 | 原因 |
+|------|------|------|
+| `config.json` | 主包 stub + 分包 | 真机读分包根 config 常失败 |
+| `import/` JSON | 主包 `assets/resources/import` | 真机读分包 import 常 `no such file` |
+| UI native（清单内） | 主包 `assets/resources/native/` | 真机可读；规避 4930 |
+| 大背景 / 结算 | 分包 `native/` | 单张背景过大，主包装不下 |
+| icons | 主包 + 分包副本 | 须即时显示；靠 BGM/bg_lobby 压缩腾体积 |
+| `index.js` / `game.js` | 主包 stub + 分包 | 微信 IDE 预编译要求 |
+
+`project.config.json`：**不得** `packOptions.ignore` 掉 `assets/resources/native`（主包须上传 critical native）。
+
+## `patch-wechatgame-config.js` 步骤
+
+| 步骤 | 作用 |
+|------|------|
+| `ensureResourcesSubpackage` | `assets/resources` → `subpackages/resources` |
+| `patchEngineResourcesSubpackage` | resources bundle 基路径 `subpackages/resources/` |
+| `patchEngineResourcesConfigInMain` | config 从主包 `assets/resources/config.*.json` 读 |
+| `patchEngineSubpackageFileExists` / `patchWebAdapterSubpackageExists` | 分包路径跳过 exists 误报 |
+| `patchEngineTransformImportRewrite` | import URL → `assets/resources/import/`；**移除** native `/` 前缀（4930） |
+| `copyResourcesImportToMain` | 物理复制 `import/` 到主包 |
+| `ensureResourcesEntryScripts` | 写 stub；**strip** 多余目录（勿删后续写入的 native） |
+| `buildCriticalNativeManifest` + `copyCriticalNativeToMain` | 从 `UiAssets.ts` UUID 自动生成主包 native 清单 |
+| `syncProjectConfig` | 不 ignore 主包 native |
+| `verifyJsSyntax` | `node --check` engine/web adapter |
+
+主包 native 排除项（`MAIN_NATIVE_EXCLUDE_*`）：`bg_room`、`bg_board`、`bg_settlement`、`settlement/*`。**icons 不得排除**。增删须跑 `python scripts/calc-main-native-budget.py` 核对主包体积；含 icons 前须跑 `compress-ui-large-assets.py`（含 BGM 压缩）。
+
+## 修改 `engine-adapter` 陷阱
+
+- import 重写 else 块后须 `};` 而非 `}"`（否则 SyntaxError）
+- exists 绕过替换后括号须闭合
+- **禁止**给 `subpackages/resources/native` URL 加 `/` 前缀
+
+## 真机现象 → 排查
+
+| 现象 | 处理 |
+|------|------|
+| 仅背景有图、按钮纯色 | 对应 UI native 未进主包；查 patch 是否 `critical native -> main lobby/btn_...` |
+| 棋盘格子/按钮/棋子全无 | 棋盘 UI 未进主包；确认 manifest 含 `board/*`；重建 + patch |
+| Error 4930 `subpackages/...png` | 真机误走 `bundle.load` 或 Image 直读分包；改回 `loadWechatNativeSprite` 主包优先 |
+| BGM `stat:fail` 分包 mp3 | 真机勿 `bundle.load` BGM；用主包 mp3 + `playWechatBgm` |
+| `native sprite unavailable` 主包路径 | patch 顺序错或 native 被 strip；重跑 patch |
+| 真机调试 ENOENT `assets/resources/native/...` | patch 须含 `writeCompileNativePlaceholders`（占位 PNG，非完整复制） |
+| 主包超 4MB（4970KB 等） | 勿 `copyMissingNativeToMain` 复制大背景；`packOptions.ignore` 不计入上传体积 |
+| `readFile:fail` 分包 native | 大背景预期行为；`preloadBoardUi` 已跳过；背景走 `applyScreenBackground` 异步 |
+| 进棋盘很慢 | 曾并行 preload 40 次分包重试；现 icons 进主包 + 重试 8 次 + 跳过 bg_board preload |
+| 主包超 4MB | 跑 `compress-ui-large-assets.py`（BGM 96kbps + bg_lobby 64 色） |
+| `compiled UiAssets patch skipped` | Cocos 重建 wechatgame |
+| patch 后无 `critical native -> main` | `copyCriticalNativeToMain` 须在 `ensureResourcesEntryScripts` **之后** |
+
+## 相关文件
+
+- `scripts/patch-wechatgame-config.js` — 权威补丁
+- `scripts/compress-ui-large-assets.py` — 背景压缩
+- `scripts/calc-main-native-budget.py` — 主包体积估算
+- `assets/scripts/ui/UiAssets.ts` — 加载链
+- `assets/scripts/audio/BgmController.ts` — BGM
+- `specs/260603-ui-entry/ui-asset-checklist.md` — 美术清单
+
+## 改 patch / 加载逻辑自检
+
+- [ ] `python scripts/calc-main-native-budget.py` → `est main slim` < 4096 KB
+- [ ] `node scripts/patch-wechatgame-config.js` exit 0
+- [ ] `build/wechatgame/assets/resources/native/` 含 `board/` 对应 uuid 文件
+- [ ] `build/wechatgame/assets/resources/import` 存在
+- [ ] 真机：大厅按钮 + BGM + 棋盘按钮/格子/棋子
+- [ ] 真机：`patched downloadDomImage strip-leading-slash`

@@ -1,0 +1,33 @@
+{
+  "command": "credits-balance",
+  "started_at": "2026-06-05T11:33:01",
+  "finished_at": "2026-06-05T11:33:02",
+  "run_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art\\20260605_113301_credits-balance",
+  "work_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art",
+  "effective_output_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art\\20260605_113301_credits-balance",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 900,
+      "poll_interval": 3.0,
+      "work_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art",
+      "output_dir": "",
+      "no_download": false,
+      "insecure": false,
+      "command": "credits-balance"
+    },
+    "payload": {}
+  },
+  "response": {
+    "trial_credits": 55,
+    "credits": 600,
+    "next_trial_credit_expires_at": "2026-07-03T10:16:42.693734Z"
+  },
+  "downloads": [],
+  "error": ""
+}

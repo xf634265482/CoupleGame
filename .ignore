@@ -1,0 +1,4 @@
+# ripgrep-only ignore (不影响 git 跟踪，cloudfunctions/*/common/ 仍会被提交)
+# 这些是 cloudfunctions/common/ 的自动同步副本（node scripts/sync-cloud-common.js 生成）
+# 搜索时只看 cloudfunctions/common/ 这个唯一权威源即可
+cloudfunctions/*/common/

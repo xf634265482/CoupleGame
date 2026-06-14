@@ -1,0 +1,574 @@
+{
+  "command": "hd-gen-template-info",
+  "started_at": "2026-06-03T18:41:45",
+  "finished_at": "2026-06-03T18:41:46",
+  "run_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art\\20260603_184145_hd-gen-template-info",
+  "work_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art",
+  "effective_output_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art\\20260603_184145_hd-gen-template-info",
+  "request": {
+    "cli_args": {
+      "no_bootstrap": false,
+      "bootstrap_force": false,
+      "api_base": "https://api.meowa.ai",
+      "api_key": "***REDACTED***",
+      "dev_key": "",
+      "timeout": 240,
+      "max_wait": 900,
+      "poll_interval": 3.0,
+      "work_dir": "D:\\GameSpace\\CoupleGame\\.cursor\\skills\\game-assets\\.meow_art",
+      "output_dir": "",
+      "no_download": false,
+      "insecure": false,
+      "command": "hd-gen-template-info"
+    },
+    "payload": {}
+  },
+  "response": {
+    "templates": [
+      {
+        "template_name": "ancient_minimal_icon",
+        "display_name": "古风简约icon",
+        "description": "古风简约高清图标模板，造型概括、线条清晰，适合生成东方古典题材的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/ancient_minimal_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/ancient_minimal_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "ancient_watercolor_icon",
+        "display_name": "古风水彩",
+        "description": "古风水彩高清图标模板，结合东方题材与水彩质感，适合生成柔和细腻的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/ancient_watercolor_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/ancient_watercolor_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "cute_cartoon_icon",
+        "display_name": "可爱卡通icon",
+        "description": "可爱卡通高清图标模板，造型圆润活泼，适合生成轻松、有亲和力的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/cute_cartoon_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/cute_cartoon_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "hd_char_1",
+        "display_name": "二次元Q版人物",
+        "description": "二次元Q版高清人物模板，角色比例可爱，轮廓清晰，适合生成轻幻想或动漫风格的多方向角色立绘。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_1.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_1.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_1__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_1__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_1__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_1__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_2",
+        "display_name": "儿童绘本Q版人物",
+        "description": "儿童绘本Q版高清人物模板，造型亲和，色彩柔和，适合生成温暖、可爱的多方向角色立绘。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_2.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_2.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_2__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_2__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_2__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_2__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_3",
+        "display_name": "古风水彩人物立绘",
+        "description": "古风水彩高清人物模板，结合东方服饰、柔和水彩质感和精致立绘表现，适合生成古典风格角色。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "2K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_3.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_3.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_3__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_3__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_3__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_3__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_4",
+        "display_name": "水墨国风人物立绘",
+        "description": "水墨国风高清人物模板，以墨色层次和留白气质塑造角色，适合生成东方水墨风格的多方向人物立绘。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "2K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_4.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_4.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_4__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_4__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_4__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_4__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_5",
+        "display_name": "淡雅国风人物立绘",
+        "description": "淡雅国风高清人物模板，色彩克制、线条轻盈，适合生成清爽雅致的东方人物立绘。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "2K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_5.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_5.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_5__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_5__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_5__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_5__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_6",
+        "display_name": "温暖治愈水彩人物",
+        "description": "温暖治愈水彩高清人物模板，使用柔和色调和手绘质感，适合生成亲切、轻松的多方向角色。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "2K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_6.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_6.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_6__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_6__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_6__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_6__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "hd_char_7",
+        "display_name": "童话治愈水彩人物",
+        "description": "童话治愈水彩高清人物模板，画面氛围梦幻柔和，适合生成童话感和治愈感强的多方向角色立绘。",
+        "labels": [
+          "hd",
+          "character"
+        ],
+        "workflow_id": "hd_gen_grid_2x2",
+        "agent_type": "hd-character",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "512-1024",
+        "default_params": {
+          "target_count": 2,
+          "remove_bg_method": "hd",
+          "resolution": "2K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "direction",
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": true,
+        "directions": [
+          "front",
+          "left",
+          "right",
+          "back"
+        ],
+        "default_direction": "front",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_7.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/hd_char_7.png?v=20260509-nobg-r2",
+        "direction_image_urls": {
+          "front": "https://media.meowa.ai/public/templates/gsc/hd_char_7__front.png?v=20260509-nobg-r2",
+          "left": "https://media.meowa.ai/public/templates/gsc/hd_char_7__left.png?v=20260509-nobg-r2",
+          "right": "https://media.meowa.ai/public/templates/gsc/hd_char_7__right.png?v=20260509-nobg-r2",
+          "back": "https://media.meowa.ai/public/templates/gsc/hd_char_7__back.png?v=20260509-nobg-r2"
+        }
+      },
+      {
+        "template_name": "ink_wash_icon",
+        "display_name": "水墨icon",
+        "description": "水墨高清图标模板，以墨色层次和东方留白表现物件，适合生成国风感强的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/ink_wash_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/ink_wash_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "minimal_pet_icon",
+        "display_name": "简约萌宠",
+        "description": "简约萌宠高清图标模板，使用干净造型和可爱动物特征，适合生成轻量、统一的宠物图标组。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/minimal_pet_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/minimal_pet_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "modern_minimal_icon",
+        "display_name": "现代简约icon",
+        "description": "现代简约高清图标模板，强调清晰形状、克制细节和统一视觉语言，适合生成现代风格图标组。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/modern_minimal_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/modern_minimal_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "storybook_watercolor_icon",
+        "display_name": "童话治愈水彩icon",
+        "description": "童话治愈水彩高清图标模板，色彩柔和、氛围梦幻，适合生成温暖童话感的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/storybook_watercolor_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/storybook_watercolor_icon.png?v=20260509-nobg-r2"
+      },
+      {
+        "template_name": "warm_healing_watercolor_icon",
+        "display_name": "温暖治愈水彩icon",
+        "description": "温暖治愈水彩高清图标模板，采用柔和笔触和温暖配色，适合生成自然亲切的成组图标。",
+        "labels": [
+          "hd",
+          "asset",
+          "sprite-pack"
+        ],
+        "workflow_id": "hd_gen_grid_4x4",
+        "agent_type": "hd-sprite-packs",
+        "is_beta": false,
+        "developer_only": false,
+        "output_size": "256",
+        "default_params": {
+          "target_count": 8,
+          "remove_bg_method": "hd",
+          "resolution": "1K",
+          "aspect_ratio": "1:1",
+          "temperature": 0.0
+        },
+        "supported_config_keys": [
+          "target_count",
+          "hd_remove_bg_mode"
+        ],
+        "supports_direction": false,
+        "directions": [],
+        "default_direction": "",
+        "display_image_url": "https://media.meowa.ai/public/templates/gsc/warm_healing_watercolor_icon.png?v=20260509-nobg-r2",
+        "preview_image_url": "https://media.meowa.ai/public/templates/gsc/warm_healing_watercolor_icon.png?v=20260509-nobg-r2"
+      }
+    ]
+  },
+  "downloads": [],
+  "error": ""
+}

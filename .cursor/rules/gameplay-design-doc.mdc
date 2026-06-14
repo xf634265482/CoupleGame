@@ -1,0 +1,14 @@
+---
+description: 玩法修改必须同步更新当前玩法设计文档
+globs: assets/scripts/**/*.ts,cloudfunctions/**/*.js,shared/**/*.ts,specs/**/*.md
+alwaysApply: true
+---
+
+# 玩法设计文档同步
+
+任何玩法规则、数值、流程、格子效果、商店商品、战斗结算、小游戏奖励、AI 行为或验收口径发生修改时，必须同步更新 `specs/260529-combat-board-game-rework/design.md`。
+
+- 正确：改 `Constants.ts`、`GameEngine.js`、`CellResolver.js`、`ShopResolver.js`、`CombatResolver.js`、小游戏奖励或 UI 行为后，同时更新 `design.md` 对应规则和 AC。
+- 错误：只改代码或任务文档，保留 `design.md` 中旧玩法、旧数值、旧验收口径。
+
+`design.md` 是当前玩法规则的唯一主文档；其他规格、任务、UI 文档与当前实现冲突时，先按最新实现修正 `design.md`，再同步关联文档。
