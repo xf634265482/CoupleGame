@@ -13,7 +13,7 @@ import { HEAVY_STRIKE_RANGE, isCellShadowedByRock } from '../core/bosses/GoblinC
 import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS } from '../core/CampSystem';
 import type { CampItemId } from '../core/CampSystem';
 import { applyClassAdvance, applyClassAwaken, pickFragment } from '../core/ClassSystem';
-import { playerAttack, playerAttackPower } from '../core/CombatSystem';
+import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import {
   advanceFloor,
   applyDeath,
@@ -63,6 +63,30 @@ function perfMark(label: string, startMs: number, extra?: string): void {
   if (!PERF_LOG) return;
   const dt = Math.round(perfNow() - startMs);
   console.log(`[PVE perf] ${label} ${dt}ms${extra ? ' ' + extra : ''}`);
+}
+
+/**
+ * _checkMeta 调度预筛选：仅当事件序列含可能触发成就 / 图鉴更新的类型时返回 true。
+ * 必须与 AchievementSystem.checkNewAchievements / collectCodexEntries 的 switch 分支保持一致——
+ * 当前匹配的类型：AP_ROLLED(FIRST_EXPEDITION/REACH_FLOOR_10) / KILL(FIRST_KILL + 图鉴) /
+ * OPEN_CHEST(FIRST_CHEST) / LOOT.equip(FIRST_EQUIPMENT + 图鉴) / CLASS_ADVANCED / FLOOR_CLEARED。
+ * LOOT 必须带 equip 字段才算图鉴新条目（金币/灵气掉落不触发）。
+ */
+function META_RELEVANT_EVENTS_PRESENT(events: PveEvent[]): boolean {
+  for (const ev of events) {
+    switch (ev.type) {
+      case 'AP_ROLLED':
+      case 'KILL':
+      case 'OPEN_CHEST':
+      case 'CLASS_ADVANCED':
+      case 'FLOOR_CLEARED':
+        return true;
+      case 'LOOT':
+        if (ev.equip) return true;
+        break;
+    }
+  }
+  return false;
 }
 
 /** 装备槽位中文名（用于事件描述，避免显示英文枚举值）。 */
@@ -195,8 +219,11 @@ function describeForLog(
             text: `攻击 -${ev.damage}（敌剩 ${ev.targetHp} 血）`,
           }
         : null;
-    case 'PLAYER_DAMAGED':
-      return { kind: 'PLAYER_HURT', text: `受击 -${ev.damage}（自己剩 ${ev.hp} 血）` };
+    case 'PLAYER_DAMAGED': {
+      const attacker = state?.floorState.monsters.find((m) => m.id === ev.sourceId);
+      const name = attacker ? monsterName(attacker) : '敌人';
+      return { kind: 'PLAYER_HURT', text: `${name} 发起攻击，受击 -${ev.damage}（自己剩 ${ev.hp} 血）` };
+    }
     case 'KILL': {
       const monster = state?.floorState.monsters.find((m) => m.id === ev.monsterId);
       const name = monster ? monsterName(monster) : (MONSTER_TYPE_CN[ev.monsterType] ?? '敌人');
@@ -305,8 +332,11 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       const name = monster ? monsterName(monster) : (MONSTER_TYPE_CN[ev.monsterType] ?? '敌人');
       return `击败了 ${name}！`;
     }
-    case 'PLAYER_DAMAGED':
-      return `受到 ${ev.damage} 点伤害（自己剩 ${ev.hp} 血）`;
+    case 'PLAYER_DAMAGED': {
+      const attacker = state?.floorState.monsters.find((m) => m.id === ev.sourceId);
+      const name = attacker ? monsterName(attacker) : '敌人';
+      return `${name} 发起攻击，受到 ${ev.damage} 点伤害（自己剩 ${ev.hp} 血）`;
+    }
     case 'LOOT': {
       const parts: string[] = [];
       if (ev.gold) parts.push(`金币 +${ev.gold}`);
@@ -610,7 +640,7 @@ export class ExpeditionController extends Component {
     if (!this._state) return;
     this._map?.refresh(this._state.floorState);
     this._hud?.refresh(this._state);
-    this._map?.showAttackTarget(this._currentAttackTarget()?.pos ?? null);
+    this._map?.showAttackTarget(this._currentAttackTarget()?.pos ?? this._currentAttackTargetEntity()?.pos ?? null);
   }
 
   /**
@@ -624,6 +654,19 @@ export class ExpeditionController extends Component {
     const { range } = playerAttackPower(this._state.player);
     return floor.monsters
       .filter((m) => m.aiState !== 'DEAD' && manhattan(floor.player, m.pos) <= range)
+      .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos))[0];
+  }
+
+  /**
+   * "攻击"按钮在没有怪物目标时会命中的冰墙（FrostGiant 专属机制，→ attackIceWall）。
+   * 与 _currentAttackTarget 同规则：范围内最近者优先。
+   */
+  private _currentAttackTargetEntity(): FixedEntity | undefined {
+    if (!this._state) return undefined;
+    const floor = this._state.floorState;
+    const { range } = playerAttackPower(this._state.player);
+    return floor.entities
+      .filter((e) => e.type === 'ICE_WALL' && !e.consumed && manhattan(floor.player, e.pos) <= range)
       .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos))[0];
   }
 
@@ -657,12 +700,17 @@ export class ExpeditionController extends Component {
     perfMark('tap.attack', perfNow(), `busy=${this._busy}`);
     if (this._busy || !this._state) return;
     const target = this._currentAttackTarget();
-    if (!target) {
-      this._toast?.toast('附近没有目标');
-      void this._maybeAutoEndTurn();
+    if (target) {
+      this._attack(target.id);
       return;
     }
-    this._attack(target.id);
+    const wall = this._currentAttackTargetEntity();
+    if (wall) {
+      this._attackIceWall(wall.id);
+      return;
+    }
+    this._toast?.toast('附近没有目标');
+    void this._maybeAutoEndTurn();
   }
 
   private _onTapCell(coord: Coord): void {
@@ -670,13 +718,33 @@ export class ExpeditionController extends Component {
     const monster = this._state.floorState.monsters.find(
       (m) => m.aiState !== 'DEAD' && m.pos.x === coord.x && m.pos.y === coord.y,
     );
-    if (!monster) return;
-    this._attack(monster.id);
+    if (monster) {
+      this._attack(monster.id);
+      return;
+    }
+    const wall = this._state.floorState.entities.find(
+      (e) => e.type === 'ICE_WALL' && !e.consumed && e.pos.x === coord.x && e.pos.y === coord.y,
+    );
+    if (wall) {
+      this._attackIceWall(wall.id);
+    }
   }
 
   private _attack(monsterId: string): void {
     if (!this._state) return;
     const result = playerAttack(this._state, monsterId);
+    if (result.events.length === 0) {
+      this._toast?.toast('目标不在攻击范围内或 AP 不足');
+      void this._maybeAutoEndTurn();
+      return;
+    }
+    void this._apply(result);
+  }
+
+  /** 攻击冰墙（FrostGiant 专属机制，→ attackIceWall）。 */
+  private _attackIceWall(entityId: string): void {
+    if (!this._state) return;
+    const result = attackIceWall(this._state, entityId);
     if (result.events.length === 0) {
       this._toast?.toast('目标不在攻击范围内或 AP 不足');
       void this._maybeAutoEndTurn();
@@ -785,10 +853,17 @@ export class ExpeditionController extends Component {
     // 的同步部分和后续 await microtask 抢占主线程，导致 _apply 末尾的 microtask（busy=false / perfMark total）
     // 被推迟到 _checkMeta 全部 toast 串行完成后才执行（真机实测 1157ms）。
     // setTimeout(0) 把 _checkMeta 整体调度到下一 macrotask，_apply 末尾 microtask 优先处理。
-    const tMeta = perfNow();
-    setTimeout(() => {
-      void this._checkMeta(result.events).then(() => perfMark('apply.meta', tMeta));
-    }, 0);
+    //
+    // 2026-06-11 二次优化：预筛选事件类型。只有 checkNewAchievements/collectCodexEntries 实际查询
+    // 的事件才需要调度 _checkMeta（见 AchievementSystem.ts switch 分支）。MOVE/REVEAL/ATTACK/
+    // TURN_END/PLAYER_DAMAGED 等高频事件完全不触发成就 / 图鉴，跳过可减少 90%+ 后台调度。
+    // 真机实测：玩家连续移动几十步时 apply.meta 累积 900ms+ 抢占主线程，导致点击响应慢；筛选后消除。
+    if (META_RELEVANT_EVENTS_PRESENT(result.events)) {
+      const tMeta = perfNow();
+      setTimeout(() => {
+        void this._checkMeta(result.events).then(() => perfMark('apply.meta', tMeta));
+      }, 0);
+    }
 
     const tAfter = perfNow();
     await this._afterApply();
@@ -921,6 +996,11 @@ export class ExpeditionController extends Component {
         m.aiState !== 'DEAD' && manhattan(m.pos, fs.player) <= range,
     );
     if (hasTarget) return true;
+
+    const hasIceWallTarget = fs.entities.some(
+      (e) => e.type === 'ICE_WALL' && !e.consumed && manhattan(e.pos, fs.player) <= range,
+    );
+    if (hasIceWallTarget) return true;
 
     const standingOnEntity = fs.entities.some(
       (e) => !e.consumed && e.pos.x === fs.player.x && e.pos.y === fs.player.y,
