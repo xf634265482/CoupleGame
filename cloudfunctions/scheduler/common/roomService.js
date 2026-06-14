@@ -16,6 +16,35 @@ const { createInitialGameDoc } = require('./BoardGenerator');
 const { quitGame, toGamePatch } = require('./GameEngine');
 const { applySettlementToUsers } = require('./Settlement');
 
+const ROOM_MAX_PLAYERS = 4;
+const GAME_NAME_MAX_LEN = 16;
+
+function defaultGameNameFromNickname(nickname) {
+  const suffix = '的房间';
+  const nick = (String(nickname || '玩家').trim() || '玩家').slice(
+    0,
+    GAME_NAME_MAX_LEN - suffix.length,
+  );
+  return `${nick}${suffix}`;
+}
+
+function sanitizeNickname(raw, fallback) {
+  const s = String(raw || '')
+    .trim()
+    .slice(0, GAME_NAME_MAX_LEN);
+  const fb = String(fallback || '玩家')
+    .trim()
+    .slice(0, GAME_NAME_MAX_LEN);
+  return s || fb || '玩家';
+}
+
+function sanitizeGameName(raw, nickname) {
+  const s = String(raw || '')
+    .trim()
+    .slice(0, GAME_NAME_MAX_LEN);
+  return s || defaultGameNameFromNickname(nickname);
+}
+
 async function findWaitingRoomByCode(roomCode) {
   const { data } = await getDb()
     .collection(COLLECTIONS.ROOMS)
@@ -27,7 +56,12 @@ async function findWaitingRoomByCode(roomCode) {
   return { roomId: doc._id, doc };
 }
 
-async function createRoomForUser(user, maxPlayers) {
+async function createRoomForUser(user, options = {}) {
+  const displayName = sanitizeNickname(options.nickname, user.nickname);
+  const gameName = sanitizeGameName(
+    options.gameName || displayName,
+    displayName,
+  );
   const db = getDb();
   const roomId = generateId();
   let roomCode = generateRoomCode();
@@ -48,11 +82,15 @@ async function createRoomForUser(user, maxPlayers) {
   }
 
   const now = nowMs();
-  const players = [toPlayerSlot(user, 0)];
+  const hostSlot = toPlayerSlot(user, 0);
+  hostSlot.nickname = displayName;
+  const players = [hostSlot];
   const data = {
     roomCode,
     hostId: user.id,
-    maxPlayers,
+    maxPlayers: ROOM_MAX_PLAYERS,
+    gameName,
+    matchFill: false,
     players,
     status: 'WAITING',
     gameId: null,
@@ -64,7 +102,124 @@ async function createRoomForUser(user, maxPlayers) {
   return toRoomVO(roomId, data);
 }
 
-async function joinRoomForUser(user, roomCode) {
+/** 大厅：可加入的等待中房间 */
+async function listWaitingRooms(user) {
+  const db = getDb();
+  // 先清理过期房间，避免“刚进小程序就看到历史房间”
+  try {
+    await disbandExpiredRooms();
+  } catch {
+    /* ignore */
+  }
+  const { data } = await db
+    .collection(COLLECTIONS.ROOMS)
+    .where({ status: 'WAITING' })
+    .orderBy('createdAt', 'desc')
+    .limit(40)
+    .get();
+
+  const now = nowMs();
+  const list = data
+    .filter((doc) => {
+      const players = doc.players || [];
+      const full = players.length >= (doc.maxPlayers || ROOM_MAX_PLAYERS);
+      const inRoom = players.some(
+        (p) => p.openId === user._openid || p.userId === user.id,
+      );
+      // 兼容旧数据：没有 expireAt 的房间直接视为过期，不再展示
+      const expireAt = Number(doc.expireAt || 0);
+      const notExpired = expireAt > now;
+      // 额外兜底：只展示最近 10 分钟创建的 WAITING 房间
+      const createdAt = Number(doc.createdAt || 0);
+      const recent = createdAt > 0 && now - createdAt <= 10 * 60 * 1000;
+      return !full && !inRoom && notExpired && recent;
+    })
+    .map((doc) => toRoomVO(doc._id, doc));
+
+  list.sort((a, b) => {
+    if (!!b.matchFill !== !!a.matchFill) return b.matchFill ? 1 : -1;
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+  return list;
+}
+
+async function setRoomMatchFill(user, roomId, enabled) {
+  const doc = await getRoom(roomId);
+  if (!doc) {
+    const err = new Error('ROOM_NOT_FOUND');
+    err.code = 'ROOM_NOT_FOUND';
+    throw err;
+  }
+  if (doc.status !== 'WAITING') {
+    const err = new Error('ROOM_NOT_WAITING');
+    err.code = 'ROOM_NOT_WAITING';
+    throw err;
+  }
+  if (doc.hostId !== user.id) {
+    const err = new Error('NOT_HOST');
+    err.code = 'NOT_HOST';
+    throw err;
+  }
+
+  const now = nowMs();
+  await getDb()
+    .collection(COLLECTIONS.ROOMS)
+    .doc(roomId)
+    .update({
+      data: {
+        matchFill: !!enabled,
+        matchFillAt: enabled ? doc.matchFillAt || now : null,
+        lastBotFillAt: enabled ? doc.lastBotFillAt || null : null,
+      },
+    });
+
+  const updated = await getRoom(roomId);
+  return toRoomVO(roomId, updated);
+}
+
+const { pickRandomBotNickname } = require('./botNames');
+
+function createBotSlot(roomId, seat, usedNicknames = []) {
+  const id = `bot_${roomId}_${seat}_${Date.now()}`;
+  return {
+    userId: id,
+    openId: id,
+    nickname: pickRandomBotNickname(usedNicknames),
+    avatarUrl: '',
+    seat,
+    isBot: true,
+  };
+}
+
+async function joinBotToRoom(roomId) {
+  const doc = await getRoom(roomId);
+  if (!doc || doc.status !== 'WAITING') return null;
+  const players = doc.players || [];
+  const maxPlayers = doc.maxPlayers || ROOM_MAX_PLAYERS;
+  if (players.length >= maxPlayers) return toRoomVO(roomId, doc);
+
+  const bot = createBotSlot(
+    roomId,
+    players.length,
+    players.map((p) => p.nickname),
+  );
+  const nextPlayers = players.concat([bot]);
+  const patch = {
+    players: nextPlayers,
+    lastBotFillAt: nowMs(),
+  };
+  if (nextPlayers.length >= maxPlayers) {
+    patch.matchFill = false;
+  }
+
+  await getDb().collection(COLLECTIONS.ROOMS).doc(roomId).update({
+    data: patch,
+  });
+  const updated = await getRoom(roomId);
+  return toRoomVO(roomId, updated);
+}
+
+async function joinRoomForUser(user, roomCode, options = {}) {
   const found = await findWaitingRoomByCode(roomCode);
   if (!found) {
     const err = new Error('ROOM_NOT_FOUND');
@@ -73,23 +228,42 @@ async function joinRoomForUser(user, roomCode) {
     throw err;
   }
 
+  const displayName = sanitizeNickname(options.nickname, user.nickname);
+
   const { roomId, doc } = found;
   if (doc.players.length >= doc.maxPlayers) {
     const err = new Error('ROOM_FULL');
     err.code = 'ROOM_FULL';
     throw err;
   }
-  if (doc.players.some((p) => p.userId === user.id || p.openId === user._openid)) {
-    return toRoomVO(roomId, doc);
+  const existingIdx = doc.players.findIndex(
+    (p) => p.userId === user.id || p.openId === user._openid,
+  );
+  if (existingIdx >= 0) {
+    const players = doc.players.map((p, i) =>
+      i === existingIdx ? { ...p, nickname: displayName } : p,
+    );
+    await getDb()
+      .collection(COLLECTIONS.ROOMS)
+      .doc(roomId)
+      .update({ data: { players } });
+    const updated = await getRoom(roomId);
+    return toRoomVO(roomId, updated);
   }
 
   const seat = doc.players.length;
-  const players = doc.players.concat([toPlayerSlot(user, seat)]);
+  const slot = toPlayerSlot(user, seat);
+  slot.nickname = displayName;
+  const players = doc.players.concat([slot]);
+  const patch = { players };
+  if (players.length >= (doc.maxPlayers || ROOM_MAX_PLAYERS)) {
+    patch.matchFill = false;
+  }
   await getDb()
     .collection(COLLECTIONS.ROOMS)
     .doc(roomId)
     .update({
-      data: { players },
+      data: patch,
     });
 
   const updated = await getRoom(roomId);
@@ -124,6 +298,7 @@ async function startRoomByHost(user, roomId) {
     gameId,
     roomId,
     players: doc.players,
+    gameName: doc.gameName,
   });
 
   const db = getDb();
@@ -147,13 +322,40 @@ async function createMatchRoomAndStart(users, maxPlayers) {
   }
 
   const host = users[0];
-  const room = await createRoomForUser(host, maxPlayers);
+  const room = await createRoomForUser(host, { gameName: '随机匹配' });
 
   for (let i = 1; i < users.length; i++) {
     await joinRoomForUser(users[i], room.roomCode);
   }
 
   return startRoomByHost(host, room.roomId);
+}
+
+/** 房主解散等待中的房间 */
+async function disbandRoomByHost(user, roomId) {
+  const doc = await getRoom(roomId);
+  if (!doc) {
+    const err = new Error('ROOM_NOT_FOUND');
+    err.code = 'ROOM_NOT_FOUND';
+    throw err;
+  }
+  if (doc.status !== 'WAITING') {
+    const err = new Error('ROOM_NOT_WAITING');
+    err.code = 'ROOM_NOT_WAITING';
+    throw err;
+  }
+  if (doc.hostId !== user.id) {
+    const err = new Error('NOT_HOST');
+    err.code = 'NOT_HOST';
+    throw err;
+  }
+
+  await getDb()
+    .collection(COLLECTIONS.ROOMS)
+    .doc(roomId)
+    .update({
+      data: { status: 'DISBANDED', players: [], matchFill: false },
+    });
 }
 
 /**
@@ -184,9 +386,6 @@ async function leaveRoomForUser(user, roomId) {
       const game = JSON.parse(JSON.stringify(current));
       quitGame(game, openId);
       const patch = toGamePatch(game);
-      if (game.bluffState === undefined) {
-        patch.bluffState = null;
-      }
       await updateGameDoc(doc.gameId, patch, current.version);
       await clearBluffPrivateForGame(
         doc.gameId,
@@ -251,8 +450,12 @@ module.exports = {
   startRoomByHost,
   createMatchRoomAndStart,
   leaveRoomForUser,
+  disbandRoomByHost,
   disbandExpiredRooms,
   findWaitingRoomByCode,
+  listWaitingRooms,
+  setRoomMatchFill,
+  joinBotToRoom,
   requireUser,
   getUserByOpenId,
 };

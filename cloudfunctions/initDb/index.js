@@ -4,8 +4,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 
-/** 首版四个集合，见 ddl-sql.md §1 */
-const COLLECTIONS = ['users', 'rooms', 'games', 'match_queue', 'bluff_private'];
+/** 首版四个集合见 ddl-sql.md §1；pve_saves 为命运远征存档集合，见 specs/260608-pve-destiny-expedition/ddl-sql.md §1 */
+const COLLECTIONS = ['users', 'rooms', 'games', 'match_queue', 'pve_saves'];
 
 const NOT_EXIST = -502005;
 
@@ -64,7 +64,7 @@ exports.main = async () => {
         ]
       : [
           '1. 云开发 → 数据库 → 点击「+」或「添加集合」',
-          '2. 分别创建：users、rooms、games、match_queue、bluff_private（空集合，仅云函数读写）',
+          '2. 分别创建：users、rooms、games、match_queue、pve_saves（空集合，仅云函数读写）',
           '3. 重新部署 initDb 后再次「测试」',
         ],
   };

@@ -1,12 +1,17 @@
 // 沙虫女王专属机制（design §11b / 第 2 章 Boss，第 10 层）：
-// - 每 SANDWORM_BURROW_INTERVAL 回合：潜入地下（免疫玩家攻击，emit BOSS_BURROWED）
+// - 每 SANDWORM_BURROW_INTERVAL 回合：潜入地下（免疫玩家攻击，emit BOSS_BURROWED），
+//   并在身侧翻起 SANDWORM_DYNAMIC_PIT_PER_BURROW 个动态流沙坑（带 remaining，反风筝，2026-06-14）
 // - 下一回合：在玩家曼哈顿距离 ≤ 1 的随机空格冒出，立即发动 × 2 倍伤害（emit BOSS_EMERGED）
 // - 其余回合：普通近战攻击（monsterAttack）
 
 import { monsterAttack } from '../CombatSystem';
-import { SANDWORM_BURROW_INTERVAL } from '../PveConstants';
+import {
+  SANDWORM_BURROW_INTERVAL,
+  SANDWORM_DYNAMIC_PIT_DURATION,
+  SANDWORM_DYNAMIC_PIT_PER_BURROW,
+} from '../PveConstants';
 import { createRng } from '../rng';
-import type { ApplyResult, Coord, ExpeditionState, FloorState, PveEvent } from '../PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, FixedEntity, FloorState, PveEvent } from '../PveTypes';
 
 function manhattan(a: Coord, b: Coord): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -109,23 +114,64 @@ export function sandwormQueenAttack(state: ExpeditionState, bossId: string): App
   return monsterAttack(state, bossId);
 }
 
+/** Boss 身侧（Chebyshev ≤1）未被玩家/存活怪/未消耗实体占据的空格，用于流沙扩张。 */
+function dynamicPitCells(floor: FloorState, center: Coord, count: number): Coord[] {
+  const occupied = new Set<string>();
+  occupied.add(`${floor.player.x},${floor.player.y}`);
+  for (const m of floor.monsters) {
+    if (m.aiState !== 'DEAD') occupied.add(`${m.pos.x},${m.pos.y}`);
+  }
+  for (const e of floor.entities) {
+    if (!e.consumed) occupied.add(`${e.pos.x},${e.pos.y}`);
+  }
+  const result: Coord[] = [];
+  for (let dy = -1; dy <= 1 && result.length < count; dy++) {
+    for (let dx = -1; dx <= 1 && result.length < count; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const x = center.x + dx;
+      const y = center.y + dy;
+      if (x < 0 || y < 0 || x >= floor.size || y >= floor.size) continue;
+      if (occupied.has(`${x},${y}`)) continue;
+      result.push({ x, y });
+    }
+  }
+  return result;
+}
+
 /**
  * 触发潜地：由 MonsterAI.stepBoss 在每 SANDWORM_BURROW_INTERVAL 回合调用。
  * 设置 isBurrowed=true，发送 BOSS_BURROWED 事件；本回合无攻击。
+ * 同时在 boss 身侧翻起动态流沙坑（带 remaining，由 endTurn 倒计时移除），逐步压缩风筝走廊。
  */
 export function sandwormBurrow(state: ExpeditionState, bossId: string): ApplyResult {
   const floor = state.floorState;
+  const boss = floor.monsters.find((m) => m.id === bossId);
+  const monsters = floor.monsters.map((m) =>
+    m.id === bossId ? { ...m, isBurrowed: true } : m,
+  );
+
+  const events: PveEvent[] = [{ type: 'BOSS_BURROWED', bossId }];
+  let entities = floor.entities;
+
+  if (boss) {
+    const pitCells = dynamicPitCells(floor, boss.pos, SANDWORM_DYNAMIC_PIT_PER_BURROW);
+    if (pitCells.length > 0) {
+      let seq = floor.entities.length;
+      const newPits: FixedEntity[] = pitCells.map((pos) => ({
+        id: `sand_${floor.floor}_${floor.turn}_${seq++}`,
+        type: 'SAND_PIT',
+        pos,
+        consumed: false,
+        remaining: SANDWORM_DYNAMIC_PIT_DURATION,
+      }));
+      entities = [...entities, ...newPits];
+      events.push({ type: 'SAND_TIDE_SPAWNED', tiles: pitCells, duration: SANDWORM_DYNAMIC_PIT_DURATION });
+    }
+  }
+
   return {
-    state: {
-      ...state,
-      floorState: {
-        ...floor,
-        monsters: floor.monsters.map((m) =>
-          m.id === bossId ? { ...m, isBurrowed: true } : m,
-        ),
-      },
-    },
-    events: [{ type: 'BOSS_BURROWED', bossId }],
+    state: { ...state, floorState: { ...floor, monsters, entities } },
+    events,
   };
 }
 

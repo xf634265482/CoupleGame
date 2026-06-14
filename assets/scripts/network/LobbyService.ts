@@ -13,6 +13,10 @@ export interface CreateRoomResponse extends CloudOk {
   room?: RoomVO;
 }
 
+export interface ListRoomsResponse extends CloudOk {
+  rooms?: RoomVO[];
+}
+
 export interface JoinRoomResponse extends CloudOk {
   room?: RoomVO;
 }
@@ -20,6 +24,10 @@ export interface JoinRoomResponse extends CloudOk {
 export interface StartRoomResponse extends CloudOk {
   gameId?: string;
   roomId?: string;
+}
+
+export interface SetMatchFillResponse extends CloudOk {
+  room?: RoomVO;
 }
 
 export interface MatchEnqueueResponse extends CloudOk {
@@ -44,16 +52,37 @@ function ensureOk<T extends CloudOk>(res: T, fallback: string): T {
   return res;
 }
 
-export async function createRoom(maxPlayers: 2 | 3 | 4): Promise<CreateRoomResponse> {
+export async function createRoom(
+  gameName: string,
+  nickname?: string,
+): Promise<CreateRoomResponse> {
   return ensureOk(
-    await callFunction<CreateRoomResponse>('room', { action: 'create', maxPlayers }),
+    await callFunction<CreateRoomResponse>('room', {
+      action: 'create',
+      gameName,
+      nickname: nickname || gameName,
+    }),
     'CREATE_ROOM_FAILED',
   );
 }
 
-export async function joinRoom(roomCode: string): Promise<JoinRoomResponse> {
+export async function listRooms(): Promise<ListRoomsResponse> {
   return ensureOk(
-    await callFunction<JoinRoomResponse>('room', { action: 'join', roomCode }),
+    await callFunction<ListRoomsResponse>('room', { action: 'list' }),
+    'LIST_ROOMS_FAILED',
+  );
+}
+
+export async function joinRoom(
+  roomCode: string,
+  nickname?: string,
+): Promise<JoinRoomResponse> {
+  return ensureOk(
+    await callFunction<JoinRoomResponse>('room', {
+      action: 'join',
+      roomCode,
+      nickname,
+    }),
     'JOIN_ROOM_FAILED',
   );
 }
@@ -76,9 +105,31 @@ export async function leaveRoom(roomId: string): Promise<LeaveRoomResponse> {
   );
 }
 
-export async function matchEnqueue(maxPlayers: 2 | 3 | 4 = 4): Promise<MatchEnqueueResponse> {
+export async function disbandRoom(roomId: string): Promise<CloudOk> {
   return ensureOk(
-    await callFunction<MatchEnqueueResponse>('match', { action: 'enqueue', maxPlayers }),
+    await callFunction<CloudOk>('room', { action: 'disband', roomId }),
+    'DISBAND_ROOM_FAILED',
+  );
+}
+
+export async function setRoomMatchFill(
+  roomId: string,
+  enabled: boolean,
+): Promise<SetMatchFillResponse> {
+  return ensureOk(
+    await callFunction<SetMatchFillResponse>('room', {
+      action: 'setMatchFill',
+      roomId,
+      enabled,
+    }),
+    'SET_MATCH_FILL_FAILED',
+  );
+}
+
+/** 全局匹配队列（房内「在线匹配」由路人入队后优先补位） */
+export async function matchEnqueue(): Promise<MatchEnqueueResponse> {
+  return ensureOk(
+    await callFunction<MatchEnqueueResponse>('match', { action: 'enqueue', maxPlayers: 4 }),
     'MATCH_ENQUEUE_FAILED',
   );
 }

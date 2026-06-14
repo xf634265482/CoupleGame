@@ -11,7 +11,6 @@ import { applyFragmentBonus, buildPendingTreeChoices, deriveTreeRng, getTreeBonu
 import {
   ANIMA_PER_STRENGTHEN,
   CHAPTER4_LAVA_TILE_DAMAGE,
-  FROST_GIANT_AP_PENALTY,
   INITIAL_ANIMA,
   INITIAL_CLASS,
   INITIAL_GOLD,
@@ -124,12 +123,8 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   const treeApBonus = aiResult.state.player.treeBonuses?.apDiceBonus ?? 0;
   const nextTurn = aiResult.state.floorState.turn + 1;
 
-  // 冰冻效果：本回合 AP 上限 -FROST_GIANT_AP_PENALTY（最低 1）
-  const freezeRounds = aiResult.state.floorState.playerFreezeRounds ?? 0;
-  const baseAp = ap + apBonus + treeApBonus;
-  const frozenAp = freezeRounds > 0 ? Math.max(1, baseAp - FROST_GIANT_AP_PENALTY) : baseAp;
-  const newFreezeRounds = Math.max(0, freezeRounds - 1);
-  events.push({ type: 'AP_ROLLED', turn: nextTurn, dice, ap: frozenAp });
+  const finalAp = ap + apBonus + treeApBonus;
+  events.push({ type: 'AP_ROLLED', turn: nextTurn, dice, ap: finalAp });
 
   // 熔岩领主灼烧 tick：每回合开始时 -10 HP（×10 基准，原 -1）
   const burnRemaining = aiResult.state.floorState.playerBurnRemaining ?? 0;
@@ -166,25 +161,29 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   const moveApPenaltyRounds = aiResult.state.floorState.playerMoveApPenaltyRounds ?? 0;
   const newMoveApPenaltyRounds = Math.max(0, moveApPenaltyRounds - 1);
 
-  // 熔岩潮汐：每回合结束 LAVA_TILE remaining-1，玩家踩入扣 CHAPTER4_LAVA_TILE_DAMAGE，remaining=0 时移除
+  // 限时地块倒计时：凡带 remaining 的未消耗实体（LAVA_TILE 熔岩 / ICE_TILE 冰面 / 动态 SAND_PIT 流沙）
+  // 每回合结束 remaining-1，归零移除；无 remaining 的实体（静态沙坑/石块/冰墙等）永久保留。
+  // 熔岩地块额外：玩家踩入扣 CHAPTER4_LAVA_TILE_DAMAGE。
   let lavaHp = burnedHp;
   let lavaDead = burnDead;
   let hpChanged = burnRemaining > 0 || (fireBurnRounds > 0 && Math.floor((fireBurnAccum + 5) / 10) > 0);
   const entitiesAfterLava: FixedEntity[] = [];
   for (const entity of aiResult.state.floorState.entities) {
-    if (entity.type !== 'LAVA_TILE' || entity.consumed) {
+    if (entity.consumed || entity.remaining === undefined) {
       entitiesAfterLava.push(entity);
       continue;
     }
-    const remaining = (entity.remaining ?? 1) - 1;
-    const playerOnTile =
-      aiResult.state.floorState.player.x === entity.pos.x && aiResult.state.floorState.player.y === entity.pos.y;
-    if (playerOnTile && !lavaDead) {
-      lavaHp = Math.max(0, lavaHp - CHAPTER4_LAVA_TILE_DAMAGE);
-      lavaDead = lavaHp <= 0;
-      hpChanged = true;
-      events.push({ type: 'LAVA_TILE_DAMAGED', entityId: entity.id, damage: CHAPTER4_LAVA_TILE_DAMAGE });
-      if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
+    const remaining = entity.remaining - 1;
+    if (entity.type === 'LAVA_TILE') {
+      const playerOnTile =
+        aiResult.state.floorState.player.x === entity.pos.x && aiResult.state.floorState.player.y === entity.pos.y;
+      if (playerOnTile && !lavaDead) {
+        lavaHp = Math.max(0, lavaHp - CHAPTER4_LAVA_TILE_DAMAGE);
+        lavaDead = lavaHp <= 0;
+        hpChanged = true;
+        events.push({ type: 'LAVA_TILE_DAMAGED', entityId: entity.id, damage: CHAPTER4_LAVA_TILE_DAMAGE });
+        if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
+      }
     }
     if (remaining > 0) entitiesAfterLava.push({ ...entity, remaining });
   }
@@ -197,13 +196,12 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       : aiResult.state.player,
     floorState: {
       ...aiResult.state.floorState,
-      ap: frozenAp,
-      maxAp: frozenAp,
+      ap: finalAp,
+      maxAp: finalAp,
       dice,
       turn: nextTurn,
       rngState: rng.state(),
       entities: entitiesAfterLava,
-      playerFreezeRounds: newFreezeRounds > 0 ? newFreezeRounds : undefined,
       playerBurnRemaining: newBurnRemaining > 0 ? newBurnRemaining : undefined,
       playerFireBurnRounds: newFireBurnRounds > 0 ? newFireBurnRounds : undefined,
       playerFireBurnAccum: newFireBurnRounds > 0 ? newFireBurnAccum : undefined,

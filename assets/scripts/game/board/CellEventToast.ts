@@ -1,5 +1,8 @@
-import { Button, Color, Graphics, Label, Node, UITransform, Vec3 } from 'cc';
+import { Color, Label, Node, UITransform, Vec3 } from 'cc';
 import type { CellType } from '../../types/GameTypes';
+import { getCachedSprite } from '../../ui/UiAssets';
+import { ensureArtSliced } from '../../ui/UiSprite';
+import { makeModalButton } from './UiModalButton';
 
 export type CellEventItem = {
   type: string;
@@ -7,27 +10,51 @@ export type CellEventItem = {
 };
 
 const TYPE_TITLE: Record<string, string> = {
-  NORMAL: '普通格',
   GOLD: '金币格',
   DIAMOND: '钻石格',
+  SUPPLY: '补给格',
+  SUPPLY_CRATE: '补给箱',
+  SUPPLY_REFRESH: '补给刷新',
+  AIRDROP: '空投',
+  WASTE: '废格',
+  BURNING: '燃烧格',
+  WEAPON_MERGE: '武器合成',
   EVENT: '事件格',
-  MINIGAME: '小游戏格',
+  GOLD_SHOP: '金币商店',
+  LEGENDARY_SHOP: '传说商店',
+  LUCKY: '幸运格',
+  TRAP: '陷阱',
+  BOT_ACTION: 'AI 行动',
 };
 
 const TYPE_COLOR: Record<string, Color> = {
-  NORMAL: new Color(120, 125, 140, 255),
   GOLD: new Color(220, 180, 60, 255),
   DIAMOND: new Color(80, 200, 240, 255),
+  SUPPLY: new Color(90, 220, 200, 255),
+  SUPPLY_CRATE: new Color(90, 220, 200, 255),
+  SUPPLY_REFRESH: new Color(90, 220, 200, 255),
+  AIRDROP: new Color(90, 220, 200, 255),
+  WASTE: new Color(120, 120, 125, 255),
+  BURNING: new Color(240, 90, 45, 255),
+  WEAPON_MERGE: new Color(255, 190, 80, 255),
   EVENT: new Color(200, 90, 200, 255),
-  MINIGAME: new Color(230, 120, 70, 255),
+  GOLD_SHOP: new Color(100, 180, 80, 255),
+  LEGENDARY_SHOP: new Color(150, 100, 220, 255),
+  LUCKY: new Color(240, 200, 70, 255),
+  TRAP: new Color(180, 80, 80, 255),
+  BOT_ACTION: new Color(140, 200, 255, 255),
 };
+
+const TOAST_SLICE = { top: 36, bottom: 36, left: 36, right: 36 };
 
 /** 落格醒目弹窗 */
 export class CellEventToast {
   private _root: Node;
+  private _box: Node | null = null;
   private _titleLabel: Label | null = null;
   private _msgLabel: Label | null = null;
   private _hideTimer: ReturnType<typeof setTimeout> | null = null;
+  private _onDismiss: (() => void) | null = null;
   private _visible = false;
 
   constructor(parent: Node) {
@@ -35,22 +62,18 @@ export class CellEventToast {
     this._root.setParent(parent);
     this._root.active = false;
 
-    const mask = new Node('Mask');
-    mask.setParent(this._root);
-    mask.addComponent(UITransform).setContentSize(900, 1400);
-    const mg = mask.addComponent(Graphics);
-    mg.fillColor = new Color(0, 0, 0, 160);
-    mg.rect(-450, -700, 900, 1400);
-    mg.fill();
-
     const box = new Node('Box');
     box.setParent(this._root);
     box.setPosition(new Vec3(0, 80, 0));
     box.addComponent(UITransform).setContentSize(620, 320);
-    const bg = box.addComponent(Graphics);
-    bg.fillColor = new Color(32, 36, 52, 250);
-    bg.rect(-310, -160, 620, 320);
-    bg.fill();
+    this._box = box;
+    const toastSf = getCachedSprite('board/panels/panel_board_toast_9s');
+    const modalSf = getCachedSprite('board/panels/panel_board_modal_9s');
+    if (toastSf) {
+      ensureArtSliced(box, 'ToastArt', toastSf, 620, 320, TOAST_SLICE);
+    } else if (modalSf) {
+      ensureArtSliced(box, 'ModalArt', modalSf, 620, 320, TOAST_SLICE);
+    }
 
     const titleN = new Node('Title');
     titleN.setParent(box);
@@ -73,38 +96,46 @@ export class CellEventToast {
     this._msgLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
     this._msgLabel.overflow = Label.Overflow.SHRINK;
 
-    const ok = new Node('Ok');
-    ok.setParent(box);
-    ok.setPosition(new Vec3(0, -105, 0));
-    ok.addComponent(UITransform).setContentSize(280, 56);
-    const og = ok.addComponent(Graphics);
-    og.fillColor = new Color(60, 130, 210, 255);
-    og.rect(-140, -28, 280, 56);
-    og.fill();
-    const ol = new Node('L');
-    ol.setParent(ok);
-    ol.addComponent(UITransform).setContentSize(280, 56);
-    const olbl = ol.addComponent(Label);
-    olbl.string = '知道了';
-    olbl.fontSize = 34;
-    olbl.color = new Color(255, 255, 255, 255);
-    olbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-    olbl.verticalAlign = Label.VerticalAlign.CENTER;
-    ok.addComponent(Button);
-    ok.on(Button.EventType.CLICK, () => this.hide(), this);
+    makeModalButton(box, '知道了', 0, -105, 280, 52, () => this.hide());
+  }
+
+  applyArt(): void {
+    if (!this._box?.isValid) return;
+    const ut = this._box.getComponent(UITransform);
+    if (!ut) return;
+    const w = ut.contentSize.width;
+    const h = ut.contentSize.height;
+    const toastSf = getCachedSprite('board/panels/panel_board_toast_9s');
+    const modalSf = getCachedSprite('board/panels/panel_board_modal_9s');
+    if (toastSf) {
+      ensureArtSliced(this._box, 'ToastArt', toastSf, w, h, TOAST_SLICE);
+    } else if (modalSf) {
+      ensureArtSliced(this._box, 'ModalArt', modalSf, w, h, TOAST_SLICE);
+    }
   }
 
   /** @param actorName 如「你」或对方昵称，会显示在标题前 */
-  show(events: CellEventItem[], cellType?: CellType, actorName?: string): void {
+  show(
+    events: CellEventItem[],
+    cellType?: CellType,
+    actorName?: string,
+    onDismiss?: () => void,
+  ): void {
     if (!events.length) return;
+    this._onDismiss = onDismiss ?? null;
     const main = events[0];
-    const type = cellType || main.type || 'NORMAL';
-    const title = TYPE_TITLE[type] || '格子';
-    const color = TYPE_COLOR[type] || TYPE_COLOR.NORMAL;
+    const type = cellType || main.type || 'GOLD';
+    const title = TYPE_TITLE[type] || TYPE_TITLE[main.type] || '格子';
+    const color = TYPE_COLOR[type] || TYPE_COLOR[main.type] || TYPE_COLOR.GOLD;
     const who = actorName ? `${actorName} · ` : '';
+    const isBotAction = type === 'BOT_ACTION' || main.type === 'BOT_ACTION';
 
     if (this._titleLabel) {
-      this._titleLabel.string = `${who}停留在【${title}】`;
+      this._titleLabel.string = isBotAction
+        ? actorName
+          ? `【${actorName}】正在行动`
+          : '【AI】正在行动'
+        : `${who}停留在【${title}】`;
       this._titleLabel.color = color;
     }
     if (this._msgLabel) {
@@ -116,7 +147,42 @@ export class CellEventToast {
     this._visible = true;
 
     if (this._hideTimer) clearTimeout(this._hideTimer);
-    this._hideTimer = setTimeout(() => this.hide(), 4500);
+    const durationMs = isBotAction ? 3200 : 4500;
+    this._hideTimer = setTimeout(() => this.hide(), durationMs);
+  }
+
+  showAwait(
+    events: CellEventItem[],
+    cellType?: CellType,
+    actorName?: string,
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      this.show(events, cellType, actorName, resolve);
+    });
+  }
+
+  /** 本回合移动结束提示（仅当前行动玩家） */
+  showMoveComplete(message: string, onDismiss?: () => void): void {
+    if (!message) return;
+    this._onDismiss = onDismiss ?? null;
+    if (this._titleLabel) {
+      this._titleLabel.string = '移动完成';
+      this._titleLabel.color = new Color(120, 200, 255, 255);
+    }
+    if (this._msgLabel) {
+      this._msgLabel.string = message;
+    }
+    this._root.active = true;
+    this._root.setSiblingIndex(9999);
+    this._visible = true;
+    if (this._hideTimer) clearTimeout(this._hideTimer);
+    this._hideTimer = setTimeout(() => this.hide(), 4800);
+  }
+
+  showMoveCompleteAwait(message: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.showMoveComplete(message, resolve);
+    });
   }
 
   hide(): void {
@@ -126,6 +192,9 @@ export class CellEventToast {
       clearTimeout(this._hideTimer);
       this._hideTimer = null;
     }
+    const done = this._onDismiss;
+    this._onDismiss = null;
+    done?.();
   }
 
   get visible(): boolean {

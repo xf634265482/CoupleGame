@@ -36,6 +36,7 @@ const GLYPH: Record<string, CellGlyph> = {
   ENTITY_ROCK: { text: '石', color: new Color(170, 170, 180, 255) },
   ENTITY_SAND_PIT: { text: '坑', color: new Color(200, 170, 110, 255) },
   ENTITY_ICE_WALL: { text: '冰', color: new Color(150, 220, 245, 255) },
+  ENTITY_ICE_TILE: { text: '霜', color: new Color(190, 235, 250, 255) },
   ENTITY_LAVA_TILE: { text: '焰', color: new Color(255, 120, 60, 255) },
   MONSTER_FATE_MIRROR: { text: '影', color: new Color(170, 120, 220, 255) },
 };

@@ -5,13 +5,16 @@ const {
   joinRoomForUser,
   startRoomByHost,
   leaveRoomForUser,
+  disbandRoomByHost,
+  listWaitingRooms,
+  setRoomMatchFill,
   requireUser,
   getUserByOpenId,
 } = require('./common/roomService');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
-/** room 云函数 → AC-2, AC-3 */
+/** room 云函数 → 建房 / 列表 / 加入 / 开始 */
 exports.main = async (event = {}) => {
   try {
     const openId = resolveOpenId(cloud.getWXContext(), event);
@@ -23,19 +26,25 @@ exports.main = async (event = {}) => {
     const { action } = event;
 
     if (action === 'create') {
-      const maxPlayers = event.maxPlayers || 4;
-      if (![2, 3, 4].includes(maxPlayers)) {
-        return { ok: false, code: 'INVALID_MAX_PLAYERS', message: 'maxPlayers 须为 2/3/4' };
-      }
-      const room = await createRoomForUser(user, maxPlayers);
+      const room = await createRoomForUser(user, {
+        gameName: event.gameName,
+        nickname: event.nickname,
+      });
       return { ok: true, roomId: room.roomId, roomCode: room.roomCode, room };
+    }
+
+    if (action === 'list') {
+      const rooms = await listWaitingRooms(user);
+      return { ok: true, rooms };
     }
 
     if (action === 'join') {
       if (!event.roomCode) {
         return { ok: false, code: 'MISSING_ROOM_CODE', message: '缺少 roomCode' };
       }
-      const room = await joinRoomForUser(user, String(event.roomCode));
+      const room = await joinRoomForUser(user, String(event.roomCode), {
+        nickname: event.nickname,
+      });
       return { ok: true, room };
     }
 
@@ -53,6 +62,22 @@ exports.main = async (event = {}) => {
       }
       const { room, settledGameId } = await leaveRoomForUser(user, event.roomId);
       return { ok: true, room, settledGameId };
+    }
+
+    if (action === 'disband') {
+      if (!event.roomId) {
+        return { ok: false, code: 'MISSING_ROOM_ID', message: '缺少 roomId' };
+      }
+      await disbandRoomByHost(user, event.roomId);
+      return { ok: true };
+    }
+
+    if (action === 'setMatchFill') {
+      if (!event.roomId) {
+        return { ok: false, code: 'MISSING_ROOM_ID', message: '缺少 roomId' };
+      }
+      const room = await setRoomMatchFill(user, event.roomId, !!event.enabled);
+      return { ok: true, room };
     }
 
     return { ok: false, code: 'UNKNOWN_ACTION', message: `未知 action: ${action}` };

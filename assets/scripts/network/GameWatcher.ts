@@ -32,14 +32,19 @@ function readWatchDoc(change: { doc: WatchDoc; docId?: string }): {
 }
 
 function toRoomVO(roomId: string, raw: Record<string, unknown>): RoomVO {
+  const players = (raw.players as RoomVO['players']) || [];
+  const host = players.find((p) => p.userId === raw.hostId) || players[0];
   return {
     roomId,
     roomCode: String(raw.roomCode ?? ''),
     hostId: String(raw.hostId ?? ''),
     maxPlayers: Number(raw.maxPlayers ?? 4),
-    players: (raw.players as RoomVO['players']) || [],
+    players,
     status: (raw.status as RoomStatus) || 'WAITING',
     gameId: raw.gameId != null && raw.gameId !== '' ? String(raw.gameId) : null,
+    gameName: raw.gameName != null ? String(raw.gameName) : '',
+    matchFill: !!raw.matchFill,
+    hostNickname: host?.nickname ? String(host.nickname) : '房主',
     createdAt: Number(raw.createdAt ?? 0),
     expireAt: Number(raw.expireAt ?? 0),
   };
@@ -209,16 +214,6 @@ export class GameWatcher {
       EventBus.emit('game_start', game);
     } else if (phase === 'BOARD' || phase === 'SETTLED') {
       EventBus.emit('game_update', game);
-    }
-
-    if (prev !== 'MINIGAME_BLUFF' && phase === 'MINIGAME_BLUFF') {
-      EventBus.emit('minigame_start', game);
-    } else if (prev === 'MINIGAME_BLUFF' && phase === 'MINIGAME_BLUFF') {
-      EventBus.emit('minigame_update', game);
-    }
-
-    if (prev === 'MINIGAME_BLUFF' && phase === 'BOARD') {
-      EventBus.emit('minigame_end', game);
     }
 
     const fin = game.settlement?.finishedAt;

@@ -14,11 +14,15 @@ export class SceneLoader {
     director.loadScene(SCENE.BOARD);
   }
 
-  static loadMinigameBluff(): void {
-    director.loadScene(SCENE.MINIGAME_BLUFF);
-  }
-
   static loadSettlement(): void {
     director.loadScene(SCENE.SETTLEMENT);
+  }
+
+  static loadPveExpedition(): void {
+    director.loadScene(SCENE.PVE_EXPEDITION);
+  }
+
+  static loadDestinyTree(): void {
+    director.loadScene(SCENE.DESTINY_TREE);
   }
 }

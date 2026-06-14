@@ -23,8 +23,9 @@ export type FixedEntityType =
   | 'PORTAL' // 传送门（Boss 击败后生成）
   | 'FRAGMENT' // 职业碎片（AC-15 M2）
   | 'ROCK' // 石块地形（Boss 房障碍，可挡一次 AOE 后消失）
-  | 'SAND_PIT' // 沙坑地形（第2章 Boss 房：移动 AP+1，Boss 钻出优先沙坑）
+  | 'SAND_PIT' // 沙坑地形（第2章 Boss 房：移动 AP+2，Boss 钻出优先沙坑；潜地时动态扩张，带 remaining 的为动态坑）
   | 'ICE_WALL' // 冰墙地形（第3章 Boss 房：阻挡移动，HP=10 可被攻击破坏）
+  | 'ICE_TILE' // 冰面地块（第3章 FrostGiant 冰冻回合铺出，玩家踩上滑行，remaining 倒计时融化）
   | 'LAVA_TILE'; // 熔岩地块（第4章 LavaLord phase2 周期性刷出，玩家踩入扣 HP）
 
 export type MonsterAiState = 'IDLE' | 'PATROL' | 'CHASE' | 'FLEE' | 'DEAD';
@@ -152,8 +153,6 @@ export interface FloorState {
   undyingAvailable?: boolean;
   /** ROGUE 残影：本层首次被攻击时闪避（触发后置 false，默认 true）。 */
   hasAfterimage?: boolean;
-  /** 冰霜巨人冰冻剩余回合数（> 0 时本回合玩家 AP 上限 -4，最低 1）。 */
-  playerFreezeRounds?: number;
   /** 熔岩领主灼烧剩余伤害（每回合开始 -10 HP，直至归零）。 */
   playerBurnRemaining?: number;
   /** 靴子首步免费标记：RARE+ 靴子每回合首次移动免费；本回合已用过则为 true，回合结束时重置。 */
@@ -176,6 +175,8 @@ export interface FloorState {
   vengeanceReady?: boolean;
   /** 进阶 oneShot（final_charge/last_arrow/desperate_gambit）：本层首次 HP≤30% 时触发 AP+3，触发后置 false（默认 true）。 */
   finalChargeAvailable?: boolean;
+  /** 命运守卫待结算预言：标记回合记录中心格，下个 Boss 回合该 3×3 区域爆炸后清空。 */
+  fateProphecy?: { center: Coord };
 }
 
 // ── 远征总状态（存档根对象） ───────────────────────────
@@ -233,8 +234,6 @@ export type PveEvent =
   | { type: 'BOSS_BURROWED'; bossId: string }
   /** 沙虫女王从地下冒出（pos 为落点）。 */
   | { type: 'BOSS_EMERGED'; bossId: string; pos: Coord }
-  /** 冰霜巨人施加冰冻：下一回合 AP 上限 -4。 */
-  | { type: 'FREEZE_APPLIED'; bossId: string; rounds: number }
   /** 熔岩领主施加灼烧：totalRemaining 为剩余总灼烧伤害点数。 */
   | { type: 'BURN_APPLIED'; bossId: string; totalRemaining: number }
   /** 移动AP惩罚施加（冰霜哥布林命中 / 哥布林酋长重击AOE）：rounds 为本次叠加的持续回合数。 */
@@ -274,7 +273,15 @@ export type PveEvent =
   /** 命运守望者镜像生成（第5章 FateGuardian HP≤33%）。 */
   | { type: 'MIRROR_SPAWNED'; mirrorId: string; pos: Coord }
   /** 命运镜像被击杀（不掉落，不影响传送门生成判定）。 */
-  | { type: 'MIRROR_KILLED'; mirrorId: string };
+  | { type: 'MIRROR_KILLED'; mirrorId: string }
+  /** 命运守卫预言标记（第5章）：center 为标记的玩家当前格，下个 Boss 回合该 3×3 爆炸。 */
+  | { type: 'PROPHECY_MARKED'; center: Coord }
+  /** 命运守卫预言结算（第5章）：center 为爆炸中心（3×3），无论是否命中均 emit 供渲染。 */
+  | { type: 'PROPHECY_RESOLVED'; center: Coord }
+  /** 冰霜巨人冰面生成（第3章）：本次铺出的冰面格子 + 存在回合数。 */
+  | { type: 'ICE_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
+  /** 沙虫女王流沙扩张（第2章）：本次刷出的动态沙坑格子 + 存在回合数。 */
+  | { type: 'SAND_TIDE_SPAWNED'; tiles: Coord[]; duration: number };
 
 /** core 纯函数统一返回：变更后的状态 + 本次产生的事件序列。 */
 export interface ApplyResult {

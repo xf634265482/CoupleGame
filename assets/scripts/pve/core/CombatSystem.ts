@@ -30,8 +30,6 @@ import {
   BASE_ATTACK_RANGE,
   CHAPTER3_ICE_WALL_DROP_ANIMA,
   CLASS_STATS,
-  FATE_GUARDIAN_DODGE_CHANCE,
-  FATE_GUARDIAN_HP_THRESHOLD,
   FIRE_BURN_ROUNDS,
   FROST_MOVE_PENALTY_ROUNDS,
 } from './PveConstants';
@@ -140,22 +138,6 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   // ── 概率 RNG（所有随机检定共用同一实例，保证 AC-13 确定性）──
   const rng = createRng(floor.rngState);
-
-  // ── 命运守卫闪避（内联，避免 FateGuardian ← CombatSystem 循环 import）──
-  // 玩家 HP ≤ 50% maxHp 时，守卫有 40% 概率完全闪避本次攻击。
-  if (monster.type === 'BOSS' && monster.bossId === 'FATE_GUARDIAN') {
-    const hpRatio = state.player.hp / state.player.maxHp;
-    if (hpRatio <= FATE_GUARDIAN_HP_THRESHOLD && rng.chance(FATE_GUARDIAN_DODGE_CHANCE)) {
-      // 攻击被闪避：消耗 AP + 推进 RNG 确保后续序列不变，无伤害事件
-      return {
-        state: {
-          ...state,
-          floorState: { ...floor, ap: spend(floor.ap, 'ATTACK'), rngState: rng.state() },
-        },
-        events: [],
-      };
-    }
-  }
 
   // ── 伤害词条（确定性叠加，在 RNG 词条前计算）──
   if (state.player.hp <= state.player.maxHp / 2) {

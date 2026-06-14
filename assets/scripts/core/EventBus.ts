@@ -7,9 +7,6 @@ type EventPayload = {
   match_found: { roomId: string; gameId?: string };
   game_start: GameDoc;
   game_update: GameDoc;
-  minigame_start: GameDoc;
-  minigame_update: GameDoc;
-  minigame_end: GameDoc;
   game_over: GameDoc;
 };
 

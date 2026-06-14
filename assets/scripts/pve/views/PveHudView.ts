@@ -154,12 +154,12 @@ export class PveHudView {
     this._animaLabel.string = `🔮${player.anima} (${player.animaProgress}/${player.animaThreshold ?? 100})`;
     // 钥匙状态对通关至关重要（普通层开门、Boss 层生成传送门），单独 1 槽位
     this._keyLabel.string = floorState.hasKey ? '🔑已持有' : '🔑无';
-    // 状态效果行（冰冻/灼烧）
-    const freeze = floorState.playerFreezeRounds ?? 0;
+    // 状态效果行（灼烧/减速）
     const burn = floorState.playerBurnRemaining ?? 0;
+    const slow = floorState.playerMoveApPenaltyRounds ?? 0;
     const statusParts: string[] = [];
-    if (freeze > 0) statusParts.push(`❄️ 冻结 ${freeze} 回合`);
     if (burn > 0) statusParts.push(`🔥 灼烧 ${burn} 点`);
+    if (slow > 0) statusParts.push(`🥶 减速 ${slow} 回合`);
     this._statusLabel.string = statusParts.join('   ');
   }
 

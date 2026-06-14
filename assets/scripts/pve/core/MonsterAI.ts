@@ -16,7 +16,7 @@ import {
 } from './bosses/GoblinChief';
 import { VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
 import { shoesStealthReduction } from './EquipmentSystem';
-import { fateGuardianAttack, spawnFateMirror } from './bosses/FateGuardian';
+import { fateGuardianAttack, fateProphecyStep, spawnFateMirror } from './bosses/FateGuardian';
 import { frostGiantAttack } from './bosses/FrostGiant';
 import { lavaLordAttack, lavaTideStep } from './bosses/LavaLord';
 import { isBurrowTurn, sandwormBurrow, sandwormQueenAttack } from './bosses/SandwormQueen';
@@ -230,9 +230,12 @@ function stepOneMonster(state: ExpeditionState, monsterId: string): ApplyResult 
   }
 
   if (monster.type === 'BOSS' && monster.bossId === 'FATE_GUARDIAN') {
-    const mirror = spawnFateMirror(state, monsterId);
+    // 命运预言（结算上回合标记 / 标记本回合）→ 镜像分身 → 正常行动
+    const prophecy = fateProphecyStep(state, monsterId);
+    if (prophecy.state.status === 'DEAD') return prophecy; // 预言爆炸致死则停止后续
+    const mirror = spawnFateMirror(prophecy.state, monsterId);
     const result = stepOneMonsterCore(mirror.state, monsterId);
-    return { state: result.state, events: [...mirror.events, ...result.events] };
+    return { state: result.state, events: [...prophecy.events, ...mirror.events, ...result.events] };
   }
 
   return stepOneMonsterCore(state, monsterId);

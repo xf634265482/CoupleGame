@@ -285,8 +285,8 @@ function describeForLog(
       return { kind: 'ENEMY_ACT', text: '🕳️ 沙虫女王潜入地下！本回合免疫攻击' };
     case 'BOSS_EMERGED':
       return { kind: 'ENEMY_ACT', text: '🐛 沙虫女王从地下冒出！双倍攻击！' };
-    case 'FREEZE_APPLIED':
-      return { kind: 'ENEMY_ACT', text: '❄️ 冰霜巨人施加冰冻！下回合行动力大幅降低' };
+    case 'ICE_TIDE_SPAWNED':
+      return { kind: 'ENEMY_ACT', text: `❄️ 冰霜巨人冻结地面！${ev.tiles.length} 格结冰，踩上去会打滑` };
     case 'BURN_APPLIED':
       return { kind: 'ENEMY_ACT', text: '🔥 熔岩领主附加灼烧！每回合持续扣血' };
     case 'MOVE_PENALTY_APPLIED':
@@ -304,7 +304,9 @@ function describeForLog(
     case 'HEAVY_STRIKE_RESOLVED':
       return { kind: 'ENEMY_ACT', text: '💥 蓄力重击发动！橙圈为本次实际命中范围' };
     case 'SAND_PIT_STEPPED':
-      return { kind: 'PLAYER_HURT', text: '🏜️ 陷入沙坑！移动 AP +1' };
+      return { kind: 'PLAYER_HURT', text: '🏜️ 陷入流沙！移动 AP +2' };
+    case 'SAND_TIDE_SPAWNED':
+      return { kind: 'ENEMY_ACT', text: `🏜️ 沙虫翻起流沙！身侧新增 ${ev.tiles.length} 个流沙坑` };
     case 'ICE_WALL_BROKEN':
       return { kind: 'PLAYER_ACT', text: `❄️ 击碎冰墙！获得 ${ev.anima} 灵气` };
     case 'LAVA_TIDE_SPAWNED':
@@ -315,6 +317,10 @@ function describeForLog(
       return { kind: 'ENEMY_ACT', text: '👥 命运镜像现身！' };
     case 'MIRROR_KILLED':
       return { kind: 'PLAYER_ACT', text: '✨ 击碎镜像！' };
+    case 'PROPHECY_MARKED':
+      return { kind: 'ENEMY_ACT', text: '🔮 命运预言！标记区域将在下回合爆炸，速速离开' };
+    case 'PROPHECY_RESOLVED':
+      return { kind: 'ENEMY_ACT', text: '💥 命运预言爆发！标记区域已轰炸' };
     default:
       return null;
   }
@@ -386,8 +392,8 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return '🕳️ 沙虫女王潜入地下！本回合免疫攻击';
     case 'BOSS_EMERGED':
       return '🐛 沙虫女王从地下冒出！双倍攻击！';
-    case 'FREEZE_APPLIED':
-      return `❄️ 冰霜巨人施加冰冻！下${ev.rounds}回合行动力大幅降低`;
+    case 'ICE_TIDE_SPAWNED':
+      return `❄️ 冰霜巨人冻结地面！${ev.tiles.length} 格结冰（持续 ${ev.duration} 回合），踩上去会打滑`;
     case 'BURN_APPLIED':
       return `🔥 熔岩领主附加灼烧！当前积累 ${ev.totalRemaining} 点`;
     case 'MOVE_PENALTY_APPLIED':
@@ -403,7 +409,9 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     case 'BLACKSMITH_REROLL':
       return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 词条洗炼完成`;
     case 'SAND_PIT_STEPPED':
-      return '🏜️ 陷入沙坑！移动 AP +1';
+      return '🏜️ 陷入流沙！移动 AP +2';
+    case 'SAND_TIDE_SPAWNED':
+      return `🏜️ 沙虫翻起流沙！身侧新增 ${ev.tiles.length} 个流沙坑（持续 ${ev.duration} 回合）`;
     case 'ICE_WALL_BROKEN':
       return `❄️ 击碎冰墙！获得 ${ev.anima} 灵气`;
     case 'LAVA_TIDE_SPAWNED':
@@ -414,6 +422,10 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return '👥 命运镜像现身！';
     case 'MIRROR_KILLED':
       return '✨ 击碎镜像！';
+    case 'PROPHECY_MARKED':
+      return '🔮 命运预言！标记区域将在下回合爆炸，速速离开';
+    case 'PROPHECY_RESOLVED':
+      return '💥 命运预言爆发！标记区域已被轰炸';
     default:
       return null;
   }
@@ -1063,6 +1075,21 @@ export class ExpeditionController extends Component {
       if (ev.type === 'HEAVY_STRIKE_RESOLVED' && this._state) {
         const { danger, safe } = splitAoeCells(ev.center, this._state.floorState.size, HEAVY_STRIKE_RANGE, this._state.floorState.entities);
         this._map?.showAoeHit(danger, safe);
+      }
+
+      // 3.6) 命运预言：标记回合（预警）/ 结算回合（爆炸）均以 3×3 橙圈标识中心区域；
+      //      由 _onEndTurn 的 clearAoeHit 在进入下一怪物回合前统一清除。
+      if ((ev.type === 'PROPHECY_MARKED' || ev.type === 'PROPHECY_RESOLVED') && this._state) {
+        const size = this._state.floorState.size;
+        const cells: Coord[] = [];
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const x = ev.center.x + dx;
+            const y = ev.center.y + dy;
+            if (x >= 0 && y >= 0 && x < size && y < size) cells.push({ x, y });
+          }
+        }
+        this._map?.showAoeHit(cells, []);
       }
 
       // 4) 职业进阶选择（AC-15 M2）

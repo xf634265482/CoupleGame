@@ -1,4 +1,9 @@
-import { Button, Color, Graphics, Label, Node, UITransform, Vec3 } from 'cc';
+import { Color, Graphics, Label, Node, UITransform, Vec3 } from 'cc';
+import { getCachedSprite } from '../../ui/UiAssets';
+import { ensureArtSliced } from '../../ui/UiSprite';
+import { makeModalButton } from './UiModalButton';
+
+const MODAL_SLICE = { top: 36, bottom: 36, left: 36, right: 36 };
 
 /** 掷骰结果弹窗（先显示点数，再移动棋子） */
 export class DiceResultToast {
@@ -13,27 +18,32 @@ export class DiceResultToast {
     this._root.setParent(parent);
     this._root.active = false;
 
-    const mask = new Node('Mask');
-    mask.setParent(this._root);
-    mask.addComponent(UITransform).setContentSize(900, 1400);
-    const mg = mask.addComponent(Graphics);
-    mg.fillColor = new Color(0, 0, 0, 140);
-    mg.rect(-450, -700, 900, 1400);
-    mg.fill();
-
     const box = new Node('Box');
     box.setParent(this._root);
-    box.setPosition(new Vec3(0, 100, 0));
-    box.addComponent(UITransform).setContentSize(520, 380);
-    const bg = box.addComponent(Graphics);
-    bg.fillColor = new Color(40, 44, 60, 250);
-    bg.rect(-260, -190, 520, 380);
-    bg.fill();
+    box.setPosition(new Vec3(0, 80, 0));
+    box.addComponent(UITransform).setContentSize(480, 340);
+
+    const mask = new Node('Mask');
+    mask.setParent(box);
+    mask.setPosition(new Vec3(0, 0, 0));
+    const maskW = 510;
+    const maskH = 355;
+    mask.addComponent(UITransform).setContentSize(maskW, maskH);
+    const mg = mask.addComponent(Graphics);
+    mg.fillColor = new Color(8, 12, 24, 175);
+    mg.rect(-maskW / 2, -maskH / 2, maskW, maskH);
+    mg.fill();
+
+    const modalSf = getCachedSprite('board/panels/panel_board_modal_9s');
+    if (modalSf) {
+      ensureArtSliced(box, 'ModalArt', modalSf, 480, 340, MODAL_SLICE);
+      box.getChildByName('ModalArt')?.setSiblingIndex(box.children.length - 1);
+    }
 
     const cap = new Node('Caption');
     cap.setParent(box);
-    cap.setPosition(new Vec3(0, 145, 0));
-    cap.addComponent(UITransform).setContentSize(480, 44);
+    cap.setPosition(new Vec3(0, 130, 0));
+    cap.addComponent(UITransform).setContentSize(440, 44);
     const cl = cap.addComponent(Label);
     cl.string = '掷骰结果';
     cl.fontSize = 34;
@@ -42,45 +52,27 @@ export class DiceResultToast {
 
     const actorN = new Node('Actor');
     actorN.setParent(box);
-    actorN.setPosition(new Vec3(0, 95, 0));
-    actorN.addComponent(UITransform).setContentSize(480, 48);
+    actorN.setPosition(new Vec3(0, 82, 0));
+    actorN.addComponent(UITransform).setContentSize(440, 48);
     this._actorLabel = actorN.addComponent(Label);
-    this._actorLabel.fontSize = 36;
-    this._actorLabel.lineHeight = 44;
+    this._actorLabel.fontSize = 32;
+    this._actorLabel.lineHeight = 40;
     this._actorLabel.color = new Color(230, 235, 245, 255);
     this._actorLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
 
     const diceN = new Node('Dice');
     diceN.setParent(box);
-    diceN.setPosition(new Vec3(0, 10, 0));
-    diceN.addComponent(UITransform).setContentSize(280, 140);
+    diceN.setPosition(new Vec3(0, 8, 0));
+    diceN.addComponent(UITransform).setContentSize(260, 120);
     this._diceLabel = diceN.addComponent(Label);
-    this._diceLabel.fontSize = 110;
-    this._diceLabel.lineHeight = 120;
+    this._diceLabel.fontSize = 100;
+    this._diceLabel.lineHeight = 110;
     this._diceLabel.color = new Color(255, 255, 255, 255);
     this._diceLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
     this._diceLabel.verticalAlign = Label.VerticalAlign.CENTER;
     this._diceLabel.overflow = Label.Overflow.CLAMP;
 
-    const ok = new Node('Ok');
-    ok.setParent(box);
-    ok.setPosition(new Vec3(0, -130, 0));
-    ok.addComponent(UITransform).setContentSize(260, 56);
-    const og = ok.addComponent(Graphics);
-    og.fillColor = new Color(200, 130, 45, 255);
-    og.rect(-130, -28, 260, 56);
-    og.fill();
-    const ol = new Node('L');
-    ol.setParent(ok);
-    ol.addComponent(UITransform).setContentSize(260, 56);
-    const olbl = ol.addComponent(Label);
-    olbl.string = '继续';
-    olbl.fontSize = 32;
-    olbl.color = new Color(255, 255, 255, 255);
-    olbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-    olbl.verticalAlign = Label.VerticalAlign.CENTER;
-    ok.addComponent(Button);
-    ok.on(Button.EventType.CLICK, () => this.hide(), this);
+    makeModalButton(box, '继续', 0, -120, 240, 52, () => this.hide());
   }
 
   /** @param actorLine 如「你掷出了」或「玩家2 掷出了」 */

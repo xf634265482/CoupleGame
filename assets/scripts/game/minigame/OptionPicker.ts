@@ -14,30 +14,34 @@ export class OptionPicker {
     title: string,
     values: number[],
     initial?: number,
+    width = 300,
   ) {
     this._values = values;
+    const panelW = Math.max(200, width);
+    const halfW = panelW / 2;
     this._root = new Node(`Picker_${title}`);
     this._root.setParent(parent);
     this._root.setPosition(new Vec3(x, y, 0));
-    this._root.addComponent(UITransform).setContentSize(300, 88);
+    this._root.addComponent(UITransform).setContentSize(panelW, 88);
 
     const bg = this._root.addComponent(Graphics);
     bg.fillColor = new Color(45, 50, 68, 255);
-    bg.rect(-150, -44, 300, 88);
+    bg.rect(-halfW, -44, panelW, 88);
     bg.fill();
 
     const titleN = new Node('T');
     titleN.setParent(this._root);
     titleN.setPosition(new Vec3(0, 28, 0));
-    titleN.addComponent(UITransform).setContentSize(280, 32);
+    titleN.addComponent(UITransform).setContentSize(panelW - 20, 32);
     const tl = titleN.addComponent(Label);
     tl.string = title;
     tl.fontSize = 24;
     tl.color = new Color(180, 185, 200, 255);
     tl.horizontalAlign = Label.HorizontalAlign.CENTER;
 
-    this._makeArrow(-105, -8, '◀', -1);
-    this._makeArrow(105, -8, '▶', 1);
+    const arrowX = Math.round(halfW - 45);
+    this._makeArrow(-arrowX, -8, '◀', -1);
+    this._makeArrow(arrowX, -8, '▶', 1);
 
     const valN = new Node('Val');
     valN.setParent(this._root);

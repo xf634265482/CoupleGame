@@ -11,7 +11,6 @@ function toUserVO(doc) {
     openId: doc._openid || doc.openId || '',
     nickname: doc.nickname || '玩家',
     avatarUrl: doc.avatarUrl || '',
-    diamond: doc.diamond || 0,
   };
 }
 
@@ -24,7 +23,6 @@ async function createUser(openId, nickname, avatarUrl) {
     _openid: openId,
     nickname: nickname || '玩家',
     avatarUrl: avatarUrl || '',
-    diamond: 0,
     createdBy: id,
     createdDate: now,
     updatedBy: id,

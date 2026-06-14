@@ -25,14 +25,19 @@ function toPlayerSlot(user, seat) {
 }
 
 function toRoomVO(roomId, doc) {
+  const players = doc.players || [];
+  const host = players.find((p) => p.userId === doc.hostId) || players[0];
   return {
     roomId,
     roomCode: doc.roomCode,
     hostId: doc.hostId,
     maxPlayers: doc.maxPlayers,
-    players: doc.players || [],
+    players,
     status: doc.status,
     gameId: doc.gameId || null,
+    gameName: doc.gameName || '',
+    matchFill: !!doc.matchFill,
+    hostNickname: host?.nickname || '房主',
     createdAt: doc.createdAt,
     expireAt: doc.expireAt,
   };

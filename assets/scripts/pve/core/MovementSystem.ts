@@ -45,6 +45,32 @@ function noop(state: ExpeditionState): ApplyResult {
   return { state, events: [] };
 }
 
+/** 某格是否为未消耗的冰面（ICE_TILE）。 */
+function isIceTile(floor: FloorState, pos: Coord): boolean {
+  return floor.entities.some(
+    (e) => e.type === 'ICE_TILE' && !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y,
+  );
+}
+
+/**
+ * 冰面滑行落点（第3章 FrostGiant 冰面，确定性、无 RNG）：
+ * 玩家站在冰面上、朝 delta 方向移动时，沿方向连续滑行，停在「第一个非冰可走格」；
+ * 撞墙/石块/冰墙/怪物/Boss 则停在障碍前最后一格。返回落点；若一格也走不动返回 null。
+ */
+function slideDestination(floor: FloorState, from: Coord, delta: Coord): Coord | null {
+  let cur = from;
+  while (true) {
+    const next: Coord = { x: cur.x + delta.x, y: cur.y + delta.y };
+    if (!inBounds(floor.size, next)) break;
+    if (isBlockedByMonster(floor, next)) break;
+    if (isBlockedByRock(floor, next)) break;
+    if (isBlockedByIceWall(floor, next)) break;
+    cur = next;
+    if (!isIceTile(floor, cur)) break; // 落在非冰格即停（第一个非冰可走格）
+  }
+  return cur.x === from.x && cur.y === from.y ? null : cur;
+}
+
 /** 计算方向 dir 对应的目标格坐标（不做越界裁剪）。 */
 export function targetOf(from: Coord, dir: Direction): Coord {
   const delta = DIRECTION_DELTA[dir];
@@ -61,9 +87,19 @@ export function targetOf(from: Coord, dir: Direction): Coord {
 export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const floor = state.floorState;
   const from = floor.player;
-  const to = targetOf(from, dir);
 
-  if (!inBounds(floor.size, to)) return noop(state);
+  // 冰面滑行：玩家站在冰面上时，移动沿方向连续滑行到边缘（落点已保证可走）；
+  // 否则普通走一格（从非冰格踏上冰面也只算普通一步，下回合站在冰上才会滑）。
+  const onIce = isIceTile(floor, from);
+  let to: Coord;
+  if (onIce) {
+    const dest = slideDestination(floor, from, DIRECTION_DELTA[dir]);
+    if (dest === null) return noop(state);
+    to = dest;
+  } else {
+    to = targetOf(from, dir);
+    if (!inBounds(floor.size, to)) return noop(state);
+  }
 
   const traits = state.player.classTraits;
   const shoes = state.player.equipment.SHOES;

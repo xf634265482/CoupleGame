@@ -223,18 +223,26 @@ export const ELITE_MONSTER_DROP = {
 // ── Boss 专属机制常量（design §11b）─────────────────────────
 /** 沙虫女王：每隔多少回合潜地一次。 */
 export const SANDWORM_BURROW_INTERVAL = 4;
-/** 冰霜巨人：每隔多少回合施加冰冻。 */
+/** 沙虫女王：每次潜地在周边动态生成的沙坑数（流沙扩张，反风筝）。 */
+export const SANDWORM_DYNAMIC_PIT_PER_BURROW = 2;
+/** 沙虫女王：动态沙坑存续回合数（remaining，到 0 自动移除；静态沙坑无此值，永久）。 */
+export const SANDWORM_DYNAMIC_PIT_DURATION = 5;
+/** 冰霜巨人：每隔多少回合铺一次冰面（复用原冰冻间隔）。 */
 export const FROST_GIANT_FREEZE_INTERVAL = 4;
-/** 冰霜巨人：冰冻持续回合数（影响 AP 的回合数）。 */
-export const FROST_GIANT_FREEZE_ROUNDS = 1;
-/** 冰霜巨人：冰冻时 AP 上限降低量（最低保留 1）。 */
-export const FROST_GIANT_AP_PENALTY = 4;
+/** 冰霜巨人：冰面以玩家为中心铺开的曼哈顿半径（1 → 「+」字 5 格）。 */
+export const FROST_GIANT_ICE_RADIUS = 1;
+/** 冰霜巨人：冰面存续回合数（remaining 倒计时融化）。 */
+export const FROST_GIANT_ICE_DURATION = 2;
 /** 熔岩领主：每次攻击附加灼烧 tick 数（每 tick = 10 HP，每回合消耗 1 tick）。 */
 export const LAVA_LORD_BURN_TICKS = 3;
 /** 命运守卫：玩家 HP 占 maxHp 比例大于此值时守卫伤害 × 2。 */
 export const FATE_GUARDIAN_HP_THRESHOLD = 0.5;
-/** 命运守卫：玩家 HP ≤ 50% 时守卫每次攻击的闪避概率。 */
-export const FATE_GUARDIAN_DODGE_CHANCE = 0.4;
+/** 命运守卫：每隔多少回合标记一次命运预言（下个 Boss 回合该区域爆炸）。 */
+export const FATE_PROPHECY_INTERVAL = 3;
+/** 命运守卫：预言爆炸范围（Chebyshev 半径，1 → 3×3）。 */
+export const FATE_PROPHECY_RADIUS = 1;
+/** 命运守卫：预言爆炸伤害 = boss.attack × 该系数（取整）。 */
+export const FATE_PROPHECY_DAMAGE_MULT = 1.0;
 
 // ── 祭坛灵气奖励范围（design §3 中性区域）────────────────────
 /** 祭坛：每次使用随机获得灵气的最小值。 */
@@ -249,10 +257,10 @@ export const BLACKSMITH_UPGRADE_COST = 20;
 export const BLACKSMITH_REROLL_COST = 30;
 
 // ── 第 2-5 章 Boss 专属机制常量（260613 内容深化）──────────
-/** 第2章 SandwormQueen Boss 房沙坑数量（钻地优先出沙坑位）。 */
-export const CHAPTER2_SAND_PIT_COUNT = 4;
-/** 沙坑移动 AP 额外消耗（叠加在基础 MOVE 上）。 */
-export const CHAPTER2_SAND_PIT_MOVE_PENALTY = 1;
+/** 第2章 SandwormQueen Boss 房静态沙坑数量（开房时刷，永久；钻地优先出沙坑位）。 */
+export const CHAPTER2_SAND_PIT_COUNT = 5;
+/** 沙坑移动 AP 额外消耗（叠加在基础 MOVE 上；静态/动态沙坑共用）。 */
+export const CHAPTER2_SAND_PIT_MOVE_PENALTY = 2;
 /** 第3章 FrostGiant Boss 房冰墙数量。 */
 export const CHAPTER3_ICE_WALL_COUNT = 3;
 /** 冰墙 HP（玩家可攻击破坏，HP=0 时消失并掉灵气）。 */
@@ -261,8 +269,8 @@ export const CHAPTER3_ICE_WALL_HP = 10;
 export const CHAPTER3_ICE_WALL_DROP_ANIMA = 1;
 /** 第4章 LavaLord 熔岩潮汐周期（Boss 回合数）。 */
 export const CHAPTER4_LAVA_TIDE_INTERVAL = 3;
-/** 每次潮汐刷出的熔岩地块数。 */
-export const CHAPTER4_LAVA_TIDE_TILE_COUNT = 3;
+/** 每次潮汐刷出的熔岩地块数（2026-06-14 由 3 → 6，加大安全区压缩）。 */
+export const CHAPTER4_LAVA_TIDE_TILE_COUNT = 6;
 /** 熔岩地块持续回合数。 */
 export const CHAPTER4_LAVA_TIDE_DURATION = 2;
 /** 玩家踩入熔岩地块的伤害（每回合开始结算）。 */
