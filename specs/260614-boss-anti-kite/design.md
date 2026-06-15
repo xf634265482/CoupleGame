@@ -15,7 +15,7 @@
 | Boss | 抗风筝靠什么 | 是否可逃课 |
 |------|------------|-----------|
 | 哥布林酋长(1) | 射程2 + AOE + 增援 + 狂暴加速 | ❌ 已抗住（不改）|
-| 沙虫女王(2) | 潜地传送贴脸（每4回合1次）| ⚠️ 其余3回合是射程1纯近战 → **可风筝** |
+| 流沙巨蝎(2) | 潜地传送贴脸（每4回合1次）| ⚠️ 其余3回合是射程1纯近战 → **可风筝** |
 | 冰霜巨人(3) | 纯射程1近战 + AP-4 | ✅ **最可逃课**（AP-4只让你少走，不阻止「走1+打」）|
 | 熔岩领主(4) | 灼烧DOT + 二阶段熔岩 | ⚠️ 靠DOT/潮汐兜底（不改，仅焰格 +3）|
 | 命运守卫(5) | 伤害倍率/闪避 + 二阶段镜像 | ✅ **可逃课**（倍率/闪避从不生效，因为玩家从不挨打）|
@@ -23,6 +23,8 @@
 设计原则（沿用项目既有思路）：**每个 Boss 用自己的机制破解风筝，不做全局规则**——让玩家觉得「这个 Boss 在逼我换打法」，而非「系统不让我风筝」。
 
 ## 二、机制一：冰霜巨人 → 冰面地形锁移动（滑行）
+
+> **2026-06-15 后续**：本节（v1）的冰面滑行已上线并保留。「贴脸打一下、退一步」式风筝在冰面之外仍可行，故追加 v2（寒气→冻结循环 / 冰霜重击 AOE+击退 / 残血预警→冲锋），详见 `specs/game-design/Boss设计V1.md` §四与 `specs/260608-pve-destiny-expedition/design.md` §11b。本文档不再更新 v2 内容。
 
 把现在的「冰冻回合 AP-4」整套替换为「冰冻回合生成冰面」。
 
@@ -44,15 +46,17 @@
   - 若存在「待结算预言」`floorState.fateProphecy` → **结算**：以记录的 `center` 为心、Chebyshev 距离 ≤ `FATE_PROPHECY_RADIUS`(1) 的 **3×3** 区域爆炸（emit `PROPHECY_RESOLVED{center}`，无论是否命中均 emit，供渲染）；玩家若在区域内，受 `round(boss.attack × FATE_PROPHECY_DAMAGE_MULT)`(1.0) 伤害（emit `PLAYER_DAMAGED`，可致死）。结算后清空 `fateProphecy`。
   - 否则若 `isProphecyTurn(turn)`（`turn % FATE_PROPHECY_INTERVAL(3) === 0`）→ **标记**：记录玩家**当前格**为 `fateProphecy.center`，emit `PROPHECY_MARKED{center}`（本回合标记、下个 Boss 回合炸，是「真·预警」，玩家看得到、必须走）。
   - 「先结算、后标记」保证预言总是提前 1 个怪物回合预警，且不会自我覆盖。
-- **保留**：高血双倍伤害（`hpRatio > FATE_GUARDIAN_HP_THRESHOLD` 时 ×2）+ 二阶段镜像分身（HP≤33%）不变。莽脸吃双倍、苟风筝吃预言，双向都堵。
+- **保留**：高血双倍伤害（`hpRatio > FATE_GUARDIAN_HP_THRESHOLD` 时 ×2）不变。莽脸吃双倍、苟风筝吃预言，双向都堵。
 
-## 四、机制三：沙虫女王 → 流沙扩张
+> **2026-06-16 更新**：原"二阶段镜像分身（HP≤33%）"已被 260616 重做替换为「行为镜像（HP≤50%）+ 狂暴改写命运（HP≤30%）」。**狂暴态进入后命运预言整体停摆**（`fateProphecyStep` 在 `boss.enraged=true` 时直接 noop），由「改写命运」周期取代为狂暴态的预警-结算机制。详见 `specs/260616-fate-guardian-rework/design.md`。
+
+## 四、机制三：流沙巨蝎 → 流沙扩张
 
 沙坑系统已存在（`SAND_PIT` 实体 + `MovementSystem` 踩入 +AP + `MapGenerator` 静态生成），让它「活」并加重。
 
-- **流沙扩张**：沙虫每次**潜地**（`sandwormBurrow`）时，在其周边曼哈顿 ≤1 的空格生成 `SANDWORM_DYNAMIC_PIT_PER_BURROW`(2) 个**动态** `SAND_PIT`（带 `remaining = SANDWORM_DYNAMIC_PIT_DURATION`(5)，复用 endTurn 倒计时；满则少刷）。场地随战斗逐渐变雷区，压缩风筝走廊。
-- **加重踩入惩罚**：`CHAPTER2_SAND_PIT_MOVE_PENALTY` `1 → 2`（重度迟滞；完全锁移动是冰霜招牌，沙虫用「深陷」做区分）。静态/动态沙坑共用此惩罚。
-- **不被填满**：动态沙坑靠 `remaining` 自清理（每 4 回合潜地刷 2 个、5 回合消失 → 同时活跃约 2~3 个），无需全局上限；静态沙坑保持永久。
+- **流沙扩张**：流沙巨蝎每次**潜地**（`quicksandScorpionBurrow`）时，在其周边曼哈顿 ≤1 的空格生成 `QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW`(2) 个**动态** `SAND_PIT`（带 `remaining = QUICKSAND_SCORPION_DYNAMIC_PIT_DURATION`(8，2026-06-15 由 5→8)，复用 endTurn 倒计时；满则少刷）。场地随战斗逐渐变雷区，压缩风筝走廊。
+- **加重踩入惩罚**：`CHAPTER2_SAND_PIT_MOVE_PENALTY` `1 → 2`（重度迟滞；完全锁移动是冰霜招牌，流沙巨蝎用「深陷」做区分）。静态/动态沙坑共用此惩罚。
+- **持续压缩**：动态沙坑靠 `remaining` 自清理（每 4 回合潜地刷 2 个、存续 8 回合后消失，2026-06-15 由 5→8）。存续 > 潜地间隔(4/3)，多波沙坑会叠加共存而非维持恒定数量，营造「越来越走不了」的压迫感；无需全局上限，静态沙坑保持永久。
 - **保留**：潜地→冒出贴脸双倍那套不变（「那一下」是爆发，流沙是常驻压迫，互补）。
 
 ## 五、两个数值加料
@@ -69,14 +73,14 @@
 - `PveEvent`：新增 `PROPHECY_MARKED{center}` / `PROPHECY_RESOLVED{center}` / `ICE_TIDE_SPAWNED{tiles;duration}` / `SAND_TIDE_SPAWNED{tiles;duration}`；删除 `FREEZE_APPLIED`。
 
 **`PveConstants.ts`**
-- 新增：`FROST_GIANT_ICE_RADIUS=1`、`FROST_GIANT_ICE_DURATION=2`、`FATE_PROPHECY_INTERVAL=3`、`FATE_PROPHECY_RADIUS=1`、`FATE_PROPHECY_DAMAGE_MULT=1.0`、`SANDWORM_DYNAMIC_PIT_PER_BURROW=2`、`SANDWORM_DYNAMIC_PIT_DURATION=5`。
+- 新增：`FROST_GIANT_ICE_RADIUS=1`、`FROST_GIANT_ICE_DURATION=2`、`FATE_PROPHECY_INTERVAL=3`、`FATE_PROPHECY_RADIUS=1`、`FATE_PROPHECY_DAMAGE_MULT=1.0`、`QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW=2`、`QUICKSAND_SCORPION_DYNAMIC_PIT_DURATION=5`。
 - 改值：`CHAPTER2_SAND_PIT_COUNT 4→5`、`CHAPTER2_SAND_PIT_MOVE_PENALTY 1→2`、`CHAPTER4_LAVA_TIDE_TILE_COUNT 3→6`。
 - 删除：`FROST_GIANT_FREEZE_ROUNDS`、`FROST_GIANT_AP_PENALTY`、`FATE_GUARDIAN_DODGE_CHANCE`。（`FROST_GIANT_FREEZE_INTERVAL` 保留，复用为冰面生成间隔。）
 
 **逻辑层**
 - `bosses/FrostGiant.ts`：删冰冻，新增 `frostIceStep`（铺冰面）。
 - `bosses/FateGuardian.ts`：删 `fateGuardianEvade`，新增 `fateProphecyStep` + `isProphecyTurn`。
-- `bosses/SandwormQueen.ts`：`sandwormBurrow` 增加动态沙坑生成。
+- `bosses/QuicksandScorpion.ts`：`quicksandScorpionBurrow` 增加动态沙坑生成。
 - `CombatSystem.ts`：删命运守卫闪避内联块。
 - `MovementSystem.ts`：站冰滑行（多格）。
 - `MonsterAI.ts`：FROST_GIANT 接 `frostIceStep`、FATE_GUARDIAN 接 `fateProphecyStep`（前置步）。
@@ -91,7 +95,7 @@
 
 - `test/pve/FrostGiant.test.ts`：重写为冰面生成 + 滑行（含「站冰滑到边缘」「撞墙停下」「过冲丢失精确间距」）。
 - `test/pve/FateGuardian.test.ts`：删闪避用例；新增预言「标记→下回合 3×3 结算伤害」「玩家走出区域则无伤」「保留高血双倍」。
-- `test/pve/SandwormQueen.test.ts`：潜地刷动态沙坑、+2AP 惩罚、动态坑倒计时移除。
+- `test/pve/QuicksandScorpion.test.ts`：潜地刷动态沙坑、+2AP 惩罚、动态坑倒计时移除。
 - `test/pve/MovementSystem*` / `ExpeditionState*`：受影响处更新。
 - `npx jest test/pve` 全绿。
-- 文档同步：`specs/game-design/Boss设计V1.md`（§三冰霜、§六命运、§三沙虫、§七总表）+ `specs/260608-pve-destiny-expedition/design.md`（§11b Boss 机制）。
+- 文档同步：`specs/game-design/Boss设计V1.md`（§三冰霜、§六命运、§三流沙巨蝎、§七总表）+ `specs/260608-pve-destiny-expedition/design.md`（§11b Boss 机制）。

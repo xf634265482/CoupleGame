@@ -26,6 +26,8 @@ export type FixedEntityType =
   | 'SAND_PIT' // 沙坑地形（第2章 Boss 房：移动 AP+2，Boss 钻出优先沙坑；潜地时动态扩张，带 remaining 的为动态坑）
   | 'ICE_WALL' // 冰墙地形（第3章 Boss 房：阻挡移动，HP=10 可被攻击破坏）
   | 'ICE_TILE' // 冰面地块（第3章 FrostGiant 冰冻回合铺出，玩家踩上滑行，remaining 倒计时融化）
+  | 'FREEZE_WALL' // 冰冻状态墙（第3章 FrostGiant：玩家被冻结时在周围生成，按攻击次数而非HP移除）
+  | 'SHATTERED_ICE' // 碎冰地块（第3章 FrostGiant：冰墙/冻结墙被击碎后生成，remaining 倒计时；玩家踩入扣固定伤害并立即消耗，不阻挡移动）
   | 'LAVA_TILE'; // 熔岩地块（第4章 LavaLord phase2 周期性刷出，玩家踩入扣 HP）
 
 export type MonsterAiState = 'IDLE' | 'PATROL' | 'CHASE' | 'FLEE' | 'DEAD';
@@ -42,10 +44,34 @@ export interface Monster {
   aiState: MonsterAiState;
   /** Boss 专属机制 id（type==='BOSS' 时有效）。 */
   bossId?: string;
-  /** 沙虫女王潜地状态：true 时免疫玩家攻击，下一回合冒出并双倍伤害（bossId=SANDWORM_QUEEN）。 */
+  /** 流沙巨蝎潜地状态：true 时免疫玩家攻击，下一回合冒出并双倍伤害（bossId=QUICKSAND_SCORPION）。 */
   isBurrowed?: boolean;
   /** 怪物变体 id（NORMAL/ANIMA/ELITE 专属行为差异，如 'GOBLIN_ARCHER'/'FROST_GOBLIN'/'SPIRIT_RAT'）。 */
   variantId?: string;
+  /** Boss 增援技能召唤出的怪物：击杀时不产生任何掉落（金币/灵气/装备），避免刷增援白嫖收益。 */
+  summoned?: boolean;
+  /** 冰冻剩余回合数（PERMAFROST_CORE 遗物 / boss_slow_on_hit / boss_stun_on_hurt 触发）：>0 时 stepOneMonsterCore 跳过本怪物回合并 -1。 */
+  frozenRounds?: number;
+  /** 流血剩余回合数（boss_bleed_on_hit 装备 trait 触发）：每怪物回合开始扣 BLEED_DAMAGE HP，递减至 0。 */
+  bleedRounds?: number;
+  /** 灼烧剩余 tick 数（boss_burn_on_hit 装备 trait 触发）：每怪物回合开始扣 BURN_TICK_DAMAGE HP，递减至 0。 */
+  burnRounds?: number;
+  /** 冰霜巨人狂暴冲锋预警方向（bossId=FROST_GIANT）：上一回合预警时记录，本回合沿此方向执行冲锋后清除。 */
+  frostChargeDir?: Coord;
+  /** 命运守卫行为镜像（bossId=FATE_MIRROR）专属：玩家上一回合行为，下个怪物回合执行后清空。 */
+  pendingBehavior?: { action: 'ATTACK' | 'MOVE' | 'IDLE'; distance: number };
+  /** 命运守卫行为镜像专属：护盾层数（0/1，不叠加；吸收一次伤害后归零）。 */
+  shieldStacks?: 0 | 1;
+  /** 命运守卫本体（bossId=FATE_GUARDIAN）专属：改写命运 E2 加伤百分比，普攻 / 镜像攻击 / 5×5 都吃。 */
+  attackBuffPct?: number;
+  /** 命运守卫本体专属：attackBuffPct 失效的怪物回合（floor.turn >= 此值时清零）。 */
+  attackBuffExpiresAtTurn?: number;
+  /** 命运守卫本体专属：HP 是否已跨过 50% 阈值生成过行为镜像（true 后不再生成，即使镜像死亡）。 */
+  mirrorSpawned?: boolean;
+  /** 命运守卫本体专属：是否已进入狂暴态（HP 跨 30% 后 true，不可逆）。 */
+  enraged?: boolean;
+  /** 命运守卫本体专属：狂暴起始 floor.turn（计算改写命运周期用）。 */
+  enrageTurn?: number;
 }
 
 export interface FixedEntity {
@@ -77,6 +103,15 @@ export interface EquipItem {
 
 export type Equipment = Partial<Record<EquipSlot, EquipItem>>;
 
+// ── 遗物（Boss 遗物 / 局内被动 buff，死亡时清空） ────────
+/** Boss 遗物 id（每章 1 件，掉落规则见 BOSS_DROP_TABLE）。 */
+export type RelicId =
+  | 'CHIEF_ROAR' // 第1章 酋长怒吼
+  | 'QUICKSAND_HEART' // 第2章 流沙之心
+  | 'PERMAFROST_CORE' // 第3章 永冻之核
+  | 'MAGMA_HEART' // 第4章 熔火之心
+  | 'FATE_ECHO'; // 第5章 命运回响
+
 // ── 远征玩家（跨层持久态） ─────────────────────────────
 export interface RunPlayer {
   hp: number;
@@ -100,6 +135,26 @@ export interface RunPlayer {
   /** 命运碎片成长树效果快照（由 startExpedition 时根据 PveMeta.unlockedTreeNodes 计算并固化，
    *  随存档持久化，保证云端复算时无需重新读取 PveMeta，AC-13）。 */
   treeBonuses?: DestinyTreeBonuses;
+  /** 本场远征拾取的 Boss 遗物列表（死亡清空，不跨远征保留；图鉴解锁记录见 PveMeta.codex.relics）。 */
+  relics?: RelicId[];
+  /** 遗物图鉴快照（开局时从 PveMeta.codex.relics 复制 + 本场远征首次拾取时同步追加）。
+   *  用于 Boss 掉落「图鉴已解锁 +10%」判定。运行结束后由 Controller 同步回云端 codex.relics。 */
+  codexRelics?: RelicId[];
+  /** 本场远征持有的命运词条卷轴数量（拾取后可使用，使用时三选一附加 strengthen_* 词条到 classTraits）。 */
+  scrolls?: number;
+  /** 遗物运行态：CHIEF_ROAR/PERMAFROST_CORE 累计与待触发标记；FATE_ECHO 一次性消耗标记。 */
+  relicState?: {
+    /** CHIEF_ROAR：上次击杀后下一次普攻 +50%，触发后置 false。 */
+    chiefRoarPending?: boolean;
+    /** PERMAFROST_CORE：累计移动步数（每 3 步触发一次冰冻并归零）。 */
+    permafrostSteps?: number;
+    /** PERMAFROST_CORE：步数达 3 后置 true，下次命中怪物时消费并冰冻目标。 */
+    permafrostPending?: boolean;
+    /** FATE_ECHO：本场远征已触发过致死兜底则为 true（每场远征仅一次）。 */
+    fateEchoUsed?: boolean;
+    /** boss_revive_50（守卫圣盾）：本场远征已触发过装备级致死兜底则为 true（每场远征仅一次）。 */
+    shieldUsed?: boolean;
+  };
 }
 
 /** 命运碎片成长树效果快照（DestinyTreeSystem.getTreeBonuses 的返回类型）。 */
@@ -108,6 +163,7 @@ export interface DestinyTreeBonuses {
   deathGoldRetentionPct: number;
   attackBonus: number;
   apDiceBonus: number;
+  apCarryCapBonus: number;
   fragmentBonus: number;
   startGoldBonus: number;
   chestGoldBonusPct: number;
@@ -169,14 +225,43 @@ export interface FloorState {
   shadowStrikeCount?: number;
   /** 熔岩领主第二阶段标记（Boss HP/maxHp ≤ CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO 后置 true，不可逆）。 */
   lavaLordPhase2?: boolean;
-  /** 熔岩潮汐回合计数器：phase2 期间每回合 +1，达到 CHAPTER4_LAVA_TIDE_INTERVAL 时刷新潮汐并归零。 */
+  /** 熔岩潮汐回合计数器：phase2 期间每回合 +1，达到 CHAPTER4_LAVA_TIDE_INTERVAL 时推进下一排并归零。 */
   lavaTideCounter?: number;
+  /** 熔岩领主阶段一「喷发预警」待结算标记：下个 Boss 回合在 cells 上生成临时 LAVA_TILE。 */
+  lavaEruptionMark?: { cells: Coord[] };
+  /** 熔岩领主「熔岩锁链」远离计数器：每 Boss 回合曼哈顿距离 >1 时 +1，<=1 时归零。 */
+  lavaLordChainCounter?: number;
+  /** 熔岩领主阶段二定向熔岩潮汐推进方向（进入阶段二时由 Boss 所在边确定，不可变）。 */
+  lavaTideDirection?: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+  /** 熔岩领主阶段二定向熔岩潮汐已推进的排数（上限 CHAPTER4_LAVA_TIDE_ROW_MAX）。 */
+  lavaTideRowsAdvanced?: number;
   /** 复仇类词条（vengeance/retreat_shot/retribution）：受到怪物攻击后置 true，下次主动攻击消耗并 +5 伤害。 */
   vengeanceReady?: boolean;
   /** 进阶 oneShot（final_charge/last_arrow/desperate_gambit）：本层首次 HP≤30% 时触发 AP+3，触发后置 false（默认 true）。 */
   finalChargeAvailable?: boolean;
   /** 命运守卫待结算预言：标记回合记录中心格，下个 Boss 回合该 3×3 区域爆炸后清空。 */
   fateProphecy?: { center: Coord };
+  /** 冰霜巨人寒气层数：普通攻击命中玩家时 +1，达到 FROST_GIANT_CHILL_STACKS_TO_FREEZE 时触发冻结并归零。 */
+  playerChillStacks?: number;
+  /** 玩家是否处于冰霜巨人冻结状态：MOVE 行为被完全阻断（no-op），ATTACK 等其余行动正常。 */
+  playerFrozen?: boolean;
+  /** 冻结状态下玩家还需主动攻击（playerAttack/attackIceWall）多少次才能解除：归零时解除冻结并移除 FREEZE_WALL。 */
+  playerFreezeAttacksRemaining?: number;
+  /** 命运守卫狂暴态「改写命运」待结算：5 抽 3 + 玩家弃 1 的中间状态。 */
+  pendingDestinyRewrite?: {
+    /** 抽到的 3 个事件编号（1-5，不重复，按抽取顺序）。 */
+    drawn: [number, number, number];
+    /** 玩家弃掉的索引（0/1/2），null 表示尚未选择。 */
+    removed: 0 | 1 | 2 | null;
+    /** 预告所在的怪物回合（用于周期判定）。 */
+    offeredAtTurn: number;
+  };
+  /** 命运守卫 E5 命运封锁：下个玩家回合 AP 减半（floor(ap/2)，最少 1）。AP 系统结算后清空。 */
+  destinyLockNextTurn?: boolean;
+  /** 命运守卫行为镜像：玩家本回合是否至少一次命中（CombatSystem.playerAttack 设置，endTurn 重置）。 */
+  playerAttackedThisTurn?: boolean;
+  /** 命运守卫行为镜像：玩家本回合的累计移动格数（MovementSystem.applyMove 自增，endTurn 重置）。 */
+  playerStepsThisTurn?: number;
 }
 
 // ── 远征总状态（存档根对象） ───────────────────────────
@@ -207,8 +292,10 @@ export type PveEvent =
   | { type: 'ANIMA_STRENGTHEN'; choices: string[] } // 触发 3 选 1（待玩家选择）
   | { type: 'PLAYER_DAMAGED'; damage: number; hp: number; sourceId: string }
   | { type: 'TURN_END'; turn: number }
-  /** 新回合开始掷骰 → AP（AC-2）：dice ∈ [1,6]，ap = 8 + dice ∈ [9,14]。 */
+  /** 新回合开始掷骰 → AP（AC-2）：dice ∈ [1,6]，ap = 8 + dice ∈ [9,14]（已包含结转，见 AP_CARRIED）。 */
   | { type: 'AP_ROLLED'; turn: number; dice: number; ap: number }
+  /** 上回合剩余 AP 按 AP_CARRY_CAP 结转到本回合：amount 为本次结转值（已计入 AP_ROLLED.ap）。 */
+  | { type: 'AP_CARRIED'; amount: number }
   /** Boss 阵亡 + 持有钥匙时在 Boss 位置浮现传送门（玩家需踏入并交互才通关，design AC-9）。 */
   | { type: 'PORTAL_SPAWNED'; entityId: string; pos: Coord }
   /** 神像祝福：永久 +1 maxHp（M1 占位数值，待设计师定稿）。 */
@@ -230,9 +317,9 @@ export type PveEvent =
   | { type: 'ACHIEVEMENT_UNLOCKED'; achievementId: string; name: string }
   | { type: 'FLOOR_CLEARED'; floor: number }
   | { type: 'PLAYER_DEAD' }
-  /** 沙虫女王潜入地下（免疫攻击，下回合冒出）。 */
+  /** 流沙巨蝎潜入地下（免疫攻击，下回合冒出）。 */
   | { type: 'BOSS_BURROWED'; bossId: string }
-  /** 沙虫女王从地下冒出（pos 为落点）。 */
+  /** 流沙巨蝎从地下冒出（pos 为落点，落点处会留下一个永久沙坑）。 */
   | { type: 'BOSS_EMERGED'; bossId: string; pos: Coord }
   /** 熔岩领主施加灼烧：totalRemaining 为剩余总灼烧伤害点数。 */
   | { type: 'BURN_APPLIED'; bossId: string; totalRemaining: number }
@@ -250,6 +337,13 @@ export type PveEvent =
   | { type: 'BLACKSMITH_REROLL'; entityId: string; slot: EquipSlot; newTrait: string }
   /** 哥布林酋长蓄力重击实际结算：center 为本次重击结算时 boss 所在格（用于 UI 标识实际命中区域）。 */
   | { type: 'HEAVY_STRIKE_RESOLVED'; bossId: string; center: Coord }
+  /** 哥布林酋长蓄力重击预警（2026-06-15 恢复 → 最终「先释放后追击」方案）：本回合非重击回合，
+   *  但下个怪物回合将触发重击；center 为 boss **当前实际位置**，radius = HEAVY_STRIKE_RANGE。
+   *  重击回合 boss 先在原地释放（中心 = center）、再追击移动，故红圈（以 center 为心半径 radius）
+   *  与下回合实际命中橙圈完全重合，玩家跑出红圈即绝对安全、不会多走位浪费 AP。 */
+  | { type: 'HEAVY_STRIKE_WARNING'; bossId: string; center: Coord; radius: number }
+  /** Boss 首次进入狂暴状态（HP 跨过狂暴阈值，当前仅哥布林酋长）：用于战报提示玩家 Boss 强化。 */
+  | { type: 'BOSS_ENRAGED'; bossId: string }
   /** 石块被 Boss AOE 摧毁。 */
   | { type: 'ROCK_DESTROYED'; entityId: string }
   /** 怪物被 Boss 增援号角召唤。 */
@@ -266,22 +360,95 @@ export type PveEvent =
   | { type: 'SAND_PIT_STEPPED'; entityId: string }
   /** 冰墙被玩家攻击破坏（第3章 Boss 房）：emit 后玩家 +anima。 */
   | { type: 'ICE_WALL_BROKEN'; entityId: string; anima: number }
-  /** 熔岩潮汐生成（第4章 LavaLord phase2）：本次刷出的格子列表 + 存在回合数。 */
-  | { type: 'LAVA_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
   /** 玩家踩入熔岩地块受伤（每回合开始结算）。 */
   | { type: 'LAVA_TILE_DAMAGED'; entityId: string; damage: number }
-  /** 命运守望者镜像生成（第5章 FateGuardian HP≤33%）。 */
+  /** 熔岩领主阶段一喷发预警：以玩家当前格为中心的 4×4 区域，下个 Boss 回合将生成熔岩。 */
+  | { type: 'ERUPTION_TELEGRAPHED'; cells: Coord[] }
+  /** 熔岩领主阶段一喷发结算：在上回合标记的 cells 上生成 LAVA_TILE（存续 duration 回合）。 */
+  | { type: 'ERUPTION_RESOLVED'; tiles: Coord[]; duration: number }
+  /** 熔岩领主熔核爆裂：灼烧层数达阈值时清空灼烧并造成真实伤害，周围生成 LAVA_TILE。 */
+  | { type: 'BURN_BURST'; damage: number; hp: number; tiles: Coord[] }
+  /** 熔岩领主阶段二定向熔岩潮汐：沿 direction 推进第 rowIndex 排永久 LAVA_TILE。 */
+  | { type: 'LAVA_TIDE_ROW_SPAWNED'; tiles: Coord[]; direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'; rowIndex: number }
+  /** 熔岩领主熔岩锁链：玩家被拉近一格并附加灼烧（burnTotal 为叠加后的总灼烧层数）。 */
+  | { type: 'LAVA_CHAIN_PULL'; from: Coord; to: Coord; burnTotal: number }
+  /** 命运守卫行为镜像生成（第5章 FateGuardian HP≤50%，hp=玩家HP×0.5、attack=玩家attack×0.5）。 */
   | { type: 'MIRROR_SPAWNED'; mirrorId: string; pos: Coord }
   /** 命运镜像被击杀（不掉落，不影响传送门生成判定）。 */
   | { type: 'MIRROR_KILLED'; mirrorId: string }
+  /** 行为镜像：记录玩家本回合行为，下个怪物回合执行。 */
+  | { type: 'MIRROR_BEHAVIOR_QUEUED'; mirrorId: string; action: 'ATTACK' | 'MOVE' | 'IDLE'; distance: number }
+  /** 行为镜像：复制玩家移动（朝玩家方向最短路径推进 distance 格）。 */
+  | { type: 'MIRROR_MOVED'; mirrorId: string; from: Coord; to: Coord }
+  /** 行为镜像：复制玩家攻击（hit=false 时为曼哈顿 > 2 的空挥）。 */
+  | { type: 'MIRROR_ATTACKED'; mirrorId: string; hit: boolean; damage: number; hp: number }
+  /** 行为镜像：玩家上回合待机 → 镜像本回合获得 1 层护盾。 */
+  | { type: 'MIRROR_SHIELDED'; mirrorId: string }
+  /** 行为镜像：护盾吸收一次伤害（damage=0 不扣 HP）。 */
+  | { type: 'MIRROR_SHIELD_ABSORBED'; mirrorId: string }
+  /** 命运守卫狂暴态「改写命运」预告：从 5 池抽 3 个事件供玩家弃 1。 */
+  | { type: 'DESTINY_REWRITE_OFFERED'; drawn: [number, number, number] }
+  /** 改写命运：玩家选定弃掉的索引（0/1/2）。 */
+  | { type: 'DESTINY_REWRITE_CHOSEN'; removedIndex: 0 | 1 | 2 }
+  /** 改写命运结算汇总：本次实际执行的事件编号（按 E5→E4→E3→E1→E2 顺序）。 */
+  | { type: 'DESTINY_REWRITE_RESOLVED'; executed: number[] }
+  /** 改写命运 E1：Boss 回血 amount，结算后 boss.hp。 */
+  | { type: 'DESTINY_HEAL'; amount: number; bossHp: number }
+  /** 改写命运 E2：Boss 加伤害 pct%，buff 失效的怪物回合。 */
+  | { type: 'DESTINY_ATK_BUFF'; pct: number; expiresAtTurn: number }
+  /** 改写命运 E3：直接对玩家造成 damage 真实伤害，hp 为结算后玩家 HP。 */
+  | { type: 'DESTINY_DIRECT_DAMAGE'; damage: number; hp: number }
+  /** 改写命运 E4：以 Boss 当前格为中心 5×5 爆炸；damage>0 时命中玩家、=0 时玩家在范围外（仅供渲染）。 */
+  | { type: 'DESTINY_5X5_EXPLODED'; center: Coord; damage: number; hp: number }
+  /** 改写命运 E5：下个玩家回合 AP 减半，nextTurnAp 为实际生效后的 AP。 */
+  | { type: 'DESTINY_AP_LOCKED'; nextTurnAp: number }
   /** 命运守卫预言标记（第5章）：center 为标记的玩家当前格，下个 Boss 回合该 3×3 爆炸。 */
   | { type: 'PROPHECY_MARKED'; center: Coord }
   /** 命运守卫预言结算（第5章）：center 为爆炸中心（3×3），无论是否命中均 emit 供渲染。 */
   | { type: 'PROPHECY_RESOLVED'; center: Coord }
   /** 冰霜巨人冰面生成（第3章）：本次铺出的冰面格子 + 存在回合数。 */
   | { type: 'ICE_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
-  /** 沙虫女王流沙扩张（第2章）：本次刷出的动态沙坑格子 + 存在回合数。 */
-  | { type: 'SAND_TIDE_SPAWNED'; tiles: Coord[]; duration: number };
+  /** 冰霜巨人寒气层数变化（第3章）：普通攻击命中玩家后 emit；stacks 为本次叠加后的层数（触发冻结时归零为 0）。 */
+  | { type: 'CHILL_STACK_APPLIED'; stacks: number }
+  /** 冰霜巨人冻结玩家（第3章，寒气叠满）：wallEntityIds 为同时生成的 FREEZE_WALL 实体 id。MOVE 被阻断直至解除。 */
+  | { type: 'PLAYER_FROZEN'; wallEntityIds: string[] }
+  /** 冰霜巨人解除冻结（第3章，玩家主动攻击 FROST_GIANT_FREEZE_ATTACKS_TO_BREAK 次后）：FREEZE_WALL 同步移除。 */
+  | { type: 'PLAYER_UNFROZEN' }
+  /** 冰霜巨人「冰霜重击」结算（第3章，每 FROST_GIANT_HEAVY_STRIKE_INTERVAL 回合）：以 boss 自身为中心的 AOE，半径 radius。 */
+  | { type: 'FROST_HEAVY_STRIKE_RESOLVED'; bossId: string; center: Coord; radius: number }
+  /** 玩家被击退（冰霜重击命中后）：to 为最终落点（若落在冰面上则已结算滑行），slid 标记是否发生了滑行。 */
+  | { type: 'KNOCKBACK'; entityId: 'PLAYER'; from: Coord; to: Coord; slid: boolean }
+  /** ICE_WALL/FREEZE_WALL 被击碎（冰霜重击或狂暴冲锋命中）：shatteredCells 为新生成的 SHATTERED_ICE 格子列表。 */
+  | { type: 'ICE_WALL_SHATTERED'; entityId: string; shatteredCells: Coord[] }
+  /** 冰霜巨人狂暴冲锋预警（第3章，狂暴后每 FROST_GIANT_HEAVY_STRIKE_INTERVAL 回合）：本回合不攻击不移动，
+   *  dir 为冲锋方向，path 为中心线路径（下回合沿此执行，三格宽车道 = path 格 ± 垂直方向 1 格）。 */
+  | { type: 'CHARGE_TELEGRAPHED'; bossId: string; dir: Coord; path: Coord[] }
+  /** 冰霜巨人狂暴冲锋执行结算（第3章）：result 标记本次冲锋的结果类型。 */
+  | { type: 'CHARGE_EXECUTED'; bossId: string; from: Coord; to: Coord; result: 'WALL_SHATTERED' | 'PLAYER_HIT' | 'ICE_WALL_SPAWNED' | 'NONE' }
+  /** 冰霜巨人狂暴冲锋未命中时，在随机空格新生成一个 ICE_WALL（第3章）。 */
+  | { type: 'ICE_WALL_SPAWNED'; entityId: string; pos: Coord }
+  /** 流沙巨蝎流沙扩张（第2章）：本次刷出的动态沙坑格子 + 存在回合数。 */
+  | { type: 'SAND_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
+  /** 流沙巨蝎沙暴（第2章，潜地时触发）：本次随机覆盖的格子；命中玩家所在格时额外 emit SANDSTORM_HIT。 */
+  | { type: 'SANDSTORM_SPAWNED'; tiles: Coord[] }
+  /** 流沙巨蝎沙暴命中玩家：真实伤害（无视护甲）。 */
+  | { type: 'SANDSTORM_HIT'; damage: number; hp: number }
+  /** Boss 击杀掉落：拾取一件 Boss 遗物（局内生效，死亡清空）。 */
+  | { type: 'RELIC_PICKUP'; relicId: RelicId; source: string }
+  /** Boss 击杀掉落：拾取一张命运词条卷轴（玩家可在 HUD 主动使用）。 */
+  | { type: 'SCROLL_PICKUP'; source: string }
+  /** Boss 击杀掉落：拾取若干命运碎片（独立 10% 判定，按章节缩放）。 */
+  | { type: 'SHARDS_PICKUP'; amount: number; source: string }
+  /** 首次解锁 Boss 遗物图鉴（写入 PveMeta.codex.relics，影响后续掉落概率）。 */
+  | { type: 'CODEX_RELIC_UNLOCKED'; relicId: RelicId }
+  /** 玩家使用命运词条卷轴：三选一弹窗触发，options 为待选 strengthen_* 词条 id。 */
+  | { type: 'SCROLL_OFFER'; options: string[] }
+  /** 玩家选定卷轴词条：已 append 到 classTraits。 */
+  | { type: 'SCROLL_RESOLVED'; selected: string }
+  /** 营地遗物宝箱开启结果：success=true 表示获得遗物；false 表示未中（已扣资源）；refunded=true 表示遗物已持有自动转补偿。 */
+  | { type: 'RELIC_CHEST_OPENED'; success: boolean; relicId?: RelicId; refunded?: boolean; refundGold?: number; refundDiamond?: number }
+  /** 遗物 hook 触发提示（例：永冻之核冰冻、熔火之心反弹），供战报展示。 */
+  | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string };
 
 /** core 纯函数统一返回：变更后的状态 + 本次产生的事件序列。 */
 export interface ApplyResult {
@@ -291,12 +458,14 @@ export interface ApplyResult {
 
 // ── 局外元进度（AC-20，远征间持久化） ────────────────────
 
-/** 图鉴：已见过的怪物类型 / 已获得的装备槽位。 */
+/** 图鉴：已见过的怪物类型 / 已获得的装备槽位 / 已解锁的 Boss 遗物。 */
 export interface PveCodex {
   /** MonsterType 字符串集合（'NORMAL'/'ANIMA'/'ELITE'/'BOSS'）。 */
   monsters: string[];
   /** EquipSlot 字符串集合（'WEAPON'/'ARMOR' 等）。 */
   equipment: string[];
+  /** 已解锁过的 Boss 遗物 id 列表（首次拾取后写入，影响后续掉落概率 +RELIC_CODEX_BONUS）。 */
+  relics?: RelicId[];
 }
 
 /**

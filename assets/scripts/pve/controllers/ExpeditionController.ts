@@ -2,7 +2,7 @@
 // 三层结构落地：Controller 仅做编排与输入处理，规则全部委托 pve/core 纯函数，渲染委托 views/*。
 // M1 垂直切片：第一章 1~5 层端到端打通；存档/云端校验留待 P3（见 specs/260608-pve-destiny-expedition）。
 
-import { _decorator, Component, EventKeyboard, Input, input, KeyCode, Node } from 'cc';
+import { _decorator, Component, EventKeyboard, Input, input, KeyCode, Node, sys } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
 import { applyUiLayerTree, refreshScreenAdapt, visibleDesignSize } from '../../platform/wechat/ViewAdapt';
@@ -10,8 +10,10 @@ import { applyStrengthen } from '../core/AnimaSystem';
 import { ACHIEVEMENT_DEFS, checkNewAchievements, collectCodexEntries } from '../core/AchievementSystem';
 import type { AchievementDef, AchievementId } from '../core/AchievementSystem';
 import { HEAVY_STRIKE_RANGE, isCellShadowedByRock } from '../core/bosses/GoblinChief';
-import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS } from '../core/CampSystem';
+import { chooseDestinyRewrite } from '../core/bosses/FateGuardian';
+import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS, openRelicChest } from '../core/CampSystem';
 import type { CampItemId } from '../core/CampSystem';
+import { CHAPTER_BOSS_RELIC, RELIC_CHEST } from '../core/PveConstants';
 import { applyClassAdvance, applyClassAwaken, pickFragment } from '../core/ClassSystem';
 import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import {
@@ -24,13 +26,15 @@ import {
 } from '../core/ExpeditionState';
 import { interactPortal, openExit, pickKey, spawnPortal } from '../core/FloorRules';
 import { openChest } from '../core/LootSystem';
+import { RELIC_DEFS } from '../core/RelicSystem';
+import { claimScrollChoice, useScroll } from '../core/ScrollSystem';
 import { applyMove } from '../core/MovementSystem';
 import { resolveTreeChoice } from '../core/DestinyTreeSystem';
 import { rerollEquipTrait, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
 import type { Direction } from '../core/MovementSystem';
 import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, DEV_SKIP_TO_FLOOR, isBossFloor, TOTAL_FLOORS } from '../core/PveConstants';
 import type { ClassId } from '../core/PveConstants';
-import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta } from '../core/PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta, RelicId } from '../core/PveTypes';
 import { loadPveSave, loadPveMeta, startRun, savePveFloor, settlePveRun, updatePveMeta } from '../../network/PveService';
 import type { PveSaveVO } from '../../network/PveService';
 import { FogMapView } from '../views/FogMapView';
@@ -122,7 +126,7 @@ const MONSTER_VARIANT_CN: Record<string, string> = {
   FIRE_GOBLIN: '赤炎哥布林',
   SPIRIT_RAT: '灵鼠',
   GOBLIN_CHIEF: '哥布林酋长',
-  SANDWORM_QUEEN: '沙虫女王',
+  QUICKSAND_SCORPION: '流沙巨蝎',
   FROST_GIANT: '冰霜巨人',
   LAVA_LORD: '熔岩领主',
   FATE_GUARDIAN: '命运守卫',
@@ -147,6 +151,14 @@ function manhattan(a: Coord, b: Coord): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
+/** 熔岩潮汐推进方向 → 中文（FogMapView 坐标系：x 向右，y 向下；UP=从上边向下推）。 */
+const TIDE_DIRECTION_CN: Record<'UP' | 'DOWN' | 'LEFT' | 'RIGHT', string> = {
+  UP: '从上方',
+  DOWN: '从下方',
+  LEFT: '从左侧',
+  RIGHT: '从右侧',
+};
+
 /**
  * 计算以 center 为中心、曼哈顿距离 ≤ radius 的所有格子（用于 AOE 范围预警/命中标识），
  * 并按「是否被石块遮挡」拆分为 danger（仍会受伤害）/ safe（石块挡住，不受伤害）两组。
@@ -170,6 +182,30 @@ function splitAoeCells(
   return { danger, safe };
 }
 
+/** 命运守卫「改写命运」5 个事件的中文名（用于战报）。 */
+function destinyEventName(id: number): string {
+  switch (id) {
+    case 1: return 'Boss 回血';
+    case 2: return 'Boss 加伤害';
+    case 3: return '玩家扣血';
+    case 4: return '5×5 爆炸';
+    case 5: return '命运封锁';
+    default: return `事件${id}`;
+  }
+}
+
+/** 改写命运事件效果描述（用于阻塞模态卡片：事件名 + 效果说明）。 */
+function destinyEventCard(id: number): string {
+  switch (id) {
+    case 1: return 'Boss 回血：恢复最大生命 10%';
+    case 2: return 'Boss 加伤害：攻击 +30%（持续 3 回合）';
+    case 3: return '玩家扣血：真实伤害（无视防御）';
+    case 4: return '5×5 爆炸：以 Boss 当前格为中心爆炸（伤害 ×1.2）';
+    case 5: return '命运封锁：你下回合 AP 减半（最少 1）';
+    default: return `事件${id}`;
+  }
+}
+
 /** 事件 → 战报栏条目（覆盖更广：MOVE/TURN_END 也产生条目，让玩家看到怪物在动）。
  *  state 用于把"怪 (5,5)→(5,4)" 这类坐标改写成"怪 靠近你/远离你"等相对描述，
  *  普通玩家更易读。
@@ -180,13 +216,8 @@ function describeForLog(
 ): { kind: LogKind; text: string } | null {
   switch (ev.type) {
     case 'MOVE': {
-      if (ev.entityId === 'PLAYER') {
-        const dx = ev.to.x - ev.from.x;
-        const dy = ev.to.y - ev.from.y;
-        // FogMapView 的坐标系：x 向右，y 向下（见 _cellLocalPos），故 dy>0 = 向南
-        const dir = dx > 0 ? '向东 →' : dx < 0 ? '向西 ←' : dy > 0 ? '向南 ↓' : '向北 ↑';
-        return { kind: 'PLAYER_ACT', text: `移动 ${dir}` };
-      }
+      // 玩家移动方向信息冗余（地图已直观显示位置变化），不进战报，避免刷屏
+      if (ev.entityId === 'PLAYER') return null;
       // 怪物：按曼哈顿距离变化告诉玩家这只怪是靠近/远离/横向游走
       const player = state?.floorState.player;
       if (!player) return { kind: 'ENEMY_ACT', text: '怪 移动' };
@@ -273,6 +304,8 @@ function describeForLog(
         kind: 'AP',
         text: `开始新回合 · 掷骰 ${ev.dice} 点 → 本回合行动力 ${ev.ap}`,
       };
+    case 'AP_CARRIED':
+      return { kind: 'AP', text: `🔋 结转上回合剩余行动力 +${ev.amount}` };
     case 'SHOP_BUY':
       return { kind: 'LOOT', text: `🏕️ 营地购买：${ev.effect}（-${ev.cost} 金）` };
     case 'ACHIEVEMENT_UNLOCKED':
@@ -282,13 +315,73 @@ function describeForLog(
     case 'PLAYER_DEAD':
       return { kind: 'SYSTEM', text: '💀 你倒下了，本次远征失败' };
     case 'BOSS_BURROWED':
-      return { kind: 'ENEMY_ACT', text: '🕳️ 沙虫女王潜入地下！本回合免疫攻击' };
+      return { kind: 'ENEMY_ACT', text: '🕳️ 流沙巨蝎潜入地下！本回合免疫攻击' };
     case 'BOSS_EMERGED':
-      return { kind: 'ENEMY_ACT', text: '🐛 沙虫女王从地下冒出！双倍攻击！' };
+      return { kind: 'ENEMY_ACT', text: '🦂 流沙巨蝎破土而出！双倍攻击！' };
     case 'ICE_TIDE_SPAWNED':
       return { kind: 'ENEMY_ACT', text: `❄️ 冰霜巨人冻结地面！${ev.tiles.length} 格结冰，踩上去会打滑` };
+    case 'CHILL_STACK_APPLIED':
+      // stacks 归零代表本次叠加直接触发了冻结，由 PLAYER_FROZEN 展示，避免重复
+      return ev.stacks > 0 ? { kind: 'PLAYER_HURT', text: `🥶 寒气叠加至 ${ev.stacks} 层` } : null;
+    case 'PLAYER_FROZEN':
+      return { kind: 'PLAYER_HURT', text: '🧊 寒气叠满！你被冻结了，周围生成冰墙，攻击可解除' };
+    case 'PLAYER_UNFROZEN':
+      return { kind: 'PLAYER_ACT', text: '🔥 冻结已解除！' };
+    case 'FROST_HEAVY_STRIKE_RESOLVED':
+      return { kind: 'ENEMY_ACT', text: '💥 冰霜巨人发动冰霜重击！周围范围被冰锤波及' };
+    case 'ICE_WALL_SHATTERED':
+      return { kind: 'ENEMY_ACT', text: `❄️ 冰墙被击碎！碎裂出 ${ev.shatteredCells.length} 格碎冰` };
+    case 'KNOCKBACK':
+      return ev.slid
+        ? { kind: 'PLAYER_HURT', text: '💨 被冰霜重击击退，并沿冰面滑出！' }
+        : { kind: 'PLAYER_HURT', text: '💨 被冰霜重击击退了一步！' };
+    case 'CHARGE_TELEGRAPHED':
+      return { kind: 'ENEMY_ACT', text: '⚠️ 冰霜巨人开始蓄力，下回合将沿直线狂暴冲锋！' };
+    case 'CHARGE_EXECUTED':
+      switch (ev.result) {
+        case 'WALL_SHATTERED':
+          return { kind: 'ENEMY_ACT', text: '💥 狂暴冲锋撞碎了冰墙！' };
+        case 'PLAYER_HIT':
+          return { kind: 'ENEMY_ACT', text: '💥 狂暴冲锋正面命中了你！' };
+        case 'ICE_WALL_SPAWNED':
+          return { kind: 'ENEMY_ACT', text: '💥 狂暴冲锋未命中，撞出一道新的冰墙！' };
+        default:
+          return { kind: 'ENEMY_ACT', text: '💨 狂暴冲锋落空' };
+      }
+    case 'ICE_WALL_SPAWNED':
+      // 已通过 CHARGE_EXECUTED{result:'ICE_WALL_SPAWNED'} 展示，避免重复战报
+      return null;
     case 'BURN_APPLIED':
-      return { kind: 'ENEMY_ACT', text: '🔥 熔岩领主附加灼烧！每回合持续扣血' };
+      return { kind: 'ENEMY_ACT', text: `🔥 熔岩领主附加灼烧（积累 ${ev.totalRemaining} 点，叠满 6 点爆裂）` };
+    case 'ERUPTION_TELEGRAPHED':
+      return { kind: 'ENEMY_ACT', text: `⚠️ 熔岩领主标记 ${ev.cells.length} 格喷发区域！下回合该区域将被熔岩吞没` };
+    case 'ERUPTION_RESOLVED':
+      return { kind: 'ENEMY_ACT', text: `🌋 喷发结算！${ev.tiles.length} 格化为熔岩（持续 ${ev.duration} 回合，踩入扣血）` };
+    case 'BURN_BURST':
+      return {
+        kind: 'PLAYER_HURT',
+        text: `💥 灼烧爆裂！清空灼烧 → 真实伤害 -${ev.damage}（剩余 ${ev.hp} 血），周围 ${ev.tiles.length} 格生成熔岩`,
+      };
+    case 'LAVA_TIDE_ROW_SPAWNED':
+      if (ev.rowIndex === 1) {
+        return {
+          kind: 'ENEMY_ACT',
+          text: `🌋 熔岩领主进入「潮汐阶段」！${TIDE_DIRECTION_CN[ev.direction]}涌出整排永久熔岩（${ev.tiles.length} 格）`,
+        };
+      }
+      return {
+        kind: 'ENEMY_ACT',
+        text: `🌊 熔岩潮汐推进第 ${ev.rowIndex}/3 排（${TIDE_DIRECTION_CN[ev.direction]}，新增 ${ev.tiles.length} 格永久熔岩）`,
+      };
+    case 'LAVA_CHAIN_PULL': {
+      const moved = ev.from.x !== ev.to.x || ev.from.y !== ev.to.y;
+      return {
+        kind: 'PLAYER_HURT',
+        text: moved
+          ? `⛓️ 被熔岩锁链拉近 1 格！附加灼烧（当前积累 ${ev.burnTotal} 点）`
+          : `⛓️ 熔岩锁链锁住！落点受阻无法拉近，仅附加灼烧（当前积累 ${ev.burnTotal} 点）`,
+      };
+    }
     case 'MOVE_PENALTY_APPLIED':
       return { kind: 'PLAYER_HURT', text: `🥶 被减速！移动消耗增加（持续${ev.rounds}回合）` };
     case 'FIRE_BURN_APPLIED':
@@ -303,24 +396,105 @@ function describeForLog(
       return { kind: 'LOOT', text: `⚒️ 铁匠洗炼 ${SLOT_CN[ev.slot] ?? ev.slot}（词条 → ${ev.newTrait}）` };
     case 'HEAVY_STRIKE_RESOLVED':
       return { kind: 'ENEMY_ACT', text: '💥 蓄力重击发动！橙圈为本次实际命中范围' };
+    case 'HEAVY_STRIKE_WARNING':
+      return { kind: 'ENEMY_ACT', text: '⚠️ 哥布林酋长开始蓄力！红圈为下回合重击范围，跑出红圈即安全' };
+    case 'BOSS_ENRAGED':
+      if (ev.bossId === 'QUICKSAND_SCORPION') {
+        return { kind: 'ENEMY_ACT', text: '😡 流沙巨蝎进入狂暴！潜地更频繁、沙暴范围扩大' };
+      }
+      if (ev.bossId === 'FROST_GIANT') {
+        return { kind: 'ENEMY_ACT', text: '😡 冰霜巨人进入狂暴！冰霜重击替换为冲锋' };
+      }
+      if (ev.bossId === 'FATE_GUARDIAN') {
+        return { kind: 'ENEMY_ACT', text: '😡 命运守卫狂暴：开始改写命运！' };
+      }
+      return { kind: 'ENEMY_ACT', text: '😡 哥布林酋长进入狂暴！攻击提升、移动加快、增援更频繁' };
     case 'SAND_PIT_STEPPED':
-      return { kind: 'PLAYER_HURT', text: '🏜️ 陷入流沙！移动 AP +2' };
+      return { kind: 'PLAYER_HURT', text: '🏜️ 陷入流沙！AP -2' };
     case 'SAND_TIDE_SPAWNED':
-      return { kind: 'ENEMY_ACT', text: `🏜️ 沙虫翻起流沙！身侧新增 ${ev.tiles.length} 个流沙坑` };
+      return { kind: 'ENEMY_ACT', text: `🏜️ 流沙巨蝎掀起流沙！身侧新增 ${ev.tiles.length} 个流沙坑` };
+    case 'SANDSTORM_SPAWNED':
+      return { kind: 'ENEMY_ACT', text: `🌪️ 流沙巨蝎掀起沙暴！${ev.tiles.length} 格被沙暴笼罩` };
+    case 'SANDSTORM_HIT':
+      return { kind: 'PLAYER_HURT', text: `🌪️ 被沙暴击中！真实伤害 -${ev.damage} HP（剩余 ${ev.hp}）` };
     case 'ICE_WALL_BROKEN':
       return { kind: 'PLAYER_ACT', text: `❄️ 击碎冰墙！获得 ${ev.anima} 灵气` };
-    case 'LAVA_TIDE_SPAWNED':
-      return { kind: 'ENEMY_ACT', text: `🌋 熔岩潮汐！${ev.tiles.length} 格被熔岩覆盖` };
     case 'LAVA_TILE_DAMAGED':
       return { kind: 'PLAYER_HURT', text: `🔥 被熔岩烫伤！-${ev.damage} HP` };
     case 'MIRROR_SPAWNED':
-      return { kind: 'ENEMY_ACT', text: '👥 命运镜像现身！' };
+      return { kind: 'ENEMY_ACT', text: '🪞 行为镜像现身！它将复制你的动作' };
     case 'MIRROR_KILLED':
       return { kind: 'PLAYER_ACT', text: '✨ 击碎镜像！' };
+    case 'MIRROR_BEHAVIOR_QUEUED':
+      switch (ev.action) {
+        case 'ATTACK': return { kind: 'ENEMY_ACT', text: '🪞 镜像记下了你的攻击' };
+        case 'MOVE':   return { kind: 'ENEMY_ACT', text: '🪞 镜像记下了你的步伐' };
+        case 'IDLE':   return { kind: 'ENEMY_ACT', text: '🪞 镜像记下了你的停顿' };
+      }
+      return null;
+    case 'MIRROR_MOVED':
+      return { kind: 'ENEMY_ACT', text: '🪞 镜像追了上来' };
+    case 'MIRROR_ATTACKED':
+      return ev.hit
+        ? { kind: 'PLAYER_HURT', text: `🪞 镜像反打：-${ev.damage}（剩 ${ev.hp} 血）` }
+        : { kind: 'ENEMY_ACT', text: '🪞 镜像空挥' };
+    case 'MIRROR_SHIELDED':
+      return { kind: 'ENEMY_ACT', text: '🪞 镜像凝出护盾' };
+    case 'MIRROR_SHIELD_ABSORBED':
+      return { kind: 'ENEMY_ACT', text: '🪞 镜像护盾化解一击' };
     case 'PROPHECY_MARKED':
       return { kind: 'ENEMY_ACT', text: '🔮 命运预言！标记区域将在下回合爆炸，速速离开' };
     case 'PROPHECY_RESOLVED':
       return { kind: 'ENEMY_ACT', text: '💥 命运预言爆发！标记区域已轰炸' };
+    case 'DESTINY_REWRITE_OFFERED':
+      return { kind: 'SYSTEM', text: `🌀 改写命运 · 5 抽 3，请舍弃一个未来（${ev.drawn.map(destinyEventName).join(' / ')}）` };
+    case 'DESTINY_REWRITE_CHOSEN':
+      return { kind: 'PLAYER_ACT', text: '🌀 已做出改写命运的选择' };
+    case 'DESTINY_REWRITE_RESOLVED':
+      return { kind: 'ENEMY_ACT', text: `🌀 改写命运结算：${ev.executed.map(destinyEventName).join('、')}` };
+    case 'DESTINY_HEAL':
+      return { kind: 'ENEMY_ACT', text: `💚 Boss 回血 +${ev.amount}（剩 ${ev.bossHp} 血）` };
+    case 'DESTINY_ATK_BUFF':
+      return { kind: 'ENEMY_ACT', text: `🗡️ Boss 攻击 +${ev.pct}%（至第 ${ev.expiresAtTurn} 回合）` };
+    case 'DESTINY_DIRECT_DAMAGE':
+      return { kind: 'PLAYER_HURT', text: `💢 命运一击：-${ev.damage}（剩 ${ev.hp} 血）` };
+    case 'DESTINY_5X5_EXPLODED':
+      return ev.damage > 0
+        ? { kind: 'PLAYER_HURT', text: `💥 命运爆炸（5×5）：-${ev.damage}（剩 ${ev.hp} 血）` }
+        : { kind: 'ENEMY_ACT', text: '💥 命运爆炸（5×5，已规避）' };
+    case 'DESTINY_AP_LOCKED':
+      return { kind: 'PLAYER_HURT', text: `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}` };
+    case 'RELIC_PICKUP': {
+      const def = RELIC_DEFS[ev.relicId];
+      return { kind: 'LOOT', text: `🏺 拾取遗物：${def?.name ?? ev.relicId}（${def?.description ?? ''}）` };
+    }
+    case 'SCROLL_PICKUP':
+      return { kind: 'LOOT', text: '📜 拾取命运词条卷轴（HUD 可主动使用）' };
+    case 'SHARDS_PICKUP':
+      return { kind: 'LOOT', text: `💎 命运碎片 +${ev.amount}` };
+    case 'CODEX_RELIC_UNLOCKED': {
+      const def = RELIC_DEFS[ev.relicId];
+      return { kind: 'SYSTEM', text: `📖 首次解锁遗物图鉴：${def?.name ?? ev.relicId}（后续掉落率 +10%）` };
+    }
+    case 'SCROLL_OFFER':
+      return { kind: 'SYSTEM', text: '📜 命运卷轴展开：请从 3 个词条中选择 1 个' };
+    case 'SCROLL_RESOLVED':
+      return { kind: 'SYSTEM', text: `📜 已选定词条：${ev.selected}` };
+    case 'RELIC_CHEST_OPENED': {
+      if (!ev.success) return { kind: 'SYSTEM', text: '🎁 遗物宝箱：未开出（金币与钻石已扣）' };
+      const def = ev.relicId ? RELIC_DEFS[ev.relicId] : undefined;
+      if (ev.refunded) {
+        return {
+          kind: 'LOOT',
+          text: `🎁 遗物宝箱：已持有 ${def?.name ?? ev.relicId}，返还 +${ev.refundGold ?? 0} 金 / +${ev.refundDiamond ?? 0} 钻`,
+        };
+      }
+      return { kind: 'LOOT', text: `🎁 遗物宝箱开出：${def?.name ?? ev.relicId}！` };
+    }
+    case 'RELIC_TRIGGERED': {
+      const def = RELIC_DEFS[ev.relicId];
+      return { kind: 'PLAYER_ACT', text: `✨ ${def?.name ?? ev.relicId} 触发${ev.detail ? `：${ev.detail}` : ''}` };
+    }
     default:
       return null;
   }
@@ -388,14 +562,40 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return '你已倒下……';
     case 'AP_ROLLED':
       return `第${ev.turn}回合开始 · 掷出 ${ev.dice} 点 · 本回合行动力 ${ev.ap}`;
+    case 'AP_CARRIED':
+      return `🔋 结转上回合剩余行动力 +${ev.amount}`;
     case 'BOSS_BURROWED':
-      return '🕳️ 沙虫女王潜入地下！本回合免疫攻击';
+      return '🕳️ 流沙巨蝎潜入地下！本回合免疫攻击';
     case 'BOSS_EMERGED':
-      return '🐛 沙虫女王从地下冒出！双倍攻击！';
+      return '🦂 流沙巨蝎破土而出！双倍攻击！';
     case 'ICE_TIDE_SPAWNED':
       return `❄️ 冰霜巨人冻结地面！${ev.tiles.length} 格结冰（持续 ${ev.duration} 回合），踩上去会打滑`;
+    case 'PLAYER_FROZEN':
+      return '🧊 你被冻结了！攻击可解除';
+    case 'PLAYER_UNFROZEN':
+      return '🔥 冻结已解除';
+    case 'CHARGE_TELEGRAPHED':
+      return '⚠️ 冰霜巨人蓄力，下回合将狂暴冲锋！';
+    case 'FROST_HEAVY_STRIKE_RESOLVED':
+      return '💥 冰霜重击命中！';
     case 'BURN_APPLIED':
       return `🔥 熔岩领主附加灼烧！当前积累 ${ev.totalRemaining} 点`;
+    case 'ERUPTION_TELEGRAPHED':
+      return '⚠️ 熔岩领主标记喷发！红圈区域下回合将被熔岩吞没';
+    case 'ERUPTION_RESOLVED':
+      return `🌋 喷发结算！${ev.tiles.length} 格变为熔岩（持续 ${ev.duration} 回合）`;
+    case 'BURN_BURST':
+      return `💥 灼烧爆裂！受到 ${ev.damage} 点真实伤害（剩余 ${ev.hp}），四周生成熔岩`;
+    case 'LAVA_TIDE_ROW_SPAWNED':
+      return ev.rowIndex === 1
+        ? `🌋 熔岩领主进入潮汐阶段！${TIDE_DIRECTION_CN[ev.direction]}涌出整排永久熔岩`
+        : `🌊 熔岩潮汐推进第 ${ev.rowIndex}/3 排（${TIDE_DIRECTION_CN[ev.direction]}）`;
+    case 'LAVA_CHAIN_PULL': {
+      const moved = ev.from.x !== ev.to.x || ev.from.y !== ev.to.y;
+      return moved
+        ? `⛓️ 熔岩锁链！你被强行拉近一格，灼烧积累 ${ev.burnTotal} 点`
+        : `⛓️ 熔岩锁链！落点受阻未能拉近，灼烧积累 ${ev.burnTotal} 点`;
+    }
     case 'MOVE_PENALTY_APPLIED':
       return `🥶 被减速！接下来${ev.rounds}回合移动消耗增加`;
     case 'FIRE_BURN_APPLIED':
@@ -409,23 +609,63 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     case 'BLACKSMITH_REROLL':
       return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 词条洗炼完成`;
     case 'SAND_PIT_STEPPED':
-      return '🏜️ 陷入流沙！移动 AP +2';
+      return '🏜️ 陷入流沙！AP -2';
     case 'SAND_TIDE_SPAWNED':
-      return `🏜️ 沙虫翻起流沙！身侧新增 ${ev.tiles.length} 个流沙坑（持续 ${ev.duration} 回合）`;
+      return `🏜️ 流沙巨蝎掀起流沙！身侧新增 ${ev.tiles.length} 个流沙坑（持续 ${ev.duration} 回合）`;
+    case 'SANDSTORM_SPAWNED':
+      return `🌪️ 流沙巨蝎掀起沙暴！${ev.tiles.length} 格被沙暴笼罩`;
+    case 'SANDSTORM_HIT':
+      return `🌪️ 被沙暴击中！真实伤害 -${ev.damage} HP（剩余 ${ev.hp}）`;
     case 'ICE_WALL_BROKEN':
       return `❄️ 击碎冰墙！获得 ${ev.anima} 灵气`;
-    case 'LAVA_TIDE_SPAWNED':
-      return `🌋 熔岩潮汐！${ev.tiles.length} 格被熔岩覆盖（持续 ${ev.duration} 回合）`;
     case 'LAVA_TILE_DAMAGED':
       return `🔥 被熔岩烫伤！-${ev.damage} HP`;
     case 'MIRROR_SPAWNED':
-      return '👥 命运镜像现身！';
+      return '🪞 行为镜像现身！它将复制你的动作';
     case 'MIRROR_KILLED':
       return '✨ 击碎镜像！';
+    case 'MIRROR_ATTACKED':
+      return ev.hit ? `🪞 镜像反打：-${ev.damage}（剩 ${ev.hp} 血）` : '🪞 镜像空挥';
+    case 'MIRROR_SHIELDED':
+      return '🪞 镜像凝出护盾';
+    case 'MIRROR_SHIELD_ABSORBED':
+      return '🪞 护盾化解一击';
     case 'PROPHECY_MARKED':
       return '🔮 命运预言！标记区域将在下回合爆炸，速速离开';
     case 'PROPHECY_RESOLVED':
       return '💥 命运预言爆发！标记区域已被轰炸';
+    case 'DESTINY_REWRITE_OFFERED':
+      return '🌀 改写命运预告：3 选 1 弃';
+    case 'DESTINY_REWRITE_RESOLVED':
+      return `🌀 改写命运结算：${ev.executed.map(destinyEventName).join('、')}`;
+    case 'DESTINY_HEAL':
+      return `💚 Boss 回血 +${ev.amount}`;
+    case 'DESTINY_ATK_BUFF':
+      return `🗡️ Boss 攻击 +${ev.pct}%`;
+    case 'DESTINY_DIRECT_DAMAGE':
+      return `💢 命运一击：-${ev.damage}（剩 ${ev.hp} 血）`;
+    case 'DESTINY_5X5_EXPLODED':
+      return ev.damage > 0 ? `💥 命运爆炸：-${ev.damage}（剩 ${ev.hp} 血）` : '💥 命运爆炸（已规避）';
+    case 'DESTINY_AP_LOCKED':
+      return `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}`;
+    case 'RELIC_PICKUP': {
+      const def = RELIC_DEFS[ev.relicId];
+      return `🏺 获得遗物：${def?.name ?? ev.relicId}`;
+    }
+    case 'CODEX_RELIC_UNLOCKED': {
+      const def = RELIC_DEFS[ev.relicId];
+      return `📖 首次解锁遗物图鉴：${def?.name ?? ev.relicId}`;
+    }
+    case 'SCROLL_PICKUP':
+      return '📜 拾取命运词条卷轴';
+    case 'SHARDS_PICKUP':
+      return `💎 命运碎片 +${ev.amount}`;
+    case 'RELIC_CHEST_OPENED': {
+      if (!ev.success) return '🎁 遗物宝箱未开出';
+      const def = ev.relicId ? RELIC_DEFS[ev.relicId] : undefined;
+      if (ev.refunded) return `🎁 已持有，返还 ${ev.refundGold ?? 0} 金 / ${ev.refundDiamond ?? 0} 钻`;
+      return `🎁 开出遗物：${def?.name ?? ev.relicId}！`;
+    }
     default:
       return null;
   }
@@ -443,6 +683,8 @@ export class ExpeditionController extends Component {
   private _log: PveMessageLog | null = null;
   private _character: PveCharacterPanel | null = null;
   private _busy = false;
+  /** wx.onKeyDown 兜底是否已绑定（用于 onDestroy 对称解绑，见 onLoad 注释）。 */
+  private _wxKeyBound = false;
 
   onLoad(): void {
     lockPortrait();
@@ -453,11 +695,29 @@ export class ExpeditionController extends Component {
     this._buildUi();
     void this._bootstrap();
 
+    // 键盘控制（电脑端玩家）。两条互补路径，覆盖不同 PC 客户端：
+    //  1) cc.input KEY_DOWN —— 引擎仅在 EVENT_KEYBOARD=true（实测为 os===WINDOWS && !isDevTool）
+    //     时才注册底层 wx.onKeyDown，故只在【Windows 微信客户端】生效；
+    //  2) wx.onKeyDown 兜底 —— 当 EVENT_KEYBOARD=false（如【Mac 微信客户端】，os!==WINDOWS）时
+    //     引擎不接管，但 wx.onKeyDown 在 Mac 客户端仍受支持，故手动绑定补齐。两者互斥不会重复触发。
+    // ⚠️ 微信开发者工具模拟器：EVENT_KEYBOARD=false 且既不转发 cc.input 也不触发 wx.onKeyDown/
+    //    document.keydown（实测三者皆静默），即【模拟器无法测试键盘】，需用 PC 微信客户端或浏览器预览验证。
     input.on(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+    if (!sys.hasFeature(sys.Feature.EVENT_KEYBOARD) && typeof wx !== 'undefined') {
+      const wxApi = wx as unknown as { onKeyDown?: (cb: (e: { code: string }) => void) => void };
+      if (typeof wxApi.onKeyDown === 'function') {
+        wxApi.onKeyDown(this._onWxKeyDown);
+        this._wxKeyBound = true;
+      }
+    }
   }
 
   onDestroy(): void {
     input.off(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+    if (this._wxKeyBound && typeof wx !== 'undefined') {
+      const wxApi = wx as unknown as { offKeyDown?: (cb: (e: { code: string }) => void) => void };
+      wxApi.offKeyDown?.(this._onWxKeyDown);
+    }
     this._map?.destroy();
     this._hud?.destroy();
     this._toast?.destroy();
@@ -465,9 +725,11 @@ export class ExpeditionController extends Component {
     this._character?.destroy();
   }
 
-  /** 键盘操作：方向键/WASD 移动，J/空格攻击，K/E 交互，回车结束回合（便于编辑器/PC 预览测试）。 */
+  /**
+   * 键盘操作（cc.input 路径，Windows 微信客户端）：方向键/WASD 移动，J/空格攻击，K/E 交互，回车结束回合。
+   * EVENT_KEYBOARD=false 的环境（Mac 客户端/模拟器）走 `_onWxKeyDown`，见 onLoad 注释。
+   */
   private _onKeyDown(event: EventKeyboard): void {
-    console.log(`[ExpeditionController] KEY_DOWN keyCode=${event.keyCode}`);
     switch (event.keyCode) {
       case KeyCode.ARROW_UP:
       case KeyCode.KEY_W:
@@ -499,6 +761,44 @@ export class ExpeditionController extends Component {
     }
   }
 
+  /** 键盘操作（wx.onKeyDown 兜底，Mac 微信客户端）。箭头函数以稳定 this 与解绑引用。 */
+  private _onWxKeyDown = (event: { code: string }): void => {
+    this._handleKeyByCode(event?.code);
+  };
+
+  /** 按微信原生 `KeyboardEvent.code` 字符串派发，与 `_onKeyDown` 映射一致。 */
+  private _handleKeyByCode(code: string | undefined): void {
+    switch (code) {
+      case 'ArrowUp':
+      case 'KeyW':
+        this._onMove('UP');
+        break;
+      case 'ArrowDown':
+      case 'KeyS':
+        this._onMove('DOWN');
+        break;
+      case 'ArrowLeft':
+      case 'KeyA':
+        this._onMove('LEFT');
+        break;
+      case 'ArrowRight':
+      case 'KeyD':
+        this._onMove('RIGHT');
+        break;
+      case 'Space':
+      case 'KeyJ':
+        this._onAttack();
+        break;
+      case 'KeyE':
+      case 'KeyK':
+        this._onInteract();
+        break;
+      case 'Enter':
+        this._onEndTurn();
+        break;
+    }
+  }
+
   private _buildUi(): void {
     const { w: screenW, h: screenH } = visibleDesignSize();
 
@@ -520,6 +820,7 @@ export class ExpeditionController extends Component {
       onEndTurn: () => this._onEndTurn(),
       onQuit: () => SceneLoader.loadLobby(),
       onShowCharacter: () => this._onShowCharacter(),
+      onUseScroll: () => this._onUseScroll(),
     });
 
     this._toast = new PveToastView(this.node, screenW, screenH);
@@ -753,6 +1054,21 @@ export class ExpeditionController extends Component {
     void this._apply(result);
   }
 
+  /** 使用 1 张命运词条卷轴（HUD 按钮触发）：弹三选一弹窗，玩家选定后 append 词条。 */
+  private _onUseScroll(): void {
+    if (this._busy || !this._state) return;
+    if ((this._state.player.scrolls ?? 0) <= 0) {
+      this._toast?.toast('没有命运词条卷轴');
+      return;
+    }
+    const result = useScroll(this._state);
+    if (result.events.length === 0) {
+      this._toast?.toast('词条池已穷尽');
+      return;
+    }
+    void this._apply(result);
+  }
+
   /** 攻击冰墙（FrostGiant 专属机制，→ attackIceWall）。 */
   private _attackIceWall(entityId: string): void {
     if (!this._state) return;
@@ -810,6 +1126,9 @@ export class ExpeditionController extends Component {
     if (this._busy || !this._state) return;
     // 进入下一个怪物回合前清除上一轮的蓄力重击命中高亮（重击若触发，本回合内会重新标识）
     this._map?.clearAoeHit();
+    // 清除上一轮的蓄力重击预警（红圈）：若本回合是重击回合，预警会被「实际命中」（橙圈）取代；
+    // 若仍是非重击回合，预警会在本回合事件中重新计算并绘制。
+    this._map?.clearAoeWarning();
     void this._apply(endTurn(this._state));
   }
 
@@ -1036,6 +1355,9 @@ export class ExpeditionController extends Component {
     const MAX_TOAST_DELAYS = 2;
     const TOAST_DELAY_MS = 60;
     let toastDelays = 0;
+    // 蓄力重击「实际命中」橙圈：2026-06-15 改为仅在本回合事件回放中短暂展示，
+    // 回放结束即清除，不再延续到玩家下一回合（避免被误读为"还会再炸一次"的预警）。
+    let heavyStrikeResolvedThisBatch = false;
 
     for (const ev of events) {
       if (ev.type === 'TURN_END') logTurn = ev.turn;
@@ -1071,10 +1393,114 @@ export class ExpeditionController extends Component {
         }
       }
 
+      // 3.1) 命运词条卷轴 3 选 1 交互（复用强化弹窗）
+      if (ev.type === 'SCROLL_OFFER' && this._toast) {
+        const choiceId = await this._toast.showStrengthenChoice(ev.options);
+        if (this._state) {
+          const result = claimScrollChoice(this._state, choiceId);
+          this._state = result.state;
+          this._hud?.refresh(this._state);
+          this._toast.toast('卷轴词条已生效');
+          this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `📜 卷轴生效:${choiceId}`);
+          await delay(420);
+        }
+      }
+
       // 3.5) 蓄力重击实际结算：以重击瞬间 boss 的位置为中心，标识真正命中的范围（橙圈），石块遮挡格标识为安全（绿）
       if (ev.type === 'HEAVY_STRIKE_RESOLVED' && this._state) {
         const { danger, safe } = splitAoeCells(ev.center, this._state.floorState.size, HEAVY_STRIKE_RANGE, this._state.floorState.entities);
         this._map?.showAoeHit(danger, safe);
+        heavyStrikeResolvedThisBatch = true;
+      }
+
+      // 3.55) 蓄力重击预警（2026-06-15 站桩方案）：以 boss 当前位置为心、ev.radius(=HEAVY_STRIKE_RANGE)
+      //       为半径画红圈。重击回合 boss 站桩不移动，故红圈即下回合实际命中区域（与橙圈完全重合），
+      //       玩家跑出红圈即绝对安全、不会多走位浪费 AP。红圈全部标红（含石块遮挡格），与橙圈一致。
+      if (ev.type === 'HEAVY_STRIKE_WARNING' && this._state) {
+        const { danger, safe } = splitAoeCells(ev.center, this._state.floorState.size, ev.radius, this._state.floorState.entities);
+        this._map?.showAoeWarning([...danger, ...safe]);
+      }
+
+      // 3.56) 冰霜巨人「冰霜重击」结算：以 boss 自身为中心，半径 ev.radius 画橙圈标识本次实际波及范围。
+      if (ev.type === 'FROST_HEAVY_STRIKE_RESOLVED' && this._state) {
+        const { danger, safe } = splitAoeCells(ev.center, this._state.floorState.size, ev.radius, this._state.floorState.entities);
+        this._map?.showAoeHit(danger, safe);
+        heavyStrikeResolvedThisBatch = true;
+      }
+
+      // 3.57) 冰霜巨人狂暴冲锋预警：dir 为冲锋方向，path 为中心线；车道为 path 格 ± 垂直方向 1 格（三格宽），
+      //       用红圈标识下回合冲锋将经过的整条车道。CHARGE_EXECUTED 结算后清除。
+      if (ev.type === 'CHARGE_TELEGRAPHED' && this._state) {
+        const size = this._state.floorState.size;
+        const perp: Coord = ev.dir.x !== 0 ? { x: 0, y: 1 } : { x: 1, y: 0 };
+        const cells: Coord[] = [];
+        for (const c of ev.path) {
+          for (const off of [-1, 0, 1]) {
+            const x = c.x + perp.x * off;
+            const y = c.y + perp.y * off;
+            if (x >= 0 && y >= 0 && x < size && y < size) cells.push({ x, y });
+          }
+        }
+        this._map?.showAoeWarning(cells);
+        // 预警红圈极易被「AP 耗尽自动结束回合」（80ms 后触发）一闪而过，
+        // 这里固定停留 1s，确保玩家有时间看到下回合的冲锋路线。
+        await delay(1000);
+      }
+
+      // 3.58) 冰霜巨人狂暴冲锋执行：结算完毕，清除冲锋车道预警红圈；
+      //       并让 Boss 大图标沿 from→to 逐格滑动（~1s），避免瞬移横跨多格。
+      if (ev.type === 'CHARGE_EXECUTED') {
+        this._map?.clearAoeWarning();
+        const dx = Math.sign(ev.to.x - ev.from.x);
+        const dy = Math.sign(ev.to.y - ev.from.y);
+        if (dx !== 0 || dy !== 0) {
+          const steps: Coord[] = [];
+          let cur: Coord = { ...ev.from };
+          while (cur.x !== ev.to.x || cur.y !== ev.to.y) {
+            cur = { x: cur.x + dx, y: cur.y + dy };
+            steps.push(cur);
+          }
+          const stepMs = Math.max(60, Math.min(200, 1000 / (steps.length + 1)));
+          this._map?.moveBossIconTo(ev.from);
+          await delay(stepMs);
+          for (const cell of steps) {
+            this._map?.moveBossIconTo(cell);
+            await delay(stepMs);
+          }
+        }
+      }
+
+      // 3.55a) 命运守卫「改写命运」预告：阻塞模态 3 选 1 弃。
+      //        玩家点选后 chooseDestinyRewrite 写 removed，下个 Boss 回合 resolveDestinyRewrite 结算。
+      if (ev.type === 'DESTINY_REWRITE_OFFERED' && this._toast && this._state) {
+        const cards = ev.drawn.map((id) => destinyEventCard(id));
+        const tChoice = perfNow();
+        const removedIndex = await this._toast.showTreeChoice('改写命运 · 舍弃一个未来（剩两个生效）', cards);
+        perfMark('blockingChoice.destinyRewrite', tChoice);
+        if (this._state) {
+          const safe = (removedIndex === 0 || removedIndex === 1 || removedIndex === 2) ? removedIndex : 0;
+          const r = chooseDestinyRewrite(this._state, safe);
+          this._state = r.state;
+          this._hud?.refresh(this._state);
+          const droppedName = destinyEventName(ev.drawn[safe]);
+          this._toast.toast(`已舍弃：${droppedName}`);
+          this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `🌀 改写命运：舍弃 ${droppedName}`);
+          await delay(420);
+        }
+      }
+
+      // 3.55b) 命运 5×5 爆炸：以 Boss 当前格为中心切比雪夫≤2 的 5×5 区域画橙圈预警。
+      if (ev.type === 'DESTINY_5X5_EXPLODED' && this._state) {
+        const size = this._state.floorState.size;
+        const cells: Coord[] = [];
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const x = ev.center.x + dx;
+            const y = ev.center.y + dy;
+            if (x >= 0 && y >= 0 && x < size && y < size) cells.push({ x, y });
+          }
+        }
+        this._map?.showAoeHit(cells, []);
       }
 
       // 3.6) 命运预言：标记回合（预警）/ 结算回合（爆炸）均以 3×3 橙圈标识中心区域；
@@ -1090,6 +1516,28 @@ export class ExpeditionController extends Component {
           }
         }
         this._map?.showAoeHit(cells, []);
+      }
+
+      // 3.7) 流沙巨蝎沙暴：直接用橙圈标识本次随机覆盖的格子（命中提示见 SANDSTORM_HIT 战报）。
+      if (ev.type === 'SANDSTORM_SPAWNED' && this._state) {
+        this._map?.showAoeHit(ev.tiles, []);
+      }
+
+      // 3.8) 熔岩领主「喷发预警」：红圈标识下回合将生成熔岩的 4×4 区域。
+      if (ev.type === 'ERUPTION_TELEGRAPHED' && this._state) {
+        this._map?.showAoeWarning(ev.cells);
+      }
+
+      // 3.9) 熔岩领主「喷发结算」：新熔岩格已在 _refreshAll 中随 floorState 渲染，
+      //      这里仅清除上一回合的喷发预警红圈。
+      if (ev.type === 'ERUPTION_RESOLVED') {
+        this._map?.clearAoeWarning();
+      }
+
+      // 3.10) 熔岩领主「熔核爆裂」：以橙圈短闪标识灼烧爆裂波及的十字区域。
+      if (ev.type === 'BURN_BURST' && this._state) {
+        this._map?.showAoeHit(ev.tiles, []);
+        heavyStrikeResolvedThisBatch = true;
       }
 
       // 4) 职业进阶选择（AC-15 M2）
@@ -1121,6 +1569,14 @@ export class ExpeditionController extends Component {
           }
         }
       }
+    }
+
+    // 本回合事件回放结束：蓄力重击「实际命中」橙圈已展示完毕，延迟 1s 后清除（不延续到玩家
+    // 下一回合）——回放刚结束就立即清除会一闪而过，玩家来不及看清范围；1s 后清除既能让
+    // 玩家看清，又不会阻塞 _busy（不 await，提前返回）。若 1s 内已进入下一怪物回合，
+    // _onEndTurn 的 clearAoeHit 会先清掉，这里的延迟清除即为空操作。
+    if (heavyStrikeResolvedThisBatch) {
+      void delay(1000).then(() => this._map?.clearAoeHit());
     }
   }
 
@@ -1247,6 +1703,48 @@ export class ExpeditionController extends Component {
           }
           return this._state.player;
         },
+        // 遗物宝箱回调：调 openRelicChest → 同步钻石（meta）+ 战报 + 返回新 player
+        () => {
+          if (!this._state || !this._meta) return null;
+          const result = openRelicChest(this._state, this._meta.diamond ?? 0);
+          if (result.events.length === 0) return null;
+          this._state = result.state;
+          this._meta = { ...this._meta, diamond: (this._meta.diamond ?? 0) + result.diamondDelta };
+          this._hud?.refresh(this._state);
+          // 战报 & toast 处理
+          for (const ev of result.events) {
+            const entry = describeForLog(ev, this._state);
+            if (entry && this._state) this._log?.push(this._state.floorState.turn, entry.kind, entry.text);
+            const toast = describeEvent(ev, this._state);
+            if (toast) this._toast?.toast(toast);
+          }
+          // 云端钻石同步（异步触发，不阻塞 UI）
+          if (result.diamondDelta !== 0) {
+            void updatePveMeta({ diamond: result.diamondDelta }).catch(() => {});
+          }
+          let message = '';
+          for (const ev of result.events) {
+            if (ev.type === 'RELIC_CHEST_OPENED') {
+              if (!ev.success) message = '未开出';
+              else if (ev.refunded) message = '已持有，资源部分返还';
+              else message = '开出新遗物！';
+              break;
+            }
+          }
+          return { ...this._state.player, message };
+        },
+        (() => {
+          const relicId = CHAPTER_BOSS_RELIC[this._state.chapter] as RelicId | undefined;
+          if (!relicId) return undefined;
+          const def = RELIC_DEFS[relicId];
+          return {
+            costGold: RELIC_CHEST.COST_GOLD,
+            costDiamond: RELIC_CHEST.COST_DIAMOND,
+            currentDiamond: this._meta?.diamond ?? 0,
+            relicName: def?.name ?? relicId,
+            alreadyOwned: (this._state.player.relics ?? []).includes(relicId),
+          };
+        })(),
       );
       if (campChoice === 'quit') {
         SceneLoader.loadLobby();

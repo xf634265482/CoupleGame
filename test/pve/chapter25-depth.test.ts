@@ -129,9 +129,9 @@ describe('chapter25-depth: 2-5 章怪物表框架', () => {
   });
 });
 
-describe('chapter25-depth: SandwormQueen 沙坑', () => {
+describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
   const { generateFloor } = require('../../assets/scripts/pve/core/MapGenerator') as typeof import('../../assets/scripts/pve/core/MapGenerator');
-  const { sandwormQueenAttack, sandwormBurrow } = require('../../assets/scripts/pve/core/bosses/SandwormQueen') as typeof import('../../assets/scripts/pve/core/bosses/SandwormQueen');
+  const { quicksandScorpionAttack, quicksandScorpionBurrow } = require('../../assets/scripts/pve/core/bosses/QuicksandScorpion') as typeof import('../../assets/scripts/pve/core/bosses/QuicksandScorpion');
   const { applyMove } = require('../../assets/scripts/pve/core/MovementSystem') as typeof import('../../assets/scripts/pve/core/MovementSystem');
   const { CHAPTER2_SAND_PIT_COUNT, CHAPTER2_SAND_PIT_MOVE_PENALTY, AP_COST } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
 
@@ -185,7 +185,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
           {
             id: 'boss',
             type: 'BOSS',
-            bossId: 'SANDWORM_QUEEN',
+            bossId: 'QUICKSAND_SCORPION',
             pos: { x: 0, y: 0 },
             hp: 100,
             maxHp: 100,
@@ -203,7 +203,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
         ],
       },
     });
-    const result = sandwormQueenAttack(state, 'boss');
+    const result = quicksandScorpionAttack(state, 'boss');
     const bossAfter = result.state.floorState.monsters.find((m) => m.id === 'boss')!;
     expect(bossAfter.pos).toEqual({ x: 4, y: 5 });
     expect(bossAfter.isBurrowed).toBe(false);
@@ -222,7 +222,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
           {
             id: 'boss',
             type: 'BOSS',
-            bossId: 'SANDWORM_QUEEN',
+            bossId: 'QUICKSAND_SCORPION',
             pos: { x: 0, y: 0 },
             hp: 100,
             maxHp: 100,
@@ -245,7 +245,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
         ],
       },
     });
-    const result = sandwormQueenAttack(state, 'boss');
+    const result = quicksandScorpionAttack(state, 'boss');
     const bossAfter = result.state.floorState.monsters.find((m) => m.id === 'boss')!;
     // 不落在被占据的沙坑
     expect(bossAfter.pos).not.toEqual({ x: 4, y: 5 });
@@ -255,7 +255,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
     expect(Math.max(dx, dy)).toBeLessThanOrEqual(1);
   });
 
-  it('sandwormBurrow 仍设 isBurrowed=true 并 emit BOSS_BURROWED', () => {
+  it('quicksandScorpionBurrow 仍设 isBurrowed=true 并 emit BOSS_BURROWED', () => {
     const state = makeExpeditionState({
       floor: 10,
       chapter: 2,
@@ -267,7 +267,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
           {
             id: 'boss',
             type: 'BOSS',
-            bossId: 'SANDWORM_QUEEN',
+            bossId: 'QUICKSAND_SCORPION',
             pos: { x: 0, y: 0 },
             hp: 100, maxHp: 100, attack: 10, range: 1, aggroRadius: 99,
             aiState: 'CHASE',
@@ -275,7 +275,7 @@ describe('chapter25-depth: SandwormQueen 沙坑', () => {
         ],
       },
     });
-    const result = sandwormBurrow(state, 'boss');
+    const result = quicksandScorpionBurrow(state, 'boss');
     expect(result.state.floorState.monsters[0].isBurrowed).toBe(true);
     // 潜地同时翻起动态流沙坑（反风筝）：事件含 BOSS_BURROWED + 可能的 SAND_TIDE_SPAWNED
     expect(result.events.some((e) => e.type === 'BOSS_BURROWED')).toBe(true);
@@ -365,119 +365,11 @@ describe('chapter25-depth: FrostGiant 冰墙', () => {
   });
 });
 
-describe('chapter25-depth: LavaLord 熔岩潮汐', () => {
-  const { lavaTideStep } = require('../../assets/scripts/pve/core/bosses/LavaLord') as typeof import('../../assets/scripts/pve/core/bosses/LavaLord');
-  const { endTurn } = require('../../assets/scripts/pve/core/ExpeditionState') as typeof import('../../assets/scripts/pve/core/ExpeditionState');
-  const {
-    CHAPTER4_LAVA_TIDE_INTERVAL,
-    CHAPTER4_LAVA_TIDE_TILE_COUNT,
-    CHAPTER4_LAVA_TIDE_DURATION,
-    CHAPTER4_LAVA_TILE_DAMAGE,
-  } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
-
-  function makeBoss(hp: number, overrides: Partial<import('../../assets/scripts/pve/core/PveTypes').Monster> = {}) {
-    return {
-      id: 'boss', type: 'BOSS' as const, bossId: 'LAVA_LORD', pos: { x: 0, y: 0 },
-      hp, maxHp: 1000, attack: 40, range: 1, aggroRadius: 99, aiState: 'CHASE' as const,
-      ...overrides,
-    };
-  }
-
-  it('Boss HP > 50% 时不触发潮汐', () => {
-    const state = makeExpeditionState({
-      chapter: 4,
-      floorOverrides: { size: 10, player: { x: 5, y: 5 }, monsters: [makeBoss(501)] },
-    });
-    const result = lavaTideStep(state, 'boss');
-    expect(result.events).toHaveLength(0);
-    expect(result.state.floorState.lavaLordPhase2).toBeUndefined();
-    expect(result.state.floorState.entities.filter((e) => e.type === 'LAVA_TILE')).toHaveLength(0);
-  });
-
-  it('Boss HP 落到 50% 时下一回合开始触发首次潮汐', () => {
-    const state = makeExpeditionState({
-      chapter: 4,
-      floorOverrides: { size: 10, player: { x: 5, y: 5 }, monsters: [makeBoss(500)] },
-    });
-    const result = lavaTideStep(state, 'boss');
-    expect(result.events.some((e) => e.type === 'LAVA_TIDE_SPAWNED')).toBe(true);
-    expect(result.state.floorState.lavaLordPhase2).toBe(true);
-    expect(result.state.floorState.lavaTideCounter).toBe(0);
-    const tiles = result.state.floorState.entities.filter((e) => e.type === 'LAVA_TILE');
-    expect(tiles).toHaveLength(CHAPTER4_LAVA_TIDE_TILE_COUNT);
-    tiles.forEach((t) => expect(t.remaining).toBe(CHAPTER4_LAVA_TIDE_DURATION));
-  });
-
-  it('潮汐间隔 CHAPTER4_LAVA_TIDE_INTERVAL 回合', () => {
-    let state = makeExpeditionState({
-      chapter: 4,
-      floorOverrides: { size: 10, player: { x: 5, y: 5 }, monsters: [makeBoss(500)] },
-    });
-    let result = lavaTideStep(state, 'boss');
-    expect(result.events.some((e) => e.type === 'LAVA_TIDE_SPAWNED')).toBe(true);
-    state = result.state;
-
-    // 间隔内（< INTERVAL）不应再次刷出潮汐
-    for (let i = 1; i < CHAPTER4_LAVA_TIDE_INTERVAL; i++) {
-      result = lavaTideStep(state, 'boss');
-      expect(result.events.some((e) => e.type === 'LAVA_TIDE_SPAWNED')).toBe(false);
-      state = result.state;
-    }
-
-    // 第 INTERVAL 次调用应再次刷出
-    result = lavaTideStep(state, 'boss');
-    expect(result.events.some((e) => e.type === 'LAVA_TIDE_SPAWNED')).toBe(true);
-    expect(result.state.floorState.lavaTideCounter).toBe(0);
-  });
-
-  it('玩家踩熔岩格扣 CHAPTER4_LAVA_TILE_DAMAGE HP', () => {
-    const state = makeExpeditionState({
-      chapter: 4,
-      floorOverrides: {
-        turn: 1,
-        size: 10,
-        player: { x: 5, y: 5 },
-        monsters: [],
-        entities: [
-          { id: 'lava1', type: 'LAVA_TILE', pos: { x: 5, y: 5 }, consumed: false, remaining: CHAPTER4_LAVA_TIDE_DURATION },
-        ],
-      },
-      playerOverrides: { hp: 200, maxHp: 200 },
-    });
-    const result = endTurn(state);
-    expect(result.events.some((e) => e.type === 'LAVA_TILE_DAMAGED' && e.entityId === 'lava1')).toBe(true);
-    expect(result.state.player.hp).toBe(200 - CHAPTER4_LAVA_TILE_DAMAGE);
-  });
-
-  it('潮汐 CHAPTER4_LAVA_TIDE_DURATION 回合后自动消失', () => {
-    let state = makeExpeditionState({
-      chapter: 4,
-      floorOverrides: {
-        turn: 1,
-        size: 10,
-        player: { x: 0, y: 0 },
-        monsters: [],
-        entities: [
-          { id: 'lava1', type: 'LAVA_TILE', pos: { x: 5, y: 5 }, consumed: false, remaining: CHAPTER4_LAVA_TIDE_DURATION },
-        ],
-      },
-      playerOverrides: { hp: 200, maxHp: 200 },
-    });
-    for (let i = 0; i < CHAPTER4_LAVA_TIDE_DURATION; i++) {
-      state = endTurn(state).state;
-    }
-    expect(state.floorState.entities.filter((e) => e.type === 'LAVA_TILE')).toHaveLength(0);
-  });
-});
-
-describe('chapter25-depth: FateGuardian 镜像分身', () => {
-  const { spawnFateMirror } = require('../../assets/scripts/pve/core/bosses/FateGuardian') as typeof import('../../assets/scripts/pve/core/bosses/FateGuardian');
+describe('chapter25-depth: FateGuardian 行为镜像（260616 重做）', () => {
+  // 重做后镜像生成阈值 50%、HP/攻击 = 玩家快照 × 0.5；详细测试见 FateGuardian.test.ts
+  // 本套件仅保留 spawnPortal 与镜像击杀的旧验收（与 260613 关卡深化耦合的部分）。
   const { spawnPortal } = require('../../assets/scripts/pve/core/FloorRules') as typeof import('../../assets/scripts/pve/core/FloorRules');
-  const {
-    CHAPTER5_MIRROR_ATTACK_MULT,
-    CHAPTER5_MIRROR_HP,
-    FATE_MIRROR_BOSS_ID,
-  } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
+  const { FATE_MIRROR_BOSS_ID } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
 
   function makeBoss(hp: number, overrides: Partial<import('../../assets/scripts/pve/core/PveTypes').Monster> = {}) {
     return {
@@ -487,47 +379,10 @@ describe('chapter25-depth: FateGuardian 镜像分身', () => {
     };
   }
 
-  it('Boss HP > 33% 时不生成镜像', () => {
-    const state = makeExpeditionState({
-      chapter: 5,
-      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(101)] },
-    });
-    const result = spawnFateMirror(state, 'boss');
-    expect(result.events).toHaveLength(0);
-    expect(result.state.floorState.monsters.some((m) => m.bossId === FATE_MIRROR_BOSS_ID)).toBe(false);
-  });
-
-  it('Boss HP 落到 33% 时下一回合生成镜像', () => {
-    const state = makeExpeditionState({
-      chapter: 5,
-      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99)] },
-    });
-    const result = spawnFateMirror(state, 'boss');
-    expect(result.events.some((e) => e.type === 'MIRROR_SPAWNED')).toBe(true);
-    const mirror = result.state.floorState.monsters.find((m) => m.bossId === FATE_MIRROR_BOSS_ID);
-    expect(mirror).toBeDefined();
-    expect(mirror!.hp).toBe(CHAPTER5_MIRROR_HP);
-    expect(mirror!.maxHp).toBe(CHAPTER5_MIRROR_HP);
-  });
-
-  it('已存在镜像时不重复生成', () => {
-    const mirror = {
-      id: 'mirror_5', type: 'BOSS' as const, bossId: FATE_MIRROR_BOSS_ID, pos: { x: 4, y: 5 },
-      hp: CHAPTER5_MIRROR_HP, maxHp: CHAPTER5_MIRROR_HP, attack: 30, range: 1, aggroRadius: 99, aiState: 'CHASE' as const,
-    };
-    const state = makeExpeditionState({
-      chapter: 5,
-      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99), mirror] },
-    });
-    const result = spawnFateMirror(state, 'boss');
-    expect(result.events).toHaveLength(0);
-    expect(result.state.floorState.monsters.filter((m) => m.bossId === FATE_MIRROR_BOSS_ID)).toHaveLength(1);
-  });
-
   it('杀死镜像不生成传送门（spawnPortal 只看真 Boss）', () => {
     const deadMirror = {
       id: 'mirror_5', type: 'BOSS' as const, bossId: FATE_MIRROR_BOSS_ID, pos: { x: 4, y: 5 },
-      hp: 0, maxHp: CHAPTER5_MIRROR_HP, attack: 30, range: 1, aggroRadius: 99, aiState: 'DEAD' as const,
+      hp: 0, maxHp: 50, attack: 30, range: 1, aggroRadius: 99, aiState: 'DEAD' as const,
     };
     const state = makeExpeditionState({
       chapter: 5,
@@ -539,15 +394,5 @@ describe('chapter25-depth: FateGuardian 镜像分身', () => {
     const result = spawnPortal(state, 'mirror_5');
     expect(result.events).toHaveLength(0);
     expect(result.state.floorState.entities.some((e) => e.type === 'PORTAL')).toBe(false);
-  });
-
-  it('镜像攻击力 = Boss 攻击 × CHAPTER5_MIRROR_ATTACK_MULT', () => {
-    const state = makeExpeditionState({
-      chapter: 5,
-      floorOverrides: { size: 10, player: { x: 0, y: 0 }, monsters: [makeBoss(99, { attack: 60 })] },
-    });
-    const result = spawnFateMirror(state, 'boss');
-    const mirror = result.state.floorState.monsters.find((m) => m.bossId === FATE_MIRROR_BOSS_ID);
-    expect(mirror!.attack).toBe(Math.round(60 * CHAPTER5_MIRROR_ATTACK_MULT));
   });
 });

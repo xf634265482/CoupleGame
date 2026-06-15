@@ -303,27 +303,35 @@ baseStat 直接作为灵气加成百分比。每次获取灵气时乘以 `1 + ba
 | 增援号角 | 每 **2** 回合召唤弓箭手×2；狂暴时额外召唤战士×2 | `HORN_ARCHER_COUNT/HORN_WARRIOR_ENRAGE_COUNT` | PveConstants.ts |
 | 增援间隔 | 与蓄力重击同步（偶数回合均触发） | `HORN_INTERVAL` | PveConstants.ts |
 | Boss 房地形 | 随机生成 **2** 块石块障碍（第一章 Boss 层） | `CHAPTER1_BOSS_ROCK_COUNT` | PveConstants.ts |
-| 掉落装备 | **50%** 概率哥布林酋长战斧（RARE WEAPON +30，×10基准，原+3） | `applyGoblinChiefDrop()` | LootSystem.ts |
+| 掉落装备 | 2026-06-15 重做：参见 `specs/game-design/Boss设计V1.md` §八「Boss 掉落统一结构」（通用必掉 + 专属随机 1 件 + 稀有独立判定）。GOBLIN_CHIEF 专属池为「酋长战斧 / 战争号角 / 破旧王冠」(RARE) 三件等概率 1 件必掉。| `applyBossKillDrop()` / `BOSS_SPOILS.GOBLIN_CHIEF` | LootSystem.ts / bosses/BossSpoils.ts |
 
 **机制说明**：
 - 攻击范围 3 使射手（射程最高 1+2+1=4）仍有一格安全距离，但不能无限放风筝
 - 每 2 回合一次蓄力重击（范围 6），基本覆盖 10×10 Boss 层的大部分区域，迫使玩家主动接近
 - HP≤200（×10基准，原20） 进入狂暴后每回合多走一步（MonsterAI stepBoss 处理），攻击提升，追击能力显著增强
 
-### 第 2 章：沙虫女王（SandwormQueen.ts）
+### 第 2 章：流沙巨蝎（QuicksandScorpion.ts）
 
 | 数值 | 当前值 | 变量 | 文件 |
 |------|--------|------|------|
-| 潜地间隔 | 每 **4** 个怪物回合 | `SANDWORM_BURROW_INTERVAL` | PveConstants.ts |
+| 潜地间隔 | 每 **4** 个怪物回合 | `QUICKSAND_SCORPION_BURROW_INTERVAL` | PveConstants.ts |
 | 潜地状态 | 免疫玩家攻击，冒出时双倍伤害 | `isBurrowed` 字段 | PveTypes.ts |
 
 ### 第 3 章：冰霜巨人（FrostGiant.ts）
 
+> 2026-06-15 反风筝 v2 重做，详见 `specs/game-design/Boss设计V1.md` §四。
+
 | 数值 | 当前值 | 变量 | 文件 |
 |------|--------|------|------|
-| 冰冻间隔 | 每 **4** 个怪物回合 | `FROST_GIANT_FREEZE_INTERVAL` | PveConstants.ts |
-| 冰冻持续 | **1** 回合 | `FROST_GIANT_FREEZE_ROUNDS` | PveConstants.ts |
-| 冰冻 AP 惩罚 | AP 上限 **-4**（最低保留 1） | `FROST_GIANT_AP_PENALTY` | PveConstants.ts |
+| 冰面生成间隔 | 每 **4** 个怪物回合的近战命中后 | `FROST_GIANT_FREEZE_INTERVAL` | PveConstants.ts |
+| 冰面范围/存续 | 玩家为中心曼哈顿≤1，**2** 回合融化 | `FROST_GIANT_ICE_RADIUS` / `FROST_GIANT_ICE_DURATION` | PveConstants.ts |
+| 寒气叠满冻结 | 命中 **3** 次叠满冻结，MOVE 无效 | `FROST_GIANT_CHILL_STACKS_TO_FREEZE` | PveConstants.ts |
+| 解冻所需攻击次数 | **3** 次（playerAttack/attackIceWall） | `FROST_GIANT_FREEZE_ATTACKS_TO_BREAK` | PveConstants.ts |
+| 冻结墙数量 | **2** 个 `FREEZE_WALL` | `FROST_GIANT_FREEZE_WALL_COUNT` | PveConstants.ts |
+| 冰霜重击间隔/范围 | 每 **3** 个怪物回合，以 boss 为中心曼哈顿≤**2** | `FROST_GIANT_HEAVY_STRIKE_INTERVAL` / `FROST_GIANT_HEAVY_STRIKE_RADIUS` | PveConstants.ts |
+| 重击击退距离 | **1** 格，落点为冰面则滑行+额外 **30** 伤害 | `FROST_GIANT_KNOCKBACK_DISTANCE` / `FROST_GIANT_ICE_SLIDE_DAMAGE` | PveConstants.ts |
+| 碎冰存续/伤害 | **5** 回合，踩入 **30** 固定伤害 | `FROST_GIANT_SHATTERED_ICE_DURATION` / `FROST_GIANT_SHATTERED_ICE_DAMAGE` | PveConstants.ts |
+| 狂暴阈值/冲锋倍率 | HP占比≤**40%**，冲锋伤害 ×**2** | `FROST_GIANT_ENRAGE_HP_RATIO` / `FROST_GIANT_CHARGE_DAMAGE_MULT` | PveConstants.ts |
 
 ### 第 4 章：熔岩领主（LavaLord.ts）
 
@@ -333,10 +341,22 @@ baseStat 直接作为灵气加成百分比。每次获取灵气时乘以 `1 + ba
 
 ### 第 5 章：命运守卫（FateGuardian.ts）
 
+> 2026-06-16 重做：HP≤50% 行为镜像、HP≤30% 狂暴改写命运。详见 `specs/260616-fate-guardian-rework/design.md`。
+
 | 数值 | 当前值 | 变量 | 文件 |
 |------|--------|------|------|
-| 高 HP 时伤害翻倍阈值 | 玩家 HP > **50%** maxHp | `FATE_GUARDIAN_HP_THRESHOLD` | PveConstants.ts |
-| 低 HP 时守卫闪避概率 | 玩家 HP ≤ 50% 时 **40%** 闪避 | `FATE_GUARDIAN_DODGE_CHANCE` | PveConstants.ts |
+| 高 HP 时伤害翻倍阈值 | 玩家 HP > **50%** maxHp（三段全程） | `FATE_GUARDIAN_HP_THRESHOLD` | PveConstants.ts |
+| 命运预言间隔 / 半径 / 伤害系数 | 3 回合 / 1 / ×1.0（仅非狂暴态） | `FATE_PROPHECY_INTERVAL` / `FATE_PROPHECY_RADIUS` / `FATE_PROPHECY_DAMAGE_MULT` | PveConstants.ts |
+| 行为镜像生成阈值 | Boss HP/maxHp ≤ **50%** 一次性生成 | `FATE_MIRROR_SPAWN_HP_RATIO=0.5` | PveConstants.ts |
+| 镜像 HP / 攻击快照 | 玩家当前 HP / 基础攻击 **× 0.5** | `FATE_MIRROR_HP_FROM_PLAYER` / `FATE_MIRROR_ATK_FROM_PLAYER` | PveConstants.ts |
+| 镜像反打距离 | 曼哈顿 ≤ 2 命中 | `FATE_MIRROR_ATTACK_RANGE` | PveConstants.ts |
+| 狂暴阈值 | Boss HP/maxHp ≤ **30%** | `FATE_ENRAGE_HP_RATIO` | PveConstants.ts |
+| 改写命运周期 | 每 3 个怪物回合 5 抽 3 | `DESTINY_REWRITE_INTERVAL` / `DESTINY_REWRITE_POOL_SIZE` / `DESTINY_REWRITE_DRAW_SIZE` | PveConstants.ts |
+| E1 Boss 回血 | maxHp × **10%** | `DESTINY_HEAL_RATIO` | PveConstants.ts |
+| E2 Boss 加伤 | **+30%**，持续 3 个怪物回合 | `DESTINY_ATK_BUFF_PCT` / `DESTINY_ATK_BUFF_DURATION_TURNS` | PveConstants.ts |
+| E3 玩家扣血 | boss.attack × **1.0** | `DESTINY_DIRECT_DMG_MULT` | PveConstants.ts |
+| E4 5×5 爆炸 | 切比雪夫 ≤ 2 / boss.attack × **1.2** | `DESTINY_5X5_RADIUS` / `DESTINY_5X5_DMG_MULT` | PveConstants.ts |
+| E5 命运封锁 | 下回合 AP `max(1, floor(ap/2))` | hardcode in ExpeditionState/endTurn | ExpeditionState.ts |
 
 ---
 

@@ -14,7 +14,13 @@ const AOE_HIT_FILL = new Color(255, 140, 0, 110);
 const AOE_HIT_STROKE = new Color(255, 140, 0, 230);
 const AOE_SAFE_FILL = new Color(90, 200, 120, 70);
 const AOE_SAFE_STROKE = new Color(90, 200, 120, 200);
+const AOE_WARNING_FILL = new Color(220, 50, 50, 80);
+const AOE_WARNING_STROKE = new Color(220, 50, 50, 220);
 const ATTACK_TARGET_STROKE = new Color(255, 215, 80, 220);
+const BOSS_ICON_SCALE = 1.6;
+const BOSS_FOOT_RING_STROKE = new Color(230, 60, 60, 220);
+const MIRROR_SHIELD_STROKE = new Color(120, 200, 255, 240);
+const FROZEN_BORDER_STROKE = new Color(120, 220, 255, 255);
 
 type CellGlyph = { text: string; color: Color };
 
@@ -37,6 +43,8 @@ const GLYPH: Record<string, CellGlyph> = {
   ENTITY_SAND_PIT: { text: '坑', color: new Color(200, 170, 110, 255) },
   ENTITY_ICE_WALL: { text: '冰', color: new Color(150, 220, 245, 255) },
   ENTITY_ICE_TILE: { text: '霜', color: new Color(190, 235, 250, 255) },
+  ENTITY_FREEZE_WALL: { text: '冻', color: new Color(120, 220, 255, 255) },
+  ENTITY_SHATTERED_ICE: { text: '裂', color: new Color(200, 230, 250, 255) },
   ENTITY_LAVA_TILE: { text: '焰', color: new Color(255, 120, 60, 255) },
   MONSTER_FATE_MIRROR: { text: '影', color: new Color(170, 120, 220, 255) },
 };
@@ -49,7 +57,10 @@ function cellContentKey(floor: FloorState, x: number, y: number): string {
     (m) => m.aiState !== 'DEAD' && m.pos.x === x && m.pos.y === y,
   );
   if (monster) {
-    if (monster.bossId === 'FATE_MIRROR') return 'MONSTER_FATE_MIRROR';
+    if (monster.bossId === 'FATE_MIRROR') {
+      // 行为镜像护盾：shieldStacks=1 时格上叠加蓝色护盾标识，diff 刷新触发重绘
+      return monster.shieldStacks === 1 ? 'MONSTER_FATE_MIRROR:SHIELD' : 'MONSTER_FATE_MIRROR';
+    }
     return `MONSTER_${monster.type}`;
   }
   const entity = floor.entities.find((e) => !e.consumed && e.pos.x === x && e.pos.y === y);
@@ -76,7 +87,10 @@ export class FogMapView {
   private _maxH: number;
   private _callbacks: FogMapViewCallbacks;
   private _hitOverlay: Node;
+  private _warningOverlay: Node;
   private _targetOverlay: Node;
+  private _bossIconOverlay: Node;
+  private _frozenOverlay: Node;
 
   /**
    * @param maxW 地图区域可用宽度（含左右留边后的值）；cellSize 按 floor(x / floor.size) 计算，
@@ -100,11 +114,34 @@ export class FogMapView {
     this._hitOverlay.setPosition(0, 0, 0);
     this._hitOverlay.addComponent(Graphics);
 
+    // AOE 预警层：独立 Graphics 节点，标识下回合可能命中的范围（红圈，2026-06-15 恢复）
+    this._warningOverlay = new Node('AoeWarningOverlay');
+    this._warningOverlay.setParent(this._content);
+    this._warningOverlay.setPosition(0, 0, 0);
+    this._warningOverlay.addComponent(Graphics);
+
     // 攻击目标提示层：独立 Graphics 节点，绘制当前"攻击"按钮将命中的目标格的细描边
     this._targetOverlay = new Node('AttackTargetOverlay');
     this._targetOverlay.setParent(this._content);
     this._targetOverlay.setPosition(0, 0, 0);
     this._targetOverlay.addComponent(Graphics);
+
+    // 冻结状态层：独立 Graphics 节点，玩家被冰霜巨人冻结时在其所在格绘制描边提示
+    this._frozenOverlay = new Node('FrozenOverlay');
+    this._frozenOverlay.setParent(this._content);
+    this._frozenOverlay.setPosition(0, 0, 0);
+    this._frozenOverlay.addComponent(Graphics);
+
+    // Boss 放大图标层：在 Boss 所在格上方叠加放大显示的图标（视觉放大，营造体型差），
+    // 实际判定位置不变，仍以该格自身（脚下圆环标记）为准
+    this._bossIconOverlay = new Node('BossIconOverlay');
+    this._bossIconOverlay.setParent(this._content);
+    this._bossIconOverlay.setPosition(0, 0, 0);
+    this._bossIconOverlay.addComponent(UITransform);
+    const bossLbl = this._bossIconOverlay.addComponent(Label);
+    bossLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
+    bossLbl.verticalAlign = Label.VerticalAlign.CENTER;
+    bossLbl.string = '';
   }
 
   /** 网格内某格在 Content 下的局部坐标（x 向右，y 向下，原点居中）。 */
@@ -162,9 +199,23 @@ export class FogMapView {
       }
     }
 
-    // 重建格子节点后，确保命中/目标提示层始终在最上层
+    // 按新 cellSize 重算 Boss 大图标的尺寸/字号
+    const bossUi = this._bossIconOverlay.getComponent(UITransform);
+    const bossLbl = this._bossIconOverlay.getComponent(Label);
+    if (bossUi && bossLbl) {
+      const bossSize = this._cellSize * BOSS_ICON_SCALE;
+      bossUi.setContentSize(bossSize, bossSize);
+      bossLbl.fontSize = Math.round(bossSize * 0.46);
+      bossLbl.lineHeight = Math.round(bossSize * 0.5);
+      bossLbl.string = '';
+    }
+
+    // 重建格子节点后，确保预警/命中/目标提示层、Boss 大图标层、冻结提示层始终在最上层
     this._hitOverlay.setSiblingIndex(-1);
+    this._warningOverlay.setSiblingIndex(-1);
     this._targetOverlay.setSiblingIndex(-1);
+    this._bossIconOverlay.setSiblingIndex(-1);
+    this._frozenOverlay.setSiblingIndex(-1);
   }
 
   private _paintCell(node: Node, sz: number, revealed: boolean, content: string): void {
@@ -193,7 +244,10 @@ export class FogMapView {
     const [glyphKey, hpText] = content.split(':');
     const glyph = GLYPH[glyphKey];
     if (lbl) {
-      if (glyph) {
+      if (glyphKey === 'MONSTER_BOSS') {
+        // Boss 大图标在 overlay 层绘制，本格不重复显示文字，只画"脚下"判定标记
+        lbl.string = '';
+      } else if (glyph) {
         lbl.string = glyph.text;
         lbl.color = glyph.color;
       } else {
@@ -202,6 +256,22 @@ export class FogMapView {
     }
     if (hpLbl) {
       hpLbl.string = glyphKey === 'ENTITY_ICE_WALL' && hpText ? `${hpText}/${CHAPTER3_ICE_WALL_HP}` : '';
+    }
+
+    if (glyphKey === 'MONSTER_BOSS') {
+      // 脚下圆环：标识 Boss 真实判定位置（普攻范围/AOE 中心等均以此格为准）
+      g.strokeColor = BOSS_FOOT_RING_STROKE;
+      g.lineWidth = 2;
+      g.circle(0, 0, sz * 0.32);
+      g.stroke();
+    }
+
+    // 命运行为镜像护盾：shieldStacks=1 时在格子周围画蓝色护盾圆环（与脚下红环类似但浅蓝且半径稍大）
+    if (glyphKey === 'MONSTER_FATE_MIRROR' && hpText === 'SHIELD') {
+      g.strokeColor = MIRROR_SHIELD_STROKE;
+      g.lineWidth = 3;
+      g.circle(0, 0, sz * 0.42);
+      g.stroke();
     }
   }
 
@@ -226,6 +296,41 @@ export class FogMapView {
         this._paintCell(node, this._cellSize, revealed, content);
       }
     }
+
+    this._refreshBossIcon(floor);
+    this._refreshFrozenOverlay(floor);
+  }
+
+  /** 玩家被冰霜巨人冻结（floor.playerFrozen）时，在其所在格绘制醒目描边；解除后清除。 */
+  private _refreshFrozenOverlay(floor: FloorState): void {
+    const g = this._frozenOverlay.getComponent(Graphics);
+    if (!g) return;
+    g.clear();
+    if (!floor.playerFrozen) return;
+    const sz = this._cellSize;
+    const pos = this._cellLocalPos(floor.player.x, floor.player.y);
+    g.strokeColor = FROZEN_BORDER_STROKE;
+    g.lineWidth = 3;
+    g.rect(pos.x - sz / 2 + 1.5, pos.y - sz / 2 + 1.5, sz - 3, sz - 3);
+    g.stroke();
+  }
+
+  /** 在 Boss 所在格上方绘制放大图标（视觉 ×1.6），位置与脚下圆环标记同步。 */
+  private _refreshBossIcon(floor: FloorState): void {
+    const lbl = this._bossIconOverlay.getComponent(Label);
+    if (!lbl) return;
+
+    const boss = floor.monsters.find((m) => m.type === 'BOSS' && m.aiState !== 'DEAD');
+    const revealed = boss ? floor.revealed[boss.pos.y]?.[boss.pos.x] ?? false : false;
+    if (!boss || !revealed) {
+      lbl.string = '';
+      return;
+    }
+
+    const glyph = GLYPH.MONSTER_BOSS;
+    lbl.string = glyph.text;
+    lbl.color = glyph.color;
+    this._bossIconOverlay.setPosition(this._cellLocalPos(boss.pos.x, boss.pos.y));
   }
 
   private _paintAoeOverlay(g: Graphics, cells: Coord[], fill: Color, stroke: Color): void {
@@ -258,6 +363,22 @@ export class FogMapView {
     this._hitOverlay.getComponent(Graphics)?.clear();
   }
 
+  /**
+   * 在指定格子上绘制红色「预测命中区域」（2026-06-15 恢复：蓄力重击前一回合预警，
+   * 提示下回合 boss 可能在此范围发动重击）。
+   */
+  showAoeWarning(cells: Coord[]): void {
+    const g = this._warningOverlay.getComponent(Graphics);
+    if (!g) return;
+    g.clear();
+    this._paintAoeOverlay(g, cells, AOE_WARNING_FILL, AOE_WARNING_STROKE);
+  }
+
+  /** 清除「预测命中区域」高亮。 */
+  clearAoeWarning(): void {
+    this._warningOverlay.getComponent(Graphics)?.clear();
+  }
+
   /** 在目标格绘制细描边，提示"攻击"按钮当前会命中该格（不遮挡格内图标，避免打扰）；cell 为 null 时清除。 */
   showAttackTarget(cell: Coord | null): void {
     const g = this._targetOverlay.getComponent(Graphics);
@@ -270,6 +391,18 @@ export class FogMapView {
     g.lineWidth = 2;
     g.rect(pos.x - sz / 2 + 2, pos.y - sz / 2 + 2, sz - 4, sz - 4);
     g.stroke();
+  }
+
+  /**
+   * 临时将 Boss 大图标移动到指定格（用于狂暴冲锋等多格位移的逐格动画）。
+   * 仅移动 overlay 节点位置，不改变底层格子渲染；动画结束时 cell 应与
+   * refresh() 已绘制的真实位置一致，无需额外校正。若 Boss 当前未显示
+   * （不在视野内）则忽略，避免凭空出现图标。
+   */
+  moveBossIconTo(cell: Coord): void {
+    const lbl = this._bossIconOverlay.getComponent(Label);
+    if (!lbl || !lbl.string) return;
+    this._bossIconOverlay.setPosition(this._cellLocalPos(cell.x, cell.y));
   }
 
   get node(): Node {

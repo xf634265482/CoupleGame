@@ -16,10 +16,20 @@ import {
 } from './bosses/GoblinChief';
 import { VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
 import { shoesStealthReduction } from './EquipmentSystem';
-import { fateGuardianAttack, fateProphecyStep, spawnFateMirror } from './bosses/FateGuardian';
-import { frostGiantAttack } from './bosses/FrostGiant';
-import { lavaLordAttack, lavaTideStep } from './bosses/LavaLord';
-import { isBurrowTurn, sandwormBurrow, sandwormQueenAttack } from './bosses/SandwormQueen';
+import {
+  fateGuardianAttack,
+  fateProphecyStep,
+  mirrorBehaviorStep,
+  resolveDestinyRewrite,
+  tryCrossEnrageThreshold,
+  tryCrossMirrorThreshold,
+  tryOfferDestinyRewrite,
+} from './bosses/FateGuardian';
+import { FATE_MIRROR_BOSS_ID } from './PveConstants';
+import { frostGiantAttack, stepFrostGiant } from './bosses/FrostGiant';
+import { lavaChainStep, lavaEruptionStep, lavaLordAttack, lavaTideStep } from './bosses/LavaLord';
+import { isBurrowTurn, quicksandScorpionBurrow, quicksandScorpionAttack } from './bosses/QuicksandScorpion';
+import { QUICKSAND_SCORPION_ENRAGE_HP_RATIO } from './PveConstants';
 import { monsterAttack } from './CombatSystem';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent } from './PveTypes';
 
@@ -105,7 +115,7 @@ function attackByType(state: ExpeditionState, monster: Monster): ApplyResult {
   if (monster.type === 'BOSS') {
     switch (monster.bossId) {
       case 'GOBLIN_CHIEF':   return goblinChiefAttack(state, monster.id);
-      case 'SANDWORM_QUEEN': return sandwormQueenAttack(state, monster.id);
+      case 'QUICKSAND_SCORPION': return quicksandScorpionAttack(state, monster.id);
       case 'FROST_GIANT':    return frostGiantAttack(state, monster.id);
       case 'LAVA_LORD':      return lavaLordAttack(state, monster.id);
       case 'FATE_GUARDIAN':  return fateGuardianAttack(state, monster.id);
@@ -117,7 +127,7 @@ function attackByType(state: ExpeditionState, monster: Monster): ApplyResult {
 /**
  * Boss 特殊预处理：在 stepOneMonster 的正常逻辑之前优先检查。
  * - 潜地 Boss（isBurrowed）→ 跳过移动，直接走 attackByType（处理冒出逻辑）
- * - 沙虫女王潜地回合 → 触发潜地，本回合无攻击
+ * - 流沙巨蝎潜地回合 → 触发潜地，本回合无攻击
  * 返回 ApplyResult 表示已处理；返回 null 表示走正常流程。
  */
 function stepBoss(state: ExpeditionState, monster: Monster): ApplyResult | null {
@@ -128,14 +138,23 @@ function stepBoss(state: ExpeditionState, monster: Monster): ApplyResult | null 
     return attackByType(state, monster);
   }
 
-  // 沙虫女王：判断是否到潜地回合
-  if (monster.bossId === 'SANDWORM_QUEEN' && isBurrowTurn(state.floorState.turn)) {
-    return sandwormBurrow(state, monster.id);
+  // 流沙巨蝎：判断是否到潜地回合（HP 占比 ≤ 阈值时狂暴，间隔缩短）
+  if (monster.bossId === 'QUICKSAND_SCORPION') {
+    const enraged = monster.hp / monster.maxHp <= QUICKSAND_SCORPION_ENRAGE_HP_RATIO;
+    if (isBurrowTurn(state.floorState.turn, enraged)) {
+      return quicksandScorpionBurrow(state, monster.id);
+    }
   }
 
   // 哥布林酋长：完整行动由 stepGoblinChief 接管（移动+攻击+增援号角）
   if (monster.bossId === 'GOBLIN_CHIEF') {
     return stepGoblinChief(state, monster);
+  }
+
+  // 冰霜巨人：冰霜重击/狂暴预警冲锋接管的回合，由 stepFrostGiant 完整处理
+  if (monster.bossId === 'FROST_GIANT') {
+    const result = stepFrostGiant(state, monster);
+    if (result !== null) return result;
   }
 
   return null; // 走正常追击/移动逻辑
@@ -156,36 +175,49 @@ function stepGoblinChief(state: ExpeditionState, boss: Monster): ApplyResult {
   // 无论是否移动，都先将 boss 标记为 CHASE（与普通怪相同）
   let current = withMonsterPatch(state, boss.id, { aiState: 'CHASE' });
 
-  // 本回合攻击范围（决定何时停止移动）
   const heavy = isHeavyStrikeTurn(floor.turn);
-  const attackRange = heavy ? HEAVY_STRIKE_RANGE : boss.range;
   const enraged = boss.hp <= GOBLIN_CHIEF_ENRAGE_HP;
-  const maxMoveSteps = goblinChiefMaxMoveSteps(boss.hp);
+  const moveSteps = goblinChiefMaxMoveSteps(boss.hp);
 
-  for (let step = 0; step < maxMoveSteps; step++) {
-    const m = current.floorState.monsters.find((m) => m.id === boss.id)!;
-    if (manhattan(m.pos, current.floorState.player) <= attackRange) break; // 已在攻击范围内
+  // 朝玩家贪心移动若干步：stopRange≥0 时一旦进入该范围即停（普攻回合，移动到贴身就停手攻击）；
+  // stopRange<0 时纯追击，移动满 steps 步或被挡为止（重击回合释放后用）。每步 emit MOVE。
+  const chasePlayer = (steps: number, stopRange: number) => {
+    for (let step = 0; step < steps; step++) {
+      const m = current.floorState.monsters.find((mm) => mm.id === boss.id);
+      if (!m || m.aiState === 'DEAD') break;
+      if (stopRange >= 0 && manhattan(m.pos, current.floorState.player) <= stopRange) break;
+      const chasing = withMonsterPatch(current, boss.id, { aiState: 'CHASE' });
+      let didMove = false;
+      for (const to of stepToward(m.pos, current.floorState.player)) {
+        if (!inBounds(current.floorState.size, to)) continue;
+        if (isOccupied(chasing.floorState, to, boss.id)) continue;
+        allEvents.push({ type: 'MOVE', entityId: boss.id, from: m.pos, to, apLeft: floor.ap });
+        current = withMonsterPatch(chasing, boss.id, { pos: to });
+        didMove = true;
+        break;
+      }
+      if (!didMove) {
+        current = chasing; // 仍标记为 CHASE，即使未能移动
+        break;
+      }
+    }
+  };
 
-    const chasing = withMonsterPatch(current, boss.id, { aiState: 'CHASE' });
-    let didMove = false;
-    for (const to of stepToward(m.pos, current.floorState.player)) {
-      if (!inBounds(current.floorState.size, to)) continue;
-      if (isOccupied(chasing.floorState, to, boss.id)) continue;
-      allEvents.push({ type: 'MOVE', entityId: boss.id, from: m.pos, to, apLeft: floor.ap });
-      current = withMonsterPatch(chasing, boss.id, { pos: to });
-      didMove = true;
-      break;
-    }
-    if (!didMove) {
-      current = chasing; // 仍标记为 CHASE，即使未能移动
-      break;
-    }
+  // 一回合内「技能/攻击二选一 + 移动追击」（2026-06-15）：
+  //  - 重击回合：先在【原地】释放重击（锁定中心 = 当前位置 = 上一回合红圈中心 → 预警精确），
+  //    释放后再追击逼近玩家（boss 不再呆站）。范围攻击无需贴身，故先打后走。
+  //  - 普通回合：近战普攻需贴身，故先移动到攻击范围内、再普攻（沿用原顺序）。
+  if (heavy) {
+    const atkResult = goblinChiefAttack(current, boss.id);
+    allEvents.push(...atkResult.events);
+    current = atkResult.state;
+    if (current.status !== 'DEAD') chasePlayer(moveSteps, -1);
+  } else {
+    chasePlayer(moveSteps, boss.range);
+    const atkResult = goblinChiefAttack(current, boss.id);
+    allEvents.push(...atkResult.events);
+    current = atkResult.state;
   }
-
-  // 攻击阶段（goblinChiefAttack 内部处理 AOE/单目标/预警/石块遮挡）
-  const atkResult = goblinChiefAttack(current, boss.id);
-  allEvents.push(...atkResult.events);
-  current = atkResult.state;
 
   // 增援号角（非狂暴每 3 回合 / 狂暴每 2 回合，玩家存活，boss 未死时触发）
   if (current.status !== 'DEAD' && isHornTurn(floor.turn, enraged)) {
@@ -194,6 +226,26 @@ function stepGoblinChief(state: ExpeditionState, boss: Monster): ApplyResult {
       const hornResult = goblinChiefHorn(current, boss.id);
       allEvents.push(...hornResult.events);
       current = hornResult.state;
+    }
+  }
+
+  // 蓄力重击预警（2026-06-15 恢复 → 最终方案「先释放后追击 + 精确预警」）：本回合非重击回合，
+  // 但下个怪物回合将触发重击时，发出预警。
+  //
+  // 重击回合 boss 先在【原地】释放重击、再追击移动（见上方 heavy 分支），即重击释放点 = 重击回合
+  // 起始位置 = 本预警回合末 boss 位置（boss 在玩家回合内不动）。故下回合重击中心 = boss **当前
+  // 位置**，命中半径 = HEAVY_STRIKE_RANGE。红圈据此画出 → 与下回合实际橙圈完全同心同半径，预警
+  // 100% 精确：玩家只要移出红圈（距 boss 当前位置 > HEAVY_STRIKE_RANGE）即绝对安全，不浪费 AP。
+  // （boss 释放后的追击移动发生在重击结算之后，不影响本次命中判定，仅为下回合逼近玩家。）
+  if (current.status !== 'DEAD' && !heavy && isHeavyStrikeTurn(floor.turn + 1)) {
+    const bossAlive = current.floorState.monsters.find((m) => m.id === boss.id && m.aiState !== 'DEAD');
+    if (bossAlive) {
+      allEvents.push({
+        type: 'HEAVY_STRIKE_WARNING',
+        bossId: boss.id,
+        center: bossAlive.pos,
+        radius: HEAVY_STRIKE_RANGE,
+      });
     }
   }
 
@@ -216,35 +268,120 @@ function stepGoblinChief(state: ExpeditionState, boss: Monster): ApplyResult {
  *   CHASE 逻辑与 NORMAL 相同。
  */
 /**
- * 单个怪的一次行动入口：LAVA_LORD 在正常行动前先结算熔岩潮汐阶段
- * （刷新/推进 lavaTiles，与 lavaLordAttack 独立叠加，不替代普通攻击）。
+ * 单个怪的一次行动入口：LAVA_LORD 在正常行动前依次结算
+ * 喷发预警(lavaEruptionStep) → 熔岩锁链(lavaChainStep，触发则替换本回合普攻但保留追击移动，
+ * 避免"Boss 原地不动→玩家被拉一格再走开→Boss 又不动→再次锁链"的死循环) → 定向熔岩潮汐
+ * (lavaTideStep) → 正常行动（普攻+灼烧，见 lavaLordAttack）。
  */
 function stepOneMonster(state: ExpeditionState, monsterId: string): ApplyResult {
   const monster = state.floorState.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return { state, events: [] };
 
   if (monster.type === 'BOSS' && monster.bossId === 'LAVA_LORD') {
-    const tide = lavaTideStep(state, monsterId);
+    const eruption = lavaEruptionStep(state, monsterId);
+
+    const chain = lavaChainStep(eruption.state, monsterId);
+    const chainTriggered = chain.events.some((e) => e.type === 'LAVA_CHAIN_PULL');
+    if (chainTriggered) {
+      if (chain.state.status === 'DEAD') {
+        return { state: chain.state, events: [...eruption.events, ...chain.events] };
+      }
+      // 锁链触发：跳过本回合普攻与潮汐推进，但仍朝玩家追击移动一格——否则 Boss 永远停在原地，
+      // 玩家被拉一下走一下，下回合又触发锁链，Boss 实质从不主动逼近。
+      const move = chaseMoveOnly(chain.state, monsterId);
+      return { state: move.state, events: [...eruption.events, ...chain.events, ...move.events] };
+    }
+
+    const tide = lavaTideStep(chain.state, monsterId);
     const result = stepOneMonsterCore(tide.state, monsterId);
-    return { state: result.state, events: [...tide.events, ...result.events] };
+    return { state: result.state, events: [...eruption.events, ...chain.events, ...tide.events, ...result.events] };
   }
 
   if (monster.type === 'BOSS' && monster.bossId === 'FATE_GUARDIAN') {
-    // 命运预言（结算上回合标记 / 标记本回合）→ 镜像分身 → 正常行动
-    const prophecy = fateProphecyStep(state, monsterId);
-    if (prophecy.state.status === 'DEAD') return prophecy; // 预言爆炸致死则停止后续
-    const mirror = spawnFateMirror(prophecy.state, monsterId);
+    // FATE_GUARDIAN 怪物回合调度顺序（design §8）：
+    // 1. tryCrossEnrageThreshold（幂等，写 enraged + 清 fateProphecy）
+    // 2. tryOfferDestinyRewrite（狂暴态周期到位则 5 抽 3 写 pendingDestinyRewrite）
+    // 3. resolveDestinyRewrite（若 pendingDestinyRewrite.removed 非 null → 结算剩余 2）
+    // 4. fateProphecyStep（仅非狂暴态，结算上回合预言 / 标记本回合）
+    // 5. tryCrossMirrorThreshold（未生成过镜像 + HP ≤ 50% → 生成）
+    // 6. fateGuardianAttack（普攻，吃 attackBuffPct）
+    const enrage = tryCrossEnrageThreshold(state, monsterId);
+    if (enrage.state.status === 'DEAD') return enrage;
+
+    const offer = tryOfferDestinyRewrite(enrage.state, monsterId);
+    if (offer.state.status === 'DEAD') {
+      return { state: offer.state, events: [...enrage.events, ...offer.events] };
+    }
+
+    const resolve = resolveDestinyRewrite(offer.state, monsterId);
+    if (resolve.state.status === 'DEAD') {
+      return { state: resolve.state, events: [...enrage.events, ...offer.events, ...resolve.events] };
+    }
+
+    const prophecy = fateProphecyStep(resolve.state, monsterId);
+    if (prophecy.state.status === 'DEAD') {
+      return { state: prophecy.state, events: [...enrage.events, ...offer.events, ...resolve.events, ...prophecy.events] };
+    }
+
+    const mirror = tryCrossMirrorThreshold(prophecy.state, monsterId);
     const result = stepOneMonsterCore(mirror.state, monsterId);
-    return { state: result.state, events: [...prophecy.events, ...mirror.events, ...result.events] };
+    return {
+      state: result.state,
+      events: [...enrage.events, ...offer.events, ...resolve.events, ...prophecy.events, ...mirror.events, ...result.events],
+    };
+  }
+
+  // 命运守卫行为镜像（FATE_MIRROR_BOSS_ID）：跳过通用 AI，直接走 mirrorBehaviorStep。
+  if (monster.type === 'BOSS' && monster.bossId === FATE_MIRROR_BOSS_ID) {
+    return mirrorBehaviorStep(state, monsterId);
   }
 
   return stepOneMonsterCore(state, monsterId);
+}
+
+/**
+ * 朝玩家追击一格但不攻击（熔岩锁链触发后使用，确保 Boss 在跳过普攻的回合仍能逼近玩家）。
+ * 已贴身（dist ≤ range）或四方向均被阻挡则原地不动。
+ */
+function chaseMoveOnly(state: ExpeditionState, monsterId: string): ApplyResult {
+  const floor = state.floorState;
+  const monster = floor.monsters.find((m) => m.id === monsterId);
+  if (!monster || monster.aiState === 'DEAD') return { state, events: [] };
+  if (manhattan(monster.pos, floor.player) <= monster.range) {
+    return { state: withMonsterPatch(state, monsterId, { aiState: 'CHASE' }), events: [] };
+  }
+  const chasing = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
+  for (const to of stepToward(monster.pos, floor.player)) {
+    if (!inBounds(floor.size, to)) continue;
+    if (isOccupied(chasing.floorState, to, monsterId)) continue;
+    return {
+      state: withMonsterPatch(chasing, monsterId, { pos: to }),
+      events: [{ type: 'MOVE', entityId: monsterId, from: monster.pos, to, apLeft: chasing.floorState.ap }],
+    };
+  }
+  return { state: chasing, events: [] };
 }
 
 function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyResult {
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return { state, events: [] };
+
+  // 冰冻（永冻之核遗物）：跳过本回合并 -1；归零后下回合正常行动
+  if ((monster.frozenRounds ?? 0) > 0) {
+    return {
+      state: {
+        ...state,
+        floorState: {
+          ...floor,
+          monsters: floor.monsters.map((m) =>
+            m.id === monsterId ? { ...m, frozenRounds: Math.max(0, (m.frozenRounds ?? 0) - 1) } : m,
+          ),
+        },
+      },
+      events: [],
+    };
+  }
 
   // Boss 优先处理：潜地/冒出/特殊预动作
   const bossResult = stepBoss(state, monster);

@@ -17,6 +17,10 @@ export const AP_COST = {
   USE_ALTAR: 1, // 使用祭坛（铁匠不在此表：铁匠只收金币，不消耗 AP）
 } as const;
 
+// AP 结转：回合结束时未用完的 AP，按 min(剩余, AP_CARRY_CAP) 结转到下一回合上限。
+// 上限取 3（恰好够凑一次 ATTACK 的"零头"），避免无限攒 AP 打破"每回合行动次数受限"的资源设计。
+export const AP_CARRY_CAP = 3;
+
 // ── 中立交互实体效果（M1 占位数值，待与设计师对齐回写 design.md） ──
 export const IDOL_MAX_HP_BONUS = 10; // 神像祝福：永久 +10 maxHp（数值×10基准下 = 原 +1）
 export const HOT_SPRING_HEAL_RATIO = 1.0; // 温泉：当次将 HP 回满（1.0=full heal）
@@ -35,14 +39,16 @@ export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * TOTAL_CHAPTERS; // 25
 
 export const CHAPTER_BOSS = {
   1: 'GOBLIN_CHIEF',
-  2: 'SANDWORM_QUEEN',
+  2: 'QUICKSAND_SCORPION',
   3: 'FROST_GIANT',
   4: 'LAVA_LORD',
   5: 'FATE_GUARDIAN',
 } as const;
 
 // ── 玩家初始状态 ───────────────────────────────────────
-export const INITIAL_HP = 200; // ×10 基准（原 20）
+// ⚠️ 仅开发调试：2026-06-15 临时再 ×10（200 → 2000），便于五个 Boss 连续测试不被秒死。
+// 5 个 Boss 测完后需与 DEV_SKIP_TO_FLOOR 一起改回 200！
+export const INITIAL_HP = 2000;
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
@@ -220,19 +226,112 @@ export const ELITE_MONSTER_DROP = {
   animaMid: [20, 40] as const,
 } as const;
 
+// ── Boss 掉落表（design §6 / Boss设计V1）────────────────────
+// 三层结构：通用必掉（金币/灵气）+ 专属随机 1 件 + 稀有独立判定（命运碎片/卷轴/遗物）。
+// 数值按章节缩放：第 1~5 章倍率 = [1, 1.2, 1.5, 1.8, 2.2]（与 bossChapterScaling 不同，掉落更线性以避免高章节资源过度通胀）。
+
+/** Boss 掉落基础数值（第 1 章基准，按 BOSS_DROP_CHAPTER_MULT 缩放）。 */
+export const BOSS_DROP_BASE = {
+  /** 通用必掉：金币基础值。 */
+  goldBase: 100,
+  /** 通用必掉：灵气基础值。 */
+  animaBase: 30,
+  /** 稀有独立判定：命运碎片基础值（命中 SHARDS_CHANCE 时给）。 */
+  shardsBase: 3,
+} as const;
+
+/** Boss 掉落数值的章节缩放倍率（1~5 章）。 */
+export const BOSS_DROP_CHAPTER_MULT = [1.0, 1.2, 1.5, 1.8, 2.2] as const;
+
+/** Boss 稀有掉落概率（三个独立判定，互不影响）。 */
+export const BOSS_RARE_DROP = {
+  /** 命运碎片掉落概率。 */
+  SHARDS_CHANCE: 0.10,
+  /** 命运词条卷轴掉落概率。 */
+  SCROLL_CHANCE: 0.30,
+  /** Boss 遗物基础掉落概率（图鉴已解锁该遗物时 +RELIC_CODEX_BONUS）。 */
+  RELIC_BASE_CHANCE: 0.20,
+  /** 图鉴已解锁该遗物时的额外掉落概率加成。 */
+  RELIC_CODEX_BONUS: 0.10,
+} as const;
+
+/** 营地遗物宝箱（每个营地楼层绑定上一个 Boss 层的章节，只能开出该章节遗物）。 */
+export const RELIC_CHEST = {
+  /** 单次开箱花费金币。 */
+  COST_GOLD: 1000,
+  /** 单次开箱花费钻石。 */
+  COST_DIAMOND: 50,
+  /** 开箱开出本章遗物的概率（剩余 90% 为「未中」）。 */
+  SUCCESS_CHANCE: 0.10,
+  /** 开出已持有的遗物时返还资源的比例（避免重复无意义）。 */
+  REFUND_PCT: 0.30,
+} as const;
+
+/** 每个章节 Boss 对应的遗物 id（营地宝箱按楼层所属章节定位本章遗物）。 */
+export const CHAPTER_BOSS_RELIC: Record<number, string> = {
+  1: 'CHIEF_ROAR',
+  2: 'QUICKSAND_HEART',
+  3: 'PERMAFROST_CORE',
+  4: 'MAGMA_HEART',
+  5: 'FATE_ECHO',
+} as const;
+
+/** 按章节返回 Boss 通用掉落数值（金币/灵气/命运碎片）。chapter 1-5，越界夹紧。 */
+export function bossDropScaled(chapter: number): { gold: number; anima: number; shards: number } {
+  const idx = Math.max(0, Math.min(chapter - 1, BOSS_DROP_CHAPTER_MULT.length - 1));
+  const mult = BOSS_DROP_CHAPTER_MULT[idx];
+  return {
+    gold: Math.round(BOSS_DROP_BASE.goldBase * mult),
+    anima: Math.round(BOSS_DROP_BASE.animaBase * mult),
+    shards: Math.round(BOSS_DROP_BASE.shardsBase * mult),
+  };
+}
+
 // ── Boss 专属机制常量（design §11b）─────────────────────────
-/** 沙虫女王：每隔多少回合潜地一次。 */
-export const SANDWORM_BURROW_INTERVAL = 4;
-/** 沙虫女王：每次潜地在周边动态生成的沙坑数（流沙扩张，反风筝）。 */
-export const SANDWORM_DYNAMIC_PIT_PER_BURROW = 2;
-/** 沙虫女王：动态沙坑存续回合数（remaining，到 0 自动移除；静态沙坑无此值，永久）。 */
-export const SANDWORM_DYNAMIC_PIT_DURATION = 5;
+/** 流沙巨蝎：每隔多少回合潜地一次。 */
+export const QUICKSAND_SCORPION_BURROW_INTERVAL = 4;
+/** 流沙巨蝎：每次潜地在周边动态生成的沙坑数（流沙扩张，反风筝）。 */
+export const QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW = 2;
+/** 流沙巨蝎：动态沙坑存续回合数（remaining，到 0 自动移除；静态沙坑无此值，永久）。2026-06-15 由 5→8，潜地间隔(4/3)内多波叠加，营造越打越走不了的压迫感。 */
+export const QUICKSAND_SCORPION_DYNAMIC_PIT_DURATION = 8;
+/** 流沙巨蝎：HP 占比 ≤ 此值时进入狂暴（潜地间隔缩短、沙暴范围扩大）。 */
+export const QUICKSAND_SCORPION_ENRAGE_HP_RATIO = 0.3;
+/** 流沙巨蝎：狂暴后潜地间隔（非狂暴见 QUICKSAND_SCORPION_BURROW_INTERVAL=4）。 */
+export const QUICKSAND_SCORPION_BURROW_INTERVAL_ENRAGED = 3;
+/** 流沙巨蝎：潜地时沙暴随机覆盖格数（非狂暴）。 */
+export const QUICKSAND_SCORPION_SANDSTORM_CELLS = 2;
+/** 流沙巨蝎：狂暴后沙暴随机覆盖格数。 */
+export const QUICKSAND_SCORPION_SANDSTORM_CELLS_ENRAGED = 4;
+/** 流沙巨蝎：沙暴命中玩家所在格造成的真实伤害（无视护甲，不受常规攻击 10 点下限限制）。 */
+export const QUICKSAND_SCORPION_SANDSTORM_DAMAGE = 1;
 /** 冰霜巨人：每隔多少回合铺一次冰面（复用原冰冻间隔）。 */
 export const FROST_GIANT_FREEZE_INTERVAL = 4;
 /** 冰霜巨人：冰面以玩家为中心铺开的曼哈顿半径（1 → 「+」字 5 格）。 */
 export const FROST_GIANT_ICE_RADIUS = 1;
 /** 冰霜巨人：冰面存续回合数（remaining 倒计时融化）。 */
 export const FROST_GIANT_ICE_DURATION = 2;
+/** 冰霜巨人：普通攻击命中玩家叠加 1 层寒气，达到此层数触发冻结并归零。 */
+export const FROST_GIANT_CHILL_STACKS_TO_FREEZE = 3;
+/** 冰霜巨人：冻结状态下玩家需主动攻击（playerAttack/attackIceWall）多少次才能解除冻结。 */
+export const FROST_GIANT_FREEZE_ATTACKS_TO_BREAK = 3;
+/** 冰霜巨人：冻结时在玩家周围生成的 FREEZE_WALL 数量（解除时一并移除）。 */
+export const FROST_GIANT_FREEZE_WALL_COUNT = 2;
+/** 冰霜巨人：每隔多少个怪物回合触发一次冰霜重击（AOE，以 boss 自身为中心）。 */
+export const FROST_GIANT_HEAVY_STRIKE_INTERVAL = 3;
+/** 冰霜巨人：冰霜重击 AOE 曼哈顿半径（以 boss 自身为中心）。 */
+export const FROST_GIANT_HEAVY_STRIKE_RADIUS = 2;
+/** 冰霜巨人：冰霜重击命中玩家后沿 boss→玩家方向击退的距离（格）。 */
+export const FROST_GIANT_KNOCKBACK_DISTANCE = 1;
+/** 冰霜巨人：击退落点为冰面时，滑行结束后额外造成的固定伤害。 */
+export const FROST_GIANT_ICE_SLIDE_DAMAGE = 30;
+/** 冰霜巨人：ICE_WALL/FREEZE_WALL 被击碎后，四周生成的 SHATTERED_ICE 存续回合数。 */
+export const FROST_GIANT_SHATTERED_ICE_DURATION = 5;
+/** 冰霜巨人：玩家踩入 SHATTERED_ICE 造成的固定伤害（命中后该格立即消耗）。 */
+export const FROST_GIANT_SHATTERED_ICE_DAMAGE = 30;
+/** 冰霜巨人：HP 占比 ≤ 此值时进入狂暴，开启「预警→冲锋」循环（替代冰霜重击）。 */
+export const FROST_GIANT_ENRAGE_HP_RATIO = 0.4;
+/** 冰霜巨人：狂暴冲锋命中玩家时的伤害倍率。 */
+export const FROST_GIANT_CHARGE_DAMAGE_MULT = 2;
 /** 熔岩领主：每次攻击附加灼烧 tick 数（每 tick = 10 HP，每回合消耗 1 tick）。 */
 export const LAVA_LORD_BURN_TICKS = 3;
 /** 命运守卫：玩家 HP 占 maxHp 比例大于此值时守卫伤害 × 2。 */
@@ -257,7 +356,7 @@ export const BLACKSMITH_UPGRADE_COST = 20;
 export const BLACKSMITH_REROLL_COST = 30;
 
 // ── 第 2-5 章 Boss 专属机制常量（260613 内容深化）──────────
-/** 第2章 SandwormQueen Boss 房静态沙坑数量（开房时刷，永久；钻地优先出沙坑位）。 */
+/** 第2章 QuicksandScorpion Boss 房静态沙坑数量（开房时刷，永久；钻地优先出沙坑位）。 */
 export const CHAPTER2_SAND_PIT_COUNT = 5;
 /** 沙坑移动 AP 额外消耗（叠加在基础 MOVE 上；静态/动态沙坑共用）。 */
 export const CHAPTER2_SAND_PIT_MOVE_PENALTY = 2;
@@ -267,24 +366,64 @@ export const CHAPTER3_ICE_WALL_COUNT = 3;
 export const CHAPTER3_ICE_WALL_HP = 10;
 /** 冰墙破坏时掉落灵气。 */
 export const CHAPTER3_ICE_WALL_DROP_ANIMA = 1;
-/** 第4章 LavaLord 熔岩潮汐周期（Boss 回合数）。 */
+/** 第4章 LavaLord 阶段二：定向熔岩潮汐每隔多少 Boss 回合推进一排（2026-06-15 由"随机撒点"重做为"定向整排"）。 */
 export const CHAPTER4_LAVA_TIDE_INTERVAL = 3;
-/** 每次潮汐刷出的熔岩地块数（2026-06-14 由 3 → 6，加大安全区压缩）。 */
-export const CHAPTER4_LAVA_TIDE_TILE_COUNT = 6;
-/** 熔岩地块持续回合数。 */
-export const CHAPTER4_LAVA_TIDE_DURATION = 2;
-/** 玩家踩入熔岩地块的伤害（每回合开始结算）。 */
+/** 定向熔岩潮汐最多推进的排数（达到后停止推进，已生成格子永久保留）。 */
+export const CHAPTER4_LAVA_TIDE_ROW_MAX = 3;
+/** 玩家踩入熔岩地块的伤害（每回合开始结算，含永久熔岩格）。 */
 export const CHAPTER4_LAVA_TILE_DAMAGE = 5;
 /** LavaLord phase2 触发的 HP 比例阈值。 */
 export const CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO = 0.5;
-/** 第5章 FateGuardian 镜像分身触发 HP 比例阈值。 */
-export const CHAPTER5_MIRROR_SPAWN_HP_RATIO = 0.33;
-/** 命运镜像 HP。 */
-export const CHAPTER5_MIRROR_HP = 20;
-/** 命运镜像攻击力 = Boss 攻击 × 该系数。 */
-export const CHAPTER5_MIRROR_ATTACK_MULT = 0.5;
-/** 命运镜像 bossId（用于 stepBoss 区分镜像与本体）。 */
+/** 阶段一「喷发预警」：每隔多少回合标记一次喷发区域。 */
+export const LAVA_LORD_ERUPTION_INTERVAL = 3;
+/** 喷发结算生成的熔岩地块存续回合数。 */
+export const LAVA_LORD_ERUPTION_DURATION = 3;
+/** 熔核爆裂：玩家灼烧层数达到该阈值时强制触发。 */
+export const LAVA_LORD_BURN_BURST_THRESHOLD = 6;
+/** 熔核爆裂：每层灼烧造成的真实伤害。 */
+export const LAVA_LORD_BURN_BURST_DAMAGE_PER_STACK = 5;
+/** 熔核爆裂：玩家周围生成的熔岩地块存续回合数。 */
+export const LAVA_LORD_BURN_BURST_TILE_DURATION = 3;
+/** 熔岩锁链：玩家与 Boss 距离达到该值时直接触发（无需累计回合）。 */
+export const LAVA_LORD_CHAIN_DISTANCE_THRESHOLD = 4;
+/** 熔岩锁链：玩家连续多少回合未与 Boss 相邻时触发。 */
+export const LAVA_LORD_CHAIN_TURN_THRESHOLD = 3;
+/** 熔岩锁链命中时附加的灼烧层数。 */
+export const LAVA_LORD_CHAIN_BURN_TICKS = 2;
+/** Boss 站在熔岩地块上时，普通攻击力加成。 */
+export const LAVA_LORD_LAVA_STAND_ATTACK_BONUS = 1;
+/** Boss 站在熔岩地块上时，受到玩家伤害的减免比例。 */
+export const LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION = 0.2;
+/** 命运守卫：行为镜像生成 HP 比例阈值（Boss HP 跨过 50% 时生成 1 次）。 */
+export const FATE_MIRROR_SPAWN_HP_RATIO = 0.5;
+/** 命运守卫：镜像 HP = 玩家当前 HP × 该系数（诞生瞬间快照）。 */
+export const FATE_MIRROR_HP_FROM_PLAYER = 0.5;
+/** 命运守卫：镜像攻击 = 玩家当前 attack × 该系数（诞生瞬间快照）。 */
+export const FATE_MIRROR_ATK_FROM_PLAYER = 0.5;
+/** 命运守卫：镜像反打攻击曼哈顿距离上限（> 此值空挥）。 */
+export const FATE_MIRROR_ATTACK_RANGE = 2;
+/** 命运镜像 bossId（用于 stepBoss / mirrorBehaviorStep 区分镜像与本体）。 */
 export const FATE_MIRROR_BOSS_ID = 'FATE_MIRROR';
+/** 命运守卫：HP 跨过此比例 → 进入狂暴态（清空预言、开启改写命运周期）。 */
+export const FATE_ENRAGE_HP_RATIO = 0.3;
+/** 命运守卫：狂暴态每多少个怪物回合触发一次「改写命运」预告。 */
+export const DESTINY_REWRITE_INTERVAL = 3;
+/** 命运守卫：改写命运事件池大小（E1-E5）。 */
+export const DESTINY_REWRITE_POOL_SIZE = 5;
+/** 命运守卫：改写命运每次抽取的事件数（玩家会从中弃 1，剩余 2 生效）。 */
+export const DESTINY_REWRITE_DRAW_SIZE = 3;
+/** 命运守卫：E1 Boss 回血量 = maxHp × 该系数。 */
+export const DESTINY_HEAL_RATIO = 0.10;
+/** 命运守卫：E2 Boss 加伤害百分比（普攻 / 镜像攻击 / 5×5 都吃）。 */
+export const DESTINY_ATK_BUFF_PCT = 30;
+/** 命运守卫：E2 Boss 加伤害持续怪物回合数。 */
+export const DESTINY_ATK_BUFF_DURATION_TURNS = 3;
+/** 命运守卫：E3 玩家扣血伤害 = boss.attack × 该系数（无视防御）。 */
+export const DESTINY_DIRECT_DMG_MULT = 1.0;
+/** 命运守卫：E4 5×5 爆炸切比雪夫半径（2 → 5×5）。 */
+export const DESTINY_5X5_RADIUS = 2;
+/** 命运守卫：E4 5×5 爆炸伤害 = boss.attack × 该系数（中心 = Boss 当前格）。 */
+export const DESTINY_5X5_DMG_MULT = 1.2;
 
 // ── 第一章专属机制常量 ─────────────────────────────────────
 /** 第一章 Boss 房随机石块数量。 */
@@ -297,8 +436,6 @@ export const HORN_WARRIOR_ENRAGE_COUNT = 2;
 export const FROST_MOVE_PENALTY_ROUNDS = 2;
 /** 赤炎哥布林灼烧：5HP/回合的持续回合数（可叠加）。 */
 export const FIRE_BURN_ROUNDS = 2;
-/** 哥布林酋长AOE余波：被击中后移动AP+1的持续回合数。 */
-export const HEAVY_AOE_SLOW_ROUNDS = 2;
 
 // ── 命运碎片成长树（destiny tree，design「命运树 V1 数值调整建议」）──
 /** A1 坚韧之躯Ⅰ：maxHp/hp +20（×10 基准，原 +2）。 */
@@ -311,6 +448,8 @@ export const TREE_A3_DEATH_GOLD_RETENTION = 0.2;
 export const TREE_B1_ATTACK_BONUS = 5;
 /** B2 急行军：AP 骰子上限 +1（dice 范围 [1,6]→[1,7]）。 */
 export const TREE_B2_AP_DICE_BONUS = 1;
+/** B2 急行军：AP 结转上限 +1（AP_CARRY_CAP 3→4）。 */
+export const TREE_B2_AP_CARRY_BONUS = 1;
 /** B3 职业先驱：远征开始时随机一个可进阶职业的碎片 +1。 */
 export const TREE_B3_FRAGMENT_BONUS = 1;
 /** C1 财富眼光：开局金币加成（原 +8 感知过弱，调整为 +12）。 */
@@ -344,7 +483,7 @@ export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
   { id: 'A2', column: 'A', order: 2, name: '坚韧之躯Ⅱ', cost: 25, desc: '生命上限再+20' },
   { id: 'A3', column: 'A', order: 3, name: '遗产意志', cost: 30, desc: '死亡保留20%金币' },
   { id: 'B1', column: 'B', order: 1, name: '武者直觉', cost: 20, desc: '攻击力+5' },
-  { id: 'B2', column: 'B', order: 2, name: '急行军', cost: 25, desc: 'AP骰子上限+1' },
+  { id: 'B2', column: 'B', order: 2, name: '急行军', cost: 25, desc: 'AP骰子上限+1，AP结转上限+1' },
   { id: 'B3', column: 'B', order: 3, name: '职业先驱', cost: 30, desc: '开局职业碎片+1' },
   { id: 'C1', column: 'C', order: 1, name: '财富眼光', cost: 15, desc: '开局金币+12' },
   { id: 'C2', column: 'C', order: 2, name: '宝箱老手', cost: 20, desc: '宝箱金币+20%' },
@@ -361,9 +500,9 @@ export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
 /**
  * 自动跳至目标层（0 = 关闭）。
  * 将此值改为非零整数（例如 5）后重新构建，开局将直接跳到该层。
- * ⚠️ 正式构建 / 提测前必须改回 0！
+ * ⚠️ 正式构建 / 提测前必须改回 0！同时把上面的 INITIAL_HP 改回 200。
  */
-export const DEV_SKIP_TO_FLOOR = 0;
+export const DEV_SKIP_TO_FLOOR = 20;
 
 /** 第 floor 层（1-based）所属章节（1-based）。 */
 export function chapterOfFloor(floor: number): number {

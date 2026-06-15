@@ -6,8 +6,10 @@
 //   背刺(backstab) — ROGUE：移动后将 floorState.backstabAvailable 置 true（下次攻击双倍）
 
 import { revealAround } from './FogSystem';
-import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, FOG_REVEAL_RADIUS } from './PveConstants';
+import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
+import { relicOnMoveStep } from './RelicSystem';
+import { bossSandImmune } from './BossEquipTraitEffects';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, PveEvent } from './PveTypes';
 
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
@@ -19,25 +21,25 @@ const DIRECTION_DELTA: Record<Direction, Coord> = {
   RIGHT: { x: 1, y: 0 },
 };
 
-function inBounds(size: number, pos: Coord): boolean {
+export function inBounds(size: number, pos: Coord): boolean {
   return pos.x >= 0 && pos.y >= 0 && pos.x < size && pos.y < size;
 }
 
-function isBlockedByMonster(floor: FloorState, pos: Coord): boolean {
+export function isBlockedByMonster(floor: FloorState, pos: Coord): boolean {
   return floor.monsters.some(
     (m) => m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y,
   );
 }
 
-function isBlockedByRock(floor: FloorState, pos: Coord): boolean {
+export function isBlockedByRock(floor: FloorState, pos: Coord): boolean {
   return floor.entities.some(
     (e) => e.type === 'ROCK' && !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y,
   );
 }
 
-function isBlockedByIceWall(floor: FloorState, pos: Coord): boolean {
+export function isBlockedByIceWall(floor: FloorState, pos: Coord): boolean {
   return floor.entities.some(
-    (e) => e.type === 'ICE_WALL' && !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y,
+    (e) => (e.type === 'ICE_WALL' || e.type === 'FREEZE_WALL') && !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y,
   );
 }
 
@@ -46,7 +48,7 @@ function noop(state: ExpeditionState): ApplyResult {
 }
 
 /** 某格是否为未消耗的冰面（ICE_TILE）。 */
-function isIceTile(floor: FloorState, pos: Coord): boolean {
+export function isIceTile(floor: FloorState, pos: Coord): boolean {
   return floor.entities.some(
     (e) => e.type === 'ICE_TILE' && !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y,
   );
@@ -57,7 +59,7 @@ function isIceTile(floor: FloorState, pos: Coord): boolean {
  * 玩家站在冰面上、朝 delta 方向移动时，沿方向连续滑行，停在「第一个非冰可走格」；
  * 撞墙/石块/冰墙/怪物/Boss 则停在障碍前最后一格。返回落点；若一格也走不动返回 null。
  */
-function slideDestination(floor: FloorState, from: Coord, delta: Coord): Coord | null {
+export function slideDestination(floor: FloorState, from: Coord, delta: Coord): Coord | null {
   let cur = from;
   while (true) {
     const next: Coord = { x: cur.x + delta.x, y: cur.y + delta.y };
@@ -88,6 +90,9 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const floor = state.floorState;
   const from = floor.player;
 
+  // 冰霜巨人冻结（第3章）：MOVE 完全无效（no-op），需主动攻击解除。
+  if (floor.playerFrozen) return noop(state);
+
   // 冰面滑行：玩家站在冰面上时，移动沿方向连续滑行到边缘（落点已保证可走）；
   // 否则普通走一格（从非冰格踏上冰面也只算普通一步，下回合站在冰上才会滑）。
   const onIce = isIceTile(floor, from);
@@ -115,7 +120,8 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const sandPitEntity = floor.entities.find(
     (e) => e.type === 'SAND_PIT' && !e.consumed && e.pos.x === to.x && e.pos.y === to.y,
   );
-  const sandPitPenalty = sandPitEntity ? CHAPTER2_SAND_PIT_MOVE_PENALTY : 0;
+  // Boss 装备 trait: boss_sand_immune（流沙护腿）→ 沙坑 AP 惩罚归零
+  const sandPitPenalty = sandPitEntity && !bossSandImmune(state.player.equipment) ? CHAPTER2_SAND_PIT_MOVE_PENALTY : 0;
   const cost = firstMoveFree
     ? 0
     : Math.max(1, baseCost + slowPenalty + sandPitPenalty - shoesReduction); // SHOES 减免，最低 1 AP
@@ -130,16 +136,29 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const revealedNext = floor.revealed.map((row) => row.slice());
   const newlyRevealed = revealAround(revealedNext, to, revealRadius);
 
+  // 冰霜巨人碎冰（第3章）：踩入未消耗的 SHATTERED_ICE 立即消耗并造成固定伤害。
+  const shatteredIce = floor.entities.find(
+    (e) => e.type === 'SHATTERED_ICE' && !e.consumed && e.pos.x === to.x && e.pos.y === to.y,
+  );
+  const shatteredHp = shatteredIce ? Math.max(0, state.player.hp - FROST_GIANT_SHATTERED_ICE_DAMAGE) : state.player.hp;
+  const shatteredDead = shatteredIce ? shatteredHp <= 0 : false;
+
   const nextAp = floor.ap - cost;
   const nextFloor: FloorState = {
     ...floor,
     player: to,
     ap: nextAp,
     revealed: revealedNext,
+    status: shatteredDead ? ('DEAD' as const) : floor.status,
+    entities: shatteredIce
+      ? floor.entities.map((e) => (e.id === shatteredIce.id ? { ...e, consumed: true } : e))
+      : floor.entities,
     // ROGUE 背刺 / 觉醒·影袭：移动后标记，playerAttack 命中时生效并消耗
     ...(traits.includes('backstab') || traits.includes('awakened_shadow_strike') ? { backstabAvailable: true } : {}),
     // RARE+ 靴子首步免费：本回合首步已用完
     ...(firstMoveFree ? { shoesFirstMoveDone: true } : {}),
+    // 命运守卫行为镜像：累计本回合移动步数（endTurn 时供 recordPlayerActionForMirror 读取）
+    playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
   };
 
   const events: PveEvent[] = [
@@ -151,9 +170,23 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   if (sandPitEntity) {
     events.push({ type: 'SAND_PIT_STEPPED', entityId: sandPitEntity.id });
   }
+  if (shatteredIce) {
+    events.push({ type: 'PLAYER_DAMAGED', damage: FROST_GIANT_SHATTERED_ICE_DAMAGE, hp: shatteredHp, sourceId: shatteredIce.id });
+    if (shatteredDead) events.push({ type: 'PLAYER_DEAD' });
+  }
+
+  // 遗物：永冻之核 — 每移动 3 步标记下次普攻冰冻
+  // 滑行整体仅算一步（沿用现有 AP 模型：滑行收 1 次移动费），与玩家直观一致。
+  const relicMove = relicOnMoveStep(state.player);
+  events.push(...relicMove.events);
 
   return {
-    state: { ...state, floorState: nextFloor },
+    state: {
+      ...state,
+      status: shatteredDead ? ('DEAD' as const) : state.status,
+      player: { ...relicMove.nextPlayer, hp: shatteredHp },
+      floorState: nextFloor,
+    },
     events,
   };
 }

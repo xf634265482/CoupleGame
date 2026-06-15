@@ -26,17 +26,42 @@ import {
 } from './StrengthenEffects';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
+  applyFreezeToMonsters,
+  relicComputeAttackBonus,
+  relicOnHitTarget,
+  relicOnKill,
+  relicReflectDamage,
+  relicTryRevive,
+} from './RelicSystem';
+import {
+  bossCritMult,
+  bossDamageReducePct,
+  bossKillHeal,
+  bossLifesteal,
+  bossOnHitDebuffPatch,
+  bossStunOnHurt,
+  bossTryRevive,
+  STUN_ROUNDS,
+} from './BossEquipTraitEffects';
+import {
   BASE_ATTACK,
   BASE_ATTACK_RANGE,
   CHAPTER3_ICE_WALL_DROP_ANIMA,
   CLASS_STATS,
+  FATE_ENRAGE_HP_RATIO,
+  FATE_MIRROR_BOSS_ID,
+  FATE_MIRROR_SPAWN_HP_RATIO,
   FIRE_BURN_ROUNDS,
+  FROST_GIANT_ENRAGE_HP_RATIO,
   FROST_MOVE_PENALTY_ROUNDS,
+  LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION,
+  QUICKSAND_SCORPION_ENRAGE_HP_RATIO,
 } from './PveConstants';
 import { VARIANT_FIRE_GOBLIN, VARIANT_FROST_GOBLIN } from './Chapter1Monsters';
+import { GOBLIN_CHIEF_ENRAGE_HP } from './bosses/GoblinChief';
 import { isRevealed, reveal } from './FogSystem';
 import { createRng } from './rng';
-import type { ApplyResult, Coord, ExpeditionState, PveEvent, RunPlayer } from './PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, FloorState, PveEvent, RunPlayer } from './PveTypes';
 
 function manhattan(a: Coord, b: Coord): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -47,12 +72,46 @@ function noop(state: ExpeditionState): ApplyResult {
 }
 
 /**
+ * 冰霜巨人冻结解除（第3章）：玩家每次主动攻击（playerAttack/attackIceWall）消耗一次
+ * playerFreezeAttacksRemaining；归零时解除冻结并移除 FREEZE_WALL，emit PLAYER_UNFROZEN。
+ */
+function consumeFreezeAttack(floor: FloorState, events: PveEvent[]): FloorState {
+  if (!floor.playerFrozen) return floor;
+  const remaining = (floor.playerFreezeAttacksRemaining ?? 0) - 1;
+  if (remaining > 0) {
+    return { ...floor, playerFreezeAttacksRemaining: remaining };
+  }
+  events.push({ type: 'PLAYER_UNFROZEN' });
+  return {
+    ...floor,
+    playerFrozen: false,
+    playerFreezeAttacksRemaining: undefined,
+    entities: floor.entities.filter((e) => e.type !== 'FREEZE_WALL'),
+  };
+}
+
+/**
  * 对单个怪物施加伤害并写回状态：追加 ATTACK 事件；若致死则追加 KILL 事件并结算掉落。
  * 供 playerAttack 主目标 / 觉醒·横扫溅射 / 连射 / 觉醒·连珠连锁 共用。
  */
 function resolveHit(state: ExpeditionState, targetId: string, damage: number, events: PveEvent[]): ExpeditionState {
   const monster = state.floorState.monsters.find((m) => m.id === targetId);
   if (!monster || monster.aiState === 'DEAD') return state;
+
+  // 命运守卫行为镜像护盾消耗（260616 重做）：玩家上回合待机 → 镜像本回合获盾，吸收下一次伤害。
+  // 在 hp 扣减前判定；仅当 shieldStacks=1 时吸收并归零，emit MIRROR_SHIELD_ABSORBED，本次伤害归 0。
+  if (monster.bossId === FATE_MIRROR_BOSS_ID && monster.shieldStacks === 1) {
+    events.push({ type: 'MIRROR_SHIELD_ABSORBED', mirrorId: targetId });
+    return {
+      ...state,
+      floorState: {
+        ...state.floorState,
+        monsters: state.floorState.monsters.map((m) =>
+          m.id === targetId ? { ...m, shieldStacks: 0 as const } : m,
+        ),
+      },
+    };
+  }
 
   const targetHp = Math.max(0, monster.hp - damage);
   const dead = targetHp <= 0;
@@ -69,6 +128,50 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
 
   events.push({ type: 'ATTACK', attackerId: 'PLAYER', targetId, damage, targetHp });
 
+  // 哥布林酋长首次进入狂暴：本次攻击使 HP 由 >阈值 跨到 ≤阈值且未死亡时，emit 一次供战报提示。
+  // hp 跨越天然只触发一次（之后攻击前 hp 已 ≤ 阈值）。
+  if (
+    !dead &&
+    monster.bossId === 'GOBLIN_CHIEF' &&
+    monster.hp > GOBLIN_CHIEF_ENRAGE_HP &&
+    targetHp <= GOBLIN_CHIEF_ENRAGE_HP
+  ) {
+    events.push({ type: 'BOSS_ENRAGED', bossId: 'GOBLIN_CHIEF' });
+  }
+
+  // 流沙巨蝎进入狂暴（HP 占比首次跌破阈值）：潜地间隔缩短、沙暴范围扩大。
+  if (
+    !dead &&
+    monster.bossId === 'QUICKSAND_SCORPION' &&
+    monster.hp / monster.maxHp > QUICKSAND_SCORPION_ENRAGE_HP_RATIO &&
+    targetHp / monster.maxHp <= QUICKSAND_SCORPION_ENRAGE_HP_RATIO
+  ) {
+    events.push({ type: 'BOSS_ENRAGED', bossId: 'QUICKSAND_SCORPION' });
+  }
+
+  // 冰霜巨人进入狂暴（HP 占比首次跌破阈值）：冰霜重击替换为「预警→冲锋」循环。
+  if (
+    !dead &&
+    monster.bossId === 'FROST_GIANT' &&
+    monster.hp / monster.maxHp > FROST_GIANT_ENRAGE_HP_RATIO &&
+    targetHp / monster.maxHp <= FROST_GIANT_ENRAGE_HP_RATIO
+  ) {
+    events.push({ type: 'BOSS_ENRAGED', bossId: 'FROST_GIANT' });
+  }
+
+  // 命运守卫跨过 50%：本处不 emit，由下一次怪物回合 tryCrossMirrorThreshold 实际生成镜像时 emit MIRROR_SPAWNED。
+
+  // 命运守卫跨过 30% → emit BOSS_ENRAGED（boss.enraged 字段由下一次怪物回合 tryCrossEnrageThreshold 写入并清空预言）。
+  if (
+    !dead &&
+    monster.bossId === 'FATE_GUARDIAN' &&
+    !monster.enraged &&
+    monster.hp / monster.maxHp > FATE_ENRAGE_HP_RATIO &&
+    targetHp / monster.maxHp <= FATE_ENRAGE_HP_RATIO
+  ) {
+    events.push({ type: 'BOSS_ENRAGED', bossId: 'FATE_GUARDIAN' });
+  }
+
   if (dead) {
     events.push({ type: 'KILL', monsterId: targetId, monsterType: monster.type });
     if (monster.bossId === 'FATE_MIRROR') {
@@ -78,6 +181,9 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
       next = dropResult.state;
       events.push(...dropResult.events);
     }
+    // 遗物：酋长怒吼 — 击杀后下次普攻 +50%（已 pending 时不重复标记）
+    const killBuff = relicOnKill(next.player);
+    next = { ...next, player: killBuff.nextPlayer };
   }
 
   return next;
@@ -129,7 +235,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return noop(state);
   if (!canAfford(floor.ap, 'ATTACK')) return noop(state);
-  // 潜地状态免疫玩家攻击（沙虫女王）
+  // 潜地状态免疫玩家攻击（流沙巨蝎）
   if (monster.isBurrowed) return noop(state);
 
   const traits = state.player.classTraits;
@@ -171,15 +277,33 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     damage *= 3; // ARCHER 暴击：20% 三倍伤害
   }
 
+  // Boss 装备 trait: boss_crit_15（命运之刃 15% 暴击 ×2，始终消耗 RNG 一次）
+  damage *= bossCritMult(state.player.equipment, rng);
+
   // 觉醒·处决(awakened_execute)：目标 HP ≤ 30% 时直接处决
   if (traits.includes('awakened_execute') && monster.hp / monster.maxHp <= 0.3) {
     damage = Math.max(damage, monster.hp);
   }
 
+  // ── 遗物伤害加成（CHIEF_ROAR / QUICKSAND_HEART）──
+  const relicAtk = relicComputeAttackBonus(state, damage);
+  damage += relicAtk.bonus;
+  let relicPlayerPatch: RunPlayer = relicAtk.nextPlayer;
+
+  // 熔岩领主：站在 LAVA_TILE 上时受到的伤害减免 LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION
+  if (monster.bossId === 'LAVA_LORD') {
+    const onLava = floor.entities.some(
+      (e) => e.type === 'LAVA_TILE' && !e.consumed && e.pos.x === monster.pos.x && e.pos.y === monster.pos.y,
+    );
+    if (onLava) {
+      damage = Math.max(1, Math.round(damage * (1 - LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION)));
+    }
+  }
+
   // ── 造伤 ──
   const targetHp = Math.max(0, monster.hp - damage);
   const dead = targetHp <= 0;
-  const events: PveEvent[] = [];
+  const events: PveEvent[] = [...relicAtk.events];
 
   // ── 玩家 HP 更新（吸血 / 血怒 / 觉醒·狂热回血；静默更新，HUD 在下一帧刷新）──
   let playerHp = state.player.hp;
@@ -187,6 +311,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   if (lifeStealCount > 0) {
     playerHp = Math.min(state.player.maxHp, playerHp + lifeStealCount * 10); // BERSERKER 吸血（可叠加）
   }
+  // Boss 装备 trait: on_hit_lifesteal_1（哥布林酋长战斧吸血 +5）
+  playerHp = bossLifesteal({ ...state.player, hp: playerHp });
   if (dead) {
     const bloodRageCount = traitCount(traits, 'blood_rage');
     if (bloodRageCount > 0) {
@@ -196,6 +322,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     if (bloodlustHeal > 0) {
       playerHp = Math.min(state.player.maxHp, playerHp + bloodlustHeal); // 嗜血本能/续命箭/放血（可叠加×5，+层数 HP）
     }
+    // Boss 装备 trait: boss_kill_heal_8（烈焰指环击杀回血）
+    playerHp = bossKillHeal(state.player, playerHp);
   }
   if (frenzyTriggered) {
     playerHp = Math.min(state.player.maxHp, playerHp + 20); // 觉醒·狂热回血
@@ -207,6 +335,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     ap: spend(floor.ap, 'ATTACK'),
     rngState: rng.state(),
     ...(vengeanceActive ? { vengeanceReady: false } : {}),
+    // 命运守卫行为镜像：玩家本回合至少一次发起攻击（endTurn 时供 recordPlayerActionForMirror 读取）
+    playerAttackedThisTurn: true,
   };
   if (backstabActive) {
     if (hasShadowStrike) {
@@ -229,11 +359,43 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   let nextState: ExpeditionState = {
     ...state,
-    player: { ...state.player, hp: playerHp },
+    player: { ...relicPlayerPatch, hp: playerHp },
     floorState: nextFloorState,
   };
 
   nextState = resolveHit(nextState, monsterId, damage, events);
+
+  // 遗物：永冻之核 — 命中后若 pending 则冰冻目标（消费 pending）。
+  // 注意：若 resolveHit 已致死，则不冰冻（已无意义）。
+  const targetStillAlive = nextState.floorState.monsters.find((m) => m.id === monsterId)?.aiState !== 'DEAD';
+  if (targetStillAlive) {
+    const freeze = relicOnHitTarget(nextState.player, monsterId);
+    if (freeze.freezeTargetId) {
+      nextState = {
+        ...nextState,
+        player: freeze.nextPlayer,
+        floorState: {
+          ...nextState.floorState,
+          monsters: applyFreezeToMonsters(nextState.floorState.monsters, freeze.freezeTargetId),
+        },
+      };
+      events.push(...freeze.events);
+    }
+
+    // Boss 装备 trait: 命中附加 debuff（boss_bleed_on_hit / boss_burn_on_hit / boss_slow_on_hit）
+    const debuffPatch = bossOnHitDebuffPatch(state.player.equipment);
+    if (Object.keys(debuffPatch).length > 0) {
+      nextState = {
+        ...nextState,
+        floorState: {
+          ...nextState.floorState,
+          monsters: nextState.floorState.monsters.map((m) =>
+            m.id === monsterId && m.aiState !== 'DEAD' ? { ...m, ...debuffPatch } : m,
+          ),
+        },
+      };
+    }
+  }
 
   // ── 横扫/散射/震荡波(cleave 系) + 觉醒·横扫(awakened_cleave)：对目标周围相邻怪物造成50%溅射伤害 ──
   if (traits.includes('awakened_cleave') || hasCleave(traits)) {
@@ -279,6 +441,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
       }
     }
   }
+
+  nextState = { ...nextState, floorState: consumeFreezeAttack(nextState.floorState, events) };
 
   return { state: nextState, events };
 }
@@ -328,7 +492,10 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   const armorReduction = (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player);
   const rawDamage = monster.attack;
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
-  const reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult;
+  let reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult;
+  // Boss 装备 trait: 物理减伤 + 站冰面减伤（叠加，上限 90%）
+  const bossReducePct = bossDamageReducePct(state.player, floor);
+  if (bossReducePct > 0) reducedDamage *= (1 - bossReducePct);
   const damage = Math.max(10, Math.round(reducedDamage - painToleranceReduction(traits, reducedDamage)));
 
   let hp = Math.max(0, state.player.hp - damage);
@@ -341,6 +508,32 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     dead = false;
     undyingTriggered = true;
   }
+
+  // ── 遗物：命运回响 — 不屈未触发但仍 dead 时兜底（每场远征一次），优先级低于不屈 ──
+  let nextPlayerAfterRelic = state.player;
+  let fateEchoEvent: PveEvent | null = null;
+  if (dead) {
+    const revive = relicTryRevive(state.player);
+    if (revive.revived) {
+      hp = revive.restoredHp;
+      dead = false;
+      nextPlayerAfterRelic = revive.nextPlayer;
+      fateEchoEvent = { type: 'RELIC_TRIGGERED', relicId: 'FATE_ECHO', detail: `兜底回 ${revive.restoredHp} HP` };
+    }
+  }
+  // ── Boss 装备 trait: 守卫圣盾（boss_revive_50）— 命运回响也未触发时，装备级再兜底一次 ──
+  if (dead) {
+    const shieldRevive = bossTryRevive(nextPlayerAfterRelic);
+    if (shieldRevive.revived) {
+      hp = shieldRevive.restoredHp;
+      dead = false;
+      nextPlayerAfterRelic = shieldRevive.nextPlayer;
+    }
+  }
+
+  // ── 遗物：熔火之心 — 受伤后反弹 30% 给攻击者（即便玩家被击杀也反弹一次）──
+  const reflectDamage = relicReflectDamage(nextPlayerAfterRelic, damage);
+  let reflectEvent: PveEvent | null = null;
 
   // ── 复仇系(vengeance/retreat_shot/retribution)：受击后下次主动攻击 +5 伤害 ──
   const vengeanceTriggered = !dead && hasVengeanceTrait(traits);
@@ -366,6 +559,33 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     );
   }
 
+  // ── 遗物：熔火之心反弹（不触发击杀，最低 1 HP；玩家死亡也反弹一次）──
+  if (reflectDamage > 0) {
+    nextMonsters = nextMonsters.map((m) =>
+      m.id === monsterId && m.aiState !== 'DEAD'
+        ? { ...m, hp: Math.max(1, m.hp - reflectDamage) }
+        : m,
+    );
+    reflectEvent = { type: 'RELIC_TRIGGERED', relicId: 'MAGMA_HEART', detail: `反弹 ${reflectDamage}` };
+  }
+  if (fateEchoEvent) events.push(fateEchoEvent);
+  if (reflectEvent) events.push(reflectEvent);
+
+  // ── Boss 装备 trait: boss_stun_on_hurt（破旧王冠 10% 受击眩晕攻击者）──
+  // 消耗 RNG 一次保证 AC-13 确定性；仅在玩家未死且攻击者未死时生效。
+  let stunRngState = floor.rngState;
+  if (!dead) {
+    const stunRng = createRng(stunRngState);
+    if (bossStunOnHurt(state.player, stunRng)) {
+      nextMonsters = nextMonsters.map((m) =>
+        m.id === monsterId && m.aiState !== 'DEAD'
+          ? { ...m, frozenRounds: STUN_ROUNDS }
+          : m,
+      );
+    }
+    stunRngState = stunRng.state();
+  }
+
   // ── 第一章变体怪物击中效果 ──────────────────────────────
   // 冰霜哥布林：移动AP+1持续2回合（叠加）
   const isFrost = !dead && monster.variantId === VARIANT_FROST_GOBLIN;
@@ -379,9 +599,10 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     state: {
       ...state,
       status: dead ? 'DEAD' : state.status,
-      player: { ...state.player, hp },
+      player: { ...nextPlayerAfterRelic, hp },
       floorState: {
         ...floor,
+        rngState: stunRngState,
         status: dead ? ('DEAD' as const) : floor.status,
         revealed,
         monsters: nextMonsters,
@@ -425,18 +646,18 @@ export function attackIceWall(state: ExpeditionState, entityId: string): ApplyRe
     { type: 'ATTACK', attackerId: 'PLAYER', targetId: entityId, damage, targetHp: newHp },
   ];
 
-  let next: ExpeditionState = {
-    ...state,
-    floorState: {
-      ...floor,
-      ap: spend(floor.ap, 'ATTACK'),
-      entities: floor.entities.map((e) =>
-        e.id === entityId
-          ? { ...e, hp: newHp, consumed: destroyed }
-          : e,
-      ),
-    },
+  let nextFloor: FloorState = {
+    ...floor,
+    ap: spend(floor.ap, 'ATTACK'),
+    entities: floor.entities.map((e) =>
+      e.id === entityId
+        ? { ...e, hp: newHp, consumed: destroyed }
+        : e,
+    ),
   };
+  nextFloor = consumeFreezeAttack(nextFloor, events);
+
+  let next: ExpeditionState = { ...state, floorState: nextFloor };
 
   if (destroyed) {
     events.push({ type: 'ICE_WALL_BROKEN', entityId, anima: CHAPTER3_ICE_WALL_DROP_ANIMA });

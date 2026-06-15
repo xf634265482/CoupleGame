@@ -4,12 +4,16 @@
 
 import { rollAp } from './ApSystem';
 import { traitCount } from './AnimaSystem';
+import { recordPlayerActionForMirror } from './bosses/FateGuardian';
 import { stepMonsters } from './MonsterAI';
 import { generateFloor } from './MapGenerator';
 import { getAwakenEligible } from './ClassSystem';
 import { applyFragmentBonus, buildPendingTreeChoices, deriveTreeRng, getTreeBonuses } from './DestinyTreeSystem';
+import { relicOnNewFloor } from './RelicSystem';
+import { isPlayerBurnImmune, tickMonsterDots } from './BossEquipTraitEffects';
 import {
   ANIMA_PER_STRENGTHEN,
+  AP_CARRY_CAP,
   CHAPTER4_LAVA_TILE_DAMAGE,
   INITIAL_ANIMA,
   INITIAL_CLASS,
@@ -84,6 +88,11 @@ export function startExpedition(runSeed: number, meta?: PveMeta): ExpeditionStat
   const treeBonuses = getTreeBonuses(meta?.unlockedTreeNodes);
   const treeRng = deriveTreeRng(runSeed);
   const player = createInitialPlayer(treeBonuses, treeRng);
+  // 遗物图鉴快照：开局从元数据复制到 player.codexRelics，供 Boss 掉落「图鉴已解锁 +10%」判定。
+  // 本场拾取新遗物时也会写入此字段，远征结束由 Controller 同步回云端 codex.relics。
+  if (meta?.codex?.relics && meta.codex.relics.length > 0) {
+    player.codexRelics = [...meta.codex.relics];
+  }
 
   // 新游戏玩家无词条，传空数组（保持函数签名一致）
   const floorState = startFloorTurn(generateFloor(floor, deriveFloorSeed(runSeed, floor)), [], treeBonuses.apDiceBonus);
@@ -111,7 +120,14 @@ export function endTurn(state: ExpeditionState): ApplyResult {
 
   const events: PveEvent[] = [{ type: 'TURN_END', turn: state.floorState.turn }];
 
-  const aiResult = stepMonsters(state);
+  // 命运守卫行为镜像：玩家回合结束、怪物回合开始之前，记录玩家本回合行为到活镜像的 pendingBehavior
+  // （ATTACK > MOVE > IDLE 优先级互斥；镜像在下个怪物回合按此执行）。
+  const attackedThisTurn = !!state.floorState.playerAttackedThisTurn;
+  const stepsThisTurn = state.floorState.playerStepsThisTurn ?? 0;
+  const mirrorRecord = recordPlayerActionForMirror(state, attackedThisTurn, stepsThisTurn);
+  events.push(...mirrorRecord.events);
+
+  const aiResult = stepMonsters(mirrorRecord.state);
   events.push(...aiResult.events);
   if (aiResult.state.status === 'DEAD') {
     return { state: aiResult.state, events };
@@ -123,20 +139,37 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   const treeApBonus = aiResult.state.player.treeBonuses?.apDiceBonus ?? 0;
   const nextTurn = aiResult.state.floorState.turn + 1;
 
-  const finalAp = ap + apBonus + treeApBonus;
+  // AP 结转：上回合剩余 AP 按 min(剩余, AP_CARRY_CAP + 命运树B2加成) 加到本回合上限
+  const carryCap = AP_CARRY_CAP + (aiResult.state.player.treeBonuses?.apCarryCapBonus ?? 0);
+  const carryAp = Math.min(aiResult.state.floorState.ap, carryCap);
+  let finalAp = ap + apBonus + treeApBonus + carryAp;
+
+  // 命运守卫 E5 命运封锁：上一个 Boss 回合写入 destinyLockNextTurn=true → 本回合 AP 减半（最少 1）
+  const destinyLocked = !!aiResult.state.floorState.destinyLockNextTurn;
+  if (destinyLocked) {
+    finalAp = Math.max(1, Math.floor(finalAp / 2));
+  }
+
   events.push({ type: 'AP_ROLLED', turn: nextTurn, dice, ap: finalAp });
+  if (carryAp > 0) events.push({ type: 'AP_CARRIED', amount: carryAp });
+  if (destinyLocked) events.push({ type: 'DESTINY_AP_LOCKED', nextTurnAp: finalAp });
+
+  // Boss 装备 trait: boss_burn_immune（焰心护胸）→ 玩家完全免疫熔岩/赤炎灼烧
+  const burnImmune = isPlayerBurnImmune(aiResult.state.player.equipment);
 
   // 熔岩领主灼烧 tick：每回合开始时 -10 HP（×10 基准，原 -1）
   const burnRemaining = aiResult.state.floorState.playerBurnRemaining ?? 0;
   let burnedHp = aiResult.state.player.hp;
   let newBurnRemaining = burnRemaining;
   let burnDead = false;
-  if (burnRemaining > 0) {
+  if (burnRemaining > 0 && !burnImmune) {
     burnedHp = Math.max(0, burnedHp - 10);
     newBurnRemaining = burnRemaining - 1;
     burnDead = burnedHp <= 0;
     events.push({ type: 'BURN_TICK', damage: 10, hp: burnedHp });
     if (burnDead) events.push({ type: 'PLAYER_DEAD' });
+  } else if (burnImmune && burnRemaining > 0) {
+    newBurnRemaining = 0; // 免疫时直接清空灼烧状态
   }
 
   // 赤炎哥布林灼烧 DoT：每回合累计 5HP（×10 基准，原 0.5HP），累计满 10 时结算一次整数伤害
@@ -144,7 +177,7 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   const fireBurnAccum = aiResult.state.floorState.playerFireBurnAccum ?? 0;
   let newFireBurnRounds = fireBurnRounds;
   let newFireBurnAccum = fireBurnAccum;
-  if (fireBurnRounds > 0 && !burnDead) {
+  if (fireBurnRounds > 0 && !burnDead && !burnImmune) {
     const newAccum = fireBurnAccum + 5;
     const fireDmg = Math.floor(newAccum / 10) * 10;
     newFireBurnAccum = newAccum - fireDmg;
@@ -155,7 +188,15 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       events.push({ type: 'BURN_TICK', damage: fireDmg, hp: burnedHp });
       if (burnDead) events.push({ type: 'PLAYER_DEAD' });
     }
+  } else if (burnImmune) {
+    newFireBurnRounds = 0;
+    newFireBurnAccum = 0;
   }
+
+  // 怪物 DoT tick（流血 / 灼烧 — boss_bleed_on_hit / boss_burn_on_hit 装备 trait）：
+  // 在玩家结算后处理，怪物可能因此死亡（不触发掉落，因为不是玩家直接击杀；避免装备 DoT 农怪刷资源）
+  const dotResult = tickMonsterDots(aiResult.state.floorState.monsters);
+  const dotMonsters = dotResult.monsters;
 
   // 移动AP惩罚倒计时
   const moveApPenaltyRounds = aiResult.state.floorState.playerMoveApPenaltyRounds ?? 0;
@@ -169,11 +210,11 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   let hpChanged = burnRemaining > 0 || (fireBurnRounds > 0 && Math.floor((fireBurnAccum + 5) / 10) > 0);
   const entitiesAfterLava: FixedEntity[] = [];
   for (const entity of aiResult.state.floorState.entities) {
-    if (entity.consumed || entity.remaining === undefined) {
+    if (entity.consumed) {
       entitiesAfterLava.push(entity);
       continue;
     }
-    const remaining = entity.remaining - 1;
+    // 熔岩地块踩入扣血：与 remaining 倒计时解耦，永久格子（无 remaining）同样生效。
     if (entity.type === 'LAVA_TILE') {
       const playerOnTile =
         aiResult.state.floorState.player.x === entity.pos.x && aiResult.state.floorState.player.y === entity.pos.y;
@@ -185,6 +226,11 @@ export function endTurn(state: ExpeditionState): ApplyResult {
         if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
       }
     }
+    if (entity.remaining === undefined) {
+      entitiesAfterLava.push(entity);
+      continue;
+    }
+    const remaining = entity.remaining - 1;
     if (remaining > 0) entitiesAfterLava.push({ ...entity, remaining });
   }
 
@@ -202,6 +248,7 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       turn: nextTurn,
       rngState: rng.state(),
       entities: entitiesAfterLava,
+      monsters: dotMonsters, // 应用怪物 DoT tick 结果（流血/灼烧）
       playerBurnRemaining: newBurnRemaining > 0 ? newBurnRemaining : undefined,
       playerFireBurnRounds: newFireBurnRounds > 0 ? newFireBurnRounds : undefined,
       playerFireBurnAccum: newFireBurnRounds > 0 ? newFireBurnAccum : undefined,
@@ -209,6 +256,9 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       status: lavaDead ? 'DEAD' : aiResult.state.floorState.status,
       shoesFirstMoveDone: undefined, // 每回合开始时重置靴子首步免费标记
       shadowStrikeCount: 0, // 觉醒·影袭：每回合开始时重置可用次数
+      destinyLockNextTurn: undefined, // 命运封锁本回合已结算（finalAp 已减半），清空
+      playerAttackedThisTurn: undefined, // 命运守卫行为镜像：玩家本回合行为状态重置
+      playerStepsThisTurn: undefined,
     },
   };
 
@@ -281,17 +331,21 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
     events.push({ type: 'CLASS_CAN_AWAKEN', classId: player.classId });
   }
 
-  return {
-    state: {
-      ...state,
-      chapter: chapterOfFloor(nextFloor),
-      floor: nextFloor,
-      status: 'ACTIVE',
-      player,
-      floorState,
-    },
-    events,
+  let next: ExpeditionState = {
+    ...state,
+    chapter: chapterOfFloor(nextFloor),
+    floor: nextFloor,
+    status: 'ACTIVE',
+    player,
+    floorState,
   };
+
+  // 遗物：流沙之心 — 进入新房间随机生成 2 格沙坑（消耗本层 rngState 推进，确定性）
+  const relicResult = relicOnNewFloor(next);
+  next = relicResult.state;
+  events.push(...relicResult.events);
+
+  return { state: next, events };
 }
 
 /**
