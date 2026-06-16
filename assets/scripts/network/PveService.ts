@@ -107,6 +107,11 @@ export interface UpdateMetaReport {
   codexMonsters?: string[];
   /** 本次新获得的装备槽位列表（EquipSlot）。 */
   codexEquipment?: string[];
+  /** 钻石余额净变化（营地遗物宝箱消费/退款时使用，负值为扣减、正值为返还）。
+   *  云端边界校验：扣减后不得 < 0，否则整次更新拒绝。 */
+  diamond?: number;
+  /** 本次新解锁的 Boss 遗物图鉴 id 列表（首次拾取时 emit）。 */
+  codexRelics?: string[];
 }
 
 /** 读取局外元进度（命运碎片余额 + 成就 + 图鉴，→ AC-20）。 */
@@ -133,5 +138,13 @@ export async function unlockTreeNode(nodeId: string): Promise<LoadMetaResponse> 
   return ensureOk(
     await callFunction<LoadMetaResponse>('pve', { action: 'unlockTreeNode', nodeId }),
     'PVE_UNLOCK_TREE_NODE_FAILED',
+  );
+}
+
+/** 重置命运树（消耗 20 钻石，退还全部命运碎片，清空已解锁节点，→ specs/game-design/命运树设计V1.md §七）。 */
+export async function resetTree(): Promise<LoadMetaResponse> {
+  return ensureOk(
+    await callFunction<LoadMetaResponse>('pve', { action: 'resetTreeNodes' }),
+    'PVE_RESET_TREE_FAILED',
   );
 }

@@ -150,7 +150,7 @@ async function getUserPveMeta(userId) {
  * 追加 PVE 元进度条目（成就 + 图鉴，→ AC-20）：读取已有数据 → 合并去重 → 写回。
  * 幂等：已有的条目不会重复写入。
  */
-async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters = [], codexEquipment = [] }) {
+async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters = [], codexEquipment = [], codexRelics = [], diamond = 0 }) {
   const user = await getUserById(userId);
   if (!user) {
     const err = new Error('USER_NOT_FOUND');
@@ -162,29 +162,47 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
   const existAch = new Set(user.achievements ?? []);
   const existMon = new Set(user.pveCodex?.monsters ?? []);
   const existEq  = new Set(user.pveCodex?.equipment ?? []);
+  const existRelics = new Set(user.pveCodex?.relics ?? []);
 
   // 过滤出真正新增的条目
   const addAch = newAchievements.filter((id) => !existAch.has(id));
   const addMon = codexMonsters.filter((t)  => !existMon.has(t));
   const addEq  = codexEquipment.filter((s) => !existEq.has(s));
+  const addRelics = codexRelics.filter((r) => !existRelics.has(r));
 
-  if (addAch.length === 0 && addMon.length === 0 && addEq.length === 0) return;
+  // 钻石净变化（营地遗物宝箱）：边界校验余额不得 < 0
+  let diamondDelta = Number.isFinite(diamond) ? Math.trunc(diamond) : 0;
+  if (diamondDelta < 0) {
+    const cur = user.diamond ?? 0;
+    if (cur + diamondDelta < 0) {
+      const err = new Error('INSUFFICIENT_DIAMOND');
+      err.code = 'INSUFFICIENT_DIAMOND';
+      throw err;
+    }
+  }
+
+  if (addAch.length === 0 && addMon.length === 0 && addEq.length === 0 && addRelics.length === 0 && diamondDelta === 0) return;
 
   // 合并后写回（整体替换数组，兼容微信云数据库）
   const mergedAch = [...existAch, ...addAch];
   const mergedMon = [...existMon, ...addMon];
   const mergedEq  = [...existEq,  ...addEq];
+  const mergedRelics = [...existRelics, ...addRelics];
+
+  const data = {
+    achievements: mergedAch,
+    pveCodex: { monsters: mergedMon, equipment: mergedEq, relics: mergedRelics },
+    updatedDate: serverDate(),
+  };
+  if (diamondDelta !== 0) {
+    const _ = getDb().command;
+    data.diamond = _.inc(diamondDelta);
+  }
 
   await getDb()
     .collection(COLLECTIONS.USERS)
     .doc(user._id)
-    .update({
-      data: {
-        achievements: mergedAch,
-        pveCodex: { monsters: mergedMon, equipment: mergedEq },
-        updatedDate: serverDate(),
-      },
-    });
+    .update({ data });
 }
 
 /** PVE 元进度账户资产入账：钻石（与 PVP 共享）+ 命运碎片（PVE 专属，→ ddl-sql.md §2）。 */
@@ -255,6 +273,58 @@ async function unlockUserTreeNode(userId, nodeId) {
   };
 }
 
+/**
+ * 重置命运树（→ specs/game-design/命运树设计V1.md §七）：
+ * 扣除 TREE_RESET_DIAMOND_COST(20) 钻石，退还所有已解锁节点的命运碎片总和，清空 unlockedTreeNodes。
+ * 校验失败抛出带 code 的 Error：INSUFFICIENT_DIAMOND / TREE_ALREADY_EMPTY。
+ */
+async function resetUserTreeNodes(userId) {
+  const { DESTINY_TREE_NODES } = require('./pve/PveDestinyTree');
+  const RESET_COST = 20;
+
+  const user = await getUserById(userId);
+  if (!user) {
+    const err = new Error('USER_NOT_FOUND'); err.code = 'USER_NOT_FOUND'; throw err;
+  }
+
+  const unlocked = user.unlockedTreeNodes ?? [];
+  if (unlocked.length === 0) {
+    const err = new Error('命运树尚未解锁任何节点'); err.code = 'TREE_ALREADY_EMPTY'; throw err;
+  }
+
+  const diamond = user.diamond ?? 0;
+  if (diamond < RESET_COST) {
+    const err = new Error(`钻石不足（需要 ${RESET_COST}，当前 ${diamond}）`); err.code = 'INSUFFICIENT_DIAMOND'; throw err;
+  }
+
+  const nodeMap = Object.fromEntries(DESTINY_TREE_NODES.map((n) => [n.id, n.cost]));
+  const refundShards = unlocked.reduce((sum, id) => sum + (nodeMap[id] ?? 0), 0);
+  const nextShards = (user.destinyShards ?? 0) + refundShards;
+
+  await getDb()
+    .collection(COLLECTIONS.USERS)
+    .doc(user._id)
+    .update({
+      data: {
+        diamond: getDb().command.inc(-RESET_COST),
+        destinyShards: nextShards,
+        unlockedTreeNodes: [],
+        updatedDate: serverDate(),
+      },
+    });
+
+  return {
+    destinyShards: nextShards,
+    diamond: diamond - RESET_COST,
+    achievements: user.achievements ?? [],
+    codex: {
+      monsters: user.pveCodex?.monsters ?? [],
+      equipment: user.pveCodex?.equipment ?? [],
+    },
+    unlockedTreeNodes: [],
+  };
+}
+
 async function getPveSaveByUserId(userId) {
   const { data } = await getDb()
     .collection(COLLECTIONS.PVE_SAVES)
@@ -317,6 +387,7 @@ module.exports = {
   getUserPveMeta,
   updateUserPveMeta,
   unlockUserTreeNode,
+  resetUserTreeNodes,
   getPveSaveByUserId,
   putPveSave,
   deletePveSave,

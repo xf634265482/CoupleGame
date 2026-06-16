@@ -9,7 +9,7 @@
  *   users.unlockedTreeNodes – 已解锁的命运树节点 id 列表（→ unlockTreeNode）
  */
 
-const { getUserPveMeta, updateUserPveMeta, unlockUserTreeNode } = require('../db');
+const { getUserPveMeta, updateUserPveMeta, unlockUserTreeNode, resetUserTreeNodes } = require('../db');
 
 /**
  * 读取用户 PVE 元进度快照。
@@ -21,17 +21,21 @@ async function loadMeta(user) {
 }
 
 /**
- * 追加 PVE 元进度条目（幂等，只追加未有的项）：
+ * 追加 PVE 元进度条目（幂等，只追加未有的项；钻石支持净增减）：
  * @param {object} report
  * @param {string[]} [report.newAchievements]  - 本次解锁的成就 id 列表
  * @param {string[]} [report.codexMonsters]    - 本次新见到的怪物类型列表
  * @param {string[]} [report.codexEquipment]   - 本次新获得的装备槽位列表
+ * @param {string[]} [report.codexRelics]      - 本次新解锁的 Boss 遗物图鉴 id 列表
+ * @param {number}   [report.diamond]          - 钻石余额净变化（营地遗物宝箱）；扣减后余额 < 0 时整次更新拒绝
  */
 async function updateMeta(user, report = {}) {
   await updateUserPveMeta(user.id, {
     newAchievements: report.newAchievements ?? [],
     codexMonsters:   report.codexMonsters   ?? [],
     codexEquipment:  report.codexEquipment  ?? [],
+    codexRelics:     report.codexRelics     ?? [],
+    diamond:         report.diamond         ?? 0,
   });
   return { ok: true };
 }
@@ -45,4 +49,13 @@ async function unlockTreeNode(user, nodeId) {
   return { meta };
 }
 
-module.exports = { loadMeta, updateMeta, unlockTreeNode };
+/**
+ * 重置命运树（消耗 20 钻石，退还全部已解锁节点命运碎片，清空 unlockedTreeNodes）。
+ * 校验失败抛 INSUFFICIENT_DIAMOND / TREE_ALREADY_EMPTY。
+ */
+async function resetTreeNodes(user) {
+  const meta = await resetUserTreeNodes(user.id);
+  return { meta };
+}
+
+module.exports = { loadMeta, updateMeta, unlockTreeNode, resetTreeNodes };

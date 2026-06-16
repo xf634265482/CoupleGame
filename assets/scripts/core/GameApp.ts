@@ -6,7 +6,6 @@ import { initWxCloud } from '../platform/wechat/WxCloudInit';
 import { login } from '../platform/wechat/WxAuth';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
 import { refreshScreenAdapt } from '../platform/wechat/ViewAdapt';
-import { playMainBgm } from '../audio/BgmController';
 import {
   ensureResourcesBundle,
   getCachedSprite,
@@ -25,14 +24,6 @@ export class GameApp extends Component {
   @property(Label)
   statusLabel: Label | null = null;
 
-  private async _tryStartBgm(bundle: Awaited<ReturnType<typeof ensureResourcesBundle>>) {
-    if (!bundle) {
-      return;
-    }
-    console.log('[GameApp] start BGM…');
-    await playMainBgm(bundle);
-  }
-
   async onLoad() {
     if (PERF_TRACE_ENABLED) PerfMarks.mark('app_start');
     lockPortrait();
@@ -41,8 +32,7 @@ export class GameApp extends Component {
     this._setStatus('初始化…');
     if (typeof wx === 'undefined' || !wx.cloud) {
       this._setStatus('编辑器预览：加载资源…');
-      const bundle = await ensureResourcesBundle();
-      await this._tryStartBgm(bundle);
+      await ensureResourcesBundle();
       this._setStatus('编辑器预览：2 秒后进入大厅（无 wx 登录）');
       this.scheduleOnce(() => SceneLoader.loadLobby(), 2);
       return;
@@ -87,9 +77,6 @@ export class GameApp extends Component {
       void lobbyUiReady; // 后台继续 preload，缺图回填由 LobbyController 处理
       void preloadLobbyBackgroundAssets().then(() => {
         if (PERF_TRACE_ENABLED) PerfMarks.mark('lobby_bg_preload_done');
-      });
-      void this._tryStartBgm(bundle).then(() => {
-        if (PERF_TRACE_ENABLED) PerfMarks.mark('bgm_started');
       });
       if (PERF_TRACE_ENABLED) setTimeout(() => PerfMarks.dump(), 0);
     } catch (err: unknown) {

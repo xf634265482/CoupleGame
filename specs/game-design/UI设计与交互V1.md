@@ -82,7 +82,12 @@ HP / AP 已回到顶部网格第一行（与楼层/攻击力同行），玩家�
 | 右侧 D-pad（贴近动作区） | 键盘方向键布局：「上」在上方居中，「左/下/右」一排在下方，各 84px | `makeFlatButton` 占位，触发 `onMove(dir)`；中心 `cx=screenW/2-305, cy=-screenH/2+105`（移到屏幕右侧、贴近攻击/交互/结束回合按钮簇，与动作按钮间距约 35px，便于单手操作），按钮间距 94px |
 | 右下动作区 | 攻击 / 交互 / 结束回合（110×60px） | 分别触发 `onAttack` / `onInteract` / `onEndTurn`，`cy=-screenH/2+105`，与 D-pad 中心对齐 |
 
-`ExpeditionController` 同时监听 `Input.EventType.KEY_DOWN`（编辑器/PC 预览用，不影响真机触屏）：方向键/WASD → `onMove`，空格/J → `onAttack`，E/K → `onInteract`，回车 → `onEndTurn`。
+`ExpeditionController` 监听键盘供**电脑端玩家**操作：方向键/WASD → `onMove`，空格/J → `onAttack`，E/K → `onInteract`，回车 → `onEndTurn`。两条互补路径覆盖不同 PC 客户端：
+
+- **cc.input `KEY_DOWN`（`_onKeyDown`，按 `KeyCode` 派发）**：引擎仅在 `sys.Feature.EVENT_KEYBOARD===true`（实测为 `os===WINDOWS && !isDevTool`）时才注册底层 `wx.onKeyDown`，故只在 **Windows 微信客户端** 生效。
+- **`wx.onKeyDown` 兜底（`_onWxKeyDown` → `_handleKeyByCode`，按 `KeyboardEvent.code` 派发）**：当 `EVENT_KEYBOARD===false`（如 **Mac 微信客户端**，`os!==WINDOWS`）时引擎不接管，但 `wx.onKeyDown` 在 Mac 客户端仍受支持，故手动绑定补齐。`onLoad` 中 gated on `!EVENT_KEYBOARD`，与 cc.input 路径互斥、不会重复触发；`onDestroy` 对称 `wx.offKeyDown`。
+
+> **平台限制（已实测）**：**微信开发者工具模拟器**里 `EVENT_KEYBOARD===false`，且既不转发 cc.input KEY_DOWN，也不触发 `wx.onKeyDown` / `document.keydown`（三者皆静默）——即**模拟器无法测试键盘**。需用 **PC 微信客户端**（上传版本后在 Windows/Mac 微信打开）或 **浏览器预览**（cc.input 在 web 平台原生支持键盘）验证。手机真机无物理键盘，不影响触屏操作。
 | 地图与战报栏之间 | 「返回」「角色」按钮，`SUB_BTN_Y=-screenH/2+274`，各 120×44px，分别位于 x=-150 / x=150 | 「返回」触发 `onQuit` → `SceneLoader.loadLobby()`；「角色」触发 `onShowCharacter()` → 弹出 `PveCharacterPanel` |
 
 `setVisible(visible)` 用于战斗结束/弹窗期间隐藏整个 HUD（避免弹窗下误触）。
@@ -94,7 +99,7 @@ HP / AP 已回到顶部网格第一行（与楼层/攻击力同行），玩家�
 - 内容分区（自上而下）：
 
   1. **基础属性**：职业（`classId`）、HP/maxHp、攻击力+攻击范围、金币&灵气、AP+骰子、钥匙数。
-  2. **装备**：5 槽位（武器/头盔/护甲/鞋子/饰品），每项显示品质 + `baseStat` + 词条。
+  2. **装备**：5 槽位（武器/头盔/护甲/鞋子/饰品），每行可**点击**展开详情浮层（`EquipDetailPopup`，440×210px，动态品质边框色，显示：装备名（品质色）/ 槽位·品质 / 主属性效果 / 词条）。空槽点击无反应，有装备的槽位标注 `★`（有词条）与 `▸`（可点）提示。品质颜色：普通=灰、精良=绿、稀有=蓝、史诗=紫、传奇=橙金。
   3. **词条**：`classTraits` 列表（职业进阶词条 + 灵气强化获得的通用词条）。
   4. **职业碎片**：按职业分类显示当前碎片数 / 进阶阈值。
      > **待更新**：当前面板硬编码显示 `/3`，但 [职业系统V1 §二](职业系统V1.md#二碎片与进阶流程v2节奏调整) 的 V2 节奏调整已将 `CLASS_FRAGMENTS_TO_ADVANCE` 改为 **5**，该面板的阈值显示需同步改为 `/5`（已知缺口，待后续任务修复）。
@@ -155,7 +160,7 @@ M1 无怪物进场动画/弹窗，玩家此前无法得知"出现了什么怪物
 
 - **发现怪物**：`REVEAL` 事件揭示的格子中若含存活怪物，追加 `ENEMY_ACT` 条目「👀 发现 哥布林弓箭手！」（多个怪物用顿号分隔）。
 - **击杀怪物**：`KILL` 事件的 `PLAYER_ACT` 条目从「击杀了一个敌人」改为「💀 击杀了 冰霜哥布林」；对应 toast 同步改为「击败了 冰霜哥布林！」。
-- 怪物中文名映射覆盖第一章全部变体（哥布林战士/哥布林弓箭手/冰霜哥布林/赤炎哥布林/灵鼠）与各章 Boss（哥布林酋长/沙虫女王/冰霜巨人/熔岩领主/命运守卫）；未命中映射时按 `MonsterType` 兜底显示"普通怪/灵气怪/精英怪/Boss"。
+- 怪物中文名映射覆盖第一章全部变体（哥布林战士/哥布林弓箭手/冰霜哥布林/赤炎哥布林/灵鼠）与各章 Boss（哥布林酋长/流沙巨蝎/冰霜巨人/熔岩领主/命运守卫）；未命中映射时按 `MonsterType` 兜底显示"普通怪/灵气怪/精英怪/Boss"。
 
 ## 九、命运树场景（DestinyTreeView + DestinyTreeController）
 

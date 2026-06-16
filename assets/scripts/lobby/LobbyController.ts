@@ -36,7 +36,7 @@ import { parseLaunchRoomCode, shareRoom } from '../platform/wechat/WxShare';
 import type { PlayerSlotVO, RoomVO } from '../types/GameTypes';
 import { RoomController } from './RoomController';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
-import { playMainBgm } from '../audio/BgmController';
+import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
   ensureResourcesBundle,
@@ -1395,6 +1395,7 @@ export class LobbyController extends Component {
    * spinner 先完成一次渲染。
    */
   private _gotoScene(text: string, load: () => void): void {
+    stopMainBgm();
     LoadingOverlay.show(this.node, text, () => this._setStatus('加载较慢，请检查网络'));
     this.scheduleOnce(load, 0);
   }
@@ -1840,6 +1841,7 @@ export class LobbyController extends Component {
   }
 
   onDestroy() {
+    stopMainBgm();
     this._stopListPoll();
     this._unbindWindowResize?.();
     this._unbindWindowResize = null;

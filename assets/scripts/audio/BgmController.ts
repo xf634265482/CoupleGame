@@ -235,6 +235,9 @@ function playWechatBgm(): Promise<void> {
 
 /** GameApp / 大厅：优先 bootstrap 上的 BgmController，否则用持久 fallback 节点 */
 export function playMainBgm(bundle: AssetManager.Bundle): Promise<void> {
+  if (typeof wx !== 'undefined') {
+    bindWechatAudioUnlock(resumeMainBgmAfterTouch);
+  }
   if (isWechatRealDevice()) {
     console.log('[BgmController] wx real-device — inner audio from main native');
     return playWechatBgm();
@@ -263,6 +266,21 @@ export function playMainBgm(bundle: AssetManager.Bundle): Promise<void> {
       resolve();
     });
   });
+}
+
+export function stopMainBgm(): void {
+  unbindWechatAudioUnlock();
+  if (isWechatInnerAudioRuntime() && wxBgmAudio) {
+    wxBgmAudio.stop();
+  }
+  const ctrl = getBgmController();
+  if (ctrl) {
+    ctrl.stopBgm();
+  }
+  const audio = ensureFallbackAudioSource();
+  if (audio?.playing) {
+    audio.stop();
+  }
 }
 
 export function resumeMainBgmAfterTouch(): void {
@@ -356,6 +374,14 @@ export class BgmController extends Component {
     console.log('[BgmController] resume after touch, playing=', audio.playing);
     if (audio.playing) {
       unbindWechatAudioUnlock();
+    }
+  }
+
+  stopBgm(): void {
+    this._started = false;
+    const audio = this.getComponent(AudioSource);
+    if (audio?.playing) {
+      audio.stop();
     }
   }
 

@@ -2,7 +2,7 @@ const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
 const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
-const { loadMeta, updateMeta, unlockTreeNode } = require('./common/pve/PveMeta');
+const { loadMeta, updateMeta, unlockTreeNode, resetTreeNodes } = require('./common/pve/PveMeta');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -49,6 +49,11 @@ exports.main = async (event = {}) => {
 
     if (action === 'unlockTreeNode') {
       const { meta } = await unlockTreeNode(user, event.nodeId);
+      return { ok: true, meta };
+    }
+
+    if (action === 'resetTreeNodes') {
+      const { meta } = await resetTreeNodes(user);
       return { ok: true, meta };
     }
 

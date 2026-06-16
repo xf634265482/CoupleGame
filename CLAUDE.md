@@ -68,10 +68,21 @@ node scripts/patch-wechatgame-config.js  # Cocos 构建后跑（细节见 .curso
 
 每次重大改动后的真机发布流程、主包 4MB 红线、`UiAssets` critical native 清单规则 —— 全部见 `.cursor/rules/cocos-wechatgame-subpackage.mdc`（"2026-06 真机 UI/BGM 事故复盘"那节是必读）。
 
+## 代码导航规则（必须遵守）
+
+1. **定位功能时，优先阅读 `PROJECT_NAVIGATION.md`**，通过系统列表找到入口文件，再打开代码。
+2. **理解调用链时，优先查 `CALL_FLOW.md`**，找到对应操作的完整执行路径。
+3. **修改代码时，从导航指定的入口文件开始，逐层向下追踪**，不要从中间层切入。
+4. **除非导航无法定位，否则禁止全项目全文搜索**（`grep -r` 整个 `assets/` 或 `cloudfunctions/`）。
+5. **如果发现导航文档指向的入口不准确或缺失**，先更新 `PROJECT_NAVIGATION.md` / `CALL_FLOW.md`，再继续开发。
+
 ## 文档入口（按问题查）
 
 | 想查什么 | 去哪里 |
 |----------|--------|
+| **系统入口 / 文件职责** | `PROJECT_NAVIGATION.md` |
+| **操作的完整调用链** | `CALL_FLOW.md` |
+| **开发规则 / 常见陷阱** | `DEVELOPMENT_GUIDE.md` |
 | 项目入门 / 构建 / 云函数部署 | `README.md` |
 | PVP 玩法规则 / AC / 双端联调 | `specs/260529-combat-board-game-rework/` |
 | PVE 玩法规则 / AC / 数值 | `specs/260608-pve-destiny-expedition/` |
