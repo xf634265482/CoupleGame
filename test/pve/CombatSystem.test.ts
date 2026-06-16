@@ -84,7 +84,7 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
       expect((loot.gold ?? 0) + (loot.anima ?? 0)).toBeGreaterThan(0);
     });
 
-    it('AC-10 Boss 击杀必掉装备：哥布林酋长死亡 → WEAPON 槽装入「哥布林酋长的战斧」', () => {
+    it('AC-10 Boss 击杀必掉装备：哥布林酋长死亡 → 装入 3 件专属之一（战斧/号角/王冠）', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 4, y: 4 },
@@ -102,11 +102,15 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
       });
 
       const result = playerAttack(state, 'boss');
-      expect(result.state.player.equipment.WEAPON).toBeDefined();
-      expect(result.state.player.equipment.WEAPON?.name).toBe('哥布林酋长的战斧');
-      expect(result.state.player.equipment.WEAPON?.slot).toBe('WEAPON');
       const loot = result.events.find((e) => e.type === 'LOOT');
-      expect(loot && loot.type === 'LOOT' && loot.equip?.name).toBe('哥布林酋长的战斧');
+      expect(loot && loot.type === 'LOOT').toBe(true);
+      if (loot && loot.type === 'LOOT') {
+        expect(loot.equip).toBeDefined();
+        expect(['哥布林酋长战斧', '战争号角', '破旧王冠']).toContain(loot.equip!.name);
+        // 实际装备到对应槽位
+        const equipped = result.state.player.equipment[loot.equip!.slot];
+        expect(equipped?.name).toBe(loot.equip!.name);
+      }
     });
 
     it('同 seed 同操作 → 同掉落（确定性 AC-13）', () => {
@@ -234,7 +238,7 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
       // 攻击者所在格此前未揭示，攻击时一并揭示该格
       expect(result.events).toEqual([
         { type: 'REVEAL', cells: [{ x: 4, y: 5 }] },
-        { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1' },
+        { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1', rawDamage: 20 },
       ]);
       expect(result.state.status).toBe('ACTIVE');
     });

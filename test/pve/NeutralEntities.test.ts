@@ -63,8 +63,8 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
     });
   });
 
-  describe('useHotSpring（温泉 · 当次回满 HP）', () => {
-    it('玩家受伤后泡温泉：扣 AP、HP 回满、emit HOT_SPRING_HEAL', () => {
+  describe('useHotSpring（温泉 · 恢复 maxHp 的 40%）', () => {
+    it('玩家受伤后泡温泉：扣 AP、HP 恢复 40% maxHp、emit HOT_SPRING_HEAL', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 4, y: 4 },
@@ -74,12 +74,12 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
         playerOverrides: { hp: 5, maxHp: 20 },
       });
 
+      // 40% × 20 = 8，hp: 5 → 13，healed = 8
       const result = useHotSpring(state, 's1');
-      expect(result.state.player.hp).toBe(20); // 回满（HEAL_RATIO=1.0）
+      expect(result.state.player.hp).toBe(13);
       expect(result.state.floorState.ap).toBe(4);
       const heal = result.events.find((e) => e.type === 'HOT_SPRING_HEAL');
-      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(15);
-      // 防回归：HEAL_RATIO 改回 1.0 以下时仍走数学公式
+      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(8);
       expect(HOT_SPRING_HEAL_RATIO).toBeGreaterThan(0);
     });
 
@@ -177,7 +177,7 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
   });
 
   describe('upgradeEquip（铁匠强化）', () => {
-    it('有装备 + 金币充足：扣 UPGRADE_COST 金币，WEAPON baseStat+10（×10基准），emit BLACKSMITH_UPGRADE', () => {
+    it('有装备 + 金币充足：扣 UPGRADE_COST×step 金币，COMMON WEAPON baseStat+1，emit BLACKSMITH_UPGRADE', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 5, y: 5 },
@@ -190,10 +190,11 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
       });
 
       const result = upgradeEquip(state, 'smith', 'WEAPON');
-      expect(result.state.player.equipment.WEAPON?.baseStat).toBe(20);
-      expect(result.state.player.gold).toBe(50 - BLACKSMITH_UPGRADE_COST);
+      // COMMON step=1：baseStat 10→11；费用 = 20×1×(0+1) = 20
+      expect(result.state.player.equipment.WEAPON?.baseStat).toBe(11);
+      expect(result.state.player.gold).toBe(50 - BLACKSMITH_UPGRADE_COST); // 20×1×1=20
       expect(result.events).toEqual([
-        { type: 'BLACKSMITH_UPGRADE', entityId: 'smith', slot: 'WEAPON', newStat: 20 },
+        { type: 'BLACKSMITH_UPGRADE', entityId: 'smith', slot: 'WEAPON', newStat: 11, newEnhanceLevel: 1 },
       ]);
       // 实体不消耗（铁匠可多次使用）
       expect(result.state.floorState.entities.find((e) => e.id === 'smith')?.consumed).toBe(false);
@@ -240,7 +241,8 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
 
       const result = upgradeEquip(state, 'smith', 'WEAPON');
       expect(result.state.player.gold).toBe(0);
-      expect(result.state.player.equipment.WEAPON?.baseStat).toBe(20);
+      // COMMON step=1：baseStat 10→11
+      expect(result.state.player.equipment.WEAPON?.baseStat).toBe(11);
     });
   });
 

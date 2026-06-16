@@ -1,4 +1,5 @@
-import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS, SELL_PRICE } from '../../assets/scripts/pve/core/CampSystem';
+import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS, openRelicChest, SELL_PRICE } from '../../assets/scripts/pve/core/CampSystem';
+import { RELIC_CHEST } from '../../assets/scripts/pve/core/PveConstants';
 import { makeExpeditionState, makeRunPlayer } from './helpers';
 
 // ── 夹具辅助 ─────────────────────────────────────────────
@@ -232,5 +233,115 @@ describe('CampSystem — applySellEquip（变卖装备）', () => {
     const state = makeExpeditionState({ playerOverrides: { equipment: { WEAPON: WEAPON_ITEM } } });
     const result = applySellEquip(state, 'WEAPON');
     expect(result.state.floorState).toBe(state.floorState);
+  });
+});
+
+// ── 营地遗物宝箱（design Boss设计V1）─────────────────────────
+
+describe('CampSystem — openRelicChest（遗物宝箱）', () => {
+  function richState(chapter: number, relics: string[] = []) {
+    return makeExpeditionState({
+      chapter,
+      playerOverrides: { gold: RELIC_CHEST.COST_GOLD + 100, relics: relics as never },
+    });
+  }
+
+  it('金币不足时 no-op（不扣资源，不 emit）', () => {
+    const state = makeExpeditionState({ chapter: 1, playerOverrides: { gold: 100 } });
+    const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+    expect(result.state).toBe(state);
+    expect(result.events).toEqual([]);
+    expect(result.diamondDelta).toBe(0);
+  });
+
+  it('钻石不足时 no-op', () => {
+    const state = richState(1);
+    const result = openRelicChest(state, 10);
+    expect(result.state).toBe(state);
+    expect(result.events).toEqual([]);
+    expect(result.diamondDelta).toBe(0);
+  });
+
+  it('扣金币 + diamondDelta 携带钻石扣减', () => {
+    const state = richState(1);
+    const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+    expect(result.state.player.gold).toBeLessThan(state.player.gold);
+    // 命中（10%）时金币可能因「已持有补偿」回流，但本次未持有的话只扣不退
+    // 至少：扣了 COST_GOLD，最多回流 0（未中或拾取新遗物）
+    const goldSpentNet = state.player.gold - result.state.player.gold;
+    expect(goldSpentNet).toBeGreaterThanOrEqual(0);
+    expect(goldSpentNet).toBeLessThanOrEqual(RELIC_CHEST.COST_GOLD);
+    // 钻石至少扣了 COST_DIAMOND（可能因「已持有补偿」部分退还）
+    expect(result.diamondDelta).toBeLessThanOrEqual(-Math.ceil(RELIC_CHEST.COST_DIAMOND * (1 - RELIC_CHEST.REFUND_PCT)));
+    expect(result.diamondDelta).toBeGreaterThanOrEqual(-RELIC_CHEST.COST_DIAMOND);
+  });
+
+  it('emit RELIC_CHEST_OPENED 事件', () => {
+    const state = richState(1);
+    const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+    const ev = result.events.find((e) => e.type === 'RELIC_CHEST_OPENED');
+    expect(ev).toBeDefined();
+  });
+
+  it('章节绑定：第 2 章营地宝箱只能开 QUICKSAND_HEART', () => {
+    // 取多次样本，所有"中奖"的 relicId 都应是 QUICKSAND_HEART
+    let opened: string | undefined;
+    for (let seed = 1; seed <= 50; seed++) {
+      const state = makeExpeditionState({
+        seed,
+        chapter: 2,
+        playerOverrides: { gold: RELIC_CHEST.COST_GOLD + 100 },
+      });
+      const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+      const ev = result.events.find((e) => e.type === 'RELIC_CHEST_OPENED');
+      if (ev?.type === 'RELIC_CHEST_OPENED' && ev.success && ev.relicId) {
+        opened = ev.relicId;
+        break;
+      }
+    }
+    expect(opened).toBe('QUICKSAND_HEART');
+  });
+
+  it('已持有该遗物时，命中开出 → 30% 资源返还（refunded=true）', () => {
+    // 找一个会命中的种子（10% 概率，多取几个种子保证）
+    let refundedEv: { refundGold?: number; refundDiamond?: number } | undefined;
+    for (let seed = 1; seed <= 200; seed++) {
+      const state = makeExpeditionState({
+        seed,
+        chapter: 1,
+        playerOverrides: {
+          gold: RELIC_CHEST.COST_GOLD + 100,
+          relics: ['CHIEF_ROAR' as never],
+        },
+      });
+      const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+      const ev = result.events.find((e) => e.type === 'RELIC_CHEST_OPENED');
+      if (ev?.type === 'RELIC_CHEST_OPENED' && ev.refunded) {
+        refundedEv = { refundGold: ev.refundGold, refundDiamond: ev.refundDiamond };
+        break;
+      }
+    }
+    expect(refundedEv).toBeDefined();
+    expect(refundedEv?.refundGold).toBe(Math.round(RELIC_CHEST.COST_GOLD * RELIC_CHEST.REFUND_PCT));
+    expect(refundedEv?.refundDiamond).toBe(Math.round(RELIC_CHEST.COST_DIAMOND * RELIC_CHEST.REFUND_PCT));
+  });
+
+  it('命中且未持有时，emit RELIC_PICKUP，relics 中加入', () => {
+    // 取多个种子直到命中
+    let pickupResult: ReturnType<typeof openRelicChest> | undefined;
+    for (let seed = 1; seed <= 200; seed++) {
+      const state = makeExpeditionState({
+        seed,
+        chapter: 1,
+        playerOverrides: { gold: RELIC_CHEST.COST_GOLD + 100 },
+      });
+      const result = openRelicChest(state, RELIC_CHEST.COST_DIAMOND);
+      if (result.events.some((e) => e.type === 'RELIC_PICKUP')) {
+        pickupResult = result;
+        break;
+      }
+    }
+    expect(pickupResult).toBeDefined();
+    expect(pickupResult!.state.player.relics).toContain('CHIEF_ROAR');
   });
 });

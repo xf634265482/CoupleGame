@@ -5,7 +5,8 @@ import { _decorator, Component } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
 import { applyUiLayerTree, refreshScreenAdapt, visibleDesignSize } from '../../platform/wechat/ViewAdapt';
-import { loadPveMeta, unlockTreeNode } from '../../network/PveService';
+import { loadPveMeta, unlockTreeNode, resetTree } from '../../network/PveService';
+import { TREE_RESET_DIAMOND_COST } from '../core/PveConstants';
 import type { PveMeta } from '../core/PveTypes';
 import { DestinyTreeView } from '../views/DestinyTreeView';
 import { PveToastView } from '../views/PveToastView';
@@ -29,6 +30,7 @@ export class DestinyTreeController extends Component {
 
     this._view = new DestinyTreeView(this.node, screenW, screenH, (nodeId) => this._onUnlock(nodeId));
     this._view.setOnBack(() => SceneLoader.loadLobby());
+    this._view.setOnReset(() => void this._onReset());
 
     this._toast = new PveToastView(this.node, screenW, screenH);
 
@@ -47,6 +49,35 @@ export class DestinyTreeController extends Component {
       this._view?.render(meta);
     } catch (err) {
       this._toast?.toast(`加载命运树失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async _onReset(): Promise<void> {
+    if (this._busy || !this._meta) return;
+    const diamond = this._meta.diamond;
+    const unlockedCount = this._meta.unlockedTreeNodes?.length ?? 0;
+    if (unlockedCount === 0) {
+      this._toast?.toast('命运树尚未解锁任何节点');
+      return;
+    }
+    const confirmed = await this._toast?.showConfirm(
+      `重置命运树\n消耗 ${TREE_RESET_DIAMOND_COST} 💎（当前 ${diamond}），退还全部命运碎片`,
+      [
+        { label: '确认重置', value: 'yes' },
+        { label: '取消', value: 'no' },
+      ],
+    );
+    if (confirmed !== 'yes') return;
+    this._busy = true;
+    try {
+      const { meta } = await resetTree();
+      this._meta = meta;
+      this._view?.render(meta);
+      this._toast?.toast('命运树已重置，碎片已全额退还');
+    } catch (err) {
+      this._toast?.toast(`重置失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._busy = false;
     }
   }
 

@@ -33,12 +33,10 @@ const IDOL_COUNT = 1;       // 神像：+1 maxHp（每普通层 1 个）
 const HOT_SPRING_COUNT = 1; // 温泉：HP 回满（每普通层 1 个）
 const ALTAR_COUNT = 1;      // 祭坛：随机 20–35 灵气（每普通层 1 个）
 
-/**
- * 第 floor 层是否放铁匠（每章第 3 层）。
- * 章内序号：((floor-1) % FLOORS_PER_CHAPTER) + 1 → 1~5；第 3 层 = Boss 前两层，给玩家强化窗口。
- */
-function isBlacksmithFloor(floor: number): boolean {
-  return !isBossFloor(floor) && (floor - 1) % FLOORS_PER_CHAPTER === 2; // 2 = 0-based 第3层
+/** 铁匠仅在章节营地（Boss 通关后）提供，楼层地图不生成铁匠实体。 */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function isBlacksmithFloor(_floor: number): boolean {
+  return false;
 }
 
 /** 关键实体（钥匙/出口门/Boss）之间的最小曼哈顿间距，避免扎堆。 */

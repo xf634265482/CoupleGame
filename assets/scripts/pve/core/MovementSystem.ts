@@ -6,7 +6,7 @@
 //   背刺(backstab) — ROGUE：移动后将 floorState.backstabAvailable 置 true（下次攻击双倍）
 
 import { revealAround } from './FogSystem';
-import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
+import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, CHAPTER4_LAVA_TILE_DAMAGE, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
 import { relicOnMoveStep } from './RelicSystem';
 import { bossSandImmune } from './BossEquipTraitEffects';
@@ -143,13 +143,22 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const shatteredHp = shatteredIce ? Math.max(0, state.player.hp - FROST_GIANT_SHATTERED_ICE_DAMAGE) : state.player.hp;
   const shatteredDead = shatteredIce ? shatteredHp <= 0 : false;
 
+  // 熔岩领主 LAVA_TILE（第4章）：踩入立即扣血，地块不消失（与 SHATTERED_ICE 不同）。
+  const lavaTile = !shatteredDead
+    ? floor.entities.find((e) => e.type === 'LAVA_TILE' && !e.consumed && e.pos.x === to.x && e.pos.y === to.y)
+    : undefined;
+  const lavaHp = lavaTile ? Math.max(0, shatteredHp - CHAPTER4_LAVA_TILE_DAMAGE) : shatteredHp;
+  const lavaDead = lavaTile ? lavaHp <= 0 : shatteredDead;
+  const finalHp = lavaHp;
+  const finalDead = lavaDead;
+
   const nextAp = floor.ap - cost;
   const nextFloor: FloorState = {
     ...floor,
     player: to,
     ap: nextAp,
     revealed: revealedNext,
-    status: shatteredDead ? ('DEAD' as const) : floor.status,
+    status: finalDead ? ('DEAD' as const) : floor.status,
     entities: shatteredIce
       ? floor.entities.map((e) => (e.id === shatteredIce.id ? { ...e, consumed: true } : e))
       : floor.entities,
@@ -174,6 +183,10 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
     events.push({ type: 'PLAYER_DAMAGED', damage: FROST_GIANT_SHATTERED_ICE_DAMAGE, hp: shatteredHp, sourceId: shatteredIce.id });
     if (shatteredDead) events.push({ type: 'PLAYER_DEAD' });
   }
+  if (lavaTile) {
+    events.push({ type: 'LAVA_TILE_DAMAGED', entityId: lavaTile.id, damage: CHAPTER4_LAVA_TILE_DAMAGE });
+    if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
+  }
 
   // 遗物：永冻之核 — 每移动 3 步标记下次普攻冰冻
   // 滑行整体仅算一步（沿用现有 AP 模型：滑行收 1 次移动费），与玩家直观一致。
@@ -183,8 +196,8 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   return {
     state: {
       ...state,
-      status: shatteredDead ? ('DEAD' as const) : state.status,
-      player: { ...relicMove.nextPlayer, hp: shatteredHp },
+      status: finalDead ? ('DEAD' as const) : state.status,
+      player: { ...relicMove.nextPlayer, hp: finalHp },
       floorState: nextFloor,
     },
     events,

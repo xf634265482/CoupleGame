@@ -8,16 +8,22 @@ import { addAnima, traitCount } from './AnimaSystem';
 import { canAfford, spend } from './ApSystem';
 import { equipItem } from './EquipHelper';
 import { rollEquipment, rollRandomSlot } from './EquipmentSystem';
-import { rollGuaranteedDrop as rollGoblinChiefGuaranteedDrop } from './bosses/GoblinChief';
+import { BOSS_SPOILS, rollBossSpoil } from './bosses/BossSpoils';
+import type { BossId } from './bosses/BossSpoils';
 import {
   ADVANCABLE_CLASSES,
   ANIMA_MONSTER_DROP,
+  BOSS_RARE_DROP,
+  CHAPTER_BOSS_RELIC,
   CLASS_FRAGMENTS_TO_ADVANCE,
   ELITE_MONSTER_DROP,
   NORMAL_MONSTER_DROP,
+  bossDropScaled,
 } from './PveConstants';
 import type { AdvancableClass, ClassId } from './PveConstants';
-import type { EquipQuality } from './PveTypes';
+import { pickupRelic } from './RelicSystem';
+import { pickupScroll } from './ScrollSystem';
+import type { EquipQuality, RelicId } from './PveTypes';
 import { createRng } from './rng';
 import type { Rng } from './rng';
 import type { ApplyResult, EquipItem, ExpeditionState, PveEvent } from './PveTypes';
@@ -39,28 +45,32 @@ export function rollAnimaMonsterDrop(rng: Rng): DropResult {
   return { anima: rng.int(min, max) };
 }
 
-/** 精英怪掉落：40% 中量金币 / 30% 金币+灵气 / 15% 高额金币 / 10% 装备 / 5% 进阶卡（design §6）。 */
+/**
+ * 精英怪基础掉落：40% 金币 / 30% 金币+灵气 / 25% 高额金币 / 5% 进阶碎片对（design §6）。
+ * 装备独立独立判定（EQUIP_CHANCE=15%），与基础掉落互相独立，由调用方追加。
+ */
 export function rollEliteMonsterDrop(rng: Rng): DropResult {
   const roll = rng.next();
+  let result: DropResult;
   if (roll < ELITE_MONSTER_DROP.GOLD_ONLY) {
-    return { gold: rng.int(ELITE_MONSTER_DROP.goldMid[0], ELITE_MONSTER_DROP.goldMid[1]) };
-  }
-  if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA) {
-    return {
+    result = { gold: rng.int(ELITE_MONSTER_DROP.goldMid[0], ELITE_MONSTER_DROP.goldMid[1]) };
+  } else if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA) {
+    result = {
       gold: rng.int(ELITE_MONSTER_DROP.goldMid[0], ELITE_MONSTER_DROP.goldMid[1]),
       anima: rng.int(ELITE_MONSTER_DROP.animaMid[0], ELITE_MONSTER_DROP.animaMid[1]),
     };
+  } else if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA + ELITE_MONSTER_DROP.GOLD_HIGH) {
+    result = { gold: rng.int(ELITE_MONSTER_DROP.goldHigh[0], ELITE_MONSTER_DROP.goldHigh[1]) };
+  } else {
+    // FRAGMENT_PAIR 分支（5%）：随机 2 个不同职业碎片
+    const shuffled = rng.shuffle(ADVANCABLE_CLASSES);
+    result = { fragmentPair: [shuffled[0], shuffled[1]] };
   }
-  if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA + ELITE_MONSTER_DROP.GOLD_HIGH) {
-    return { gold: rng.int(ELITE_MONSTER_DROP.goldHigh[0], ELITE_MONSTER_DROP.goldHigh[1]) };
+  // 独立 15% 概率额外掉落 FINE 装备
+  if (rng.chance(ELITE_MONSTER_DROP.EQUIP_CHANCE)) {
+    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE') };
   }
-  if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA + ELITE_MONSTER_DROP.GOLD_HIGH + ELITE_MONSTER_DROP.EQUIP) {
-    // EQUIP 分支（10%，AC-17）：掉落一件 FINE 品质随机槽位装备
-    return { equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE') };
-  }
-  // FRAGMENT_PAIR 分支（5%，V2）：随机 2 个不同职业碎片，由 applySimpleDrop 各 +1
-  const shuffled = rng.shuffle(ADVANCABLE_CLASSES);
-  return { fragmentPair: [shuffled[0], shuffled[1]] };
+  return result;
 }
 
 /**
@@ -95,10 +105,9 @@ const BOSS_DROP_QUALITY: Record<number, EquipQuality> = {
   5: 'LEGENDARY',
 };
 
-/** 章节 2-5 Boss 通用掉落：固定 10 金 + 章节品质装备。 */
-function rollGenericBossDrop(rng: Rng, chapter: number): DropResult {
-  const quality: EquipQuality = BOSS_DROP_QUALITY[chapter] ?? 'FINE';
-  return { gold: 10, equip: rollEquipment(rng, rollRandomSlot(rng), quality) };
+/** Boss id 是否在 BOSS_SPOILS 表中（即支持三层掉落结构）。 */
+function isKnownBossId(bossId: string | undefined): bossId is BossId {
+  return !!bossId && bossId in BOSS_SPOILS;
 }
 
 /**
@@ -233,12 +242,10 @@ export function applyMonsterKillDrop(state: ExpeditionState, monsterId: string):
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster) return noop(state);
-  if (monster.type === 'BOSS' && monster.bossId === 'GOBLIN_CHIEF') {
-    return applyGoblinChiefDrop(state, monsterId);
-  }
-  if (monster.type === 'BOSS') {
-    const chapter = state.chapter;
-    return applySimpleDrop(state, monsterId, (rng) => rollGenericBossDrop(rng, chapter));
+  // 增援召唤的怪物（Boss 号角等）击杀后不产生任何掉落，避免刷增援白嫖收益
+  if (monster.summoned) return noop(state);
+  if (monster.type === 'BOSS' && isKnownBossId(monster.bossId)) {
+    return applyBossKillDrop(state, monsterId, monster.bossId);
   }
   if (monster.type === 'ANIMA') return applySimpleDrop(state, monsterId, rollAnimaMonsterDrop);
   if (monster.type === 'ELITE') return applySimpleDrop(state, monsterId, rollEliteMonsterDrop);
@@ -247,36 +254,76 @@ export function applyMonsterKillDrop(state: ExpeditionState, monsterId: string):
 }
 
 /**
- * 哥布林酋长击杀掉落（design §6 Boss / AC-10）：
- * - 必掉装备「哥布林酋长的战斧」装入 WEAPON 槽（覆盖原有武器）
- * - 额外给一份普通掉落（金币 + 灵气）作为通关奖励
- * - emit LOOT(equip, gold, anima, source) + 可能的 ANIMA_STRENGTHEN
+ * Boss 击杀掉落（三层结构，design Boss设计V1 / 掉落系统）：
+ *   1. 通用必掉：金币 + 灵气（按章节缩放，bossDropScaled）
+ *   2. 专属随机：从 BOSS_SPOILS[bossId] 等概率随机 1 件（rollBossSpoil）
+ *   3. 稀有独立判定（互不影响）：
+ *      - 10%  → 命运碎片 N 个（按章节缩放）
+ *      - 30%  → 命运词条卷轴 1 张
+ *      - 20%+10% → Boss 遗物（图鉴已解锁 +10%）
+ *
+ * emit 序列：LOOT(gold/anima/equip) → 可能的 SHARDS_PICKUP → 可能的 SCROLL_PICKUP →
+ *           可能的 RELIC_PICKUP / CODEX_RELIC_UNLOCKED → 可能的 ANIMA_STRENGTHEN（由 addAnima 串联）。
+ *
+ * 注意：随机判定顺序固定（碎片 → 卷轴 → 遗物）以保证 AC-13 确定性。
  */
-function applyGoblinChiefDrop(state: ExpeditionState, monsterId: string): ApplyResult {
+function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: BossId): ApplyResult {
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
-  // 50% 概率掉落哥布林酋长战斧
-  const dropsWeapon = rng.chance(0.5);
-  const equip = dropsWeapon ? rollGoblinChiefGuaranteedDrop(rng) : undefined;
-  const drop = rollNormalMonsterDrop(rng);
+  const scaled = bossDropScaled(state.chapter);
+
+  // 第 2 层：专属装备（等概率从 3 件中 1 件）
+  const equip = rollBossSpoil(rng, bossId);
+
+  // 第 3 层：稀有掉落独立判定（顺序固定：碎片 → 卷轴 → 遗物）
+  const dropShards = rng.chance(BOSS_RARE_DROP.SHARDS_CHANCE);
+  const dropScroll = rng.chance(BOSS_RARE_DROP.SCROLL_CHANCE);
+  const codexHasRelic = (state.player.codexRelics ?? []).includes(CHAPTER_BOSS_RELIC[state.chapter] as RelicId);
+  const relicChance = BOSS_RARE_DROP.RELIC_BASE_CHANCE + (codexHasRelic ? BOSS_RARE_DROP.RELIC_CODEX_BONUS : 0);
+  const dropRelic = rng.chance(relicChance);
 
   let next: ExpeditionState = {
     ...state,
     floorState: { ...floor, rngState: rng.state() },
-    ...(equip ? { player: equipItem(state.player, equip) } : {}),
+    player: equipItem(state.player, equip),
   };
 
   const events: PveEvent[] = [
-    { type: 'LOOT', gold: drop.gold, anima: drop.anima, ...(equip ? { equip } : {}), source: monsterId },
+    { type: 'LOOT', gold: scaled.gold, anima: scaled.anima, equip, source: monsterId },
   ];
 
-  if (drop.gold) {
-    next = { ...next, player: { ...next.player, gold: next.player.gold + drop.gold } };
-  }
-  if (drop.anima) {
-    const animaResult = addAnima(next, drop.anima);
+  // 通用必掉：金币
+  next = { ...next, player: { ...next.player, gold: next.player.gold + scaled.gold } };
+
+  // 通用必掉：灵气（可能连锁 ANIMA_STRENGTHEN）
+  if (scaled.anima > 0) {
+    const animaResult = addAnima(next, scaled.anima);
     next = animaResult.state;
     events.push(...animaResult.events);
+  }
+
+  // 稀有：命运碎片（写入 player.classFragments 不是入口，这里只 emit 事件；
+  // 实际命运碎片入账由 Controller 在远征结束时调用云函数，按已通关层数发放，
+  // 此处 SHARDS_PICKUP 仅用于战报展示与图鉴/成就触发）
+  if (dropShards && scaled.shards > 0) {
+    events.push({ type: 'SHARDS_PICKUP', amount: scaled.shards, source: monsterId });
+  }
+
+  // 稀有：命运词条卷轴
+  if (dropScroll) {
+    const scrollResult = pickupScroll(next.player, monsterId);
+    next = { ...next, player: scrollResult.player };
+    events.push(...scrollResult.events);
+  }
+
+  // 稀有：Boss 遗物（按章节查表）
+  if (dropRelic) {
+    const relicId = CHAPTER_BOSS_RELIC[state.chapter] as RelicId | undefined;
+    if (relicId) {
+      const relicResult = pickupRelic(next.player, relicId, monsterId);
+      next = { ...next, player: relicResult.player };
+      events.push(...relicResult.events);
+    }
   }
 
   return { state: next, events };

@@ -1,5 +1,5 @@
 import { stepMonsters } from '../../assets/scripts/pve/core/MonsterAI';
-import { HEAVY_STRIKE_INTERVAL, HEAVY_STRIKE_MULTIPLIER } from '../../assets/scripts/pve/core/bosses/GoblinChief';
+import { HEAVY_STRIKE_INTERVAL, HEAVY_STRIKE_MULTIPLIER, HEAVY_STRIKE_RANGE } from '../../assets/scripts/pve/core/bosses/GoblinChief';
 import { makeExpeditionState, makeMonster } from './helpers';
 
 describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
@@ -53,7 +53,7 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
     // 攻击者所在格此前未揭示，攻击时一并揭示该格
     expect(result.events).toEqual([
       { type: 'REVEAL', cells: [{ x: 4, y: 5 }] },
-      { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1' },
+      { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1', rawDamage: 20 },
     ]);
   });
 
@@ -154,6 +154,75 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
       const normalTurn = { ...baseState, floorState: { ...baseState.floorState, turn: HEAVY_STRIKE_INTERVAL + 1 } };
       const normalResult = stepMonsters(normalTurn);
       expect(normalResult.state.player.hp).toBe(170); // 200 - 30
+    });
+
+    it('Boss 蓄力重击预警（2026-06-15 站桩方案）：以 boss 当前位置为心、半径=HEAVY_STRIKE_RANGE（红圈=橙圈）', () => {
+      // turn = HEAVY_STRIKE_INTERVAL - 1：本回合非重击，但下个怪物回合（turn+1）将触发重击
+      const state = makeExpeditionState({
+        floorOverrides: {
+          player: { x: 4, y: 7 },
+          turn: HEAVY_STRIKE_INTERVAL - 1,
+          monsters: [makeGoblinChief({ x: 4, y: 0 })],
+        },
+      });
+
+      const result = stepMonsters(state);
+      // 本回合 boss 朝玩家移动一格 (4,0) → (4,1)；预警以移动后的 boss 位置 (4,1) 为心、半径
+      // = HEAVY_STRIKE_RANGE（重击回合 boss 站桩不移动，无需预留移动空间，红圈即下回合实际命中区）
+      expect(result.events).toContainEqual({
+        type: 'HEAVY_STRIKE_WARNING', bossId: 'boss', center: { x: 4, y: 1 }, radius: HEAVY_STRIKE_RANGE,
+      });
+
+      // 重击回合本身（turn = HEAVY_STRIKE_INTERVAL）不再发出预警
+      const heavyTurn = { ...state, floorState: { ...state.floorState, turn: HEAVY_STRIKE_INTERVAL } };
+      const heavyResult = stepMonsters(heavyTurn);
+      expect(heavyResult.events.some((e) => e.type === 'HEAVY_STRIKE_WARNING')).toBe(false);
+    });
+
+    it('Boss 重击回合「先原地释放、再追击移动」（2026-06-15）：以起手位置结算，释放后逼近一格', () => {
+      // 重击回合 boss(4,1) 与玩家(4,4) 距离 3（≤ HEAVY_STRIKE_RANGE=4，命中）
+      const state = makeExpeditionState({
+        floorOverrides: {
+          player: { x: 4, y: 4 },
+          turn: HEAVY_STRIKE_INTERVAL,
+          monsters: [makeGoblinChief({ x: 4, y: 1 })],
+        },
+        playerOverrides: { hp: 2000, maxHp: 2000 },
+      });
+
+      const result = stepMonsters(state);
+      const boss = result.state.floorState.monsters.find((m) => m.id === 'boss');
+      // 重击以【起手位置 (4,1)】为心结算（释放发生在移动之前 → 与上一回合红圈中心一致）
+      expect(result.events).toContainEqual(
+        expect.objectContaining({ type: 'HEAVY_STRIKE_RESOLVED', center: { x: 4, y: 1 } }),
+      );
+      expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(true);
+      // 释放后追击逼近一格 (4,1) → (4,2)
+      expect(boss?.pos).toEqual({ x: 4, y: 2 });
+      const idxResolved = result.events.findIndex((e) => e.type === 'HEAVY_STRIKE_RESOLVED');
+      const idxMove = result.events.findIndex((e) => e.type === 'MOVE' && e.entityId === 'boss');
+      expect(idxMove).toBeGreaterThan(idxResolved); // 先释放、后移动
+    });
+
+    it('Boss 重击回合：玩家在 HEAVY_STRIKE_RANGE 外则落空（以起手位置结算），释放后仍追击', () => {
+      // boss(4,0)，玩家(4,5) 距离 5 > HEAVY_STRIKE_RANGE(4)：以起手位置释放打不到玩家
+      const state = makeExpeditionState({
+        floorOverrides: {
+          player: { x: 4, y: 5 },
+          turn: HEAVY_STRIKE_INTERVAL,
+          monsters: [makeGoblinChief({ x: 4, y: 0 })],
+        },
+        playerOverrides: { hp: 2000, maxHp: 2000 },
+      });
+
+      const result = stepMonsters(state);
+      const boss = result.state.floorState.monsters.find((m) => m.id === 'boss');
+      expect(result.events).toContainEqual(
+        expect.objectContaining({ type: 'HEAVY_STRIKE_RESOLVED', center: { x: 4, y: 0 } }),
+      );
+      expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(false); // 落空
+      expect(result.state.player.hp).toBe(2000);
+      expect(boss?.pos).toEqual({ x: 4, y: 1 }); // 释放后仍追击逼近一格
     });
   });
 

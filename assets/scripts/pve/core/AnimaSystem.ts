@@ -91,7 +91,7 @@ export interface StrengthenMeta {
 }
 
 /** 选中时立即生效 +3 maxHp/HP 的可叠加词条（铁骨/强化箭袋/灵巧）。 */
-const IMMEDIATE_HP_STACK_TRAITS = new Set(['iron_skin_stack', 'quiver_stack', 'nimble_stack']);
+export const IMMEDIATE_HP_STACK_TRAITS = new Set(['iron_skin_stack', 'quiver_stack', 'nimble_stack']);
 
 /** 强化词条元数据表（AC-404~406）：覆盖 ADVENTURER + BERSERKER/ARCHER/ROGUE 全部 49 条词条。 */
 export const STRENGTHEN_META: Record<string, StrengthenMeta> = {

@@ -54,22 +54,11 @@ describe('MapGenerator — 楼层生成（AC-1, AC-8, AC-9）', () => {
     expect(normals.length).toBe(3); // 章节1楼层1：哥布林战士×3（变体 GOBLIN_WARRIOR）
   });
 
-  it('铁匠仅在每章第 3 层出现（floor 3、8、13、18、23）', () => {
-    // 第3层：有铁匠
-    const withSmith = generateFloor(3, 777);
-    expect(withSmith.entities.filter((e) => e.type === 'BLACKSMITH').length).toBe(1);
-
-    // 第1层：无铁匠
-    const noSmith1 = generateFloor(1, 777);
-    expect(noSmith1.entities.filter((e) => e.type === 'BLACKSMITH').length).toBe(0);
-
-    // 第5层（Boss层）：无铁匠
-    const bossFloor = generateFloor(5, 777);
-    expect(bossFloor.entities.filter((e) => e.type === 'BLACKSMITH').length).toBe(0);
-
-    // 第8层（chapter 2 第3层）：有铁匠
-    const ch2Smith = generateFloor(8, 777);
-    expect(ch2Smith.entities.filter((e) => e.type === 'BLACKSMITH').length).toBe(1);
+  it('铁匠仅在章节营地出现，楼层地图不含铁匠实体', () => {
+    for (const floor of [1, 2, 3, 4, 5, 8]) {
+      const f = generateFloor(floor, 777);
+      expect(f.entities.filter((e) => e.type === 'BLACKSMITH').length).toBe(0);
+    }
   });
 
   it('所有实体与玩家出生点不重叠', () => {
@@ -134,7 +123,7 @@ describe('MapGenerator — 章节怪物缩放', () => {
     });
   });
 
-  it('第 2 章（第 6 层）普通层怪物 HP/攻击按 ×1.4 缩放', () => {
+  it('第 2 章（第 6 层）普通层怪物 HP/攻击按 ×1.8 缩放', () => {
     const floor = generateFloor(6, 100); // floor 6 = chapter 2, normal floor
     const { hpMult, attackMult } = chapterScaling(2);
     const normals = floor.monsters.filter((m) => m.type === 'NORMAL');
@@ -150,7 +139,7 @@ describe('MapGenerator — 章节怪物缩放', () => {
     });
   });
 
-  it('第 5 章（第 25 层）Boss HP/攻击按 bossChapterScaling ×4.5 缩放', () => {
+  it('第 5 章（第 25 层）Boss HP/攻击按 bossChapterScaling 缩放', () => {
     const floor = generateFloor(25, 100); // floor 25 = chapter 5, boss floor
     const { hpMult, attackMult } = bossChapterScaling(5);
     const boss = floor.monsters.find((m) => m.type === 'BOSS');

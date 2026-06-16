@@ -15,6 +15,8 @@ export type PveHudCallbacks = {
   onEndTurn: () => void;
   onQuit?: () => void;
   onShowCharacter?: () => void;
+  /** 使用 1 张命运词条卷轴（HUD 按钮触发 → 弹三选一弹窗）。 */
+  onUseScroll?: () => void;
 };
 
 const INFO_COLOR = new Color(225, 230, 240, 255);
@@ -44,6 +46,9 @@ export class PveHudView {
   private _shardsLabel: Label;
   /** 状态效果（冰冻 / 灼烧）：显示在顶部状态条下方第二行。 */
   private _statusLabel: Label;
+  /** 卷轴使用按钮（动态显隐，仅当 player.scrolls > 0 时显示）。 */
+  private _scrollButton: Node | null = null;
+  private _scrollButtonLabel: Label | null = null;
 
   constructor(parent: Node, screenW: number, screenH: number, callbacks: PveHudCallbacks) {
     this._root = new Node('PveHudView');
@@ -121,17 +126,28 @@ export class PveHudView {
       () => callbacks.onEndTurn(), new Color(120, 130, 145, 255),
     );
 
-    // 「返回」「角色」按钮：移至地图与战报栏之间的横向空隙
+    // 「返回」「卷轴」「角色」按钮：地图与战报栏之间的横向空隙（三按钮平均分布）
     const SUB_BTN_Y = -screenH / 2 + 274;
     if (callbacks.onQuit) {
       makeFlatButton(
-        this._root, '返回', -150, SUB_BTN_Y,
+        this._root, '返回', -200, SUB_BTN_Y,
         120, 44, () => callbacks.onQuit?.(), new Color(90, 95, 105, 255),
       );
     }
+    if (callbacks.onUseScroll) {
+      this._scrollButton = makeFlatButton(
+        this._root, '📜 卷轴 ×0', 0, SUB_BTN_Y,
+        140, 44, () => callbacks.onUseScroll?.(),
+        new Color(120, 90, 170, 255),
+      );
+      // 缓存 label 引用以便在 refresh 中更新文本
+      const labelNode = this._scrollButton.getChildByName('Label');
+      this._scrollButtonLabel = labelNode?.getComponent(Label) ?? null;
+      this._scrollButton.active = false; // 初始无卷轴时隐藏
+    }
     if (callbacks.onShowCharacter) {
       makeFlatButton(
-        this._root, '角色', 150, SUB_BTN_Y,
+        this._root, '角色', 200, SUB_BTN_Y,
         120, 44, () => callbacks.onShowCharacter?.(),
         new Color(140, 100, 200, 255),
       );
@@ -161,6 +177,13 @@ export class PveHudView {
     if (burn > 0) statusParts.push(`🔥 灼烧 ${burn} 点`);
     if (slow > 0) statusParts.push(`🥶 减速 ${slow} 回合`);
     this._statusLabel.string = statusParts.join('   ');
+
+    // 卷轴按钮：仅当持有卷轴时显示，文本带数量
+    const scrolls = player.scrolls ?? 0;
+    if (this._scrollButton) {
+      this._scrollButton.active = scrolls > 0;
+      if (this._scrollButtonLabel) this._scrollButtonLabel.string = `📜 卷轴 ×${scrolls}`;
+    }
   }
 
   /**

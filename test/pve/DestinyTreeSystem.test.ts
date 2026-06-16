@@ -21,6 +21,7 @@ import {
   TREE_A3_DEATH_GOLD_RETENTION,
   TREE_B1_ATTACK_BONUS,
   TREE_B2_AP_DICE_BONUS,
+  TREE_B2_AP_CARRY_BONUS,
   TREE_B3_FRAGMENT_BONUS,
   TREE_C1_GOLD_BONUS,
   TREE_C2_CHEST_GOLD_BONUS_PCT,
@@ -110,6 +111,7 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       const bonuses = getTreeBonuses(['B1', 'B2', 'B3']);
       expect(bonuses.attackBonus).toBe(TREE_B1_ATTACK_BONUS);
       expect(bonuses.apDiceBonus).toBe(TREE_B2_AP_DICE_BONUS);
+      expect(bonuses.apCarryCapBonus).toBe(TREE_B2_AP_CARRY_BONUS);
       expect(bonuses.fragmentBonus).toBe(TREE_B3_FRAGMENT_BONUS);
     });
 

@@ -15,6 +15,18 @@ import {
   isHornTurn,
 } from './bosses/GoblinChief';
 import { VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
+import { VARIANT_SANDWORM_LARVA } from './Chapter2Monsters';
+import { VARIANT_SNOW_WOLF } from './Chapter3Monsters';
+import { VARIANT_VOID_WORM } from './Chapter5Monsters';
+import {
+  VARIANT_SPIRIT_BEETLE,
+  VARIANT_SPIRIT_ELF,
+} from './ChapterAnimaMonsters';
+
+/** 冲锋变体：CHASE 状态每回合最多移动 2 格（而非普通怪的 1 格）。 */
+const CHARGE_VARIANTS = new Set([VARIANT_SANDWORM_LARVA, VARIANT_SNOW_WOLF, VARIANT_VOID_WORM]);
+import { ANIMA_BEETLE_TRAP_DURATION, ANIMA_ELF_TRAP_DURATION } from './PveConstants';
+import type { FixedEntity } from './PveTypes';
 import { shoesStealthReduction } from './EquipmentSystem';
 import {
   fateGuardianAttack,
@@ -391,7 +403,8 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；EPIC+靴子：额外缩小 2~3（叠加）
   const stealthReduction = (state.player.classTraits.includes('stealth') ? 2 : 0)
     + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0);
-  const inAggroRange = dist <= Math.max(0, monster.aggroRadius - stealthReduction);
+  // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
+  const inAggroRange = dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);
 
   // ── 灵气怪：FLEE ──────────────────────────────────────
   if (monster.type === 'ANIMA') {
@@ -400,6 +413,14 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
     const fleeing = withMonsterPatch(state, monsterId, { aiState: 'FLEE' });
     // 灵鼠(SPIRIT_RAT)：每次逃跑移动2格，其余灵气怪移动1格
     const moveSteps = monster.variantId === VARIANT_SPIRIT_RAT ? 2 : 1;
+    // 灵气甲虫/精灵（CH2/CH3）：逃跑离开的原格生成陷阱（沙坑/冰面），存续若干回合
+    const trapType: 'SAND_PIT' | 'ICE_TILE' | null =
+      monster.variantId === VARIANT_SPIRIT_BEETLE ? 'SAND_PIT' :
+      monster.variantId === VARIANT_SPIRIT_ELF ? 'ICE_TILE' : null;
+    const trapDuration =
+      trapType === 'SAND_PIT' ? ANIMA_BEETLE_TRAP_DURATION :
+      trapType === 'ICE_TILE' ? ANIMA_ELF_TRAP_DURATION : 0;
+
     let current = fleeing;
     const allEvents: PveEvent[] = [];
 
@@ -409,8 +430,42 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
       for (const to of stepAwayFrom(m.pos, current.floorState.player)) {
         if (!inBounds(current.floorState.size, to)) continue;
         if (isOccupied(current.floorState, to, monsterId)) continue;
-        allEvents.push({ type: 'MOVE', entityId: monsterId, from: m.pos, to, apLeft: floor.ap });
+        const from = m.pos;
+        allEvents.push({ type: 'MOVE', entityId: monsterId, from, to, apLeft: floor.ap });
         current = withMonsterPatch(current, monsterId, { pos: to });
+
+        // 离开原格生成陷阱：跳过原格已有未消耗的同类型实体（避免叠加）
+        if (trapType !== null) {
+          const occupied = current.floorState.entities.some(
+            (e) => !e.consumed && e.pos.x === from.x && e.pos.y === from.y && e.type === trapType,
+          );
+          if (!occupied) {
+            const trapId = `anima_trap_${current.floorState.floor}_${monsterId}_${step}`;
+            const trap: FixedEntity = {
+              id: trapId,
+              type: trapType,
+              pos: from,
+              consumed: false,
+              remaining: trapDuration,
+            };
+            current = {
+              ...current,
+              floorState: {
+                ...current.floorState,
+                entities: [...current.floorState.entities, trap],
+              },
+            };
+            allEvents.push({
+              type: 'ANIMA_TRAP_SPAWNED',
+              entityId: trapId,
+              entityType: trapType,
+              pos: from,
+              variantId: monster.variantId ?? '',
+              duration: trapDuration,
+            });
+          }
+        }
+
         moved = true;
         break;
       }
@@ -458,16 +513,26 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
     );
   }
 
-  const chasing = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
-  for (const to of stepToward(monster.pos, floor.player)) {
-    if (!inBounds(floor.size, to)) continue;
-    if (isOccupied(chasing.floorState, to, monsterId)) continue;
-    return {
-      state: withMonsterPatch(chasing, monsterId, { pos: to }),
-      events: [{ type: 'MOVE', entityId: monsterId, from: monster.pos, to, apLeft: chasing.floorState.ap }],
-    };
+  // 冲锋变体（SANDWORM_LARVA/SNOW_WOLF/VOID_WORM）每回合最多移动 2 格，普通怪 1 格。
+  const maxMoveSteps = CHARGE_VARIANTS.has(monster.variantId ?? '') ? 2 : 1;
+  let current = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
+  const allEvents: PveEvent[] = [];
+
+  for (let step = 0; step < maxMoveSteps; step++) {
+    const m = current.floorState.monsters.find((mm) => mm.id === monsterId)!;
+    let moved = false;
+    for (const to of stepToward(m.pos, current.floorState.player)) {
+      if (!inBounds(current.floorState.size, to)) continue;
+      if (isOccupied(current.floorState, to, monsterId)) continue;
+      allEvents.push({ type: 'MOVE', entityId: monsterId, from: m.pos, to, apLeft: floor.ap });
+      current = withMonsterPatch(current, monsterId, { pos: to });
+      moved = true;
+      break;
+    }
+    if (!moved) break;
   }
-  return { state: chasing, events: [] };
+
+  return { state: current, events: allEvents };
 }
 
 /**

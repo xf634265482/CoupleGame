@@ -55,9 +55,15 @@ import {
   FROST_GIANT_ENRAGE_HP_RATIO,
   FROST_MOVE_PENALTY_ROUNDS,
   LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION,
+  POISON_ROUNDS,
   QUICKSAND_SCORPION_ENRAGE_HP_RATIO,
 } from './PveConstants';
 import { VARIANT_FIRE_GOBLIN, VARIANT_FROST_GOBLIN } from './Chapter1Monsters';
+import { VARIANT_POISON_SCORPION } from './Chapter2Monsters';
+import { VARIANT_FROST_SPRITE, VARIANT_ICE_SLIME } from './Chapter3Monsters';
+import { VARIANT_FIRE_ELEMENTAL, VARIANT_LAVA_CRAB } from './Chapter4Monsters';
+import { VARIANT_VOID_WORM } from './Chapter5Monsters';
+import { applyAnimaDeathEffect } from './AnimaDeathEffects';
 import { GOBLIN_CHIEF_ENRAGE_HP } from './bosses/GoblinChief';
 import { isRevealed, reveal } from './FogSystem';
 import { createRng } from './rng';
@@ -113,7 +119,15 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
     };
   }
 
-  const targetHp = Math.max(0, monster.hp - damage);
+  // 硬甲（LAVA_CRAB）：受到物理攻击伤害减半（向下取整）。
+  if (monster.variantId === VARIANT_LAVA_CRAB) {
+    damage = Math.floor(damage / 2);
+  }
+
+  const rawTargetHp = Math.max(0, monster.hp - damage);
+  // C4: VOID_WORM 双生复活 — 首次被击杀时以 50% maxHp 原地复活
+  const voidWormReviving = rawTargetHp <= 0 && monster.variantId === VARIANT_VOID_WORM && !monster.revivedOnce;
+  const targetHp = voidWormReviving ? Math.floor(monster.maxHp / 2) : rawTargetHp;
   const dead = targetHp <= 0;
 
   let next: ExpeditionState = {
@@ -121,7 +135,9 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
     floorState: {
       ...state.floorState,
       monsters: state.floorState.monsters.map((m) =>
-        m.id === targetId ? { ...m, hp: targetHp, aiState: dead ? ('DEAD' as const) : m.aiState } : m,
+        m.id === targetId
+          ? { ...m, hp: targetHp, aiState: dead ? ('DEAD' as const) : m.aiState, revivedOnce: voidWormReviving ? true : m.revivedOnce }
+          : m,
       ),
     },
   };
@@ -174,6 +190,21 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
 
   if (dead) {
     events.push({ type: 'KILL', monsterId: targetId, monsterType: monster.type });
+    // 灵气怪死亡触发（CH4 SPIRIT_EMBER 爆熔岩 / CH5 SPIRIT_MIRAGE Buff/Debuff）。
+    // 在 applyMonsterKillDrop（LOOT）之前结算，确保事件顺序为 KILL → 死亡效果 → LOOT。
+    const deathEffect = applyAnimaDeathEffect(next, monster);
+    next = deathEffect.state;
+    events.push(...deathEffect.events);
+    // C3: FIRE_ELEMENTAL 爆裂自爆 — 死亡时对 2 格曼哈顿距离内的玩家造成等攻击力真实伤害（无视护甲）。
+    if (monster.variantId === VARIANT_FIRE_ELEMENTAL) {
+      const explosionDamage = monster.attack;
+      if (manhattan(monster.pos, next.floorState.player) <= 2) {
+        const newPlayerHp = Math.max(0, next.player.hp - explosionDamage);
+        next = { ...next, player: { ...next.player, hp: newPlayerHp } };
+        events.push({ type: 'ELITE_EXPLODE', monsterId: targetId, pos: monster.pos, damage: explosionDamage, hp: newPlayerHp });
+        if (newPlayerHp <= 0) events.push({ type: 'PLAYER_DEAD' });
+      }
+    }
     if (monster.bossId === 'FATE_MIRROR') {
       events.push({ type: 'MIRROR_KILLED', mirrorId: targetId });
     } else {
@@ -184,6 +215,8 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
     // 遗物：酋长怒吼 — 击杀后下次普攻 +50%（已 pending 时不重复标记）
     const killBuff = relicOnKill(next.player);
     next = { ...next, player: killBuff.nextPlayer };
+  } else if (voidWormReviving) {
+    events.push({ type: 'ELITE_REVIVE', monsterId: targetId, hp: targetHp });
   }
 
   return next;
@@ -225,7 +258,7 @@ export function playerAttackPower(player: RunPlayer): { damage: number; range: n
  *  - 狂暴(berserk): HP ≤ 50% 时伤害 +10
  *  - 背刺(backstab): 本回合有移动时首次攻击双倍伤害
  *  - 刺客之心(assassin_heart): 目标非 CHASE 状态时伤害 +20
- *  - 暴击(crit): 20% 概率三倍伤害（消耗 rngState）
+ *  - 暴击(crit): 10% 概率双倍伤害（消耗 rngState）
  *  - 吸血(life_steal): 每次攻击回复 10 HP
  *  - 血怒(blood_rage): 击杀目标时回复 20 HP
  *  - 连射(multi_shot): 30% 概率再射一箭（基础伤害，不含词条加乘，消耗 rngState）
@@ -273,8 +306,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   }
 
   // ── 概率词条（消耗 rngState，始终推进以保证 AC-13 确定性；rng 在上方范围检查后创建）──
-  if (traits.includes('crit') && rng.chance(0.20)) {
-    damage *= 3; // ARCHER 暴击：20% 三倍伤害
+  if (traits.includes('crit') && rng.chance(0.10)) {
+    damage *= 2; // ARCHER 暴击：10% 双倍伤害
   }
 
   // Boss 装备 trait: boss_crit_15（命运之刃 15% 暴击 ×2，始终消耗 RNG 一次）
@@ -489,7 +522,10 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   }
 
   // ── 装备减伤（ARMOR 槽，AC-17 + equip_def_up 词条，AC-402）──
-  const armorReduction = (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player);
+  // C1: POISON_SCORPION 穿甲攻击 — 完全无视玩家护甲与减伤词条
+  const armorReduction = monster.variantId === VARIANT_POISON_SCORPION
+    ? 0
+    : (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player);
   const rawDamage = monster.attack;
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
   let reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult;
@@ -544,7 +580,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     && hp / state.player.maxHp <= 0.3
     && (floor.finalChargeAvailable ?? true);
 
-  const events: PveEvent[] = [...revealEvents, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: monsterId }];
+  const events: PveEvent[] = [...revealEvents, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: monsterId, rawDamage: rawDamage }];
   if (dead) events.push({ type: 'PLAYER_DEAD' });
 
   // ── BERSERKER 反击：对攻击者造成 10 伤害（可叠加，不触发击杀，min 1 HP）──
@@ -586,14 +622,24 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     stunRngState = stunRng.state();
   }
 
-  // ── 第一章变体怪物击中效果 ──────────────────────────────
-  // 冰霜哥布林：移动AP+1持续2回合（叠加）
-  const isFrost = !dead && monster.variantId === VARIANT_FROST_GOBLIN;
-  // 赤炎哥布林：灼烧5HP/回合持续2回合（叠加）
-  const isFire = !dead && monster.variantId === VARIANT_FIRE_GOBLIN;
+  // ── 变体怪物命中效果 ──────────────────────────────────
+  // 冰霜哥布林/冰史莱姆/冰霜精灵：移动AP+1持续2回合（叠加）
+  const isFrost = !dead && (
+    monster.variantId === VARIANT_FROST_GOBLIN ||
+    monster.variantId === VARIANT_ICE_SLIME ||
+    monster.variantId === VARIANT_FROST_SPRITE
+  );
+  // 赤炎哥布林/火焰元素：灼烧5HP/回合持续2回合（叠加）
+  const isFire = !dead && (
+    monster.variantId === VARIANT_FIRE_GOBLIN ||
+    monster.variantId === VARIANT_FIRE_ELEMENTAL
+  );
+  // 毒蝎：中毒8HP/回合持续3回合（不叠加，刷新计时）
+  const isPoison = !dead && monster.variantId === VARIANT_POISON_SCORPION;
 
   if (isFrost) events.push({ type: 'MOVE_PENALTY_APPLIED', rounds: FROST_MOVE_PENALTY_ROUNDS });
   if (isFire) events.push({ type: 'FIRE_BURN_APPLIED', rounds: FIRE_BURN_ROUNDS });
+  if (isPoison) events.push({ type: 'POISON_APPLIED', rounds: POISON_ROUNDS });
 
   return {
     state: {
@@ -615,6 +661,9 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
           : {}),
         ...(isFire
           ? { playerFireBurnRounds: (floor.playerFireBurnRounds ?? 0) + FIRE_BURN_ROUNDS }
+          : {}),
+        ...(isPoison
+          ? { playerPoisonRounds: POISON_ROUNDS }
           : {}),
       },
     },

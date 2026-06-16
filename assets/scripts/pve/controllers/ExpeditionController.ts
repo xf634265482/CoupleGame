@@ -30,9 +30,9 @@ import { RELIC_DEFS } from '../core/RelicSystem';
 import { claimScrollChoice, useScroll } from '../core/ScrollSystem';
 import { applyMove } from '../core/MovementSystem';
 import { resolveTreeChoice } from '../core/DestinyTreeSystem';
-import { rerollEquipTrait, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
+import { CAMP_BLACKSMITH_ID, rerollEquipTrait, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
 import type { Direction } from '../core/MovementSystem';
-import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, DEV_SKIP_TO_FLOOR, isBossFloor, TOTAL_FLOORS } from '../core/PveConstants';
+import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, DEV_SKIP_TO_FLOOR, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS, TOTAL_FLOORS } from '../core/PveConstants';
 import type { ClassId } from '../core/PveConstants';
 import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta, RelicId } from '../core/PveTypes';
 import { loadPveSave, loadPveMeta, startRun, savePveFloor, settlePveRun, updatePveMeta } from '../../network/PveService';
@@ -120,16 +120,39 @@ const CLASS_CN: Record<string, string> = {
 
 /** 怪物变体/Boss 中文名（用于战报「发现/击杀」描述，避免显示英文枚举值）。 */
 const MONSTER_VARIANT_CN: Record<string, string> = {
+  // 第 1 章
   GOBLIN_WARRIOR: '哥布林战士',
   GOBLIN_ARCHER: '哥布林弓箭手',
   FROST_GOBLIN: '冰霜哥布林',
   FIRE_GOBLIN: '赤炎哥布林',
   SPIRIT_RAT: '灵鼠',
+  // 第 2 章
+  DESERT_RAIDER: '沙漠劫匪',
+  SANDWORM_LARVA: '沙虫幼体',
+  POISON_SCORPION: '毒蝎',
+  SPIRIT_BEETLE: '灵气甲虫',
+  // 第 3 章
+  SNOW_WOLF: '雪狼',
+  ICE_SLIME: '冰史莱姆',
+  FROST_SPRITE: '冰霜精灵',
+  SPIRIT_ELF: '灵气精灵',
+  // 第 4 章
+  LAVA_GRUNT: '熔岩暴徒',
+  LAVA_CRAB: '岩浆蟹',
+  FIRE_ELEMENTAL: '火焰元素',
+  SPIRIT_EMBER: '灵气炎魂',
+  // 第 5 章
+  SHADOW_ASSASSIN: '影子刺客',
+  FATE_WATCHER: '命运守望者',
+  VOID_WORM: '虚空虫',
+  SPIRIT_MIRAGE: '灵气幻象',
+  // Boss
   GOBLIN_CHIEF: '哥布林酋长',
   QUICKSAND_SCORPION: '流沙巨蝎',
   FROST_GIANT: '冰霜巨人',
   LAVA_LORD: '熔岩领主',
   FATE_GUARDIAN: '命运守卫',
+  FATE_MIRROR: '命运镜像',
 };
 
 /** 按 MonsterType 兜底的中文名（变体/Boss id 未命中映射表时使用）。 */
@@ -253,7 +276,9 @@ function describeForLog(
     case 'PLAYER_DAMAGED': {
       const attacker = state?.floorState.monsters.find((m) => m.id === ev.sourceId);
       const name = attacker ? monsterName(attacker) : '敌人';
-      return { kind: 'PLAYER_HURT', text: `${name} 发起攻击，受击 -${ev.damage}（自己剩 ${ev.hp} 血）` };
+      const absorbed = (ev.rawDamage != null && ev.rawDamage > ev.damage) ? ev.rawDamage - ev.damage : 0;
+      const absorbedText = absorbed > 0 ? `，护甲格挡 ${absorbed}` : '';
+      return { kind: 'PLAYER_HURT', text: `${name} 发起攻击，受击 -${ev.damage}${absorbedText}（自己剩 ${ev.hp} 血）` };
     }
     case 'KILL': {
       const monster = state?.floorState.monsters.find((m) => m.id === ev.monsterId);
@@ -281,7 +306,11 @@ function describeForLog(
     case 'HOT_SPRING_HEAL':
       return { kind: 'LOOT', text: `♨️ 温泉治疗（恢复 ${ev.healed} 血）` };
     case 'FRAGMENT_PICKED': {
-      return { kind: 'LOOT', text: `🧩 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（${ev.totalFragments}/${CLASS_FRAGMENTS_TO_ADVANCE}）` };
+      // 已进阶到该职业 → 显示觉醒进度（/10），否则显示进阶进度（/5）
+      const fragTarget = state?.player.classId === ev.classId
+        ? CLASS_FRAGMENTS_TO_AWAKEN
+        : CLASS_FRAGMENTS_TO_ADVANCE;
+      return { kind: 'LOOT', text: `🧩 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（${ev.totalFragments}/${fragTarget}）` };
     }
     case 'CLASS_CAN_ADVANCE':
       return { kind: 'SYSTEM', text: '⭐ 职业碎片集齐！可选择进阶职业' };
@@ -351,8 +380,15 @@ function describeForLog(
     case 'ICE_WALL_SPAWNED':
       // 已通过 CHARGE_EXECUTED{result:'ICE_WALL_SPAWNED'} 展示，避免重复战报
       return null;
-    case 'BURN_APPLIED':
-      return { kind: 'ENEMY_ACT', text: `🔥 熔岩领主附加灼烧（积累 ${ev.totalRemaining} 点，叠满 6 点爆裂）` };
+    case 'BURN_APPLIED': {
+      const t = ev.totalRemaining;
+      const T = LAVA_LORD_BURN_BURST_THRESHOLD;
+      if (t >= T)
+        return { kind: 'PLAYER_HURT', text: `🔥💥 灼烧叠至 ${t} 层！熔核爆裂触发！` };
+      if (t + LAVA_LORD_BURN_TICKS >= T)
+        return { kind: 'PLAYER_HURT', text: `🔥⚠️ 灼烧 ${t}/${T} 层！下次被击中将立即引爆！` };
+      return { kind: 'ENEMY_ACT', text: `🔥 灼烧 ${t}/${T} 层（叠满 ${T} 层触发熔核爆裂）` };
+    }
     case 'ERUPTION_TELEGRAPHED':
       return { kind: 'ENEMY_ACT', text: `⚠️ 熔岩领主标记 ${ev.cells.length} 格喷发区域！下回合该区域将被熔岩吞没` };
     case 'ERUPTION_RESOLVED':
@@ -391,7 +427,9 @@ function describeForLog(
     case 'ALTAR_USED':
       return { kind: 'LOOT', text: `🌿 祭坛感应（灵气 +${ev.anima}）` };
     case 'BLACKSMITH_UPGRADE':
-      return { kind: 'LOOT', text: `⚒️ 铁匠强化 ${SLOT_CN[ev.slot] ?? ev.slot}：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}` };
+      return { kind: 'LOOT', text: `⚒️ 铁匠强化 ${SLOT_CN[ev.slot] ?? ev.slot} +${ev.newEnhanceLevel}：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}` };
+    case 'BLACKSMITH_UPGRADE_FAIL':
+      return { kind: 'PLAYER_HURT', text: `⚒️ 铁匠强化失败！（失败率 ${Math.round(ev.failChance * 100)}%）金币已扣除` };
     case 'BLACKSMITH_REROLL':
       return { kind: 'LOOT', text: `⚒️ 铁匠洗炼 ${SLOT_CN[ev.slot] ?? ev.slot}（词条 → ${ev.newTrait}）` };
     case 'HEAVY_STRIKE_RESOLVED':
@@ -495,6 +533,12 @@ function describeForLog(
       const def = RELIC_DEFS[ev.relicId];
       return { kind: 'PLAYER_ACT', text: `✨ ${def?.name ?? ev.relicId} 触发${ev.detail ? `：${ev.detail}` : ''}` };
     }
+    case 'ELITE_REVIVE':
+      return { kind: 'ENEMY_ACT', text: `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}` };
+    case 'ELITE_EXPLODE':
+      return { kind: 'PLAYER_HURT', text: `💥 火焰元素爆裂！真实伤害 -${ev.damage}（剩余 ${ev.hp} 血）` };
+    case 'FROST_AURA_DRAINED':
+      return { kind: 'PLAYER_HURT', text: `❄️ 寒冰光环！AP -1（剩余 ${ev.ap}）` };
     default:
       return null;
   }
@@ -515,7 +559,9 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     case 'PLAYER_DAMAGED': {
       const attacker = state?.floorState.monsters.find((m) => m.id === ev.sourceId);
       const name = attacker ? monsterName(attacker) : '敌人';
-      return `${name} 发起攻击，受到 ${ev.damage} 点伤害（自己剩 ${ev.hp} 血）`;
+      const absorbed = (ev.rawDamage != null && ev.rawDamage > ev.damage) ? ev.rawDamage - ev.damage : 0;
+      const absorbedText = absorbed > 0 ? `（护甲格挡 ${absorbed}）` : '';
+      return `${name} 发起攻击，受到 ${ev.damage} 点伤害${absorbedText}（自己剩 ${ev.hp} 血）`;
     }
     case 'LOOT': {
       const parts: string[] = [];
@@ -537,7 +583,10 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     case 'HOT_SPRING_HEAL':
       return `♨️ 温泉治疗 +${ev.healed} HP`;
     case 'FRAGMENT_PICKED': {
-      return `🧩 拾取 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（已有 ${ev.totalFragments}/${CLASS_FRAGMENTS_TO_ADVANCE}）`;
+      const fragTarget = state?.player.classId === ev.classId
+        ? CLASS_FRAGMENTS_TO_AWAKEN
+        : CLASS_FRAGMENTS_TO_ADVANCE;
+      return `🧩 拾取 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（已有 ${ev.totalFragments}/${fragTarget}）`;
     }
     case 'CLASS_CAN_ADVANCE':
       return `⭐ 职业碎片已集齐，可选择进阶职业！`;
@@ -578,8 +627,13 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return '⚠️ 冰霜巨人蓄力，下回合将狂暴冲锋！';
     case 'FROST_HEAVY_STRIKE_RESOLVED':
       return '💥 冰霜重击命中！';
-    case 'BURN_APPLIED':
-      return `🔥 熔岩领主附加灼烧！当前积累 ${ev.totalRemaining} 点`;
+    case 'BURN_APPLIED': {
+      const t = ev.totalRemaining;
+      const T = LAVA_LORD_BURN_BURST_THRESHOLD;
+      if (t >= T) return `💥 灼烧叠满！熔核爆裂即将引爆！`;
+      if (t + LAVA_LORD_BURN_TICKS >= T) return `⚠️ 灼烧 ${t}/${T} 层！下次被击中将引爆！`;
+      return `🔥 灼烧 ${t}/${T} 层（叠满 ${T} 层引爆，注意保持距离）`;
+    }
     case 'ERUPTION_TELEGRAPHED':
       return '⚠️ 熔岩领主标记喷发！红圈区域下回合将被熔岩吞没';
     case 'ERUPTION_RESOLVED':
@@ -605,7 +659,9 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     case 'ALTAR_USED':
       return `🌿 祭坛感应：灵气 +${ev.anima}`;
     case 'BLACKSMITH_UPGRADE':
-      return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 强化完成：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}`;
+      return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 强化 +${ev.newEnhanceLevel} 完成：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}`;
+    case 'BLACKSMITH_UPGRADE_FAIL':
+      return `⚒️ 强化失败（失败率 ${Math.round(ev.failChance * 100)}%），金币已扣除`;
     case 'BLACKSMITH_REROLL':
       return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 词条洗炼完成`;
     case 'SAND_PIT_STEPPED':
@@ -666,6 +722,12 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       if (ev.refunded) return `🎁 已持有，返还 ${ev.refundGold ?? 0} 金 / ${ev.refundDiamond ?? 0} 钻`;
       return `🎁 开出遗物：${def?.name ?? ev.relicId}！`;
     }
+    case 'ELITE_REVIVE':
+      return `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}`;
+    case 'ELITE_EXPLODE':
+      return `💥 火焰元素爆裂！真实伤害 -${ev.damage}（剩余 ${ev.hp} 血）`;
+    case 'FROST_AURA_DRAINED':
+      return `❄️ 寒冰光环！AP -1（剩余 ${ev.ap}）`;
     default:
       return null;
   }
@@ -1211,10 +1273,12 @@ export class ExpeditionController extends Component {
    */
   private async _checkMeta(events: PveEvent[]): Promise<void> {
     if (!this._state) return;
+    const tCheck = perfNow();
 
     // 使用安全默认（meta 尚未加载时也能正常检查）
     const unlocked = this._meta?.achievements ?? [];
     const newAch = checkNewAchievements(events, this._state.floor, unlocked);
+    perfMark('meta.checkAch', tCheck, `new=${newAch.length}`);
 
     if (newAch.length > 0) {
       // 更新本地 meta
@@ -1238,16 +1302,25 @@ export class ExpeditionController extends Component {
         const names = defs.map((d) => d.name).join('、');
         this._toast?.toast(`🏆 成就解锁：${names}`);
       }
-      // fire-and-forget 写云端
-      void updatePveMeta({ newAchievements: newAch }).catch(() => {});
+      // fire-and-forget 写云端 — 2026-06-11 改用 setTimeout(0) 二次推迟：原本 void updatePveMeta()
+      // 虽是 fire-and-forget，但 updatePveMeta 同步执行到 await wx.cloud.callFunction 期间，
+      // 序列化 + JSBridge 调用可能占主线程几百 ms~1s（真机实测 1117ms）。包 setTimeout(0)
+      // 让云调用本身的同步部分也脱离当前 task。
+      const tCloud = perfNow();
+      setTimeout(() => {
+        perfMark('meta.cloudAchStart', tCloud);
+        void updatePveMeta({ newAchievements: newAch }).catch(() => {});
+      }, 0);
     }
 
     // 图鉴：从击杀/掉落事件提取新条目
+    const tCodex = perfNow();
     const { monsters, equipment } = collectCodexEntries(events);
     const existMon = new Set(this._meta?.codex.monsters ?? []);
     const existEq  = new Set(this._meta?.codex.equipment ?? []);
     const newMon = monsters.filter((m) => !existMon.has(m));
     const newEq  = equipment.filter((e) => !existEq.has(e));
+    perfMark('meta.checkCodex', tCodex, `newMon=${newMon.length} newEq=${newEq.length}`);
 
     if (newMon.length > 0 || newEq.length > 0) {
       this._meta = {
@@ -1260,7 +1333,11 @@ export class ExpeditionController extends Component {
         },
         unlockedTreeNodes: this._meta?.unlockedTreeNodes ?? [],
       };
-      void updatePveMeta({ codexMonsters: newMon, codexEquipment: newEq }).catch(() => {});
+      const tCloud = perfNow();
+      setTimeout(() => {
+        perfMark('meta.cloudCodexStart', tCloud);
+        void updatePveMeta({ codexMonsters: newMon, codexEquipment: newEq }).catch(() => {});
+      }, 0);
     }
   }
 
@@ -1388,7 +1465,9 @@ export class ExpeditionController extends Component {
           this._state = applyStrengthen(this._state, choiceId).state;
           this._hud?.refresh(this._state);
           this._toast.toast('强化已生效');
-          this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `✨ 强化生效:${choiceId}`);
+          const info = STRENGTHEN_LABEL[choiceId] ?? { title: choiceId, desc: '' };
+          const label = info.desc ? `${info.title}（${info.desc}）` : info.title;
+          this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `✨ 强化生效：${label}`);
           await delay(420);
         }
       }
@@ -1473,10 +1552,29 @@ export class ExpeditionController extends Component {
       // 3.55a) 命运守卫「改写命运」预告：阻塞模态 3 选 1 弃。
       //        玩家点选后 chooseDestinyRewrite 写 removed，下个 Boss 回合 resolveDestinyRewrite 结算。
       if (ev.type === 'DESTINY_REWRITE_OFFERED' && this._toast && this._state) {
+        // 若抽到 E4（5×5 爆炸），先在地图上用红圈高亮 Boss 周围 5×5 范围，让玩家在模态中看清危险区域
+        if (ev.drawn.includes(4) && this._state) {
+          const bossPos = this._state.floorState.monsters.find(
+            (m) => m.bossId === 'FATE_GUARDIAN' && m.aiState !== 'DEAD',
+          )?.pos;
+          if (bossPos) {
+            const size = this._state.floorState.size;
+            const e4Cells: Coord[] = [];
+            for (let dy = -2; dy <= 2; dy++) {
+              for (let dx = -2; dx <= 2; dx++) {
+                const x = bossPos.x + dx;
+                const y = bossPos.y + dy;
+                if (x >= 0 && y >= 0 && x < size && y < size) e4Cells.push({ x, y });
+              }
+            }
+            this._map?.showAoeWarning(e4Cells);
+          }
+        }
         const cards = ev.drawn.map((id) => destinyEventCard(id));
         const tChoice = perfNow();
         const removedIndex = await this._toast.showTreeChoice('改写命运 · 舍弃一个未来（剩两个生效）', cards);
         perfMark('blockingChoice.destinyRewrite', tChoice);
+        this._map?.clearAoeWarning(); // 模态关闭后清除 E4 预警圈
         if (this._state) {
           const safe = (removedIndex === 0 || removedIndex === 1 || removedIndex === 2) ? removedIndex : 0;
           const r = chooseDestinyRewrite(this._state, safe);
@@ -1504,7 +1602,7 @@ export class ExpeditionController extends Component {
       }
 
       // 3.6) 命运预言：标记回合（预警）/ 结算回合（爆炸）均以 3×3 橙圈标识中心区域；
-      //      由 _onEndTurn 的 clearAoeHit 在进入下一怪物回合前统一清除。
+      //      展示 1s 后自动消失（不阻塞 _busy，不等待；若 1s 内进入下一回合 clearAoeHit 会先清掉）。
       if ((ev.type === 'PROPHECY_MARKED' || ev.type === 'PROPHECY_RESOLVED') && this._state) {
         const size = this._state.floorState.size;
         const cells: Coord[] = [];
@@ -1516,6 +1614,7 @@ export class ExpeditionController extends Component {
           }
         }
         this._map?.showAoeHit(cells, []);
+        void delay(1000).then(() => this._map?.clearAoeHit());
       }
 
       // 3.7) 流沙巨蝎沙暴：直接用橙圈标识本次随机覆盖的格子（命中提示见 SANDSTORM_HIT 战报）。
@@ -1745,6 +1844,26 @@ export class ExpeditionController extends Component {
             alreadyOwned: (this._state.player.relics ?? []).includes(relicId),
           };
         })(),
+        {
+          onUpgrade: (slot) => {
+            if (!this._state) return null;
+            const r = upgradeEquip(this._state, CAMP_BLACKSMITH_ID, slot);
+            if (r.events.length === 0) return null;
+            this._state = r.state;
+            this._hud?.refresh(this._state);
+            void this._playEvents(r.events);
+            return this._state.player;
+          },
+          onReroll: (slot) => {
+            if (!this._state) return null;
+            const r = rerollEquipTrait(this._state, CAMP_BLACKSMITH_ID, slot);
+            if (r.events.length === 0) return null;
+            this._state = r.state;
+            this._hud?.refresh(this._state);
+            void this._playEvents(r.events);
+            return this._state.player;
+          },
+        },
       );
       if (campChoice === 'quit') {
         SceneLoader.loadLobby();
@@ -1767,7 +1886,10 @@ export class ExpeditionController extends Component {
 
     const r = advanceFloor(this._state);
     this._state = r.state;
+    // 每层独立战报：进入新层时清空，避免历史堆积
+    this._log?.clear();
     this._map?.clearAoeHit();
+    this._map?.clearAoeWarning();
     this._refreshAll();
 
     if (r.state.status === 'COMPLETED') {

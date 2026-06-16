@@ -21,6 +21,10 @@ const BOSS_ICON_SCALE = 1.6;
 const BOSS_FOOT_RING_STROKE = new Color(230, 60, 60, 220);
 const MIRROR_SHIELD_STROKE = new Color(120, 200, 255, 240);
 const FROZEN_BORDER_STROKE = new Color(120, 220, 255, 255);
+const EXIT_HIGHLIGHT_FILL = new Color(120, 220, 140, 55);
+const EXIT_HIGHLIGHT_STROKE = new Color(120, 220, 140, 210);
+const PORTAL_HIGHLIGHT_FILL = new Color(110, 220, 235, 55);
+const PORTAL_HIGHLIGHT_STROKE = new Color(110, 220, 235, 210);
 
 type CellGlyph = { text: string; color: Color };
 
@@ -63,7 +67,15 @@ function cellContentKey(floor: FloorState, x: number, y: number): string {
     }
     return `MONSTER_${monster.type}`;
   }
-  const entity = floor.entities.find((e) => !e.consumed && e.pos.x === x && e.pos.y === y);
+  // 优先级：PORTAL > EXIT > KEY > 其他实体（SAND_PIT 等地形实体排在功能实体后面，
+  // 避免巨蝎冒出留下的沙坑把传送门盖住）。
+  const atPos = (e: { consumed?: boolean; pos: { x: number; y: number } }) =>
+    !e.consumed && e.pos.x === x && e.pos.y === y;
+  const ENTITY_PRIORITY: Record<string, number> = { PORTAL: 100, EXIT: 90, KEY: 80 };
+  const entitiesHere = floor.entities.filter((e) => atPos(e));
+  const entity = entitiesHere.length > 1
+    ? entitiesHere.reduce((best, e) => (ENTITY_PRIORITY[e.type] ?? 0) > (ENTITY_PRIORITY[best.type] ?? 0) ? e : best)
+    : entitiesHere[0];
   if (entity) {
     if (entity.type === 'ICE_WALL') return `ENTITY_ICE_WALL:${entity.hp ?? 0}`;
     return `ENTITY_${entity.type}`;
@@ -242,6 +254,26 @@ export class FogMapView {
     g.stroke();
 
     const [glyphKey, hpText] = content.split(':');
+
+    // 出口门 / 传送门：画彩色填充 + 发光描边，让玩家一眼定位出口
+    if (glyphKey === 'ENTITY_EXIT') {
+      g.fillColor = EXIT_HIGHLIGHT_FILL;
+      g.rect(-sz / 2, -sz / 2, sz, sz);
+      g.fill();
+      g.strokeColor = EXIT_HIGHLIGHT_STROKE;
+      g.lineWidth = 2.5;
+      g.rect(-sz / 2 + 1.5, -sz / 2 + 1.5, sz - 3, sz - 3);
+      g.stroke();
+    } else if (glyphKey === 'ENTITY_PORTAL') {
+      g.fillColor = PORTAL_HIGHLIGHT_FILL;
+      g.rect(-sz / 2, -sz / 2, sz, sz);
+      g.fill();
+      g.strokeColor = PORTAL_HIGHLIGHT_STROKE;
+      g.lineWidth = 2.5;
+      g.rect(-sz / 2 + 1.5, -sz / 2 + 1.5, sz - 3, sz - 3);
+      g.stroke();
+    }
+
     const glyph = GLYPH[glyphKey];
     if (lbl) {
       if (glyphKey === 'MONSTER_BOSS') {

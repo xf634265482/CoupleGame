@@ -2,6 +2,14 @@
 // M1 无美术资源：纯色面板 + Label，参考 CellEventToast 的「显示→定时/按钮关闭」模式。
 
 import { Color, Graphics, Label, Node, UITransform } from 'cc';
+import {
+  BLACKSMITH_ENHANCE_STEP,
+  BLACKSMITH_FAIL_BASE,
+  BLACKSMITH_FAIL_CAP,
+  BLACKSMITH_FAIL_STEP,
+  BLACKSMITH_FAIL_THRESHOLD,
+  BLACKSMITH_UPGRADE_COST,
+} from '../core/PveConstants';
 import type { Equipment, EquipItem, EquipSlot } from '../core/PveTypes';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
@@ -17,24 +25,54 @@ export const STRENGTHEN_LABEL: Record<string, { title: string; desc: string }> =
   strengthen_attack_up: { title: '力量强化',  desc: '攻击力 +5' },
   strengthen_ap_up:     { title: '敏捷强化',  desc: '下回合起 AP 上限 +1' },
   strengthen_gold_find: { title: '财富强化',  desc: '拾取金币 +20%' },
-  // ── BERSERKER（AC-16 M2）──
-  life_steal:           { title: '吸血',      desc: '每次攻击回复 10 HP' },
-  berserk:              { title: '狂暴',      desc: 'HP ≤ 50% 时攻击 +10' },
-  blood_rage:           { title: '血怒',      desc: '击杀时回复 20 HP' },
-  undying:              { title: '不屈',      desc: '每层首次将死时保留 1 HP' },
-  counter:              { title: '反击',      desc: '被攻击时对攻击者造成 10 伤害' },
-  // ── ARCHER（AC-16 M2）──
-  eagle_eye:            { title: '鹰眼',      desc: '攻击范围 +1' },
-  marksman:             { title: '射手精通',  desc: '攻击力 +5' },
-  multi_shot:           { title: '连射',      desc: '30% 概率对同一目标再射一箭' },
-  pierce:               { title: '穿透',      desc: '攻击无视护甲减伤' },
-  crit:                 { title: '暴击',      desc: '20% 概率造成三倍伤害' },
-  // ── ROGUE（AC-16 M2）──
-  swift:                { title: '疾步',      desc: '移动消耗 AP -1' },
-  backstab:             { title: '背刺',      desc: '移动后首次攻击双倍伤害' },
-  stealth:              { title: '潜行',      desc: '怪物仇恨范围对你缩小 2' },
-  afterimage:           { title: '残影',      desc: '每层闪避首次受到的攻击' },
-  assassin_heart:       { title: '刺客之心',  desc: '对非追击状态敌人 +20 伤害' },
+  // ── 狂战士（AC-16 M2 基础 + AC-404 扩展）──
+  life_steal:           { title: '吸血',        desc: '每次攻击回复 10 HP' },
+  berserk:              { title: '狂暴',        desc: 'HP ≤ 50% 时攻击 +10' },
+  blood_rage:           { title: '血怒',        desc: '击杀时回复 20 HP' },
+  undying:              { title: '不屈',        desc: '每层首次将死时保留 1 HP' },
+  counter:              { title: '反击',        desc: '被攻击时对攻击者造成 10 伤害' },
+  last_stand:           { title: '绝境一击',    desc: 'HP ≤ 25% 时攻击翻倍' },
+  vengeance:            { title: '复仇',        desc: '受击后下次攻击 +5 伤害' },
+  cleave:               { title: '横扫',        desc: '命中后对相邻敌人造成 50% 溅射伤害' },
+  pain_tolerance:       { title: '痛觉钝化',    desc: '受到 ≥5 伤害时额外减免 2' },
+  executioner:          { title: '处刑者',      desc: '对 HP ≤ 20% 目标 +3 伤害' },
+  iron_skin_stack:      { title: '铁骨',        desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
+  bloodlust_stack:      { title: '嗜血本能',    desc: '击杀时回复等同层数的 HP（可叠加）' },
+  rage_strike_stack:    { title: '怒击连击',    desc: '攻击力 + 当前层数×0.5（可叠加）' },
+  berserker_resolve:    { title: '背水一战',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
+  final_charge:         { title: '最后冲锋',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
+  // ── 射手（AC-16 M2 基础 + AC-404 扩展）──
+  eagle_eye:            { title: '鹰眼',        desc: '攻击范围 +1' },
+  marksman:             { title: '射手精通',    desc: '攻击力 +5' },
+  multi_shot:           { title: '连射',        desc: '30% 概率对同一目标再射一箭' },
+  pierce:               { title: '穿透',        desc: '攻击无视护甲减伤' },
+  crit:                 { title: '暴击',        desc: '20% 概率造成三倍伤害' },
+  headshot:             { title: '致命狩猎',    desc: 'HP ≤ 25% 时攻击翻倍' },
+  retreat_shot:         { title: '回马枪',      desc: '受击后下次攻击 +5 伤害' },
+  scatter_shot:         { title: '散射',        desc: '命中后对相邻敌人造成 50% 溅射伤害' },
+  steady_aim:           { title: '稳健射姿',    desc: '受到 ≥5 伤害时额外减免 2' },
+  finisher:             { title: '收割者',      desc: '对 HP ≤ 20% 目标 +3 伤害' },
+  quiver_stack:         { title: '强化箭袋',    desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
+  vital_shot_stack:     { title: '续命箭',      desc: '击杀时回复等同层数的 HP（可叠加）' },
+  focus_stack:          { title: '专注蓄力',    desc: '攻击力 + 当前层数×0.5（可叠加）' },
+  deadeye:              { title: '死神之眼',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
+  last_arrow:           { title: '最后一箭',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
+  // ── 隐匿者（AC-16 M2 基础 + AC-404 扩展）──
+  swift:                { title: '疾步',        desc: '移动消耗 AP -1' },
+  backstab:             { title: '背刺',        desc: '移动后首次攻击双倍伤害' },
+  stealth:              { title: '潜行',        desc: '怪物仇恨范围对你缩小 2' },
+  afterimage:           { title: '残影',        desc: '每层闪避首次受到的攻击' },
+  assassin_heart:       { title: '刺客之心',    desc: '对非追击状态敌人 +20 伤害' },
+  shadow_strike:        { title: '暗影突袭',    desc: 'HP ≤ 25% 时攻击翻倍' },
+  retribution:          { title: '夜枭反击',    desc: '受击后下次攻击 +5 伤害' },
+  shockwave:            { title: '震荡波',      desc: '命中后对相邻敌人造成 50% 溅射伤害' },
+  evasion_training:     { title: '闪避训练',    desc: '受到 ≥5 伤害时额外减免 2' },
+  coup_de_grace:        { title: '致命一击',    desc: '对 HP ≤ 20% 目标 +3 伤害' },
+  nimble_stack:         { title: '灵巧',        desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
+  bloodletter_stack:    { title: '放血',        desc: '击杀时回复等同层数的 HP（可叠加）' },
+  flurry_stack:         { title: '连斩',        desc: '攻击力 + 当前层数×0.5（可叠加）' },
+  survival_instinct:    { title: '求生本能',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
+  desperate_gambit:     { title: '背水孤注',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
   // ── 二阶觉醒专属词条（design §七）──
   awakened_cleave:      { title: '横扫',      desc: '攻击命中后，对相邻怪物造成50%溅射伤害' },
   awakened_frenzy:      { title: '狂热',      desc: '击杀后下一次攻击必定暴击并回复20点HP' },
@@ -334,6 +372,15 @@ export class PveToastView {
     shopItems: ReadonlyArray<{ id: string; name: string; desc: string; cost: number }>,
     onBuy: (itemId: string) => { hp: number; maxHp: number; gold: number; equipment: Equipment } | null,
     onSellEquip: (slot: EquipSlot) => { hp: number; maxHp: number; gold: number; equipment: Equipment } | null,
+    onRelicChest?: () => {
+      hp: number; maxHp: number; gold: number; equipment: Equipment;
+      message: string;
+    } | null,
+    relicChestMeta?: { costGold: number; costDiamond: number; currentDiamond: number; relicName: string; alreadyOwned: boolean },
+    blacksmithCbs?: {
+      onUpgrade: (slot: EquipSlot) => { gold: number; equipment: Equipment } | null;
+      onReroll: (slot: EquipSlot) => { gold: number; equipment: Equipment } | null;
+    },
   ): Promise<'continue' | 'quit'> {
     // 装备槽信息（供装备整理面板使用）
     const SLOT_ORDER: EquipSlot[] = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'];
@@ -353,8 +400,9 @@ export class PveToastView {
       let currentPlayer = { ...initialPlayer };
 
       const BOX_W = 640;
-      // 默认 2 项 → 520（含装备整理按钮行 +80），每多一项 +80
-      const BOX_H = 520 + (shopItems.length - 2) * 80;
+      // 默认 2 项 → 520（含装备整理按钮行 +80），每多一项 +80；
+      // 遗物宝箱按钮存在时再 +80；铁匠按钮存在时再 +80
+      const BOX_H = 520 + (shopItems.length - 2) * 80 + (onRelicChest ? 80 : 0) + (blacksmithCbs ? 80 : 0);
 
       // ── 装备整理面板（先声明以便 buildModal 引用）────────────
       let buildEquipPanel!: () => void;
@@ -435,6 +483,57 @@ export class PveToastView {
           new Color(100, 80, 50, 255),
         );
         curY -= 32 + 12;
+
+        // 铁匠铺按钮（仅当 blacksmithCbs 提供时显示）
+        if (blacksmithCbs) {
+          curY -= 16;
+          curY -= 32;
+          makeFlatButton(
+            box, '🔨 铁匠铺（强化 / 洗炼装备）', 0, curY, BOX_W - 80, 64,
+            () => {
+              this._closeChoice();
+              void this.showBlacksmith(
+                currentPlayer,
+                (slot) => {
+                  const updated = blacksmithCbs.onUpgrade(slot);
+                  if (updated) currentPlayer = { ...currentPlayer, ...updated };
+                  return updated;
+                },
+                (slot) => {
+                  const updated = blacksmithCbs.onReroll(slot);
+                  if (updated) currentPlayer = { ...currentPlayer, ...updated };
+                  return updated;
+                },
+              ).then(() => buildModal());
+            },
+            new Color(90, 65, 30, 255),
+          );
+          curY -= 32 + 12;
+        }
+
+        // 遗物宝箱（仅当 onRelicChest 提供时显示）
+        if (onRelicChest && relicChestMeta) {
+          const meta = relicChestMeta;
+          const canOpen = p.gold >= meta.costGold && meta.currentDiamond >= meta.costDiamond;
+          curY -= 32;
+          const tag = meta.alreadyOwned ? '已持有 · 中奖时返还 30%' : '10% 概率开出';
+          const label = canOpen
+            ? `🎁 ${meta.relicName} 宝箱（${meta.costGold}💰 + ${meta.costDiamond}💎）${tag}`
+            : `🎁 ${meta.relicName} 宝箱（${meta.costGold}💰 + ${meta.costDiamond}💎）资源不足`;
+          makeFlatButton(
+            box, label, 0, curY, BOX_W - 80, 64,
+            () => {
+              if (!canOpen) return;
+              const updated = onRelicChest();
+              if (updated) {
+                currentPlayer = { hp: updated.hp, maxHp: updated.maxHp, gold: updated.gold, equipment: updated.equipment };
+                buildModal();
+              }
+            },
+            canOpen ? new Color(120, 70, 130, 255) : new Color(55, 58, 68, 255),
+          );
+          curY -= 32 + 12;
+        }
 
         // 底部：继续远征 + 返回大厅
         curY -= 16;
@@ -526,7 +625,17 @@ export class PveToastView {
     const SLOT_ATTR_LABEL: Record<EquipSlot, string> = {
       WEAPON: '攻击力', HELMET: '最大HP', ARMOR: '减伤', SHOES: '靴子等级', TRINKET: '灵气加成',
     };
-    const upgradeStepFor = (slot: EquipSlot): number => (slot === 'SHOES' || slot === 'TRINKET' ? 1 : 10);
+    const upgradeStepFor = (slot: EquipSlot, item: EquipItem): number =>
+      (slot === 'SHOES' || slot === 'TRINKET') ? 1 : (BLACKSMITH_ENHANCE_STEP[item.quality] ?? 1);
+    const upgradeCostFor = (item: EquipItem, slot: EquipSlot): number => {
+      const step = upgradeStepFor(slot, item);
+      return BLACKSMITH_UPGRADE_COST * step * ((item.enhanceLevel ?? 0) + 1);
+    };
+    const upgradeFailChanceFor = (item: EquipItem): number => {
+      const lv = item.enhanceLevel ?? 0;
+      if (lv < BLACKSMITH_FAIL_THRESHOLD) return 0;
+      return Math.min(BLACKSMITH_FAIL_CAP, BLACKSMITH_FAIL_BASE + (lv - BLACKSMITH_FAIL_THRESHOLD) * BLACKSMITH_FAIL_STEP);
+    };
 
     return new Promise((resolve) => {
       let currentPlayer = { ...initialPlayer };
@@ -586,25 +695,29 @@ export class PveToastView {
             ? (item.trait ? `[${EQUIP_TRAIT_LABEL[item.trait] ?? item.trait}]` : '[未洗炼]')
             : '[低品质无词条]';
 
-          // 装备名称行
+          // 装备名称行（含强化等级 +N 后缀）
+          const enhanceSuffix = (item.enhanceLevel ?? 0) > 0 ? `+${item.enhanceLevel}` : '';
+          const failChance = upgradeFailChanceFor(item);
+          const failText = failChance > 0 ? `  ⚠️失败率${Math.round(failChance * 100)}%` : '';
           curY -= 12;
           makeLabel(
             box, 0, curY, BOX_W - 60, 24, 18,
             new Color(210, 220, 240, 255), Label.HorizontalAlign.CENTER,
-          ).string = `${SLOT_LABEL[slot]}：${item.name}（基础 ${item.baseStat}）${traitText}`;
+          ).string = `${SLOT_LABEL[slot]}：${item.name}${enhanceSuffix}（基础 ${item.baseStat}）${traitText}${failText}`;
           curY -= 12 + 8;
 
           // 强化 / 洗炼按钮（并排）
           curY -= 30;
           const btnW = Math.floor((BOX_W - 120) / 2);
-          const canUpgrade = p.gold >= 20;
+          const upgradeCost = upgradeCostFor(item, slot);
+          const canUpgrade = p.gold >= upgradeCost;
           const canReroll = hasTraitSlot && p.gold >= 30;
 
-          const step = upgradeStepFor(slot);
+          const step = upgradeStepFor(slot, item);
           const upgradeLabel = `强化${SLOT_ATTR_LABEL[slot]} ${item.baseStat}→${item.baseStat + step}`;
           if (canUpgrade) {
             makeFlatButton(
-              box, `${upgradeLabel}（20💰）`, -(btnW / 2 + 8), curY, btnW, 60,
+              box, `${upgradeLabel}（${upgradeCost}💰）`, -(btnW / 2 + 8), curY, btnW, 60,
               () => {
                 const updated = onUpgrade(slot);
                 if (updated) { currentPlayer = { ...updated }; buildPanel(); }
@@ -612,7 +725,7 @@ export class PveToastView {
               new Color(50, 100, 60, 255),
             );
           } else {
-            makeFlatButton(box, `${upgradeLabel}（20💰 不足）`, -(btnW / 2 + 8), curY, btnW, 60,
+            makeFlatButton(box, `${upgradeLabel}（${upgradeCost}💰 不足）`, -(btnW / 2 + 8), curY, btnW, 60,
               () => {}, new Color(40, 50, 40, 255));
           }
 

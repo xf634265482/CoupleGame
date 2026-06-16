@@ -259,17 +259,17 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
     });
   });
 
-  describe('applyMonsterKillDrop — 章节 2-5 Boss 通用掉落', () => {
-    const CHAPTER_QUALITY: Array<{ chapter: number; quality: EquipQuality }> = [
-      { chapter: 2, quality: 'FINE' },
-      { chapter: 3, quality: 'RARE' },
-      { chapter: 4, quality: 'EPIC' },
-      { chapter: 5, quality: 'LEGENDARY' },
+  describe('applyMonsterKillDrop — Boss 三层掉落（design Boss设计V1）', () => {
+    // 各章节 BOSS_SPOILS 的品质（均统一一档：ch1=RARE / ch2-3=EPIC / ch4-5=LEGENDARY）
+    const CHAPTER_BOSS: Array<{ chapter: number; bossId: string; quality: EquipQuality }> = [
+      { chapter: 2, bossId: 'QUICKSAND_SCORPION', quality: 'EPIC' },
+      { chapter: 3, bossId: 'FROST_GIANT', quality: 'EPIC' },
+      { chapter: 4, bossId: 'LAVA_LORD', quality: 'LEGENDARY' },
+      { chapter: 5, bossId: 'FATE_GUARDIAN', quality: 'LEGENDARY' },
     ];
 
-    CHAPTER_QUALITY.forEach(({ chapter, quality }) => {
-      it(`章节 ${chapter} Boss 掉落 10 金 + ${quality} 品质装备`, () => {
-        const bossId = ['SANDWORM_QUEEN', 'FROST_GIANT', 'LAVA_LORD', 'FATE_GUARDIAN'][chapter - 2];
+    CHAPTER_BOSS.forEach(({ chapter, bossId, quality }) => {
+      it(`章节 ${chapter} Boss 掉落通用奖励 + 1 件 ${quality} 专属装备`, () => {
         const state = makeExpeditionState({
           chapter,
           floorOverrides: {
@@ -281,15 +281,18 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
         const loot = result.events.find((e) => e.type === 'LOOT');
         expect(loot).toBeDefined();
         if (loot && loot.type === 'LOOT') {
-          expect(loot.gold).toBe(10);
+          // 通用奖励：金币按 bossDropScaled 缩放（>0）
+          expect(loot.gold ?? 0).toBeGreaterThan(0);
+          // 专属：必定一件装备，品质按 BOSS_SPOILS 表
           expect(loot.equip).toBeDefined();
           expect(loot.equip!.quality).toBe(quality);
         }
-        expect(result.state.player.gold).toBe(state.player.gold + 10);
+        // 实际金币入账
+        expect(result.state.player.gold).toBeGreaterThan(state.player.gold);
       });
     });
 
-    it('章节 1 GOBLIN_CHIEF 仍走专属掉落路径（含专属武器）', () => {
+    it('章节 1 GOBLIN_CHIEF 掉落：3 件专属中 1 件（RARE 品质）', () => {
       const state = makeExpeditionState({
         chapter: 1,
         floorOverrides: {
@@ -300,8 +303,36 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       const loot = result.events.find((e) => e.type === 'LOOT');
       expect(loot).toBeDefined();
       if (loot && loot.type === 'LOOT') {
-        expect(loot.equip?.slot).toBe('WEAPON');
+        expect(loot.equip).toBeDefined();
+        expect(loot.equip!.quality).toBe('RARE');
+        expect(['哥布林酋长战斧', '战争号角', '破旧王冠']).toContain(loot.equip!.name);
       }
+    });
+
+    it('稀有掉落概率叠加：多次击杀时碎片/卷轴/遗物事件均可能出现', () => {
+      // 用大样本验证：100 次击杀（每次种子不同），SHARDS/SCROLL/RELIC 至少各出现一次
+      let shardsCount = 0;
+      let scrollCount = 0;
+      let relicCount = 0;
+      for (let seed = 1; seed <= 100; seed++) {
+        const state = makeExpeditionState({
+          seed,
+          chapter: 1,
+          floorOverrides: {
+            monsters: [makeMonster('boss1', { x: 1, y: 1 }, { type: 'BOSS', bossId: 'GOBLIN_CHIEF', aiState: 'DEAD' })],
+          },
+        });
+        const result = applyMonsterKillDrop(state, 'boss1');
+        if (result.events.some((e) => e.type === 'SHARDS_PICKUP')) shardsCount++;
+        if (result.events.some((e) => e.type === 'SCROLL_PICKUP')) scrollCount++;
+        if (result.events.some((e) => e.type === 'RELIC_PICKUP')) relicCount++;
+      }
+      // 概率 10% / 30% / 20%，100 次样本至少各出现 1 次
+      expect(shardsCount).toBeGreaterThan(0);
+      expect(scrollCount).toBeGreaterThan(0);
+      expect(relicCount).toBeGreaterThan(0);
+      // 卷轴出现率（30%）应明显高于碎片（10%）
+      expect(scrollCount).toBeGreaterThan(shardsCount);
     });
   });
 });

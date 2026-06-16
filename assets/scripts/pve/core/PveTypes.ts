@@ -72,6 +72,8 @@ export interface Monster {
   enraged?: boolean;
   /** 命运守卫本体专属：狂暴起始 floor.turn（计算改写命运周期用）。 */
   enrageTurn?: number;
+  /** VOID_WORM 双生复活：首次被击杀时以 50% maxHp 原地复活；true 后不再触发。 */
+  revivedOnce?: boolean;
 }
 
 export interface FixedEntity {
@@ -99,6 +101,8 @@ export interface EquipItem {
   name: string;
   baseStat: number;
   trait?: string; // 随机词条 id
+  /** 已强化次数（0 = 未强化，显示为 +N 后缀）。 */
+  enhanceLevel?: number;
 }
 
 export type Equipment = Partial<Record<EquipSlot, EquipItem>>;
@@ -219,6 +223,8 @@ export interface FloorState {
   playerFireBurnRounds?: number;
   /** 赤炎哥布林灼烧伤害累计（每回合 +5，≥10 时扣 10HP 并 -10）。 */
   playerFireBurnAccum?: number;
+  /** 毒蝎中毒剩余回合数（每回合 8HP，不叠加，刷新计时）。 */
+  playerPoisonRounds?: number;
   /** 觉醒·狂热(awakened_frenzy)：击杀后下一次攻击必定暴击+回血，触发后置 false。 */
   frenzyPending?: boolean;
   /** 觉醒·影袭(awakened_shadow_strike)：本回合已触发的背刺次数（上限2），回合结束时重置为0。 */
@@ -290,7 +296,7 @@ export type PveEvent =
   | { type: 'PICK_KEY'; entityId: string }
   | { type: 'OPEN_CHEST'; entityId: string }
   | { type: 'ANIMA_STRENGTHEN'; choices: string[] } // 触发 3 选 1（待玩家选择）
-  | { type: 'PLAYER_DAMAGED'; damage: number; hp: number; sourceId: string }
+  | { type: 'PLAYER_DAMAGED'; damage: number; hp: number; sourceId: string; rawDamage?: number }
   | { type: 'TURN_END'; turn: number }
   /** 新回合开始掷骰 → AP（AC-2）：dice ∈ [1,6]，ap = 8 + dice ∈ [9,14]（已包含结转，见 AP_CARRIED）。 */
   | { type: 'AP_ROLLED'; turn: number; dice: number; ap: number }
@@ -327,12 +333,18 @@ export type PveEvent =
   | { type: 'MOVE_PENALTY_APPLIED'; rounds: number }
   /** 灼烧状态施加（赤炎哥布林命中）：rounds 为本次叠加的持续回合数。 */
   | { type: 'FIRE_BURN_APPLIED'; rounds: number }
+  /** 中毒状态施加（毒蝎命中）：rounds 为持续回合数（不叠加，刷新计时）。 */
+  | { type: 'POISON_APPLIED'; rounds: number }
+  /** 中毒 tick：每回合开始时 -8 HP。 */
+  | { type: 'POISON_TICK'; damage: number; hp: number }
   /** 灼烧 tick：每回合开始时 -1 HP。 */
   | { type: 'BURN_TICK'; damage: number; hp: number }
   /** 祭坛使用：消耗后随机获得灵气。 */
   | { type: 'ALTAR_USED'; entityId: string; anima: number }
-  /** 铁匠强化：+1 基础属性（消耗金币，不消耗实体）。 */
-  | { type: 'BLACKSMITH_UPGRADE'; entityId: string; slot: EquipSlot; newStat: number }
+  /** 铁匠强化成功：baseStat 提升，enhanceLevel +1，显示新的强化等级与属性值。 */
+  | { type: 'BLACKSMITH_UPGRADE'; entityId: string; slot: EquipSlot; newStat: number; newEnhanceLevel: number }
+  /** 铁匠强化失败：扣费但属性不变（概率失败）。 */
+  | { type: 'BLACKSMITH_UPGRADE_FAIL'; entityId: string; slot: EquipSlot; failChance: number }
   /** 铁匠洗炼：随机替换装备词条（消耗金币，不消耗实体）。 */
   | { type: 'BLACKSMITH_REROLL'; entityId: string; slot: EquipSlot; newTrait: string }
   /** 哥布林酋长蓄力重击实际结算：center 为本次重击结算时 boss 所在格（用于 UI 标识实际命中区域）。 */
@@ -358,6 +370,14 @@ export type PveEvent =
   | { type: 'EQUIP_CHANGED'; slot: EquipSlot; item: EquipItem; prevBaseStat?: number }
   /** 玩家踩入沙坑（第2章 Boss 房）：当前格 entityId，移动 AP 已加 1。 */
   | { type: 'SAND_PIT_STEPPED'; entityId: string }
+  /** 灵气怪逃跑后在离开的原格留下陷阱（CH2 沙坑 / CH3 冰面）：variantId 用于战报展示。 */
+  | { type: 'ANIMA_TRAP_SPAWNED'; entityId: string; entityType: 'SAND_PIT' | 'ICE_TILE'; pos: Coord; variantId: string; duration: number }
+  /** 灵气炎魂（CH4）被击杀时在十字 4 格生成熔岩（跳过被占格）。 */
+  | { type: 'ANIMA_DEATH_LAVA'; tiles: Coord[]; duration: number }
+  /** 灵气幻象（CH5）被击杀时给玩家随机 Buff。 */
+  | { type: 'ANIMA_BUFF_GRANTED'; buffId: string }
+  /** 灵气幻象（CH5）被击杀时给玩家随机 Debuff。 */
+  | { type: 'ANIMA_DEBUFF_APPLIED'; debuffId: string }
   /** 冰墙被玩家攻击破坏（第3章 Boss 房）：emit 后玩家 +anima。 */
   | { type: 'ICE_WALL_BROKEN'; entityId: string; anima: number }
   /** 玩家踩入熔岩地块受伤（每回合开始结算）。 */
@@ -448,7 +468,13 @@ export type PveEvent =
   /** 营地遗物宝箱开启结果：success=true 表示获得遗物；false 表示未中（已扣资源）；refunded=true 表示遗物已持有自动转补偿。 */
   | { type: 'RELIC_CHEST_OPENED'; success: boolean; relicId?: RelicId; refunded?: boolean; refundGold?: number; refundDiamond?: number }
   /** 遗物 hook 触发提示（例：永冻之核冰冻、熔火之心反弹），供战报展示。 */
-  | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string };
+  | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string }
+  /** C4 VOID_WORM 双生复活：首次被击杀时原地复活到 50% HP，emit 供战报/UI 展示。 */
+  | { type: 'ELITE_REVIVE'; monsterId: string; hp: number }
+  /** C3 FIRE_ELEMENTAL 爆裂自爆：死亡时对 2 格内玩家造成等攻击力真实伤害（无视护甲）。 */
+  | { type: 'ELITE_EXPLODE'; monsterId: string; pos: Coord; damage: number; hp: number }
+  /** C2 FROST_SPRITE 寒冰光环：存活且在玩家 3 格内时每回合开始 AP -1。 */
+  | { type: 'FROST_AURA_DRAINED'; ap: number };
 
 /** core 纯函数统一返回：变更后的状态 + 本次产生的事件序列。 */
 export interface ApplyResult {

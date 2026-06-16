@@ -214,14 +214,8 @@ describe('词条：marksman 射手精通（ARCHER）', () => {
 });
 
 describe('词条：crit 暴击（ARCHER）', () => {
-  it('大量攻击时有一定比例造成 3 倍伤害（概率约 20%）', () => {
+  it('大量攻击时有一定比例造成 2 倍伤害（概率约 10%）', () => {
     let critCount = 0;
-    const baseState = makeExpeditionState({
-      floorOverrides: {
-        player: { x: 4, y: 4 },
-        ap: 10,
-      },
-    });
 
     for (let i = 0; i < 500; i++) {
       const s = makeExpeditionState({
@@ -235,11 +229,11 @@ describe('词条：crit 暴击（ARCHER）', () => {
       });
       const result = playerAttack(s, 'm1');
       const atk = result.events.find((e) => e.type === 'ATTACK');
-      if (atk?.type === 'ATTACK' && atk.damage === 30) critCount++; // 基础 10 * 3
+      if (atk?.type === 'ATTACK' && atk.damage === 20) critCount++; // 基础 10 * 2
     }
-    // 期望约 100/500=20%，允许误差
-    expect(critCount / 500).toBeGreaterThan(0.10);
-    expect(critCount / 500).toBeLessThan(0.35);
+    // 期望约 50/500=10%，允许误差
+    expect(critCount / 500).toBeGreaterThan(0.03);
+    expect(critCount / 500).toBeLessThan(0.22);
   });
 
   it('确定性：相同 rngState → 相同暴击结果（AC-13）', () => {

@@ -11,14 +11,15 @@ import { getAwakenEligible } from './ClassSystem';
 import { applyFragmentBonus, buildPendingTreeChoices, deriveTreeRng, getTreeBonuses } from './DestinyTreeSystem';
 import { relicOnNewFloor } from './RelicSystem';
 import { isPlayerBurnImmune, tickMonsterDots } from './BossEquipTraitEffects';
+import { VARIANT_FROST_SPRITE } from './Chapter3Monsters';
 import {
   ANIMA_PER_STRENGTHEN,
   AP_CARRY_CAP,
-  CHAPTER4_LAVA_TILE_DAMAGE,
   INITIAL_ANIMA,
   INITIAL_CLASS,
   INITIAL_GOLD,
   INITIAL_HP,
+  POISON_DAMAGE_PER_ROUND,
   TOTAL_FLOORS,
   chapterOfFloor,
   isBossFloor,
@@ -150,6 +151,16 @@ export function endTurn(state: ExpeditionState): ApplyResult {
     finalAp = Math.max(1, Math.floor(finalAp / 2));
   }
 
+  // C2: FROST_SPRITE 寒冰光环 — 任意存活的 FROST_SPRITE 在玩家 3 格曼哈顿距离内，本回合 AP -1
+  const frostSpriteAuraActive = aiResult.state.floorState.monsters.some(
+    (m) => m.variantId === VARIANT_FROST_SPRITE && m.aiState !== 'DEAD'
+      && Math.abs(m.pos.x - aiResult.state.floorState.player.x) + Math.abs(m.pos.y - aiResult.state.floorState.player.y) <= 3,
+  );
+  if (frostSpriteAuraActive) {
+    finalAp = Math.max(1, finalAp - 1);
+    events.push({ type: 'FROST_AURA_DRAINED', ap: finalAp });
+  }
+
   events.push({ type: 'AP_ROLLED', turn: nextTurn, dice, ap: finalAp });
   if (carryAp > 0) events.push({ type: 'AP_CARRIED', amount: carryAp });
   if (destinyLocked) events.push({ type: 'DESTINY_AP_LOCKED', nextTurnAp: finalAp });
@@ -193,6 +204,17 @@ export function endTurn(state: ExpeditionState): ApplyResult {
     newFireBurnAccum = 0;
   }
 
+  // 中毒 DoT（毒蝎 POISON_SCORPION）：每回合 8 HP 伤害，不叠加，刷新计时
+  const poisonRounds = aiResult.state.floorState.playerPoisonRounds ?? 0;
+  let newPoisonRounds = poisonRounds;
+  if (poisonRounds > 0 && !burnDead) {
+    burnedHp = Math.max(0, burnedHp - POISON_DAMAGE_PER_ROUND);
+    newPoisonRounds = poisonRounds - 1;
+    burnDead = burnedHp <= 0;
+    events.push({ type: 'POISON_TICK', damage: POISON_DAMAGE_PER_ROUND, hp: burnedHp });
+    if (burnDead) events.push({ type: 'PLAYER_DEAD' });
+  }
+
   // 怪物 DoT tick（流血 / 灼烧 — boss_bleed_on_hit / boss_burn_on_hit 装备 trait）：
   // 在玩家结算后处理，怪物可能因此死亡（不触发掉落，因为不是玩家直接击杀；避免装备 DoT 农怪刷资源）
   const dotResult = tickMonsterDots(aiResult.state.floorState.monsters);
@@ -204,27 +226,15 @@ export function endTurn(state: ExpeditionState): ApplyResult {
 
   // 限时地块倒计时：凡带 remaining 的未消耗实体（LAVA_TILE 熔岩 / ICE_TILE 冰面 / 动态 SAND_PIT 流沙）
   // 每回合结束 remaining-1，归零移除；无 remaining 的实体（静态沙坑/石块/冰墙等）永久保留。
-  // 熔岩地块额外：玩家踩入扣 CHAPTER4_LAVA_TILE_DAMAGE。
-  let lavaHp = burnedHp;
-  let lavaDead = burnDead;
-  let hpChanged = burnRemaining > 0 || (fireBurnRounds > 0 && Math.floor((fireBurnAccum + 5) / 10) > 0);
+  // 注意：LAVA_TILE 踩入伤害已移至 MovementSystem.applyMove（步入即时结算），这里仅做倒计时。
+  const lavaHp = burnedHp;
+  const lavaDead = burnDead;
+  const hpChanged = burnRemaining > 0 || (fireBurnRounds > 0 && Math.floor((fireBurnAccum + 5) / 10) > 0) || poisonRounds > 0;
   const entitiesAfterLava: FixedEntity[] = [];
   for (const entity of aiResult.state.floorState.entities) {
     if (entity.consumed) {
       entitiesAfterLava.push(entity);
       continue;
-    }
-    // 熔岩地块踩入扣血：与 remaining 倒计时解耦，永久格子（无 remaining）同样生效。
-    if (entity.type === 'LAVA_TILE') {
-      const playerOnTile =
-        aiResult.state.floorState.player.x === entity.pos.x && aiResult.state.floorState.player.y === entity.pos.y;
-      if (playerOnTile && !lavaDead) {
-        lavaHp = Math.max(0, lavaHp - CHAPTER4_LAVA_TILE_DAMAGE);
-        lavaDead = lavaHp <= 0;
-        hpChanged = true;
-        events.push({ type: 'LAVA_TILE_DAMAGED', entityId: entity.id, damage: CHAPTER4_LAVA_TILE_DAMAGE });
-        if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
-      }
     }
     if (entity.remaining === undefined) {
       entitiesAfterLava.push(entity);
@@ -252,6 +262,7 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       playerBurnRemaining: newBurnRemaining > 0 ? newBurnRemaining : undefined,
       playerFireBurnRounds: newFireBurnRounds > 0 ? newFireBurnRounds : undefined,
       playerFireBurnAccum: newFireBurnRounds > 0 ? newFireBurnAccum : undefined,
+      playerPoisonRounds: newPoisonRounds > 0 ? newPoisonRounds : undefined,
       playerMoveApPenaltyRounds: newMoveApPenaltyRounds > 0 ? newMoveApPenaltyRounds : undefined,
       status: lavaDead ? 'DEAD' : aiResult.state.floorState.status,
       shoesFirstMoveDone: undefined, // 每回合开始时重置靴子首步免费标记

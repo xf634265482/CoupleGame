@@ -23,7 +23,7 @@ export const AP_CARRY_CAP = 3;
 
 // ── 中立交互实体效果（M1 占位数值，待与设计师对齐回写 design.md） ──
 export const IDOL_MAX_HP_BONUS = 10; // 神像祝福：永久 +10 maxHp（数值×10基准下 = 原 +1）
-export const HOT_SPRING_HEAL_RATIO = 1.0; // 温泉：当次将 HP 回满（1.0=full heal）
+export const HOT_SPRING_HEAL_RATIO = 0.4; // 温泉：恢复 maxHp 的 40%（削弱自回满，避免玩家无损通层）
 
 // ── 地图尺寸（design §3 / §5） ─────────────────────────
 export const MAP_SIZE = {
@@ -46,9 +46,7 @@ export const CHAPTER_BOSS = {
 } as const;
 
 // ── 玩家初始状态 ───────────────────────────────────────
-// ⚠️ 仅开发调试：2026-06-15 临时再 ×10（200 → 2000），便于五个 Boss 连续测试不被秒死。
-// 5 个 Boss 测完后需与 DEV_SKIP_TO_FLOOR 一起改回 200！
-export const INITIAL_HP = 2000;
+export const INITIAL_HP = 200;
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
@@ -89,8 +87,8 @@ export const NORMAL_MONSTER_DROP = {
   GOLD_ONLY: 0.5,
   ANIMA_ONLY: 0.25,
   GOLD_AND_ANIMA: 0.25,
-  /** 额外独立判定：极低概率掉落 COMMON 装备（design §11.3）。 */
-  EQUIP_CHANCE: 0.03,
+  /** 独立额外判定：5% 概率掉落 COMMON 装备（与金币/灵气掉落互相独立）。 */
+  EQUIP_CHANCE: 0.05,
   goldSmall: [5, 12] as const,
   animaSmall: [10, 25] as const,
 } as const;
@@ -218,9 +216,10 @@ export const ANIMA_MONSTER_DROP = {
 export const ELITE_MONSTER_DROP = {
   GOLD_ONLY: 0.40,
   GOLD_AND_ANIMA: 0.30,
-  GOLD_HIGH: 0.15,     // 大量金币（40+30+15=85%）
-  EQUIP: 0.10,         // 装备（40+30+15+10=95%）
-  FRAGMENT_PAIR: 0.05, // 职业碎片对（V2）：随机 2 个不同职业各 +1 碎片（40+30+15+10+5=100%）
+  GOLD_HIGH: 0.25,     // 大量金币（40+30+25=95%）
+  FRAGMENT_PAIR: 0.05, // 职业碎片对（40+30+25+5=100%）
+  /** 独立额外判定：15% 概率掉落 FINE 装备（与金币/灵气掉落互相独立）。 */
+  EQUIP_CHANCE: 0.15,
   goldMid: [15, 30] as const,
   goldHigh: [35, 60] as const,
   animaMid: [20, 40] as const,
@@ -350,8 +349,25 @@ export const ALTAR_ANIMA_MIN = 20;
 export const ALTAR_ANIMA_MAX = 35;
 
 // ── 铁匠服务费用（design §3 中性区域）────────────────────────
-/** 铁匠强化：+1 基础属性所需金币（WEAPON/ARMOR/HELMET 实际强化量为 +10，SHOES/TRINKET 为 +1，详见 NeutralEntities.upgradeEquip）。 */
+/** 铁匠强化基础费用（每次实际费用 = BASE × upgradeStep × (enhanceLevel + 1)，按品质分级递增）。 */
 export const BLACKSMITH_UPGRADE_COST = 20;
+/** 强化从第几级起开始有失败概率（+5 = 10%，+6 = 15%，每级 +5%，上限 80%）。 */
+export const BLACKSMITH_FAIL_THRESHOLD = 5;
+export const BLACKSMITH_FAIL_BASE = 0.10;
+export const BLACKSMITH_FAIL_STEP = 0.05;
+export const BLACKSMITH_FAIL_CAP = 0.80;
+/**
+ * 铁匠强化每次提升 baseStat 的增量，按装备品质分级（×10 基准）。
+ * WEAPON / ARMOR / HELMET 使用此表；SHOES / TRINKET 固定 +1。
+ * 示例：COMMON 武器（基础10）每次+1；FINE（基础20）每次+2；LEGENDARY（基础80）每次+8。
+ */
+export const BLACKSMITH_ENHANCE_STEP: Record<string, number> = {
+  COMMON:    1,
+  FINE:      2,
+  RARE:      3,
+  EPIC:      5,
+  LEGENDARY: 8,
+};
 /** 铁匠洗炼：重新随机词条所需金币。 */
 export const BLACKSMITH_REROLL_COST = 30;
 
@@ -407,13 +423,13 @@ export const FATE_MIRROR_BOSS_ID = 'FATE_MIRROR';
 /** 命运守卫：HP 跨过此比例 → 进入狂暴态（清空预言、开启改写命运周期）。 */
 export const FATE_ENRAGE_HP_RATIO = 0.3;
 /** 命运守卫：狂暴态每多少个怪物回合触发一次「改写命运」预告。 */
-export const DESTINY_REWRITE_INTERVAL = 3;
+export const DESTINY_REWRITE_INTERVAL = 4;
 /** 命运守卫：改写命运事件池大小（E1-E5）。 */
 export const DESTINY_REWRITE_POOL_SIZE = 5;
 /** 命运守卫：改写命运每次抽取的事件数（玩家会从中弃 1，剩余 2 生效）。 */
 export const DESTINY_REWRITE_DRAW_SIZE = 3;
 /** 命运守卫：E1 Boss 回血量 = maxHp × 该系数。 */
-export const DESTINY_HEAL_RATIO = 0.10;
+export const DESTINY_HEAL_RATIO = 0.05;
 /** 命运守卫：E2 Boss 加伤害百分比（普攻 / 镜像攻击 / 5×5 都吃）。 */
 export const DESTINY_ATK_BUFF_PCT = 30;
 /** 命运守卫：E2 Boss 加伤害持续怪物回合数。 */
@@ -436,6 +452,25 @@ export const HORN_WARRIOR_ENRAGE_COUNT = 2;
 export const FROST_MOVE_PENALTY_ROUNDS = 2;
 /** 赤炎哥布林灼烧：5HP/回合的持续回合数（可叠加）。 */
 export const FIRE_BURN_ROUNDS = 2;
+
+// ── 第 2-5 章普通/精英怪新行为常量（P1）────────────────────────
+/** 毒蝎中毒：每回合伤害值。 */
+export const POISON_DAMAGE_PER_ROUND = 8;
+/** 毒蝎中毒：命中玩家后的持续回合数（不叠加，刷新计时）。 */
+export const POISON_ROUNDS = 3;
+
+// ── 第 2-5 章灵气怪专属机制常量（260616 灵气怪差异化升级）─────
+/** 灵气甲虫（CH2）：逃跑离开格留下沙坑，存续回合数。 */
+export const ANIMA_BEETLE_TRAP_DURATION = 8;
+/** 灵气精灵（CH3）：逃跑离开格留下冰面，存续回合数。 */
+export const ANIMA_ELF_TRAP_DURATION = 6;
+/** 灵气炎魂（CH4）：玩家击杀时在十字 4 格生成的熔岩存续回合数。 */
+export const ANIMA_EMBER_LAVA_DURATION = 3;
+/** 灵气幻象（CH5）Buff/Debuff 池 id：随机一项立即生效。 */
+export const ANIMA_MIRAGE_BUFF_IDS = ['HEAL_30', 'AP_PLUS_3', 'ANIMA_PLUS_60', 'GOLD_PLUS_60', 'ATTACK_UP'] as const;
+export const ANIMA_MIRAGE_DEBUFF_IDS = ['HURT_20', 'FIRE_BURN_2', 'SLOW_2', 'AP_MINUS_3', 'ANIMA_PROGRESS_MINUS_30'] as const;
+export type AnimaMirageBuffId = (typeof ANIMA_MIRAGE_BUFF_IDS)[number];
+export type AnimaMirageDebuffId = (typeof ANIMA_MIRAGE_DEBUFF_IDS)[number];
 
 // ── 命运碎片成长树（destiny tree，design「命运树 V1 数值调整建议」）──
 /** A1 坚韧之躯Ⅰ：maxHp/hp +20（×10 基准，原 +2）。 */
@@ -466,6 +501,8 @@ export const TREE_D2_THRESHOLD_MULT = 0.9;
 export const TREE_D3_ANIMA_GAIN_PCT = 0.1;
 /** E1 誓石意志：maxHp/hp +40（×10 基准，原 +4）。 */
 export const TREE_E1_HP_BONUS = 40;
+/** 命运树重置：消耗钻石数（退还全部已解锁节点的命运碎片，清空 unlockedTreeNodes）。 */
+export const TREE_RESET_DIAMOND_COST = 20;
 
 /** 命运树节点定义：column 内按 order 顺序解锁（需先解锁 order-1 的节点）。 */
 export interface DestinyTreeNodeDef {
@@ -502,7 +539,7 @@ export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
  * 将此值改为非零整数（例如 5）后重新构建，开局将直接跳到该层。
  * ⚠️ 正式构建 / 提测前必须改回 0！同时把上面的 INITIAL_HP 改回 200。
  */
-export const DEV_SKIP_TO_FLOOR = 20;
+export const DEV_SKIP_TO_FLOOR = 0;
 
 /** 第 floor 层（1-based）所属章节（1-based）。 */
 export function chapterOfFloor(floor: number): number {
@@ -520,27 +557,31 @@ export function mapSizeOfFloor(floor: number): number {
   return chapterOfFloor(floor) >= 3 ? MAP_SIZE.HIGH : MAP_SIZE.NORMAL;
 }
 
-/** 按章节返回普通/精英/灵气怪属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。 */
+/** 按章节返回普通/精英/灵气怪属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。
+ *  旧值：1.0→1.4→2.0→2.8→3.8；新值大幅拉陡使后期怪物真正构成威胁。
+ */
 export function chapterScaling(chapter: number): { hpMult: number; attackMult: number } {
   const SCALING = [
     { hpMult: 1.0, attackMult: 1.0 },
-    { hpMult: 1.4, attackMult: 1.4 },
-    { hpMult: 2.0, attackMult: 2.0 },
-    { hpMult: 2.8, attackMult: 2.8 },
-    { hpMult: 3.8, attackMult: 3.8 },
+    { hpMult: 1.8, attackMult: 1.8 },
+    { hpMult: 3.0, attackMult: 3.0 },
+    { hpMult: 5.0, attackMult: 5.0 },
+    { hpMult: 8.0, attackMult: 8.0 },
   ] as const;
   const idx = Math.max(0, Math.min(chapter - 1, SCALING.length - 1));
   return SCALING[idx];
 }
 
-/** 按章节返回 Boss 专属属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。 */
+/** 按章节返回 Boss 专属属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。
+ *  HP 大幅上调保证 Boss 战有足够回合数；攻击上调幅度较缓，保留可玩余地。
+ */
 export function bossChapterScaling(chapter: number): { hpMult: number; attackMult: number } {
   const SCALING = [
-    { hpMult: 1.5, attackMult: 1.5 },
-    { hpMult: 2.2, attackMult: 2.2 },
-    { hpMult: 3.0, attackMult: 3.0 },
-    { hpMult: 3.8, attackMult: 3.8 },
-    { hpMult: 4.5, attackMult: 4.5 },
+    { hpMult: 2.0,  attackMult: 1.5 },
+    { hpMult: 3.5,  attackMult: 2.5 },
+    { hpMult: 6.0,  attackMult: 3.5 },
+    { hpMult: 10.0, attackMult: 5.0 },
+    { hpMult: 16.0, attackMult: 7.0 },
   ] as const;
   const idx = Math.max(0, Math.min(chapter - 1, SCALING.length - 1));
   return SCALING[idx];

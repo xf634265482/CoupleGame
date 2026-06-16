@@ -122,11 +122,37 @@ describe('ClassSystem — 职业碎片与进阶（AC-15 M2）', () => {
       expect(applyClassAdvance(state, 'ROGUE').events).toEqual([]);
     });
 
-    it('已是该职业时为 no-op', () => {
+    it('已是该职业时为 no-op（当前职业非 ADVENTURER 无法一阶进阶）', () => {
       const state = makeExpeditionState({
         playerOverrides: { classId: 'ARCHER', classFragments: { ARCHER: CLASS_FRAGMENTS_TO_ADVANCE } },
       });
       expect(applyClassAdvance(state, 'ARCHER').events).toEqual([]);
+    });
+
+    it('已进阶为一阶职业后，积累其他职业碎片不触发二次进阶', () => {
+      // 玩家已是狂战士，攒够射手碎片，不应再进阶
+      const state = makeExpeditionState({
+        playerOverrides: {
+          classId: 'BERSERKER',
+          classFragments: { BERSERKER: 2, ARCHER: CLASS_FRAGMENTS_TO_ADVANCE },
+        },
+      });
+      expect(applyClassAdvance(state, 'ARCHER').events).toEqual([]);
+    });
+
+    it('已进阶为一阶职业后，pickFragment 不再 emit CLASS_CAN_ADVANCE', () => {
+      const state = makeExpeditionState({
+        floorOverrides: {
+          player: { x: 3, y: 3 },
+          entities: [makeEntity('frag', 'FRAGMENT', { x: 3, y: 3 }, { fragmentClass: 'ARCHER' })],
+        },
+        playerOverrides: {
+          classId: 'BERSERKER',
+          classFragments: { BERSERKER: 2, ARCHER: CLASS_FRAGMENTS_TO_ADVANCE - 1 },
+        },
+      });
+      const result = pickFragment(state, 'frag');
+      expect(result.events.find((e) => e.type === 'CLASS_CAN_ADVANCE')).toBeUndefined();
     });
 
     it('确定性：相同种子 + 相同碎片状态 → 相同结果（AC-13）', () => {

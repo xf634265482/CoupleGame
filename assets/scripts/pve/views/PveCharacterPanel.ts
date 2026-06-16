@@ -5,20 +5,40 @@
 import { Color, EventTouch, Graphics, Label, Node, UITransform } from 'cc';
 import { findAchievement } from '../core/AchievementSystem';
 import { playerAttackPower } from '../core/CombatSystem';
+import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD, SHOES_STEALTH_THRESHOLD, shoesStealthReduction } from '../core/EquipmentSystem';
 import { AP_BASE, AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
-import type { EquipSlot, ExpeditionState, PveMeta } from '../core/PveTypes';
+import { RELIC_DEFS } from '../core/RelicSystem';
+import type { EquipItem, EquipSlot, ExpeditionState, PveMeta } from '../core/PveTypes';
 import { EQUIP_TRAIT_LABEL, STRENGTHEN_LABEL } from './PveToastView';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
-const TITLE_COLOR = new Color(245, 220, 130, 255);
-const TEXT_COLOR  = new Color(225, 230, 240, 255);
-const DIM_COLOR   = new Color(160, 165, 180, 255);
-const BG_COLOR    = new Color(28, 32, 44, 240);
-const MASK_COLOR  = new Color(0, 0, 0, 170);
+const TITLE_COLOR  = new Color(245, 220, 130, 255);
+const TEXT_COLOR   = new Color(225, 230, 240, 255);
+const DIM_COLOR    = new Color(160, 165, 180, 255);
+const BG_COLOR     = new Color(28, 32, 44, 240);
+const MASK_COLOR   = new Color(0, 0, 0, 170);
 const BORDER_COLOR = new Color(120, 130, 160, 200);
+const POPUP_BG     = new Color(18, 22, 36, 255);  // 完全不透明，防止底层内容透出
+
+/** 装备品质的文字颜色（用于弹窗标题）。 */
+const QUALITY_TEXT: Record<string, Color> = {
+  COMMON:    new Color(180, 185, 200, 255),
+  FINE:      new Color(100, 210, 100, 255),
+  RARE:      new Color(100, 180, 255, 255),
+  EPIC:      new Color(200, 120, 255, 255),
+  LEGENDARY: new Color(255, 190,  60, 255),
+};
+/** 装备品质的边框颜色（用于弹窗边框）。 */
+const QUALITY_BORDER: Record<string, Color> = {
+  COMMON:    new Color(140, 145, 160, 255),
+  FINE:      new Color( 80, 180,  80, 255),
+  RARE:      new Color( 60, 140, 240, 255),
+  EPIC:      new Color(160,  80, 240, 255),
+  LEGENDARY: new Color(240, 150,  30, 255),
+};
 
 const PANEL_W = 580;
-const PANEL_H = 700; // 扩展高度（+80px）为成就区段留出足够空间（AC-20）
+const PANEL_H = 760; // 760px：成就区段 + 遗物/卷轴展示区段（Task #10）
 
 const CLASS_LABEL: Record<string, string> = {
   ADVENTURER: '冒险者',
@@ -48,7 +68,14 @@ const SLOT_ORDER: EquipSlot[] = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'
 export class PveCharacterPanel {
   private _root: Node;
   private _statsLabel:        Label;
-  private _equipLabel:        Label;
+  /** 装备槽位行（可点击，点击弹出 _detailPopup）。 */
+  private _equipRowLabels:    Label[]  = [];
+  /** 对应每个槽位当前装备的快照，供点击时读取。 */
+  private _currentItems:      (EquipItem | undefined)[] = [];
+  private _detailPopup:       Node  | null = null;
+  private _detailTitleLabel:  Label | null = null;
+  private _detailBodyLabel:   Label | null = null;
+  private _detailGfx:         Graphics | null = null;
   private _traitsLabel:       Label;
   private _fragmentsLabel:    Label;
   private _achievementsLabel: Label;
@@ -99,21 +126,22 @@ export class PveCharacterPanel {
     // 基础属性（7 行：职业/HP/攻击/金币&灵气/AP/骰子/钥匙）
     this._statsLabel     = this._makeSection(panel, PANEL_H / 2 - 80,  170, TEXT_COLOR);
 
-    // 装备（1 行标题 + 5 行槽位）
-    this._equipLabel     = this._makeSection(panel, PANEL_H / 2 - 265, 120, TEXT_COLOR);
+    // 装备（1 行标题 + 5 行可点击槽位行）
+    this._buildEquipRows(panel);
+    this._buildDetailPopup(panel);
 
-    // 词条
-    this._traitsLabel    = this._makeSection(panel, PANEL_H / 2 - 395,  35, DIM_COLOR);
+    // 词条 + 遗物 + 卷轴（3 行：词条 / 遗物 / 卷轴）
+    this._traitsLabel    = this._makeSection(panel, PANEL_H / 2 - 395,  95, DIM_COLOR);
 
-    // 职业碎片
-    this._fragmentsLabel = this._makeSection(panel, PANEL_H / 2 - 440,  35, DIM_COLOR);
+    // 职业碎片（下移 60px 以适应 traits 区段扩展）
+    this._fragmentsLabel = this._makeSection(panel, PANEL_H / 2 - 500,  35, DIM_COLOR);
 
     // 成就（CLAMP 防溢出，120px 足够 5 行）
-    this._achievementsLabel = this._makeSection(panel, PANEL_H / 2 - 485, 120, new Color(255, 215, 100, 255));
+    this._achievementsLabel = this._makeSection(panel, PANEL_H / 2 - 545, 120, new Color(255, 215, 100, 255));
     this._achievementsLabel.overflow = Label.Overflow.CLAMP;
 
     // 图鉴
-    this._codexLabel = this._makeSection(panel, PANEL_H / 2 - 625,  50, DIM_COLOR);
+    this._codexLabel = this._makeSection(panel, PANEL_H / 2 - 685,  50, DIM_COLOR);
 
     // 关闭按钮
     makeFlatButton(
@@ -121,6 +149,172 @@ export class PveCharacterPanel {
       () => { this.hide(); onClose?.(); },
       new Color(120, 130, 145, 255),
     );
+  }
+
+  /** 构建装备标题行 + 5 个可点击槽位行（占据原 _makeSection y=PANEL_H/2-265 h=120 区域）。 */
+  private _buildEquipRows(panel: Node): void {
+    const TOP_Y = PANEL_H / 2 - 265;   // 同原 _makeSection 第一参数
+    const ROW_H = 20;
+
+    // 标题行
+    makeLabel(panel, 0, TOP_Y - ROW_H / 2, PANEL_W - 60, ROW_H, 16, TEXT_COLOR, Label.HorizontalAlign.LEFT)
+      .string = '装备：（点击查看详情）';
+
+    // 5 个槽位行
+    this._equipRowLabels = [];
+    this._currentItems   = new Array(SLOT_ORDER.length).fill(undefined);
+    SLOT_ORDER.forEach((slot, i) => {
+      const rowY = TOP_Y - ROW_H - i * ROW_H;   // 每行中心 y
+      const rowNode = new Node(`EquipRow_${slot}`);
+      rowNode.setParent(panel);
+      rowNode.setPosition(0, rowY - ROW_H / 2, 0);
+      rowNode.addComponent(UITransform).setContentSize(PANEL_W - 60, ROW_H);
+
+      const lbl = rowNode.addComponent(Label);
+      lbl.fontSize = 15;
+      lbl.color    = DIM_COLOR;
+      lbl.string   = `  ${SLOT_LABEL[slot]}：(空)`;
+      lbl.horizontalAlign = Label.HorizontalAlign.LEFT;
+      lbl.verticalAlign   = Label.VerticalAlign.CENTER;
+      this._equipRowLabels.push(lbl);
+
+      rowNode.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+        e.propagationStopped = true;
+        const item = this._currentItems[i];
+        if (item) this._showEquipDetail(item);
+      });
+    });
+  }
+
+  /** 构建装备详情浮层（默认隐藏，_showEquipDetail 时显示）。 */
+  private _buildDetailPopup(panel: Node): void {
+    const POP_W = 440;
+    const POP_H = 210;
+
+    const popup = new Node('EquipDetailPopup');
+    popup.setParent(panel);
+    popup.setPosition(0, -80, 0);  // 面板中下区域
+    popup.setSiblingIndex(9999);   // 确保渲染在面板所有子节点之上
+    popup.addComponent(UITransform).setContentSize(POP_W, POP_H);
+    popup.active = false;
+
+    // 背景 + 边框（边框颜色在 _showEquipDetail 中动态更新）
+    const gfx = popup.addComponent(Graphics);
+    gfx.fillColor = POPUP_BG;
+    gfx.rect(-POP_W / 2, -POP_H / 2, POP_W, POP_H);
+    gfx.fill();
+    gfx.strokeColor = BORDER_COLOR;
+    gfx.lineWidth = 2;
+    gfx.rect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2);
+    gfx.stroke();
+
+    // 装备名标题（颜色由品质决定，动态设置）
+    const titleLbl = makeLabel(popup, 0, POP_H / 2 - 22, POP_W - 24, 28, 19, TEXT_COLOR, Label.HorizontalAlign.CENTER);
+
+    // 属性正文（多行）
+    const bodyLbl = makeLabel(popup, 0, POP_H / 2 - 70, POP_W - 32, 110, 15, TEXT_COLOR, Label.HorizontalAlign.LEFT);
+    bodyLbl.verticalAlign = Label.VerticalAlign.TOP;
+
+    // 关闭按钮
+    makeFlatButton(popup, '关闭', 0, -POP_H / 2 + 22, 100, 36,
+      () => { popup.active = false; },
+      new Color(80, 90, 110, 255),
+    );
+
+    // 点击弹窗背景本身也关闭
+    popup.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      popup.active = false;
+    });
+
+    this._detailPopup      = popup;
+    this._detailTitleLabel = titleLbl;
+    this._detailBodyLabel  = bodyLbl;
+    this._detailGfx        = gfx;
+  }
+
+  /** 显示指定装备的详情浮层。 */
+  private _showEquipDetail(item: EquipItem): void {
+    if (!this._detailPopup || !this._detailTitleLabel || !this._detailBodyLabel || !this._detailGfx) return;
+
+    const qualityStr  = QUALITY_LABEL[item.quality] ?? item.quality;
+    const slotStr     = SLOT_LABEL[item.slot];
+    const titleColor  = QUALITY_TEXT[item.quality] ?? TEXT_COLOR;
+    const borderColor = QUALITY_BORDER[item.quality] ?? BORDER_COLOR;
+
+    // 更新标题颜色与文字
+    this._detailTitleLabel.color  = titleColor;
+    this._detailTitleLabel.string = item.name;
+
+    // 动态更新边框颜色（重绘）
+    const POP_W = 440, POP_H = 210;
+    const gfx = this._detailGfx;
+    gfx.clear();
+    gfx.fillColor = POPUP_BG;
+    gfx.rect(-POP_W / 2, -POP_H / 2, POP_W, POP_H);
+    gfx.fill();
+    gfx.strokeColor = borderColor;
+    gfx.lineWidth = 2;
+    gfx.rect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2);
+    gfx.stroke();
+
+    // 正文内容
+    const effectLine = this._slotEffectDesc(item.slot, item.baseStat);
+    const traitLine  = item.trait
+      ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? item.trait}`
+      : '词条：(未洗炼)';
+
+    this._detailBodyLabel.string = [
+      `${slotStr} · ${qualityStr}`,
+      `主属性：${effectLine}`,
+      traitLine,
+    ].join('\n');
+
+    this._detailPopup.active = true;
+  }
+
+  /**
+   * 装备词条完整中文映射（通用词条 + Boss 专属词条）。
+   * 补充 BossEquipTraitEffects 里的 trait id，避免详情弹窗显示英文 id。
+   */
+  private static readonly _TRAIT_CN: Record<string, string> = {
+    // 通用词条（与 EQUIP_TRAIT_LABEL 一致）
+    equip_atk_up:  '攻击 +10',
+    equip_def_up:  '防御 +10',
+    equip_hp_up:   '最大HP +20',
+    equip_crit_up: '暴击率 +5%',
+    equip_gold_up: '拾取金币 +10%',
+    equip_swift:   '移动AP -1',
+    // Boss 专属词条（BossEquipTraitEffects.ts 命名规范）
+    'on_hit_lifesteal_1': '命中吸血（回复HP）',
+    'boss_stun_on_hurt':  '受击有概率眩晕攻击者',
+    'boss_bleed_on_hit':  '命中附加流血',
+    'boss_sand_immune':   '沙坑地形免疫',
+    'boss_phys_reduce_15':'物理减伤 15%',
+    'boss_slow_on_hit':   '命中减速（冰冻1回合）',
+    'boss_ice_reduce_20': '站冰面时减伤 20%',
+    'boss_burn_on_hit':   '命中附加灼烧',
+    'boss_burn_immune':   '灼烧免疫',
+    'boss_kill_heal_8':   '击杀回复 8 HP',
+    'boss_crit_15':       '15% 概率暴击×2',
+    'boss_revive_50':     '致死时复活（回50%HP，每场1次）',
+  };
+
+  /** 按槽位 + baseStat 生成主属性效果描述。 */
+  private _slotEffectDesc(slot: EquipSlot, baseStat: number): string {
+    switch (slot) {
+      case 'WEAPON':  return `攻击力 +${baseStat}`;
+      case 'HELMET':  return `最大HP +${baseStat}`;
+      case 'ARMOR':   return `每次受伤减伤 ${baseStat} 点`;
+      case 'TRINKET': return `灵气获取量 +${baseStat}%`;
+      case 'SHOES': {
+        const parts: string[] = [`靴子等级 ${baseStat}`];
+        if (baseStat >= SHOES_REVEAL_BONUS_THRESHOLD) parts.push('移动后视野 +1');
+        if (baseStat >= SHOES_FIRST_MOVE_THRESHOLD)   parts.push('每回合首次移动免费');
+        if (baseStat >= SHOES_STEALTH_THRESHOLD)      parts.push(`怪物仇恨半径 -${shoesStealthReduction(baseStat)}`);
+        return parts.join(' · ');
+      }
+    }
   }
 
   private _makeSection(parent: Node, y: number, h: number, color: Color): Label {
@@ -171,20 +365,34 @@ export class PveCharacterPanel {
       `钥匙：${floorState.hasKey ? '✅ 已持有' : '⬜ 未拾取'}`,
     ].join('\n');
 
-    // ── 装备 ──────────────────────────────────────────────────
-    const equipLines = SLOT_ORDER.map((slot) => {
+    // ── 装备行刷新 ────────────────────────────────────────────
+    SLOT_ORDER.forEach((slot, i) => {
       const item = player.equipment[slot];
-      if (!item) return `  ${SLOT_LABEL[slot]}：(空)`;
-      const qualityStr = QUALITY_LABEL[item.quality] ?? item.quality;
-      const traitStr   = item.trait ? `  · ${EQUIP_TRAIT_LABEL[item.trait] ?? item.trait}` : '';
-      return `  ${SLOT_LABEL[slot]}：${item.name}（${qualityStr}）+${item.baseStat}${traitStr}`;
+      this._currentItems[i] = item;
+      const lbl = this._equipRowLabels[i];
+      if (!lbl) return;
+      if (!item) {
+        lbl.color = DIM_COLOR;
+        lbl.string = `  ${SLOT_LABEL[slot]}：(空)`;
+      } else {
+        lbl.color = QUALITY_TEXT[item.quality] ?? TEXT_COLOR;
+        const traitMark = item.trait ? ' ★' : '';
+        const enhanceSuffix = (item.enhanceLevel ?? 0) > 0 ? `+${item.enhanceLevel}` : '';
+        lbl.string = `  ${SLOT_LABEL[slot]}：${item.name}${enhanceSuffix} +${item.baseStat}${traitMark}  ▸`;
+      }
     });
-    this._equipLabel.string = '装备：\n' + equipLines.join('\n');
 
-    // ── 词条 ──────────────────────────────────────────────────
+    // ── 词条 + 遗物 + 卷轴 ────────────────────────────────────
     const traits = player.classTraits;
     const traitNames = traits.map((id) => STRENGTHEN_LABEL[id]?.title ?? id);
-    this._traitsLabel.string = `词条：${traitNames.length === 0 ? '(无)' : traitNames.join('、')}`;
+    const traitLine = `词条：${traitNames.length === 0 ? '(无)' : traitNames.join('、')}`;
+    const relics = player.relics ?? [];
+    const relicLine = relics.length > 0
+      ? `🏺 遗物：${relics.map((r) => RELIC_DEFS[r]?.name ?? r).join('、')}`
+      : '🏺 遗物：(无)';
+    const scrolls = player.scrolls ?? 0;
+    const scrollLine = scrolls > 0 ? `📜 命运卷轴：×${scrolls}` : '';
+    this._traitsLabel.string = [traitLine, relicLine, ...(scrollLine ? [scrollLine] : [])].join('\n');
 
     // ── 职业碎片 ──────────────────────────────────────────────
     const fragEntries = Object.entries(player.classFragments)

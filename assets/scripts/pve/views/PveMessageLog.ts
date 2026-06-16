@@ -1,8 +1,8 @@
-// 远征战报消息栏（右侧竖条，最近 12 条，按事件类型上色，回合号前缀分组显示）。
+// 远征战报消息栏（右侧竖条，按事件类型上色，回合号前缀分组显示，可上下滑动查看本层全部回合）。
 // 解决"结束回合后世界悄悄变化、玩家不知道发生了什么"的信息真空（design §2 UX 补强）。
-// M1 无美术资源，纯 Graphics 半透明背景 + Label 文本。
+// M1 无美术资源，纯 Graphics 半透明背景 + Label 文本；列表用 ScrollView+Mask+Layout 实现滚动。
 
-import { Color, Graphics, Label, Node, UITransform } from 'cc';
+import { Color, Graphics, Label, Layout, Mask, Node, ScrollView, UITransform } from 'cc';
 import { makeLabel } from './pveUiKit';
 
 /** 战报条目分类，对应不同颜色，让玩家一眼分辨"谁干了什么"。 */
@@ -23,28 +23,23 @@ const COLOR_BY_KIND: Record<LogKind, Color> = {
   SYSTEM: new Color(180, 185, 200, 255),
 };
 
-const TURN_PREFIX_COLOR = new Color(120, 125, 140, 255);
 const TITLE_COLOR = new Color(225, 230, 240, 255);
 const BG_COLOR = new Color(20, 22, 32, 180);
 const BORDER_COLOR = new Color(90, 98, 122, 160);
 
-const MAX_ENTRIES = 6;
 const LINE_H = 22;
 const PAD_X = 10;
 const PAD_TOP = 8;
 const TITLE_H = 26;
+/** 判断"是否已滚到底部"的容差像素，浮点误差用。 */
+const SCROLL_EPS = 4;
 
-interface Entry {
-  turn: number;
-  kind: LogKind;
-  text: string;
-}
-
-/** 战报视图：固定大小面板，push 时滚动最旧条目。 */
+/** 战报视图：固定大小面板，内部为可滚动列表，append-only 显示本层全部回合记录。 */
 export class PveMessageLog {
   private _root: Node;
-  private _lines: Label[] = [];
-  private _entries: Entry[] = [];
+  private _content: Node;
+  private _scrollView: ScrollView;
+  private _lastTurn = -1;
 
   constructor(parent: Node, x: number, y: number, w: number = 240, h: number = 320) {
     this._root = new Node('PveMessageLog');
@@ -74,62 +69,73 @@ export class PveMessageLog {
       Label.HorizontalAlign.CENTER,
     ).string = '📜 战报';
 
-    // 预建 MAX_ENTRIES 个 Label（节点池化）
-    const startY = h / 2 - PAD_TOP - TITLE_H - LINE_H / 2;
-    for (let i = 0; i < MAX_ENTRIES; i++) {
-      const lbl = makeLabel(
-        this._root,
-        0,
-        startY - i * LINE_H,
-        w - PAD_X * 2,
-        LINE_H,
-        14,
-        COLOR_BY_KIND.SYSTEM,
-        Label.HorizontalAlign.LEFT,
-      );
-      lbl.string = '';
-      this._lines.push(lbl);
-    }
+    // 可视区域（Mask 裁剪），位于标题下方，左右各留 PAD_X，底部留 PAD_TOP
+    const viewW = w - PAD_X * 2;
+    const viewH = h - PAD_TOP * 2 - TITLE_H;
+    const view = new Node('View');
+    view.setParent(this._root);
+    view.setPosition(0, h / 2 - PAD_TOP - TITLE_H - viewH / 2, 0);
+    view.addComponent(UITransform).setContentSize(viewW, viewH);
+    view.addComponent(Mask);
+
+    // 内容容器：纵向 Layout，随条目数自动增高；顶部对齐 view 顶部，超出部分由 Mask 裁剪
+    const content = new Node('Content');
+    content.setParent(view);
+    const contentUi = content.addComponent(UITransform);
+    contentUi.setAnchorPoint(0.5, 1);
+    contentUi.setContentSize(viewW, 0);
+    content.setPosition(0, viewH / 2, 0);
+
+    const layout = content.addComponent(Layout);
+    layout.type = Layout.Type.VERTICAL;
+    layout.resizeMode = Layout.ResizeMode.CONTAINER;
+    layout.spacingY = 0;
+
+    const sv = view.addComponent(ScrollView);
+    sv.content = content;
+    sv.horizontal = false;
+    sv.vertical = true;
+
+    this._content = content;
+    this._scrollView = sv;
   }
 
-  /** 追加一条战报；超过 MAX_ENTRIES 时滚出最旧。 */
+  /** 追加一条战报；append-only，本层切换前全部保留，可上下滑动查看。 */
   push(turn: number, kind: LogKind, text: string): void {
-    this._entries.push({ turn, kind, text });
-    if (this._entries.length > MAX_ENTRIES) {
-      this._entries.shift();
+    // 同回合内只在首行显示「回合N」前缀，其余空两格对齐（视觉分组）。
+    // 用中文「回合N」而非「T{n}」更白话，符合普通玩家直觉。
+    const showTurnPrefix = turn !== this._lastTurn;
+    this._lastTurn = turn;
+    const str = showTurnPrefix ? `回合${turn}  ${text}` : `        ${text}`;
+
+    const wasAtBottom = this._isAtBottom();
+
+    const contentW = this._content.getComponent(UITransform)!.width;
+    const lbl = makeLabel(this._content, 0, 0, contentW, LINE_H, 14, COLOR_BY_KIND[kind], Label.HorizontalAlign.LEFT);
+    lbl.string = str;
+
+    // 立即重排，使 ScrollView 的滚动范围马上反映新内容（避免下一帧才生效）
+    this._content.getComponent(Layout)?.updateLayout();
+
+    if (wasAtBottom) {
+      this._scrollView.scrollToBottom(0);
     }
-    this._render();
   }
 
   /** 清空（楼层切换 / 死亡 / 重开远征时调用）。 */
   clear(): void {
-    this._entries = [];
-    this._render();
+    this._content.removeAllChildren();
+    this._lastTurn = -1;
+    this._content.getComponent(Layout)?.updateLayout();
+    this._scrollView.scrollToBottom(0);
   }
 
-  private _render(): void {
-    // 像普通消息框一样从上到下追加：最旧在顶部、最新在底部
-    // 条目数 < MAX_ENTRIES 时，顶部留空（lbl.string=''），让条目自然贴底
-    const offset = MAX_ENTRIES - this._entries.length;
-    let prevTurn = -1;
-    for (let i = 0; i < MAX_ENTRIES; i++) {
-      const lbl = this._lines[i];
-      const entryIdx = i - offset;
-      if (entryIdx < 0) {
-        lbl.string = '';
-        continue;
-      }
-      const e = this._entries[entryIdx];
-      // 同回合内只在首行显示「回合N」前缀，其余空两格对齐（视觉分组）。
-      // 用中文「回合N」而非「T{n}」更白话，符合普通玩家直觉。
-      const showTurnPrefix = e.turn !== prevTurn;
-      prevTurn = e.turn;
-      lbl.string = showTurnPrefix ? `回合${e.turn}  ${e.text}` : `        ${e.text}`;
-      lbl.color = COLOR_BY_KIND[e.kind];
-    }
-    // 回合分组前缀色调（不能 per-character 上色，整行取事件色即可；
-    // 视觉分组靠 showTurnPrefix 是否带"T{n}"实现，足够分辨）
-    void TURN_PREFIX_COLOR; // 预留，后续若改富文本可用
+  /** 当前滚动位置是否已在底部（容差 SCROLL_EPS），用于决定新条目是否需要自动跟随滚动。 */
+  private _isAtBottom(): boolean {
+    const maxOffset = this._scrollView.getMaxScrollOffset();
+    if (maxOffset.y <= 0) return true;
+    const offset = this._scrollView.getScrollOffset();
+    return Math.abs(offset.y - maxOffset.y) < SCROLL_EPS;
   }
 
   get node(): Node {

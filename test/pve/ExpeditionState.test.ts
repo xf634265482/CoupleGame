@@ -12,6 +12,7 @@ import { EMPTY_TREE_BONUSES } from '../../assets/scripts/pve/core/DestinyTreeSys
 import {
   ANIMA_PER_STRENGTHEN,
   AP_BASE,
+  AP_CARRY_CAP,
   AWAKEN_REQUIRED_CHAPTER,
   AWAKEN_SECONDARY_TOTAL,
   CLASS_FRAGMENTS_TO_AWAKEN,
@@ -24,6 +25,7 @@ import {
   TREE_A2_HP_BONUS,
   TREE_A3_DEATH_GOLD_RETENTION,
   TREE_B2_AP_DICE_BONUS,
+  TREE_B2_AP_CARRY_BONUS,
   TREE_B3_FRAGMENT_BONUS,
   TREE_C1_GOLD_BONUS,
   TREE_D1_ANIMA_BONUS,
@@ -486,6 +488,57 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       const a = endTurn(state).events.find((e) => e.type === 'AP_ROLLED');
       const b = endTurn(state).events.find((e) => e.type === 'AP_ROLLED');
       expect(a).toEqual(b);
+    });
+  });
+
+  describe('AP 结转（AP_CARRY_CAP）', () => {
+    it('回合结束时剩余 AP ≤ AP_CARRY_CAP 全部结转：AP_ROLLED.ap = 8+dice+剩余，并 emit AP_CARRIED', () => {
+      const state = makeExpeditionState({
+        floorOverrides: { player: { x: 0, y: 0 }, turn: 1, monsters: [], ap: 2, maxAp: 10 },
+      });
+      const result = endTurn(state);
+      const apRolled = result.events.find((e) => e.type === 'AP_ROLLED');
+      const carried = result.events.find((e) => e.type === 'AP_CARRIED');
+      expect(apRolled?.type).toBe('AP_ROLLED');
+      expect(carried).toEqual({ type: 'AP_CARRIED', amount: 2 });
+      if (apRolled?.type === 'AP_ROLLED') {
+        expect(apRolled.ap).toBe(8 + apRolled.dice + 2);
+        expect(result.state.floorState.ap).toBe(apRolled.ap);
+        expect(result.state.floorState.maxAp).toBe(apRolled.ap);
+      }
+    });
+
+    it('回合结束时剩余 AP 超过 AP_CARRY_CAP 仅结转上限部分', () => {
+      const state = makeExpeditionState({
+        floorOverrides: { player: { x: 0, y: 0 }, turn: 1, monsters: [], ap: 9, maxAp: 12 },
+      });
+      const result = endTurn(state);
+      const apRolled = result.events.find((e) => e.type === 'AP_ROLLED');
+      const carried = result.events.find((e) => e.type === 'AP_CARRIED');
+      expect(carried).toEqual({ type: 'AP_CARRIED', amount: AP_CARRY_CAP });
+      if (apRolled?.type === 'AP_ROLLED') {
+        expect(apRolled.ap).toBe(8 + apRolled.dice + AP_CARRY_CAP);
+      }
+    });
+
+    it('回合结束时 AP 已耗尽（0）不 emit AP_CARRIED', () => {
+      const state = makeExpeditionState({
+        floorOverrides: { player: { x: 0, y: 0 }, turn: 1, monsters: [], ap: 0, maxAp: 10 },
+      });
+      const result = endTurn(state);
+      expect(result.events.some((e) => e.type === 'AP_CARRIED')).toBe(false);
+    });
+
+    it('命运树 B2 急行军：AP 结转上限 +1（AP_CARRY_CAP + TREE_B2_AP_CARRY_BONUS）', () => {
+      const state = makeExpeditionState({
+        floorOverrides: { player: { x: 0, y: 0 }, turn: 1, monsters: [], ap: 9, maxAp: 12 },
+        playerOverrides: {
+          treeBonuses: { ...EMPTY_TREE_BONUSES, apCarryCapBonus: TREE_B2_AP_CARRY_BONUS },
+        },
+      });
+      const result = endTurn(state);
+      const carried = result.events.find((e) => e.type === 'AP_CARRIED');
+      expect(carried).toEqual({ type: 'AP_CARRIED', amount: AP_CARRY_CAP + TREE_B2_AP_CARRY_BONUS });
     });
   });
 

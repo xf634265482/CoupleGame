@@ -15,11 +15,16 @@ import {
 import type { AdvancableClass, AwakenForm, ClassId } from './PveConstants';
 import type { ApplyResult, ExpeditionState, PveEvent, RunPlayer } from './PveTypes';
 
-/** 返回已达到进阶阈值且与当前职业不同的职业列表（可进阶候选）。 */
+/**
+ * 返回已达到进阶阈值的可进阶职业列表。
+ * 只有冒险者（ADVENTURER）可进阶一阶职业；已进阶的玩家不再触发此检测
+ * （其他职业碎片只参与二阶觉醒形态判定，见 getAwakenEligible）。
+ */
 function getAdvancableClasses(
   fragments: Partial<Record<ClassId, number>>,
   currentClass: ClassId,
 ): ClassId[] {
+  if (currentClass !== 'ADVENTURER') return [];
   return (Object.entries(fragments) as [ClassId, number][])
     .filter(([cls, count]) => cls !== currentClass && count >= CLASS_FRAGMENTS_TO_ADVANCE)
     .map(([cls]) => cls);
@@ -80,7 +85,7 @@ export function pickFragment(state: ExpeditionState, entityId: string): ApplyRes
 export function applyClassAdvance(state: ExpeditionState, classId: ClassId): ApplyResult {
   const currentCount = state.player.classFragments[classId] ?? 0;
   if (currentCount < CLASS_FRAGMENTS_TO_ADVANCE) return { state, events: [] };
-  if (classId === state.player.classId) return { state, events: [] }; // 已是该职业
+  if (state.player.classId !== 'ADVENTURER') return { state, events: [] }; // 仅冒险者可一阶进阶
 
   const stats = CLASS_STATS[classId];
   // BERSERKER 进阶代价：扣当前 HP 一半（下取整），最少扣 30（×10 基准，原 3，防止故意低血量零代价进阶）

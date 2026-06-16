@@ -37,6 +37,7 @@ export class DestinyTreeView {
   private _gridRoot: Node;
   private _shardsLabel: Label;
   private _onBack: (() => void) | null = null;
+  private _onReset: (() => void) | null = null;
 
   constructor(parent: Node, private _screenW: number, private _screenH: number, private _onUnlock: (nodeId: string) => void) {
     this._root = new Node('DestinyTreeView');
@@ -65,7 +66,12 @@ export class DestinyTreeView {
     this._gridRoot.setPosition(0, 0, 0);
 
     makeFlatButton(
-      this._root, '返回大厅', 0, -this._screenH / 2 + 50, 200, 56,
+      this._root, '重置命运树', -120, -this._screenH / 2 + 50, 180, 56,
+      () => this._onReset?.(),
+      new Color(140, 60, 60, 255),
+    );
+    makeFlatButton(
+      this._root, '返回大厅', 120, -this._screenH / 2 + 50, 180, 56,
       () => this._onBack?.(),
       new Color(120, 130, 145, 255),
     );
@@ -73,6 +79,10 @@ export class DestinyTreeView {
 
   setOnBack(cb: () => void): void {
     this._onBack = cb;
+  }
+
+  setOnReset(cb: () => void): void {
+    this._onReset = cb;
   }
 
   /** 用最新 PveMeta 重建节点网格（已解锁/可解锁/锁定三态着色）。 */

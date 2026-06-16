@@ -19,6 +19,7 @@ import {
   TREE_A3_DEATH_GOLD_RETENTION,
   TREE_B1_ATTACK_BONUS,
   TREE_B2_AP_DICE_BONUS,
+  TREE_B2_AP_CARRY_BONUS,
   TREE_B3_FRAGMENT_BONUS,
   TREE_C1_GOLD_BONUS,
   TREE_C2_CHEST_GOLD_BONUS_PCT,
@@ -45,6 +46,7 @@ export const EMPTY_TREE_BONUSES: DestinyTreeBonuses = {
   deathGoldRetentionPct: 0,
   attackBonus: 0,
   apDiceBonus: 0,
+  apCarryCapBonus: 0,
   fragmentBonus: 0,
   startGoldBonus: 0,
   chestGoldBonusPct: 0,
@@ -111,7 +113,10 @@ export function getTreeBonuses(unlockedNodes: readonly string[] | undefined): De
   if (set.has('A3')) bonuses.deathGoldRetentionPct = TREE_A3_DEATH_GOLD_RETENTION;
 
   if (set.has('B1')) bonuses.attackBonus += TREE_B1_ATTACK_BONUS;
-  if (set.has('B2')) bonuses.apDiceBonus += TREE_B2_AP_DICE_BONUS;
+  if (set.has('B2')) {
+    bonuses.apDiceBonus += TREE_B2_AP_DICE_BONUS;
+    bonuses.apCarryCapBonus += TREE_B2_AP_CARRY_BONUS;
+  }
   if (set.has('B3')) bonuses.fragmentBonus += TREE_B3_FRAGMENT_BONUS;
 
   if (set.has('C1')) bonuses.startGoldBonus += TREE_C1_GOLD_BONUS;
