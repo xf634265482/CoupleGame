@@ -172,7 +172,10 @@ export function fateProphecyStep(state: ExpeditionState, bossId: string): ApplyR
   if (!boss || boss.aiState === 'DEAD') return noop(state);
   if (boss.enraged) return noop(state); // 狂暴态停摆
 
-  // ── 结算待定预言 ──────────────────────────────────────
+  // 非预言触发回合：跳过（防止标记后下一个怪物回合立即爆炸）
+  if (!isProphecyTurn(floor.turn)) return noop(state);
+
+  // ── 结算待定预言（爆炸：到达下一个 isProphecyTurn 时结算上次标记）──────────
   if (floor.fateProphecy) {
     const center = floor.fateProphecy.center;
     const events: PveEvent[] = [{ type: 'PROPHECY_RESOLVED', center }];
@@ -198,15 +201,11 @@ export function fateProphecyStep(state: ExpeditionState, bossId: string): ApplyR
   }
 
   // ── 标记新预言 ────────────────────────────────────────
-  if (isProphecyTurn(floor.turn)) {
-    const center: Coord = { x: floor.player.x, y: floor.player.y };
-    return {
-      state: { ...state, floorState: { ...floor, fateProphecy: { center } } },
-      events: [{ type: 'PROPHECY_MARKED', center }],
-    };
-  }
-
-  return noop(state);
+  const center: Coord = { x: floor.player.x, y: floor.player.y };
+  return {
+    state: { ...state, floorState: { ...floor, fateProphecy: { center } } },
+    events: [{ type: 'PROPHECY_MARKED', center }],
+  };
 }
 
 // ════════════════════════════════════════════════════════════════

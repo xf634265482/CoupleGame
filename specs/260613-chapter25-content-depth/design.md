@@ -19,7 +19,7 @@
 | 章 | Boss | 当前已实现机制 |
 |---|---|---|
 | 1 | GoblinChief | 重击预警(HEAVY_STRIKE_WARNING) + 增援号角(HORN_INTERVAL) + 石块地形(ROCK) ✅ 完整 |
-| 2 | SandwormQueen | `sandwormBurrow` 周期性钻地隐身 |
+| 2 | QuicksandScorpion | `quicksandScorpionBurrow` 周期性钻地隐身 |
 | 3 | FrostGiant | `isFreezeAttackTurn` 周期性冰冻 AOE |
 | 4 | LavaLord | DOT 灼烧 |
 | 5 | FateGuardian | `fateGuardianEvade` 闪避 |
@@ -32,7 +32,7 @@
 
 | Boss | 现有保留 | 新增机制 | 理由 |
 |---|---|---|---|
-| SandwormQueen | 钻地 | **沙坑地形**（`SAND_PIT`）：玩家踩入移动 AP+1，Boss 钻出时优先从最近沙坑出，玩家可借此预判 | 让"钻地"从被动等变成主动博弈 |
+| QuicksandScorpion | 钻地 | **沙坑地形**（`SAND_PIT`）：玩家踩入移动 AP+1，Boss 钻出时优先从最近沙坑出，玩家可借此预判 | 让"钻地"从被动等变成主动博弈 |
 | FrostGiant | 冰冻 AOE | **冰墙地形**（`ICE_WALL`）：Boss 房刷 2-3 个冰墙阻挡视线/移动，玩家可攻击破坏（HP=10），破坏后掉落 1 灵气 | 给冰章一个"打地形换资源"的小循环 |
 | LavaLord | DOT 灼烧 | **熔岩潮汐阶段**：HP ≤ 50% 时切入第二阶段，每 3 回合在棋盘随机 3 格刷 `LAVA_TILE`（持续 2 回合），玩家踩入受 5 伤 | 阶段切换 + AOE 预警，给"残血更危险"的紧张感 |
 | FateGuardian | 闪避 | **镜像分身**：HP ≤ 33% 时召唤 1 个"命运镜像"（HP=20，攻击=Boss 攻击的 50%），镜像与本体共享伤害池但不共享 HP（玩家可专打镜像或本体） | 终章 Boss 需要"选择优先级"的决策 |

@@ -116,11 +116,11 @@
 
 > 每个 Boss 一节，按章节顺序。**每一节都要单测过了再下一节**，否则 Boss 之间 bug 互相串。
 
-### T3.1 SandwormQueen — 沙坑地形（1 小时）
+### T3.1 QuicksandScorpion — 沙坑地形（1 小时）
 
 - `MapGenerator.generateFloor`：Boss 层 + chapter===2 时，从 pool 取 `CHAPTER2_SAND_PIT_COUNT` 个格放 `SAND_PIT` 实体。
 - `MovementSystem.applyMove`：目标格是 `SAND_PIT` 时，AP 消耗 + `CHAPTER2_SAND_PIT_MOVE_PENALTY`，emit `SAND_PIT_STEPPED`。
-- `bosses/SandwormQueen.ts` 的 `sandwormBurrow`：钻出位置改为"距玩家最近的未被占用沙坑"，找不到则保持现有随机位置回退。
+- `bosses/QuicksandScorpion.ts` 的 `quicksandScorpionBurrow`：钻出位置改为"距玩家最近的未被占用沙坑"，找不到则保持现有随机位置回退。
 - 测试：
   - it：钻出时如有沙坑，必从沙坑出
   - it：踩沙坑移动 AP 消耗 +1

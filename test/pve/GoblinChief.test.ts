@@ -1,14 +1,17 @@
 import {
+  GOBLIN_CHIEF_ENRAGE_HP,
   HEAVY_STRIKE_INTERVAL,
   HEAVY_STRIKE_MULTIPLIER,
   HORN_INTERVAL_ENRAGED,
   HORN_INTERVAL_NORMAL,
   goblinChiefAttack,
+  goblinChiefHorn,
   isHeavyStrikeTurn,
   isHornTurn,
   rollGuaranteedDrop,
 } from '../../assets/scripts/pve/core/bosses/GoblinChief';
-import { HEAVY_AOE_SLOW_ROUNDS } from '../../assets/scripts/pve/core/PveConstants';
+import { playerAttack } from '../../assets/scripts/pve/core/CombatSystem';
+import { applyMonsterKillDrop } from '../../assets/scripts/pve/core/LootSystem';
 import { createRng } from '../../assets/scripts/pve/core/rng';
 import { makeExpeditionState, makeMonster } from './helpers';
 
@@ -17,6 +20,7 @@ function bossState(turn: number, overrides: { attack?: number; hp?: number } = {
     floorOverrides: {
       player: { x: 4, y: 4 },
       turn,
+      ap: 8, // 让玩家攻击相关测试有足够 AP（怪物攻击玩家的测试不读此字段，不受影响）
       monsters: [
         makeMonster('boss1', { x: 4, y: 5 }, {
           type: 'BOSS',
@@ -80,7 +84,6 @@ describe('GoblinChief — 第一章 Boss 专属机制（AC-10）', () => {
       expect(result.events).toEqual([
         { type: 'HEAVY_STRIKE_RESOLVED', bossId: 'boss1', center: { x: 4, y: 5 } },
         { type: 'PLAYER_DAMAGED', damage: expectedDamage, hp: 200 - expectedDamage, sourceId: 'boss1' },
-        { type: 'MOVE_PENALTY_APPLIED', rounds: HEAVY_AOE_SLOW_ROUNDS },
       ]);
     });
 
@@ -130,7 +133,7 @@ describe('GoblinChief — 第一章 Boss 专属机制（AC-10）', () => {
         floorOverrides: {
           player: { x: 4, y: 4 },
           turn: 1,
-          monsters: [makeMonster('boss2', { x: 4, y: 5 }, { type: 'BOSS', bossId: 'SANDWORM_QUEEN', range: 1 })],
+          monsters: [makeMonster('boss2', { x: 4, y: 5 }, { type: 'BOSS', bossId: 'QUICKSAND_SCORPION', range: 1 })],
         },
       });
       expect(goblinChiefAttack(wrongBoss, 'boss2').events).toEqual([]);
@@ -150,6 +153,39 @@ describe('GoblinChief — 第一章 Boss 专属机制（AC-10）', () => {
       const a = rollGuaranteedDrop(rng);
       const b = rollGuaranteedDrop(rng);
       expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('增援号角召唤物不掉落（2026-06-15）', () => {
+    it('召唤的哥布林战士带 summoned 标记', () => {
+      const state = bossState(HORN_INTERVAL_NORMAL);
+      const result = goblinChiefHorn(state, 'boss1');
+      const summoned = result.state.floorState.monsters.filter((m) => m.summoned);
+      expect(summoned.length).toBeGreaterThan(0);
+      expect(summoned.every((m) => m.variantId === 'GOBLIN_WARRIOR')).toBe(true);
+    });
+
+    it('击杀召唤战士不产生任何掉落（金币不变、无 LOOT 事件）', () => {
+      const horned = goblinChiefHorn(bossState(HORN_INTERVAL_NORMAL), 'boss1').state;
+      const warrior = horned.floorState.monsters.find((m) => m.summoned)!;
+      const drop = applyMonsterKillDrop(horned, warrior.id);
+      expect(drop.events).toEqual([]);
+      expect(drop.state.player.gold).toBe(horned.player.gold);
+    });
+  });
+
+  describe('狂暴战报事件（2026-06-15）', () => {
+    it('玩家攻击使 HP 跨过狂暴阈值且未致死时 emit BOSS_ENRAGED', () => {
+      // boss HP = 阈值 + 1，任意基础攻击都能打到 ≤ 阈值但远不致死
+      const state = bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP + 1 });
+      const result = playerAttack(state, 'boss1');
+      expect(result.events.some((e) => e.type === 'BOSS_ENRAGED')).toBe(true);
+    });
+
+    it('攻击前 HP 已 ≤ 阈值时不重复 emit BOSS_ENRAGED', () => {
+      const state = bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP });
+      const result = playerAttack(state, 'boss1');
+      expect(result.events.some((e) => e.type === 'BOSS_ENRAGED')).toBe(false);
     });
   });
 });

@@ -22,6 +22,21 @@
 //   （伤害取整 Math.round）；
 //   增援号角不再召唤弓箭手，改为召唤哥布林战士 ×HORN_WARRIOR_COUNT（非狂暴=1），
 //   狂暴后召唤数提升为 HORN_WARRIOR_ENRAGE_COUNT（=2）。
+//
+// 平衡性调整记录（2026-06-15，实测后再削弱）：
+//   蓄力重击命中后不再附带「移动AP+1」减速效果；
+//   普通攻击范围 GOBLIN_CHIEF_RANGE：2 → 1（改为纯近战）；
+//   狂暴阈值 GOBLIN_CHIEF_ENRAGE_HP：200 → 170。
+//
+// 平衡性调整记录（2026-06-15，重击预警重做 → 最终「先释放后追击」）：
+//   蓄力重击恢复「重击前一回合」红圈预警。演进过程：
+//   ① 中途「威胁区」方案：红圈半径 = HEAVY_STRIKE_RANGE + 移动步数，因 boss 重击回合追击移动需
+//      预留空间，红圈恒大于橙圈，玩家被误导多走位浪费 AP。
+//   ② 中途「站桩」方案：重击回合 boss 完全不移动，红圈=橙圈预警精确，但 boss 呆站观感差。
+//   ③ 最终「先释放后追击」方案：重击回合 boss 一回合内「技能/攻击二选一 + 移动追击」——先在
+//      【原地】释放重击（锁定中心 = 当前位置 = 上一回合红圈中心 → 预警仍 100% 精确），释放后再
+//      追击逼近玩家（boss 不呆站）。普通回合仍「先移动贴身、再普攻」。
+//   HEAVY_STRIKE_RANGE 维持 4（曾短暂下调为 3，站桩/先放后追方案下无需缩半径即可躲避，已改回）。
 
 import type { Rng } from '../rng';
 import type {
@@ -35,16 +50,12 @@ import type {
   PveEvent,
 } from '../PveTypes';
 import { makeGoblinWarrior } from '../Chapter1Monsters';
-import {
-  HEAVY_AOE_SLOW_ROUNDS,
-  HORN_WARRIOR_COUNT,
-  HORN_WARRIOR_ENRAGE_COUNT,
-} from '../PveConstants';
+import { HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
 
-/** HP ≤ 此值时进入狂暴：攻击 +10、移动 +1（MonsterAI 处理额外移动步；×10 基准，原 20）。 */
-export const GOBLIN_CHIEF_ENRAGE_HP = 200;
-/** 普通攻击范围（曼哈顿距离）。 */
-export const GOBLIN_CHIEF_RANGE = 2;
+/** HP ≤ 此值时进入狂暴：攻击 +10、移动 +1（MonsterAI 处理额外移动步；2026-06-15 由 200 下调为 170）。 */
+export const GOBLIN_CHIEF_ENRAGE_HP = 170;
+/** 普通攻击范围（曼哈顿距离）。2026-06-15 由 2 → 1，改为纯近战。 */
+export const GOBLIN_CHIEF_RANGE = 1;
 /** 每隔多少个怪物回合触发一次蓄力重击。 */
 export const HEAVY_STRIKE_INTERVAL = 3;
 /** 增援号角间隔（非狂暴）：每 3 个怪物回合。 */
@@ -57,7 +68,8 @@ export const HEAVY_STRIKE_MULTIPLIER = 1.5;
 export const HEAVY_STRIKE_INNER_RANGE = 2;
 /** 蓄力重击外圈伤害倍率（距离 HEAVY_STRIKE_INNER_RANGE+1 到 HEAVY_STRIKE_RANGE）。 */
 export const HEAVY_STRIKE_OUTER_MULTIPLIER = 1.5;
-/** 蓄力重击外圈最大半径（整体 AOE 半径）。 */
+/** 蓄力重击外圈最大半径（整体 AOE 半径）。2026-06-15 曾由 4→3，同日改为「重击回合站桩」后又改回 4
+ *  （站桩后红圈=橙圈，无需靠缩小半径来腾出躲避空间，半径放大回 4 保持威慑）。 */
 export const HEAVY_STRIKE_RANGE = 4;
 
 function manhattan(a: Coord, b: Coord): number {
@@ -167,7 +179,6 @@ function getAdjacentFreeCells(floor: FloorState, center: Coord, count: number): 
  * - 普通回合（奇数）：普通攻击范围 GOBLIN_CHIEF_RANGE（2），单目标
  * - 重击回合（偶数）：同心圆 AOE，内圈(≤2格)×3，外圈(3-4格)×2
  *   - 石块在 boss→player 路径上时吸收伤害并消失
- *   - 命中后玩家移动AP+1持续 HEAVY_AOE_SLOW_ROUNDS 回合
  * - 狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）：基础攻击+10
  */
 export function goblinChiefAttack(state: ExpeditionState, bossId: string): ApplyResult {
@@ -249,10 +260,6 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
   const events: PveEvent[] = [resolvedEvent, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: bossId }];
   if (dead) events.push({ type: 'PLAYER_DEAD' });
 
-  // 被 AOE 击中：移动AP+1 持续 HEAVY_AOE_SLOW_ROUNDS 回合
-  const prevSlowRounds = floor.playerMoveApPenaltyRounds ?? 0;
-  if (!dead) events.push({ type: 'MOVE_PENALTY_APPLIED', rounds: HEAVY_AOE_SLOW_ROUNDS });
-
   return {
     state: {
       ...state,
@@ -261,7 +268,6 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
       floorState: {
         ...floor,
         status: dead ? 'DEAD' : floor.status,
-        playerMoveApPenaltyRounds: prevSlowRounds + HEAVY_AOE_SLOW_ROUNDS,
         ...(undyingTriggered ? { undyingAvailable: false } : {}),
       },
     },
@@ -290,7 +296,8 @@ export function goblinChiefHorn(state: ExpeditionState, bossId: string): ApplyRe
 
   for (let i = 0; i < warriorCount && i < freeCells.length; i++) {
     const pos = freeCells[i];
-    const m = makeGoblinWarrior(`mon_horn_${floor.turn}_w${i}`, pos);
+    // summoned: 增援召唤的战士击杀后不掉落（金币/灵气/装备），避免刷增援白嫖收益
+    const m = { ...makeGoblinWarrior(`mon_horn_${floor.turn}_w${i}`, pos), summoned: true };
     newMonsters.push(m);
     events.push({ type: 'MONSTER_SPAWNED', monsterId: m.id, pos });
   }

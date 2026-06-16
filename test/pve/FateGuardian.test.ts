@@ -84,7 +84,8 @@ describe('FateGuardian', () => {
     });
 
     it('存在待定预言且玩家仍在 3×3 内 → 结算 attack×1 伤害 + PROPHECY_RESOLVED，清空预言', () => {
-      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL + 1, { center: { x: 4, y: 4 } });
+      // 修复后：只有下一个 isProphecyTurn（INTERVAL * 2）才结算，而非 INTERVAL+1
+      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL * 2, { center: { x: 4, y: 4 } });
       const result = fateProphecyStep(state, 'boss');
       expect(result.events.some((e) => e.type === 'PROPHECY_RESOLVED')).toBe(true);
       const dmg = result.events.find((e) => e.type === 'PLAYER_DAMAGED');
@@ -94,7 +95,8 @@ describe('FateGuardian', () => {
     });
 
     it('结算时玩家已走出 3×3 → 仅 PROPHECY_RESOLVED，无伤害', () => {
-      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL + 1, { center: { x: 0, y: 0 } });
+      // 修复后：只有下一个 isProphecyTurn（INTERVAL * 2）才结算，而非 INTERVAL+1
+      const state = makeBossState(200, 200, FATE_PROPHECY_INTERVAL * 2, { center: { x: 0, y: 0 } });
       const result = fateProphecyStep(state, 'boss');
       expect(result.events).toEqual([{ type: 'PROPHECY_RESOLVED', center: { x: 0, y: 0 } }]);
       expect(result.state.player.hp).toBe(200);

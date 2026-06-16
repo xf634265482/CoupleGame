@@ -102,13 +102,27 @@ describe('chapter25-depth: 2-5 章怪物表框架', () => {
     expect(fl4.filter((m) => m.variantId === 'FROST_GOBLIN').length).toBe(1);
   });
 
-  it('chapter=2~5 各层符合 P0 配比 normal=4, elite=1, anima=1', () => {
+  it('chapter=2~5 各层恰好有 1 只 ANIMA 怪（P1 配比）', () => {
     for (const chapter of [2, 3, 4, 5]) {
       for (let fl = 1; fl <= 4; fl++) {
         const ms = run(chapter, fl);
-        expect(ms.filter((m) => m.type === 'NORMAL').length).toBe(4);
-        expect(ms.filter((m) => m.type === 'ELITE').length).toBe(1);
         expect(ms.filter((m) => m.type === 'ANIMA').length).toBe(1);
+      }
+    }
+  });
+
+  it('chapter=2~5 层 4（Boss 前夜）各有恰好 1 只 ELITE 怪（P1）', () => {
+    for (const chapter of [2, 3, 4, 5]) {
+      const ms = run(chapter, 4);
+      expect(ms.filter((m) => m.type === 'ELITE').length).toBe(1);
+    }
+  });
+
+  it('chapter=2~5 层 1/2 至少有 2 只 NORMAL 怪（P1）', () => {
+    for (const chapter of [2, 3, 4, 5]) {
+      for (const fl of [1, 2]) {
+        const ms = run(chapter, fl);
+        expect(ms.filter((m) => m.type === 'NORMAL').length).toBeGreaterThanOrEqual(2);
       }
     }
   });
