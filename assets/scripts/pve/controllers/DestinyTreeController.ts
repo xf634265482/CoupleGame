@@ -6,6 +6,7 @@ import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
 import { applyUiLayerTree, refreshScreenAdapt, visibleDesignSize } from '../../platform/wechat/ViewAdapt';
 import { loadPveMeta, unlockTreeNode, resetTree } from '../../network/PveService';
+import { preloadPveUi } from '../../ui/UiAssets';
 import { TREE_RESET_DIAMOND_COST } from '../core/PveConstants';
 import type { PveMeta } from '../core/PveTypes';
 import { DestinyTreeView } from '../views/DestinyTreeView';
@@ -25,6 +26,7 @@ export class DestinyTreeController extends Component {
     refreshScreenAdapt(this.node);
     this.scheduleOnce(() => refreshScreenAdapt(this.node), 0);
     applyUiLayerTree(this.node, this.node.layer);
+    void preloadPveUi();
 
     const { w: screenW, h: screenH } = visibleDesignSize();
 

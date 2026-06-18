@@ -1,10 +1,11 @@
 // 命运之树视图（specs/260610-destiny-tree-ui）：账户级局外成长树，5 行（A-E 分支）× 3 节点（order 1-3，自左向右）。
-// M1 无美术资源：纯 Graphics + Label 占位，配色与 PveCharacterPanel 一致。
 
-import { Color, Label, Node } from 'cc';
+import { Color, Label, Node, Sprite } from 'cc';
 import { canUnlockNode } from '../core/DestinyTreeSystem';
 import { DESTINY_TREE_NODES } from '../core/PveConstants';
 import type { PveMeta } from '../core/PveTypes';
+import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
+import { ensureArtSliced } from '../../ui/UiSprite';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const TITLE_COLOR  = new Color(245, 220, 130, 255);
@@ -13,6 +14,12 @@ const DIM_COLOR    = new Color(120, 125, 140, 255);
 const UNLOCKED_COLOR = new Color(150, 120, 40, 255);
 const UNLOCKABLE_COLOR = new Color(52, 120, 200, 255);
 const LOCKED_COLOR = new Color(60, 64, 76, 255);
+
+// node_frame 状态着色：与 specs/ui-art/260618-pve-art-integration-design.md 对应
+const NODE_FRAME_LOCKED    = new Color(80, 80, 90, 255);
+const NODE_FRAME_AVAILABLE = new Color(80, 200, 230, 255);
+const NODE_FRAME_UNLOCKED  = new Color(230, 185, 80, 255);
+const NODE_FRAME_INSETS    = { top: 20, bottom: 20, left: 20, right: 20 };
 
 const COLUMN_LABEL: Record<string, string> = {
   A: '生存',
@@ -43,6 +50,7 @@ export class DestinyTreeView {
     this._root = new Node('DestinyTreeView');
     this._root.setParent(parent);
     this._root.setPosition(0, 0, 0);
+    void loadUiSprite('pve/destiny/node_frame').catch(() => null);
 
     makeLabel(
       this._root, 0, this._screenH / 2 - 50,
@@ -114,6 +122,22 @@ export class DestinyTreeView {
       if (isUnlocked || !canUnlock) {
         const label = btn.getChildByName('Label')?.getComponent(Label);
         if (label) label.color = isUnlocked ? TITLE_COLOR : DIM_COLOR;
+      }
+
+      // node_frame 底框：有缓存立即贴，否则异步加载后补贴（首次进入可能 frame 尚未就绪）
+      const frameColor = isUnlocked ? NODE_FRAME_UNLOCKED : canUnlock ? NODE_FRAME_AVAILABLE : NODE_FRAME_LOCKED;
+      const cachedFrame = getCachedSprite('pve/destiny/node_frame');
+      if (cachedFrame) {
+        const sp = ensureArtSliced(btn, 'NodeFrame', cachedFrame, NODE_W, NODE_H, NODE_FRAME_INSETS);
+        sp.color = frameColor;
+        sp.node.setSiblingIndex(0);
+      } else {
+        void loadUiSprite('pve/destiny/node_frame').then((sf) => {
+          if (!sf || !btn.isValid) return;
+          const sp = ensureArtSliced(btn, 'NodeFrame', sf, NODE_W, NODE_H, NODE_FRAME_INSETS);
+          sp.color = frameColor;
+          sp.node.setSiblingIndex(0);
+        }).catch(() => null);
       }
     }
   }

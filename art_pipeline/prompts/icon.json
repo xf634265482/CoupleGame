@@ -1,0 +1,12 @@
+{
+  "useCase": "stylized-concept",
+  "assetType": "small PVE mobile game UI icon",
+  "composition": "single centered symbol or object, front three-quarter view, compact square silhouette, 14 percent clear padding on every side",
+  "rendering": "painted chibi fantasy icon with simplified internal detail and strong value separation at 24 to 64 display pixels",
+  "constraints": [
+    "transparent background",
+    "strong continuous dark charcoal outer outline",
+    "no frame unless the asset prompt explicitly requests one",
+    "no text or watermark"
+  ]
+}

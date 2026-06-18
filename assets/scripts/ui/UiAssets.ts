@@ -65,9 +65,6 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'icons/icon_armor_armor': '7b036436-2b39-4328-8797-28c0c8960ea4@f9941',
   'icons/icon_armor_helmet': 'f26b39da-5f5b-49cb-aa90-2a7ab1515c82@f9941',
   'icons/icon_connected': '6523c396-ffba-4578-9784-b484ffd45b11@f9941',
-  'icons/icon_diamond': '353f871a-75bf-440c-97cf-d3de7a20e9ec@f9941',
-  'icons/icon_gold': 'ea46f026-4bb9-4f2e-9f41-07c30b84209b@f9941',
-  'icons/icon_hp': 'b1341f24-e34c-453b-86a1-b4ee8b92a817@f9941',
   'icons/icon_item_dice': 'cb41b591-2030-4679-af0d-14bf3255ef90@f9941',
   'icons/icon_item_immunity': 'd50ae392-7418-4795-b806-2f7affdca589@f9941',
   'icons/icon_item_medkit': '6afb5301-2fe8-4fda-b8f4-01c185e13d68@f9941',
@@ -89,6 +86,70 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'lobby/input_lobby_name_9s': 'be3ed857-affc-4056-a18c-330277e66f09@f9941',
   'lobby/logo_game': '32c676f7-3434-49a5-b02b-f96ba623c038@f9941',
   'lobby/panel_lobby_main_9s': 'edc5c209-6f75-4d1b-8079-9a01f2cd0695@f9941',
+  'pve/backgrounds/bg_destiny_tree': 'b84fda9d-7263-47fc-a4f3-04c6050f6c72@f9941',
+  'pve/backgrounds/bg_pve_camp': '93eabd9b-34de-480d-ba17-b8ce8f4690ad@f9941',
+  'pve/backgrounds/bg_pve_ch2': '94de010e-c1e9-437b-87db-57b460a2756b@f9941',
+  'pve/backgrounds/bg_pve_ch3': 'dcb41494-9338-4cda-bb3d-e2a87df38184@f9941',
+  'pve/backgrounds/bg_pve_ch4': '00c422be-4c5e-4d1e-91e4-a8437515a442@f9941',
+  'pve/backgrounds/bg_pve_ch5': 'f8eb92ee-f6d2-461c-af0a-1dbfd97a45b8@f9941',
+  'pve/camp/panel_camp_main_9s': '750cb7e3-fb89-4042-8dfd-b6bfd61698cc@f9941',
+  'pve/class/icon_class_adventurer': 'c3c96b12-3d37-4e95-ba49-b45b0d33df86@f9941',
+  'pve/class/icon_class_archer': 'be5c49d3-acf7-46cb-a5a9-3b2cfe1e6498@f9941',
+  'pve/class/icon_class_berserker': '3e25de32-0135-40fd-8051-35334f423b14@f9941',
+  'pve/class/icon_class_rogue': '47f2a9f0-4bb1-4e9d-8639-6067c6454148@f9941',
+  'pve/destiny/node_frame': 'db81866d-7d58-4103-aaf0-ceb0ecef0311@f9941',
+  'pve/hud/bar_pve_info_9s': '2ad83a84-63f1-4ca1-a1ff-88322d24be6d@f9941',
+  'pve/hud/bg_dpad': 'e9214c11-1db7-4dec-a06d-4d9290a63dae@f9941',
+  'pve/hud/btn_pve_attack': '353bafaf-5e1f-409d-bf13-5a1af07e769f@f9941',
+  'pve/hud/btn_pve_end_turn': 'cad6e080-53fa-420d-b727-b3f618bff022@f9941',
+  'pve/hud/btn_pve_interact': '0affe775-4482-49b2-91ac-a591b7fa8606@f9941',
+  'pve/icons/icon_block': 'c3ba5bc7-6418-4c9f-9132-7a00cbe97d65@f9941',
+  'pve/icons/icon_boss_warn': '47c4ca2c-3b72-443c-9a19-e42c7932467e@f9941',
+  'pve/icons/icon_crit': '4d1fb0cb-c865-477d-9f9c-5d7216ada90f@f9941',
+  'pve/icons/icon_hud_anima': '14f1c72e-fd33-436a-9eb3-7c0e041c5a9e@f9941',
+  'pve/icons/icon_hud_ap': 'f853553b-2106-4934-949c-16e20e9da708@f9941',
+  'pve/icons/icon_hud_attack': '7c5237b7-b939-4ff5-80e5-d399221a2a01@f9941',
+  'pve/icons/icon_hud_dice': 'f4ec4196-8dcf-4c66-9bb2-c43f279cf609@f9941',
+  'pve/icons/icon_hud_gold': '59a3bef4-2c1c-43e7-9872-351d4d0bb543@f9941',
+  'pve/icons/icon_hud_hp': '3c1851c1-6cee-4b06-98b7-8ceca889a3e2@f9941',
+  'pve/icons/icon_hud_key': '97f6c5d6-0fad-4fc5-8808-6e0425f1ec69@f9941',
+  'pve/icons/icon_hud_scroll': '53e5e4a6-1b02-4217-a1b5-0f566dfbf7e4@f9941',
+  'pve/icons/icon_hud_shards': 'ad25e353-6aeb-4af4-ad99-070f5d402c0a@f9941',
+  'pve/icons/icon_relic_default': 'e211a403-54d2-4af1-b3d8-4ea3a8ae37d3@f9941',
+  'pve/icons/icon_scroll': '555df907-227f-4941-a388-5720152b9a20@f9941',
+  'pve/icons/icon_status_burn': '63a4e701-56be-49b7-a900-773b7079547b@f9941',
+  'pve/icons/icon_status_chill': '3399414b-02c8-4cc3-9353-d35d963b0193@f9941',
+  'pve/icons/icon_status_frozen': '1a726b6d-ff78-44be-94f1-bd574085111b@f9941',
+  'pve/map/icon_altar': '97ccc8b3-3729-40d8-baa1-ff1e4a9b94f1@f9941',
+  'pve/map/icon_blacksmith': '95e9d13e-4114-44cc-a9e6-57768caf9d5d@f9941',
+  'pve/map/icon_chest': '2838f2aa-64de-454a-ae11-a2ceb06f06b5@f9941',
+  'pve/map/icon_exit': '753d8095-d142-4f2b-8bf8-ec8f6bbbff7e@f9941',
+  'pve/map/icon_hot_spring': 'b00d36f7-7a69-4e3c-9ca7-12295f8efec2@f9941',
+  'pve/map/icon_idol': '04aa29b5-1fd1-4897-98a1-7b42e21f825e@f9941',
+  'pve/map/icon_key': '87815865-6e1a-48fc-a7f1-a558c1f50f52@f9941',
+  'pve/map/icon_monster_anima': '29b46c10-beb4-4598-977a-7e9e69ee378e@f9941',
+  'pve/map/icon_monster_boss': 'cd9e9f82-2c80-4375-8f52-0f5bced1256c@f9941',
+  'pve/map/icon_monster_ch1_normal': '83a5fda4-9dc8-4754-8d70-6ccb0ffe5c0b@f9941',
+  'pve/map/icon_monster_elite': '4393b67e-6e9e-4414-a452-c9b50ff2475a@f9941',
+  'pve/map/icon_monster_normal': '4acc5677-9e5e-42c2-910c-95a6550fa61f@f9941',
+  'pve/map/icon_player': 'f621a780-95f7-4cab-bfd0-71de76b89e44@f9941',
+  'pve/map/icon_portal': 'b6e018c4-5a3a-4384-ba92-394bd03c574d@f9941',
+  'pve/map/mark_attack_range': '19c2ac62-f809-4b87-a26b-7b2a8f2b567b@f9941',
+  'pve/map/mark_move_range': '7cd41b51-8d59-4da8-b245-b2d2c86c9ba2@f9941',
+  'pve/map/tile_floor_ch1': '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6@f9941',
+  'pve/map/tile_floor_ch2': '76b4a3db-b2b9-472e-bf86-a61d0de2419c@f9941',
+  'pve/map/tile_floor_ch3': '1f4d79be-7014-4707-9079-b4b83c14df36@f9941',
+  'pve/map/tile_floor_ch4': '8a57498e-8f89-4244-9818-f3cd8f7fd230@f9941',
+  'pve/map/tile_floor_ch5': '0613b374-6008-4582-b4dc-993457f49a30@f9941',
+  'pve/map/tile_fog': 'cb221eaf-62c2-42df-b751-2d6d521e1652@f9941',
+  'pve/map/tile_selected_frame': 'd92094e5-211d-460b-88c0-919a9775b933@f9941',
+  'pve/panel/panel_char_bg_9s': '1b6233d0-eb91-4fc5-b3ca-728573a47442@f9941',
+  'pve/panel/slot_equip_empty': '813a20e5-014e-4d22-bad8-707344802b0e@f9941',
+  'pve/popup/card_strengthen_choice_9s': 'aba6145e-4fdd-4393-8ad3-a6ef098828fd@f9941',
+  'pve/popup/panel_death_9s': '2f8c1707-d1a4-4ef5-bf61-4465f0f59b39@f9941',
+  'pve/popup/panel_floor_clear_9s': '2c33d542-f371-4218-a046-1c6476951872@f9941',
+  'pve/popup/panel_interact_9s': '5c3eb0e2-e1e5-43de-9303-59aa2c451921@f9941',
+  'pve/popup/panel_strengthen_9s': '15848f75-bfa3-4f32-aa0d-a7d2528fa09c@f9941',
   'room/card_room_player_empty': 'ebc95ea1-0db2-4cf5-b848-a5780cd90d8d@f9941',
   'room/card_room_player_ready': '31cc810e-f907-46ab-8dd8-d8864ae357bb@f9941',
   'room/panel_room_main_9s': '3a884848-ff37-4199-b774-d15280308671@f9941',
@@ -162,6 +223,104 @@ export const SETTLEMENT_UI_KEYS = [
   'settlement/tag_defeated',
   'settlement/btn_settlement_back_9s',
   'settlement/btn_settlement_again_9s',
+] as const;
+
+export const PVE_MAP_KEYS = [
+  'pve/map/tile_fog',
+  'pve/map/tile_floor_ch1',
+  'pve/map/tile_floor_ch2',
+  'pve/map/tile_floor_ch3',
+  'pve/map/tile_floor_ch4',
+  'pve/map/tile_floor_ch5',
+  'pve/map/tile_selected_frame',
+  'pve/map/mark_move_range',
+  'pve/map/mark_attack_range',
+  'pve/map/icon_player',
+  'pve/map/icon_portal',
+  'pve/map/icon_monster_normal',
+  'pve/map/icon_monster_ch1_normal',
+  'pve/map/icon_monster_elite',
+  'pve/map/icon_monster_anima',
+  'pve/map/icon_monster_boss',
+  'pve/map/icon_chest',
+  'pve/map/icon_key',
+  'pve/map/icon_exit',
+  'pve/map/icon_altar',
+  'pve/map/icon_blacksmith',
+  'pve/map/icon_hot_spring',
+  'pve/map/icon_idol',
+] as const;
+
+export const PVE_HUD_KEYS = [
+  'pve/icons/icon_hud_hp',
+  'pve/icons/icon_hud_ap',
+  'pve/icons/icon_hud_attack',
+  'pve/icons/icon_hud_gold',
+  'pve/icons/icon_hud_anima',
+  'pve/icons/icon_hud_key',
+  'pve/icons/icon_hud_dice',
+  'pve/icons/icon_hud_shards',
+  'pve/icons/icon_hud_scroll',
+  'pve/hud/btn_pve_attack',
+  'pve/hud/btn_pve_interact',
+  'pve/hud/btn_pve_end_turn',
+] as const;
+
+/** 战斗状态/战报/遗物图标 */
+export const PVE_STATUS_KEYS = [
+  'pve/icons/icon_block',
+  'pve/icons/icon_boss_warn',
+  'pve/icons/icon_crit',
+  'pve/icons/icon_relic_default',
+  'pve/icons/icon_scroll',
+  'pve/icons/icon_status_burn',
+  'pve/icons/icon_status_chill',
+  'pve/icons/icon_status_frozen',
+] as const;
+
+/** 职业图标 */
+export const PVE_CLASS_KEYS = [
+  'pve/class/icon_class_adventurer',
+  'pve/class/icon_class_archer',
+  'pve/class/icon_class_berserker',
+  'pve/class/icon_class_rogue',
+] as const;
+
+export const PVE_POPUP_KEYS = [
+  'pve/popup/card_strengthen_choice_9s',
+  'pve/popup/panel_strengthen_9s',
+  'pve/popup/panel_interact_9s',
+  'pve/popup/panel_death_9s',
+  'pve/popup/panel_floor_clear_9s',
+] as const;
+
+/** 大章节背景（720×1280 竖图）；微信真机走分包，不进主包 native */
+export const PVE_BG_KEYS = [
+  'pve/backgrounds/bg_pve_ch2',
+  'pve/backgrounds/bg_pve_ch3',
+  'pve/backgrounds/bg_pve_ch4',
+  'pve/backgrounds/bg_pve_ch5',
+  'pve/backgrounds/bg_pve_camp',
+  'pve/backgrounds/bg_destiny_tree',
+] as const;
+
+/** 面板/弹窗/营地/命运树底框，与弹窗一起预加载 */
+export const PVE_PANEL_KEYS = [
+  'pve/hud/bar_pve_info_9s',
+  'pve/hud/bg_dpad',
+  'pve/panel/panel_char_bg_9s',
+  'pve/panel/slot_equip_empty',
+  'pve/camp/panel_camp_main_9s',
+  'pve/destiny/node_frame',
+] as const;
+
+export const PVE_UI_KEYS = [
+  ...PVE_MAP_KEYS,
+  ...PVE_HUD_KEYS,
+  ...PVE_STATUS_KEYS,
+  ...PVE_CLASS_KEYS,
+  ...PVE_POPUP_KEYS,
+  ...PVE_PANEL_KEYS,
 ] as const;
 
 /** 大厅首屏必需：仅大厅背景 + 大厅 UI；阻塞启动流程，越小越快。 */
@@ -319,10 +478,16 @@ const PRELOAD_BATCH_SIZE = 6;
 /** 仅分包的大背景/结算，不进主包；preload 跳过；主包仅有编译占位 PNG */
 const WECHAT_SUBPACKAGE_ONLY_KEYS = new Set([
   'backgrounds/bg_settlement',
+  'pve/backgrounds/bg_pve_ch2',
+  'pve/backgrounds/bg_pve_ch3',
+  'pve/backgrounds/bg_pve_ch4',
+  'pve/backgrounds/bg_pve_ch5',
+  'pve/backgrounds/bg_pve_camp',
+  'pve/backgrounds/bg_destiny_tree',
 ]);
 
 function usesSubpackageOnlyNative(key: string): boolean {
-  return WECHAT_SUBPACKAGE_ONLY_KEYS.has(key) || key.startsWith('settlement/');
+  return WECHAT_SUBPACKAGE_ONLY_KEYS.has(key) || key.startsWith('settlement/') || key.startsWith('pve/backgrounds/');
 }
 const WECHAT_SUBPACKAGE_DOWNLOAD_WAIT_MS = 30000;
 
@@ -927,6 +1092,15 @@ export async function preloadBoardUi(): Promise<void> {
 export async function preloadSettlementUi(): Promise<void> {
   if (!(await ensureResourcesBundle())) return;
   await preloadKeys([...SETTLEMENT_KEYS]);
+}
+
+export async function preloadPveUi(): Promise<void> {
+  if (!(await ensureResourcesBundle())) return;
+  // 大章节背景（720×1280）在微信真机走分包延迟加载，不进主包 preload
+  const keys = usesWechatNativeFs()
+    ? ([...PVE_UI_KEYS] as string[]).filter((k) => !usesSubpackageOnlyNative(k))
+    : [...PVE_UI_KEYS];
+  await preloadKeys(keys);
 }
 
 export type ScreenBgKey = 'lobby' | 'room' | 'board' | 'settlement';

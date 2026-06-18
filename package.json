@@ -7,6 +7,10 @@
   "scripts": {
     "patch:wechat": "node scripts/patch-wechatgame-config.js",
     "compress:bgm": "node scripts/compress-bgm-main.js",
+    "art:pve:generate": "python art_pipeline/scripts/generate.py",
+    "art:pve:sheet": "python art_pipeline/scripts/contact_sheet.py",
+    "art:pve:validate": "python art_pipeline/scripts/validate.py",
+    "art:pve:promote": "python art_pipeline/scripts/promote.py",
     "test": "jest",
     "test:pve": "jest --roots test/pve"
   },

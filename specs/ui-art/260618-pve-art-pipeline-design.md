@@ -28,13 +28,15 @@ art_pipeline/
     map_entity.json
     background.json
     panel.json
+  references/
+    pve-style-reference.png
   manifests/
     pve_ui.json
   scripts/
-    generate.mjs
-    contact-sheet.mjs
-    validate.mjs
-    promote.mjs
+    generate.py
+    contact_sheet.py
+    validate.py
+    promote.py
   generated/
     <batch-id>/
       batch.json
@@ -78,7 +80,9 @@ Templates remain separate because icons, map entities, full backgrounds, and UI 
 
 ## Generation Command
 
-`generate.mjs` reads the manifest and accepts filters:
+`generate.py` reads the manifest and accepts filters. It is an orchestration
+layer around the installed Codex `image_gen.py` CLI rather than a second
+OpenAI SDK implementation:
 
 ```text
 --ids <comma-separated ids>
@@ -105,13 +109,13 @@ Every request and result is recorded in `batch.json`, including asset ID, varian
 
 ## Contact Sheet
 
-`contact-sheet.mjs` creates one numbered preview for a batch. Each tile shows the asset ID and variant number outside the artwork. It does not modify source images.
+`contact_sheet.py` creates one numbered preview for a batch. Each tile shows the asset ID and variant number outside the artwork. It does not modify source images.
 
 The contact sheet is the default review artifact so Codex and the user do not need to inspect every full-resolution image individually.
 
 ## Validation
 
-`validate.mjs` checks:
+`validate.py` checks:
 
 - File exists and is a readable PNG.
 - Dimensions match the expected source or target size.
@@ -119,12 +123,14 @@ The contact sheet is the default review artifact so Codex and the user do not ne
 - Transparent assets are not completely opaque or completely empty.
 - Filename and asset ID agree with the manifest.
 - Production paths stay under `assets/resources/art/ui/pve/`.
+- Assets marked `requiresOutline` have a predominantly dark alpha-boundary
+  ring. This is a heuristic warning, not a replacement for visual review.
 
 Visual style, unwanted text, composition, and outline quality still require human review.
 
 ## Promotion
 
-`promote.mjs` only processes explicitly selected `assetId:variant` pairs. It:
+`promote.py` only processes explicitly selected `assetId:variant` pairs. It:
 
 1. Reads the generated batch result.
 2. Resizes to `targetSize` while preserving aspect ratio.
@@ -154,4 +160,3 @@ The implementation is complete when:
 - Promotion stays inside approved PVE paths and refuses unsafe overwrite.
 - `npm` scripts expose concise terminal commands.
 - The README documents the user/Codex handoff workflow.
-

@@ -1,0 +1,13 @@
+{
+  "useCase": "stylized-concept",
+  "assetType": "PVE mobile game environment background",
+  "composition": "portrait environment backdrop with a calm open center and richer decoration near the outer edges, no characters, no UI, no framed play area",
+  "rendering": "painted chibi fantasy environment matching the approved mossy stone grid in texture, lighting, and palette",
+  "constraints": [
+    "opaque full-bleed background",
+    "no text, logo, watermark, grid labels, or interface elements",
+    "avoid high-frequency clutter behind gameplay",
+    "do not draw a board, grid, square cells, tile lines, framed arena, or central stone rectangle",
+    "the real gameplay grid will be rendered separately on top of this image"
+  ]
+}

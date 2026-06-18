@@ -1,4 +1,4 @@
-import { _decorator, Component, Label } from 'cc';
+import { _decorator, Component, dynamicAtlasManager, Label } from 'cc';
 import { SceneLoader } from './SceneLoader';
 import { PERF_TRACE_ENABLED } from './Constants';
 import { PerfMarks } from './PerfMarks';
@@ -6,6 +6,7 @@ import { initWxCloud } from '../platform/wechat/WxCloudInit';
 import { login } from '../platform/wechat/WxAuth';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
 import { refreshScreenAdapt } from '../platform/wechat/ViewAdapt';
+import { ensurePrivacyAuthorized } from '../platform/wechat/WxPrivacy';
 import {
   ensureResourcesBundle,
   getCachedSprite,
@@ -26,6 +27,10 @@ export class GameApp extends Component {
 
   async onLoad() {
     if (PERF_TRACE_ENABLED) PerfMarks.mark('app_start');
+    // 全局禁用动态合图：Cocos 3.x DynamicAtlas 在微信端会让 <512px 的 SpriteFrame
+    // 渲染时纹理坐标错乱（HUD 图标/地图素材全部不显示）。packable=false 在 atlas
+    // 已合后撤销不了，必须从一开始禁用全局合图器。
+    try { dynamicAtlasManager.enabled = false; } catch {}
     lockPortrait();
     this.scheduleOnce(() => refreshScreenAdapt(this.node), 0);
     this.scheduleOnce(() => refreshScreenAdapt(this.node), 0.15);
@@ -39,6 +44,8 @@ export class GameApp extends Component {
     }
     await initWxCloud();
     if (PERF_TRACE_ENABLED) PerfMarks.mark('wx_cloud_init_done');
+
+    await ensurePrivacyAuthorized();
 
     try {
       // 登录（网络）和资源分包加载（IO）原本串行，互相不依赖 → 并行执行缩短主路径。

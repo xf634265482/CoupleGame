@@ -1,0 +1,1160 @@
+{
+  "schemaVersion": 1,
+  "scope": "PVE_ONLY",
+  "defaultModel": "gpt-image-1",
+  "defaultQuality": "medium",
+  "defaultBatchLimit": 10,
+  "assets": [
+    {
+      "id": "map.tile_floor_ch1",
+      "category": "background",
+      "status": "integrated",
+      "promptTemplate": "background",
+      "prompt": "Chapter 1 top-down mossy woodland dungeon floor, gray stone border, olive green worn tiles, small leaves and pebbles, same grid-ground rendering as the approved reference.",
+      "size": "1024x1024",
+      "targetSize": [
+        560,
+        560
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_floor_ch1.png",
+      "notes": "Approved style anchor."
+    },
+    {
+      "id": "map.icon_player",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "The approved blue-haired young chibi swordsman in blue armor and scarf, preserve his hairstyle, face, costume colors, short silver sword, proportions, and confident neutral pose.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_player.png",
+      "notes": "Primary character style anchor; do not regenerate without explicit approval."
+    },
+    {
+      "id": "map.icon_chest",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Compact wooden treasure chest with muted gold bands and lock, warm amber highlights, matching the approved reference chest.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_chest.png",
+      "notes": "Approved object style anchor."
+    },
+    {
+      "id": "map.icon_key",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Large readable antique gold dungeon key with a simple fantasy bow and slightly worn metal.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_key.png",
+      "notes": "Approved object style anchor."
+    },
+    {
+      "id": "map.icon_exit",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small mossy stone exit arch with pale cyan light in the doorway, clearly readable as the next-floor exit.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_exit.png",
+      "notes": ""
+    },
+    {
+      "id": "map.icon_monster_ch1_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small goblin warrior, green skin, large ears, broken iron helmet, short rusty sword and tiny wooden shield, mischievous foot-soldier expression.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch1_normal.png",
+      "notes": ""
+    },
+    {
+      "id": "map.icon_monster_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Generic fallback dungeon creature with a simple compact silhouette and mild threat.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_normal.png",
+      "notes": "Fallback only."
+    },
+    {
+      "id": "map.icon_monster_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Generic fallback elite dungeon creature with a larger armored silhouette and restrained crimson warning accents.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_elite.png",
+      "notes": "Fallback only."
+    },
+    {
+      "id": "map.icon_monster_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small floating anima spirit creature with a compact cyan-blue glowing core and readable face.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_anima.png",
+      "notes": "Fallback only."
+    },
+    {
+      "id": "map.icon_monster_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Large fallback dungeon boss with a broad imposing silhouette, dark stone armor, and restrained crimson rune glow.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_boss.png",
+      "notes": "Fallback only."
+    },
+    {
+      "id": "map.tile_fog",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Organic black and blue-black exploration fog overlay with broken smoky edges and a dense opaque center.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_fog.png",
+      "notes": ""
+    },
+    {
+      "id": "map.tile_selected_frame",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Hollow square selected-cell frame with restrained cyan rune corners and transparent center.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_selected_frame.png",
+      "notes": ""
+    },
+    {
+      "id": "map.mark_move_range",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Hollow square movement-range overlay with a teal-green magical edge and transparent center.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/mark_move_range.png",
+      "notes": ""
+    },
+    {
+      "id": "map.mark_attack_range",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Hollow square attack-range overlay with a controlled crimson magical edge and transparent center.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/mark_attack_range.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_hp",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Ruby red heart for player health.",
+      "size": "1024x1024",
+      "targetSize": [
+        56,
+        56
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_hp.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_attack",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Short silver sword with a restrained cyan edge highlight for player attack.",
+      "size": "1024x1024",
+      "targetSize": [
+        56,
+        56
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_attack.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_ap",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Cyan lightning bolt for action points.",
+      "size": "1024x1024",
+      "targetSize": [
+        56,
+        56
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_ap.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_gold",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Small stack of worn muted-gold coins.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_gold.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_anima",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Blue-green soul flame orb for anima energy.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_anima.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.icon_key",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Tiny antique gold dungeon key.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_key.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.btn_attack",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Compact dark red stone action button with a centered sword-slash symbol and no words.",
+      "size": "1536x1024",
+      "targetSize": [
+        220,
+        120
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_pve_attack.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.btn_interact",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Compact deep teal stone action button with a centered hand-and-spark symbol and no words.",
+      "size": "1536x1024",
+      "targetSize": [
+        220,
+        120
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_pve_interact.png",
+      "notes": ""
+    },
+    {
+      "id": "hud.btn_end_turn",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Compact charcoal stone action button with a centered hourglass symbol and no words.",
+      "size": "1536x1024",
+      "targetSize": [
+        220,
+        120
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_pve_end_turn.png",
+      "notes": ""
+    },
+    {
+      "id": "popup.panel_strengthen",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Large strengthen-choice modal frame, mossy gray stone and deep wood, restrained cyan runes, empty central content area, 9-slice friendly.",
+      "size": "1024x1536",
+      "targetSize": [
+        620,
+        640
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/popup/panel_strengthen_9s.png",
+      "notes": ""
+    },
+    {
+      "id": "popup.card_strengthen",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Vertical strengthen option card frame with dark stone, deep wood, restrained cyan rune border, empty center, 9-slice friendly.",
+      "size": "1024x1536",
+      "targetSize": [
+        360,
+        480
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/popup/card_strengthen_choice_9s.png",
+      "notes": ""
+    },
+    {
+      "id": "map.icon_portal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small circular next-floor portal, mossy stone ring, pale cyan swirling center.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_portal.png",
+      "notes": "Existing candidate; review before promotion."
+    },
+    {
+      "id": "map.icon_blacksmith",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small blacksmith anvil and hammer with dark iron, worn wood, and warm orange forge highlights.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_blacksmith.png",
+      "notes": "Existing candidate; review before promotion."
+    },
+    {
+      "id": "map.icon_idol",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small ancient mossy stone idol with a friendly mysterious face and restrained cyan rune glow.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_idol.png",
+      "notes": "Existing candidate; review before promotion."
+    },
+    {
+      "id": "map.icon_hot_spring",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small mossy stone hot spring basin with clear cyan water and two simple steam curls.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_hot_spring.png",
+      "notes": "Existing candidate; review before promotion."
+    },
+    {
+      "id": "map.icon_altar",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small dark stone sacrificial altar with worn corners and restrained crimson-violet rune light.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_altar.png",
+      "notes": "Existing candidate; review before promotion."
+    },
+    {
+      "id": "hud.icon_dice",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Small ivory action die with dark inset pips and worn muted-gold corners.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_dice.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "hud.icon_shards",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Cluster of dark violet destiny crystal shards with cyan inner light.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_shards.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "hud.icon_scroll",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Small rolled parchment scroll tied with a blue ribbon and a tiny cyan rune seal.",
+      "size": "1024x1024",
+      "targetSize": [
+        56,
+        56
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_hud_scroll.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "status.burn",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact orange-red flame status symbol.",
+      "size": "1024x1024",
+      "targetSize": [
+        44,
+        44
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_status_burn.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "status.frozen",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact cyan ice crystal status symbol.",
+      "size": "1024x1024",
+      "targetSize": [
+        44,
+        44
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_status_frozen.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "status.chill",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact pale-blue snowflake and cold-wind status symbol.",
+      "size": "1024x1024",
+      "targetSize": [
+        44,
+        44
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_status_chill.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "combat.icon_crit",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact gold-orange impact burst for a critical hit.",
+      "size": "1024x1024",
+      "targetSize": [
+        44,
+        44
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_crit.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "combat.icon_block",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact blue-gray shield for a blocked attack.",
+      "size": "1024x1024",
+      "targetSize": [
+        44,
+        44
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_block.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "combat.icon_boss_warn",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Compact dark-stone warning triangle with a restrained crimson boss rune.",
+      "size": "1024x1024",
+      "targetSize": [
+        48,
+        48
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_boss_warn.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "class.adventurer",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Adventurer class emblem using the approved blue-haired swordsman profile, short sword, blue scarf, and small travel pack.",
+      "size": "1024x1024",
+      "targetSize": [
+        128,
+        128
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/class/icon_class_adventurer.png",
+      "notes": "Existing candidate; character consistency needs close review."
+    },
+    {
+      "id": "class.berserker",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Berserker class emblem, compact chibi warrior with oversized worn axe and dark red accents.",
+      "size": "1024x1024",
+      "targetSize": [
+        128,
+        128
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/class/icon_class_berserker.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "class.archer",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Archer class emblem, compact chibi archer with short bow, feather hood, and teal-green accents.",
+      "size": "1024x1024",
+      "targetSize": [
+        128,
+        128
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/class/icon_class_archer.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "class.rogue",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Rogue class emblem, compact chibi hooded rogue with a short dagger and restrained violet accents.",
+      "size": "1024x1024",
+      "targetSize": [
+        128,
+        128
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/class/icon_class_rogue.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "relic.default",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Mysterious ancient relic placeholder, small mossy stone charm with muted gold and cyan rune accents.",
+      "size": "1024x1024",
+      "targetSize": [
+        128,
+        128
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_relic_default.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "item.scroll",
+      "category": "icon",
+      "status": "integrated",
+      "promptTemplate": "icon",
+      "prompt": "Readable parchment magic scroll with worn gold caps, blue ribbon, and cyan rune seal.",
+      "size": "1024x1024",
+      "targetSize": [
+        96,
+        96
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/icons/icon_scroll.png",
+      "notes": "Existing candidate."
+    },
+    {
+      "id": "background.chapter2",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Chapter 2 desert ruins expedition environment backdrop, worn ochre stone, windblown sand, broken columns, sparse teal magical details around the outer edges, broad calm sandy center beneath the separately rendered map, preserve the same painted texture and lighting family as Chapter 1. Absolutely no board, grid, square cells, tile lines, framed arena, or central stone rectangle.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch2.png",
+      "notes": "Next generation order 1.",
+      "lastBatch": "pve-20260618-111509",
+      "selectedVariant": "background.chapter2:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-111509/backgrounds/bg_pve_ch2.png"
+    },
+    {
+      "id": "map.tile_floor_ch2",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "map_tile",
+      "prompt": "One Chapter 2 desert ruins floor cell, worn ochre sandstone and packed sand, tiny sparse pebble details, warm shadows, matching the approved Chapter 1 tile shape and outline weight.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_floor_ch2.png",
+      "notes": "Repeated dynamically by FogMapView.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "map.tile_floor_ch2:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/map/tile_floor_ch2.png"
+    },
+    {
+      "id": "background.chapter3",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Chapter 3 frozen tower expedition environment backdrop, blue-gray stone, snow drifts and ice crystals around the outer edges, broad calm frozen center beneath the separately rendered map, pale cyan light, preserve the same painted texture and lighting family as Chapter 1. Absolutely no board, grid, square cells, tile lines, framed arena, or central stone rectangle.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch3.png",
+      "notes": "Next generation order 2.",
+      "lastBatch": "pve-20260618-111509",
+      "selectedVariant": "background.chapter3:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-111509/backgrounds/bg_pve_ch3.png"
+    },
+    {
+      "id": "map.tile_floor_ch3",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "map_tile",
+      "prompt": "One Chapter 3 frozen tower floor cell, blue-gray stone beneath thin worn ice, restrained pale cyan cracks and frost at the edges, matching the approved Chapter 1 tile shape and outline weight.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_floor_ch3.png",
+      "notes": "Repeated dynamically by FogMapView.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "map.tile_floor_ch3:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/map/tile_floor_ch3.png"
+    },
+    {
+      "id": "background.chapter4",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Chapter 4 volcanic abyss expedition background, black stone, controlled orange magma cracks, iron chains, smoke kept away from the gameplay center, same painted rendering family.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch4.png",
+      "notes": "Next generation order 3.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "background.chapter4:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/backgrounds/bg_pve_ch4.png"
+    },
+    {
+      "id": "map.tile_floor_ch4",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "map_tile",
+      "prompt": "One Chapter 4 volcanic abyss floor cell, dark charcoal volcanic stone with a few thin controlled orange magma cracks near the edges, matching the approved Chapter 1 tile shape and outline weight.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_floor_ch4.png",
+      "notes": "Repeated dynamically by FogMapView.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "map.tile_floor_ch4:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/map/tile_floor_ch4.png"
+    },
+    {
+      "id": "background.chapter5",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Chapter 5 fate sanctum expedition environment backdrop with continuous charcoal stone ground extending naturally edge to edge, muted violet night sky only near the upper outer edge, sparse pale cyan constellation marks and restrained gold details pushed to the outer perimeter, broad calm uninterrupted central ground beneath the separately rendered square map, avoid a purple-dominated image. Absolutely no treasure chest, key, portal, character, monster, item, interactable object, circular platform, magic circle, altar, ritual ring, arena border, raised stage, board, grid, square cells, tile lines, framed play area, or central stone rectangle.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch5.png",
+      "notes": "Next generation order 4.",
+      "lastBatch": "pve-20260618-113942",
+      "selectedVariant": "background.chapter5:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-113942/backgrounds/bg_pve_ch5.png"
+    },
+    {
+      "id": "map.tile_floor_ch5",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "map_tile",
+      "prompt": "One Chapter 5 fate sanctum floor cell, charcoal-violet stone with sparse pale cyan constellation scratches and tiny muted-gold points, avoid purple dominance, matching the approved Chapter 1 tile shape and outline weight.",
+      "size": "1024x1024",
+      "targetSize": [
+        140,
+        140
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/map/tile_floor_ch5.png",
+      "notes": "Repeated dynamically by FogMapView.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "map.tile_floor_ch5:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/map/tile_floor_ch5.png"
+    },
+    {
+      "id": "background.camp",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Safe expedition camp at night, mossy stone, canvas tent, wooden crates, small warm campfire, blue-haired hero absent, calm central UI space, same Chapter 1 art style.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_camp.png",
+      "notes": "Next generation order 5.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "background.camp:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/backgrounds/bg_pve_camp.png"
+    },
+    {
+      "id": "background.destiny_tree",
+      "category": "background",
+      "status": "processed",
+      "promptTemplate": "background",
+      "prompt": "Ancient destiny tree chamber, enormous dark tree roots growing through mossy stone, cyan constellation lights and restrained muted gold, readable central node area, same painted fantasy style.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_destiny_tree.png",
+      "notes": "Next generation order 6.",
+      "lastBatch": "pve-20260618-112635",
+      "selectedVariant": "background.destiny_tree:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-112635/backgrounds/bg_destiny_tree.png"
+    },
+    {
+      "id": "hud.bar_info",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Wide two-row expedition HUD information bar, dark mossy stone and deep wood, restrained copper fittings. Provide six evenly spaced plain empty dark inset zones for code-rendered icons and numbers. Frame artwork only: every zone must be blank. No character portrait, icon, coin, heart, orb, key, symbol, number, text, or embedded content. 9-slice friendly.",
+      "size": "1536x1024",
+      "targetSize": [
+        720,
+        120
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/hud/bar_pve_info_9s.png",
+      "notes": "Next generation order 7.",
+      "lastBatch": "pve-20260618-115626",
+      "selectedVariant": "hud.bar_info:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-115626/hud/bar_pve_info_9s.png"
+    },
+    {
+      "id": "hud.bg_dpad",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Compact cross-shaped directional control base, dark mossy stone with worn bevels and a restrained cyan center rune, no arrows and no text.",
+      "size": "1024x1024",
+      "targetSize": [
+        260,
+        260
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/hud/bg_dpad.png",
+      "notes": "Next generation order 8.",
+      "lastBatch": "pve-20260618-114700",
+      "selectedVariant": "hud.bg_dpad:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-114700/hud/bg_dpad.png"
+    },
+    {
+      "id": "panel.character",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Large portrait character information panel outer frame only. One broad completely blank dark interior content area with no subdivisions, slots, portrait box, rows, cards, separators, or controls. Mossy stone outer border, deep wood inner trim, worn leather and muted gold fittings. Game code will construct the portrait, exactly five equipment slots, stat rows and trait list on top. No character, portrait, slot, weapon, armor, atom mark, skill emblem, rune, icon, symbol, text, number, item art, or embedded layout. 9-slice friendly outer frame.",
+      "size": "1024x1536",
+      "targetSize": [
+        580,
+        760
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/panel/panel_char_bg_9s.png",
+      "notes": "Next generation order 9.",
+      "lastBatch": "pve-20260618-122958",
+      "selectedVariant": "panel.character:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-122958/panel/panel_char_bg_9s.png"
+    },
+    {
+      "id": "panel.equipment_slot",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "One standalone square empty equipment slot frame for the PVE character panel. Mossy gray stone outer edge, deep wood inset, thin muted-gold inner border, plain completely empty dark center. No item, weapon, armor, character, icon, rune, symbol, text, number, highlight, or quality color. Strong dark outer outline. The game will repeat this same slot exactly five times.",
+      "size": "1024x1024",
+      "targetSize": [
+        192,
+        192
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/panel/slot_equip_empty.png",
+      "notes": "Repeated exactly five times by code.",
+      "lastBatch": "pve-20260618-122958",
+      "selectedVariant": "panel.equipment_slot:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-122958/panel/slot_equip_empty.png"
+    },
+    {
+      "id": "camp.panel_main",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Large expedition camp shop panel frame with one blank header plate, three completely empty item-card zones and one blank lower action area. Deep wood, mossy stone, leather and only subtle warm amber edge lighting. Frame and empty containers only. No character, campfire, chest, crate, item, icon, symbol, text, number, or button caption. 9-slice friendly outer frame.",
+      "size": "1024x1536",
+      "targetSize": [
+        720,
+        900
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/camp/panel_camp_main_9s.png",
+      "notes": "Next generation order 10.",
+      "lastBatch": "pve-20260618-115626",
+      "selectedVariant": "camp.panel_main:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-115626/camp/panel_camp_main_9s.png"
+    },
+    {
+      "id": "popup.panel_interact",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "General neutral-entity interaction modal frame with one completely empty circular icon socket, one large blank description area and two blank option-row backgrounds. Mossy stone, deep wood and restrained cyan edge details. Frame and empty containers only. No character, portrait, key, item, icon, symbol, text, number, or embedded option content. 9-slice friendly outer frame.",
+      "size": "1024x1536",
+      "targetSize": [
+        620,
+        640
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/popup/panel_interact_9s.png",
+      "notes": "Next generation order 11.",
+      "lastBatch": "pve-20260618-115626",
+      "selectedVariant": "popup.panel_interact:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-115626/popup/panel_interact_9s.png"
+    },
+    {
+      "id": "popup.panel_death",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Expedition death results modal frame, dark cracked stone and extinguished cyan rune accents, one large completely blank statistics area and one completely blank wide action-button plate near the bottom. Solemn but not horror. Frame and empty containers only. No skull emblem, character, icon, reward, symbol, letters, words, REVIVE text, numbers, or button caption. 9-slice friendly outer frame.",
+      "size": "1024x1536",
+      "targetSize": [
+        620,
+        720
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/popup/panel_death_9s.png",
+      "notes": "Next generation order 12.",
+      "lastBatch": "pve-20260618-115626",
+      "selectedVariant": "popup.panel_death:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-115626/popup/panel_death_9s.png"
+    },
+    {
+      "id": "popup.panel_floor_clear",
+      "category": "panel",
+      "status": "processed",
+      "promptTemplate": "panel",
+      "prompt": "Floor-clear reward modal frame, mossy stone and deep wood with warm muted-gold success edge light, one large completely blank reward area, two empty reward-slot frames and one completely blank action-button plate. Celebratory but restrained. Frame and empty containers only. No item, reward, icon, symbol, letters, words, CONTINUE text, numbers, or button caption. 9-slice friendly outer frame.",
+      "size": "1024x1536",
+      "targetSize": [
+        620,
+        560
+      ],
+      "transparent": true,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/popup/panel_floor_clear_9s.png",
+      "notes": "Next generation order 13.",
+      "lastBatch": "pve-20260618-115626",
+      "selectedVariant": "popup.panel_floor_clear:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-115626/popup/panel_floor_clear_9s.png"
+    },
+    {
+      "id": "destiny.node_frame",
+      "category": "icon",
+      "status": "processed",
+      "promptTemplate": "icon",
+      "prompt": "One circular empty destiny-tree node frame. Symmetrical mossy carved gray-stone outer ring, continuous dark charcoal outline, thin muted-gold inner rim, and one completely empty plain dark circular center reserved for a code-rendered node icon. No lock, rune, glow symbol, letter, number, character, icon, constellation, emblem, or decorative mark inside the center. This exact frame will be reused for locked, available, and unlocked states; game code applies tint, opacity and glow.",
+      "size": "1024x1024",
+      "targetSize": [
+        160,
+        160
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "trimAlpha": true,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/destiny/node_frame.png",
+      "notes": "One reusable frame; state styling is applied by DestinyTreeView.",
+      "lastBatch": "pve-20260618-124155",
+      "selectedVariant": "destiny.node_frame:1",
+      "approvedPath": "art_pipeline/approved/pve-20260618-124155/destiny/node_frame.png"
+    }
+  ]
+}

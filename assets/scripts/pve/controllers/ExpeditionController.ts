@@ -43,6 +43,7 @@ import { PveHudView } from '../views/PveHudView';
 import type { LogKind } from '../views/PveMessageLog';
 import { PveMessageLog } from '../views/PveMessageLog';
 import { PveToastView, STRENGTHEN_LABEL } from '../views/PveToastView';
+import { preloadPveUi } from '../../ui/UiAssets';
 
 const { ccclass } = _decorator;
 
@@ -754,6 +755,7 @@ export class ExpeditionController extends Component {
     this.scheduleOnce(() => refreshScreenAdapt(this.node), 0);
     applyUiLayerTree(this.node, this.node.layer);
 
+    void preloadPveUi();
     this._buildUi();
     void this._bootstrap();
 

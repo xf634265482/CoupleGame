@@ -1,0 +1,13 @@
+{
+  "useCase": "stylized-concept",
+  "assetType": "single PVE square battlefield floor tile",
+  "composition": "one complete square floor cell viewed from directly above, centered, seamless edge alignment, subtle dark recessed border around this one cell only, 8 percent transparent padding",
+  "rendering": "painted chibi fantasy terrain matching the approved Chapter 1 floor tile, softly beveled surface, restrained natural detail, readable when repeated in an 8 by 8 to 10 by 10 grid",
+  "constraints": [
+    "transparent background outside the one square tile",
+    "draw exactly one floor cell, not a board and not multiple cells",
+    "strong dark outer cell boundary with softly rounded corners",
+    "no objects, characters, UI, text, logo, watermark, or directional lighting that breaks tiling",
+    "avoid a highly distinctive repeated landmark in the center"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "useCase": "stylized-concept",
+  "assetType": "PVE top-down map entity sprite",
+  "composition": "single centered entity, slightly elevated three-quarter top-down game view matching the approved player and chest, fully visible silhouette, 10 percent transparent padding",
+  "rendering": "painted chibi fantasy game sprite, chunky proportions, readable at 48 to 106 display pixels",
+  "constraints": [
+    "transparent background",
+    "strong continuous dark charcoal outer outline around the full entity",
+    "no floor tile, pedestal, cast shadow, text, or watermark"
+  ]
+}

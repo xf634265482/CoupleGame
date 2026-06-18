@@ -12,12 +12,23 @@ native
 # NPM
 #//////////////////////////
 node_modules/
+__pycache__/
+*.pyc
+
+# Local PVE AI art batches and approved working copies
+art_pipeline/generated/
+art_pipeline/approved/
 
 # 本地微信 AppID / 云环境 ID（勿提交）
 config/wechat.local.json
 
 # MeowArt / 其他本地密钥（勿提交）
 .env
+
+# 本地生成产物 / 临时文件（勿提交）
+output/
+tmp/
+.codex/
 
 #//////////////////////////
 # VSCode

@@ -84,9 +84,12 @@ function applySpriteSize(
 
   let sp = node.getComponent(Sprite);
   if (!sp) sp = node.addComponent(Sprite);
-  sp.spriteFrame = sf;
   sp.sizeMode = Sprite.SizeMode.CUSTOM;
   sp.type = Sprite.Type.SIMPLE;
+  sp.spriteFrame = sf;
+  // 替换 SpriteFrame 时 Cocos 可能按原图尺寸刷新 UITransform。
+  // 赋图后再次锁定目标尺寸，避免固定布局被 256×256 等素材尺寸撑大。
+  ut.setContentSize(w, h);
 
   removePlaceholderGraphics(node);
   return sp;
@@ -100,6 +103,33 @@ export function applySpriteFill(
 ): Sprite {
   const lay = pickSpriteLayout(sf, boxW, boxH);
   return applySpriteSize(node, sf, lay.w, lay.h);
+}
+
+/** Keep the node hitbox/layout fixed, and scale only the sprite inside that box. */
+export function applySpriteInsideFixedBox(
+  node: Node,
+  sf: SpriteFrame,
+  boxW: number,
+  boxH: number,
+): Sprite {
+  normalizeUiSpriteFrame(sf);
+  const lay = pickSpriteLayout(sf, boxW, boxH);
+  const ut = node.getComponent(UITransform) || node.addComponent(UITransform);
+  ut.setContentSize(lay.w, lay.h);
+
+  let sp = node.getComponent(Sprite);
+  if (!sp) sp = node.addComponent(Sprite);
+  sp.sizeMode = Sprite.SizeMode.CUSTOM;
+  sp.type = Sprite.Type.SIMPLE;
+  sp.spriteFrame = sf;
+  ut.setContentSize(lay.w, lay.h);
+
+  // 节点会被格子池反复复用。尺寸直接写入 UITransform，节点缩放始终归一，
+  // 避免上一张图片的宽高比缩放残留到下一次渲染。
+  node.setScale(1, 1, 1);
+
+  removePlaceholderGraphics(node);
+  return sp;
 }
 
 /** 子节点铺底图（置于最底层，居中） */
@@ -151,9 +181,10 @@ function applySpriteSliced(
 
   let sp = node.getComponent(Sprite);
   if (!sp) sp = node.addComponent(Sprite);
-  sp.spriteFrame = sf;
   sp.sizeMode = Sprite.SizeMode.CUSTOM;
   sp.type = Sprite.Type.SLICED;
+  sp.spriteFrame = sf;
+  ut.setContentSize(w, h);
 
   removePlaceholderGraphics(node);
   return sp;

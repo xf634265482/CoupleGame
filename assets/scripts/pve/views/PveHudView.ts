@@ -1,11 +1,10 @@
-// 远征 HUD（design §2/§4）：显示 章节-层数/AP/HP/金币/灵气，提供方向移动 + 攻击/交互/结束回合操作入口。
-// 代码建 UI（无 prefab），参考 HudController 的回调对象模式；M1 无美术资源，纯 Graphics + Label。
-
-import { Color, Label, Node } from 'cc';
+import { Color, Graphics, Label, Layers, Node, UITransform } from 'cc';
 import { playerAttackPower } from '../core/CombatSystem';
 import type { Direction } from '../core/MovementSystem';
 import { AP_BASE } from '../core/PveConstants';
 import type { ExpeditionState } from '../core/PveTypes';
+import { loadUiSprite } from '../../ui/UiAssets';
+import { ensureArtChild } from '../../ui/UiSprite';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 export type PveHudCallbacks = {
@@ -15,183 +14,259 @@ export type PveHudCallbacks = {
   onEndTurn: () => void;
   onQuit?: () => void;
   onShowCharacter?: () => void;
-  /** 使用 1 张命运词条卷轴（HUD 按钮触发 → 弹三选一弹窗）。 */
   onUseScroll?: () => void;
 };
 
-const INFO_COLOR = new Color(225, 230, 240, 255);
-const HP_COLOR = new Color(235, 110, 100, 255);
-const AP_COLOR = new Color(120, 200, 255, 255);
-const GOLD_COLOR = new Color(245, 210, 110, 255);
-const ANIMA_COLOR = new Color(190, 150, 245, 255);
-const ATTACK_COLOR = new Color(250, 165, 90, 255);
-const KEY_COLOR = new Color(245, 220, 110, 255);
+const INFO_COLOR   = new Color(225, 230, 240, 255);
+const HP_COLOR     = new Color(235, 110, 100, 255);
+const AP_COLOR     = new Color(120, 200, 255, 255);
+const GOLD_COLOR   = new Color(245, 210, 110, 255);
+const ANIMA_COLOR  = new Color(190, 150, 245, 255);
+const ATTACK_COLOR = new Color(250, 165, 90,  255);
+const KEY_COLOR    = new Color(245, 220, 110, 255);
 const SHARDS_COLOR = new Color(130, 200, 250, 255);
 
-const DPAD_BTN = 84;
-const ACTION_BTN_W = 110;
+const BAR_W = 110;
+const BAR_H = 22;
+const DPAD_BTN    = 84;
+const ACTION_BTN_W = 120;
 const ACTION_BTN_H = 60;
 
-/** 远征 HUD 视图 → P2 PveHudView */
 export class PveHudView {
   private _root: Node;
-  private _floorLabel: Label;
-  private _hpLabel: Label;
-  private _apLabel: Label;
-  private _goldLabel: Label;
-  private _animaLabel: Label;
-  private _attackLabel: Label;
-  private _keyLabel: Label;
-  /** 命运碎片余额（AC-20 局外资产，通过 refreshMeta 单独刷新）。 */
+  private _floorLabel:  Label;
+  private _goldLabel:   Label;
+  private _animaLabel:  Label;
+  private _keyLabel:    Label;
   private _shardsLabel: Label;
-  /** 状态效果（冰冻 / 灼烧）：显示在顶部状态条下方第二行。 */
+  private _attackLabel: Label;
   private _statusLabel: Label;
-  /** 卷轴使用按钮（动态显隐，仅当 player.scrolls > 0 时显示）。 */
-  private _scrollButton: Node | null = null;
+
+  // HP / AP 进度条
+  private _hpBarG:     Graphics | null = null;
+  private _hpBarLabel: Label    | null = null;
+  private _apBarG:     Graphics | null = null;
+  private _apBarLabel: Label    | null = null;
+
+  private _scrollButton:      Node  | null = null;
   private _scrollButtonLabel: Label | null = null;
+  private _row1Y = 0;
+  private _row2Y = 0;
+  /** 局外命运碎片余额：从 PveMeta 注入，不在 ExpeditionState 里 */
+  private _destinyShards = 0;
 
   constructor(parent: Node, screenW: number, screenH: number, callbacks: PveHudCallbacks) {
     this._root = new Node('PveHudView');
+    this._root.layer = Layers.Enum.UI_2D;
     this._root.setParent(parent);
-    this._root.setPosition(0, 0, 0);
+    this._root.addComponent(UITransform).setContentSize(screenW, screenH);
 
-    // 状态信息条（竖屏 720 宽）：2 行 x 4 列网格 + 状态效果行，整体移至「地图下方、战报栏上方」，
-    // 与 ExpeditionController._buildUi 的 mapRoot/PveMessageLog 位置联动（见 design 文档）。
-    // Y 坐标用相对 -screenH/2 的常量表达：与 ExpeditionController 中
-    // mapRoot 底边 (-screenH/2+598) / 战报栏顶边 (-screenH/2+480) 共同推导，保证三者贴合不重叠。
-    const ROW1_Y = -screenH / 2 + 571;
-    const ROW2_Y = ROW1_Y - 38;
-    const STATUS_Y = ROW2_Y - 36;
-    const COL_X = [-270, -90, 90, 270];
-    const COL_W = 170;
-    const ROW_H = 34;
-    const FONT = 20;
+    const row1Y   = -screenH / 2 + 571;
+    const row2Y   = row1Y - 38;
+    const statusY = row2Y - 36;
+    this._row1Y = row1Y;
+    this._row2Y = row2Y;
 
-    // 第一行：楼层/回合、AP+骰子、HP、攻击力（HP/AP 回到顶部网格，紧邻地图，无遮挡）
-    this._floorLabel = makeLabel(this._root, COL_X[0], ROW1_Y, COL_W, ROW_H, FONT, INFO_COLOR);
-    this._apLabel = makeLabel(this._root, COL_X[1], ROW1_Y, COL_W, ROW_H, FONT, AP_COLOR);
-    this._hpLabel = makeLabel(this._root, COL_X[2], ROW1_Y, COL_W, ROW_H, FONT, HP_COLOR);
-    this._attackLabel = makeLabel(this._root, COL_X[3], ROW1_Y, COL_W, ROW_H, FONT, ATTACK_COLOR);
+    const colX = [-270, -90, 90, 270];
+    const colW = 170;
+    const rowH = 34;
 
-    // 第二行：金币、灵气、钥匙、命运碎片
-    this._goldLabel = makeLabel(this._root, COL_X[0], ROW2_Y, COL_W, ROW_H, FONT, GOLD_COLOR);
-    this._animaLabel = makeLabel(this._root, COL_X[1], ROW2_Y, COL_W, ROW_H, FONT, ANIMA_COLOR);
-    this._keyLabel = makeLabel(this._root, COL_X[2], ROW2_Y, COL_W, ROW_H, FONT, KEY_COLOR);
-    // 命运碎片（局外资产，AC-20）
-    this._shardsLabel = makeLabel(this._root, COL_X[3], ROW2_Y, COL_W, ROW_H, FONT, SHARDS_COLOR);
+    // ── Row 1 ───────────────────────────────────────────────
+    // Col 0：章节/楼层/回合（文字，无图标）
+    this._floorLabel = makeLabel(this._root, colX[0], row1Y, colW, rowH, 18, INFO_COLOR);
 
-    // 状态效果行（第三行）：显示冰冻/灼烧等 Boss 异常状态
-    this._statusLabel = makeLabel(
-      this._root, 0, STATUS_Y, 600, 26, 18,
-      new Color(255, 255, 190, 255), Label.HorizontalAlign.CENTER,
-    );
+    // Col 1：AP 进度条
+    { const n = new Node('ApBar');
+      n.setParent(this._root);
+      n.setPosition(colX[1], row1Y, 0);
+      n.layer = Layers.Enum.UI_2D;
+      n.addComponent(UITransform).setContentSize(BAR_W, BAR_H);
+      this._apBarG = n.addComponent(Graphics); }
+    this._apBarLabel = makeLabel(this._root, colX[1], row1Y, BAR_W, BAR_H, 13, new Color(255, 255, 255, 255));
+    this._apBarLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+    this._apBarLabel.isBold = true;
 
+    // Col 2：HP 进度条
+    { const n = new Node('HpBar');
+      n.setParent(this._root);
+      n.setPosition(colX[2], row1Y, 0);
+      n.layer = Layers.Enum.UI_2D;
+      n.addComponent(UITransform).setContentSize(BAR_W, BAR_H);
+      this._hpBarG = n.addComponent(Graphics); }
+    this._hpBarLabel = makeLabel(this._root, colX[2], row1Y, BAR_W, BAR_H, 13, new Color(255, 255, 255, 255));
+    this._hpBarLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+    this._hpBarLabel.isBold = true;
+
+    // Col 3：攻击力数字
+    this._attackLabel = makeLabel(this._root, colX[3], row1Y, 100, rowH, 20, ATTACK_COLOR);
+
+    // ── Row 2 ───────────────────────────────────────────────
+    this._goldLabel   = makeLabel(this._root, colX[0], row2Y, colW, rowH, 20, GOLD_COLOR);
+    this._animaLabel  = makeLabel(this._root, colX[1], row2Y, colW, rowH, 20, ANIMA_COLOR);
+    this._keyLabel    = makeLabel(this._root, colX[2], row2Y, colW, rowH, 20, KEY_COLOR);
+    this._shardsLabel = makeLabel(this._root, colX[3], row2Y, colW, rowH, 20, SHARDS_COLOR);
+
+    this._statusLabel = makeLabel(this._root, 0, statusY, 600, 26, 18, new Color(255, 255, 190, 255));
+    this._statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+
+    this._buildHudBg(screenW, screenH);
+    void this._loadHudArt();
     this._buildDpad(callbacks, screenW, screenH);
     this._buildActionButtons(callbacks, screenW, screenH);
+    this._floorLabel.string = '加载中...';
+  }
 
-    // 状态条占位（_bootstrap loadSave 期间，让玩家看到"在加载"而不是空 HUD）
-    this._floorLabel.string = '加载中…';
+  private _buildHudBg(screenW: number, screenH: number): void {
+    const bg = new Node('HudBg');
+    bg.setParent(this._root);
+    bg.setPosition(0, this._row1Y - 19, 0);
+    const g = bg.addComponent(Graphics);
+    g.fillColor = new Color(15, 15, 25, 200);
+    g.roundRect(-screenW / 2, -48, screenW, 100, 0);
+    g.fill();
+  }
+
+  private async _loadHudArt(): Promise<void> {
+    const [hp, ap, atk, gold, anima, key] = await Promise.all([
+      loadUiSprite('pve/icons/icon_hud_hp'),
+      loadUiSprite('pve/icons/icon_hud_ap'),
+      loadUiSprite('pve/icons/icon_hud_attack'),
+      loadUiSprite('pve/icons/icon_hud_gold'),
+      loadUiSprite('pve/icons/icon_hud_anima'),
+      loadUiSprite('pve/icons/icon_hud_key'),
+    ]);
+
+    const colX = [-270, -90, 90, 270];
+    // 图标放在进度条/标签左侧：colCenter - barHalfW - gap - iconHalfW
+    const barIconX = (cx: number) => cx - BAR_W / 2 - 8 - 14;
+    const lblIconX = (cx: number) => cx - 56;
+
+    // Row 1
+    if (ap)  this._addIcon('AP',  ap,  barIconX(colX[1]), this._row1Y);
+    if (hp)  this._addIcon('HP',  hp,  barIconX(colX[2]), this._row1Y);
+    if (atk) this._addIcon('ATK', atk, lblIconX(colX[3]), this._row1Y);
+
+    // Row 2
+    if (gold)  this._addIcon('GOLD',  gold,  lblIconX(colX[0]), this._row2Y);
+    if (anima) this._addIcon('ANIMA', anima, lblIconX(colX[1]), this._row2Y);
+    if (key)   this._addIcon('KEY',   key,   lblIconX(colX[2]), this._row2Y);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _addIcon(name: string, frame: any, x: number, y: number): void {
+    let holder = this._root.getChildByName(`IconHolder_${name}`);
+    if (!holder) {
+      holder = new Node(`IconHolder_${name}`);
+      holder.setParent(this._root);
+      holder.layer = Layers.Enum.UI_2D;
+      holder.addComponent(UITransform).setContentSize(28, 28);
+    }
+    holder.setPosition(x, y, 0);
+    ensureArtChild(holder, 'Art', frame, 28, 28);
+    const art = holder.getChildByName('Art');
+    if (art) art.layer = Layers.Enum.UI_2D;
+  }
+
+  /** 绘制进度条（背景 + 填充），每帧刷新时调用 */
+  private _drawBar(g: Graphics, pct: number, color: Color): void {
+    const w = BAR_W;
+    const h = BAR_H;
+    g.clear();
+    g.fillColor = new Color(25, 25, 35, 190);
+    g.roundRect(-w / 2, -h / 2, w, h, 3);
+    g.fill();
+    const clamped = Math.max(0, Math.min(1, pct));
+    if (clamped > 0) {
+      const fillW = Math.max(4, (w - 4) * clamped);
+      g.fillColor = color;
+      g.roundRect(-w / 2 + 2, -h / 2 + 2, fillW, h - 4, 2);
+      g.fill();
+    }
   }
 
   private _buildDpad(callbacks: PveHudCallbacks, screenW: number, screenH: number): void {
-    // 单手操作：方向键整体移到屏幕右半侧、贴近「攻击/交互/结束回合」按钮簇，
-    // 与动作按钮（x = screenW/2 - ACTION_BTN_W/2 - 24）之间留约 35px 间距，避免重叠。
-    const cx = screenW / 2 - 305;
-    const cy = -screenH / 2 + 105;
+    const cx  = screenW / 2 - 305;
+    const cy  = -screenH / 2 + 105;
     const gap = DPAD_BTN + 10;
-
-    // 键盘方向键布局：「上」在上方居中，「左/下/右」在下方一排
-    makeFlatButton(this._root, '上', cx, cy + gap, DPAD_BTN, DPAD_BTN, () => callbacks.onMove('UP'));
-    makeFlatButton(this._root, '左', cx - gap, cy, DPAD_BTN, DPAD_BTN, () => callbacks.onMove('LEFT'));
-    makeFlatButton(this._root, '下', cx, cy, DPAD_BTN, DPAD_BTN, () => callbacks.onMove('DOWN'));
-    makeFlatButton(this._root, '右', cx + gap, cy, DPAD_BTN, DPAD_BTN, () => callbacks.onMove('RIGHT'));
+    makeFlatButton(this._root, '上', cx,       cy + gap, DPAD_BTN, DPAD_BTN, () => callbacks.onMove('UP'));
+    makeFlatButton(this._root, '左', cx - gap, cy,       DPAD_BTN, DPAD_BTN, () => callbacks.onMove('LEFT'));
+    makeFlatButton(this._root, '下', cx,       cy,       DPAD_BTN, DPAD_BTN, () => callbacks.onMove('DOWN'));
+    makeFlatButton(this._root, '右', cx + gap, cy,       DPAD_BTN, DPAD_BTN, () => callbacks.onMove('RIGHT'));
   }
 
   private _buildActionButtons(callbacks: PveHudCallbacks, screenW: number, screenH: number): void {
-    const x = screenW / 2 - ACTION_BTN_W / 2 - 24;
-    // 与 d-pad 中心对齐
-    const cy = -screenH / 2 + 105;
+    const x   = screenW / 2 - ACTION_BTN_W / 2 - 24;
+    const cy  = -screenH / 2 + 105;
     const gap = ACTION_BTN_H + 14;
 
-    makeFlatButton(
-      this._root, '攻击', x, cy + gap, ACTION_BTN_W, ACTION_BTN_H,
-      () => callbacks.onAttack(), new Color(200, 90, 90, 255),
-    );
-    makeFlatButton(
-      this._root, '交互', x, cy, ACTION_BTN_W, ACTION_BTN_H,
-      () => callbacks.onInteract(), new Color(90, 160, 200, 255),
-    );
-    makeFlatButton(
-      this._root, '结束回合', x, cy - gap, ACTION_BTN_W, ACTION_BTN_H,
-      () => callbacks.onEndTurn(), new Color(120, 130, 145, 255),
-    );
+    makeFlatButton(this._root, '攻击',   x, cy + gap,   ACTION_BTN_W, ACTION_BTN_H, () => callbacks.onAttack(),   new Color(200, 90,  90,  255));
+    makeFlatButton(this._root, '互动',   x, cy,         ACTION_BTN_W, ACTION_BTN_H, () => callbacks.onInteract(), new Color(90,  160, 200, 255));
+    makeFlatButton(this._root, '结束回合', x, cy - gap, ACTION_BTN_W, ACTION_BTN_H, () => callbacks.onEndTurn(),  new Color(120, 130, 145, 255));
 
-    // 「返回」「卷轴」「角色」按钮：地图与战报栏之间的横向空隙（三按钮平均分布）
-    const SUB_BTN_Y = -screenH / 2 + 274;
+    const subBtnY = -screenH / 2 + 274;
     if (callbacks.onQuit) {
-      makeFlatButton(
-        this._root, '返回', -200, SUB_BTN_Y,
-        120, 44, () => callbacks.onQuit?.(), new Color(90, 95, 105, 255),
-      );
+      makeFlatButton(this._root, '返回', -200, subBtnY, 120, 44, () => callbacks.onQuit?.(), new Color(90, 95, 105, 255));
     }
     if (callbacks.onUseScroll) {
-      this._scrollButton = makeFlatButton(
-        this._root, '📜 卷轴 ×0', 0, SUB_BTN_Y,
-        140, 44, () => callbacks.onUseScroll?.(),
-        new Color(120, 90, 170, 255),
-      );
-      // 缓存 label 引用以便在 refresh 中更新文本
+      this._scrollButton = makeFlatButton(this._root, '卷轴 x0', 0, subBtnY, 140, 44, () => callbacks.onUseScroll?.(), new Color(120, 90, 170, 255));
       const labelNode = this._scrollButton.getChildByName('Label');
       this._scrollButtonLabel = labelNode?.getComponent(Label) ?? null;
-      this._scrollButton.active = false; // 初始无卷轴时隐藏
+      this._scrollButton.active = false;
     }
     if (callbacks.onShowCharacter) {
-      makeFlatButton(
-        this._root, '角色', 200, SUB_BTN_Y,
-        120, 44, () => callbacks.onShowCharacter?.(),
-        new Color(140, 100, 200, 255),
-      );
+      makeFlatButton(this._root, '角色', 200, subBtnY, 120, 44, () => callbacks.onShowCharacter?.(), new Color(140, 100, 200, 255));
     }
   }
 
   refresh(state: ExpeditionState): void {
     const { player, floorState, chapter, floor } = state;
+
     this._floorLabel.string = `第${chapter}章·第${floor}层 回合${floorState.turn}`;
-    this._hpLabel.string = `❤️${player.hp}/${player.maxHp}`;
-    // 攻击力随职业 + 装备实时变化（CombatSystem.playerAttackPower），让玩家看见加成
+
+    // HP 进度条
+    if (this._hpBarG) this._drawBar(this._hpBarG, player.hp / player.maxHp, HP_COLOR);
+    if (this._hpBarLabel) this._hpBarLabel.string = `${player.hp}/${player.maxHp}`;
+
+    // AP 进度条（含骰值）
+    if (this._apBarG) this._drawBar(this._apBarG, floorState.ap / floorState.maxAp, AP_COLOR);
+    if (this._apBarLabel) {
+      const apBonus = floorState.maxAp - AP_BASE - floorState.dice;
+      const diceStr = apBonus !== 0
+        ? `骰${floorState.dice}${apBonus > 0 ? '+' : ''}${apBonus}`
+        : `骰${floorState.dice}`;
+      this._apBarLabel.string = `${floorState.ap}/${floorState.maxAp} ${diceStr}`;
+    }
+
+    // 攻击力（纯数字，图标传意）
     const { damage } = playerAttackPower(player);
-    this._attackLabel.string = `⚔️${damage}`;
-    // 显示骰子值 + 强化/命运树等加成，让玩家明白 maxAp = 8 + 骰子 + 加成（AC-2 表现需求）。
-    const apBonus = floorState.maxAp - AP_BASE - floorState.dice;
-    this._apLabel.string = apBonus !== 0
-      ? `AP ${floorState.ap}/${floorState.maxAp}（🎲${floorState.dice}${apBonus > 0 ? '+' : ''}${apBonus}强化)`
-      : `AP ${floorState.ap}/${floorState.maxAp} 🎲${floorState.dice}`;
-    this._goldLabel.string = `💰${player.gold}`;
-    this._animaLabel.string = `🔮${player.anima} (${player.animaProgress}/${player.animaThreshold ?? 100})`;
-    // 钥匙状态对通关至关重要（普通层开门、Boss 层生成传送门），单独 1 槽位
-    this._keyLabel.string = floorState.hasKey ? '🔑已持有' : '🔑无';
-    // 状态效果行（灼烧/减速）
+    this._attackLabel.string = `${damage}`;
+
+    // Row 2（纯数字，图标传意）
+    this._goldLabel.string   = `${player.gold}`;
+    this._animaLabel.string  = `${player.anima}(${player.animaProgress}/${player.animaThreshold ?? 100})`;
+    this._keyLabel.string    = floorState.hasKey ? '已持有' : '未持有';
+    this._shardsLabel.string = `${this._destinyShards}`;
+
+    // 状态行：燃烧 / 减速 Debuff
     const burn = floorState.playerBurnRemaining ?? 0;
     const slow = floorState.playerMoveApPenaltyRounds ?? 0;
     const statusParts: string[] = [];
-    if (burn > 0) statusParts.push(`🔥 灼烧 ${burn} 点`);
-    if (slow > 0) statusParts.push(`🥶 减速 ${slow} 回合`);
+    if (burn > 0) statusParts.push(`燃烧 ${burn} 回合`);
+    if (slow > 0) statusParts.push(`减速 ${slow} 回合`);
     this._statusLabel.string = statusParts.join('   ');
 
-    // 卷轴按钮：仅当持有卷轴时显示，文本带数量
+    // 卷轴按钮
     const scrolls = player.scrolls ?? 0;
     if (this._scrollButton) {
       this._scrollButton.active = scrolls > 0;
-      if (this._scrollButtonLabel) this._scrollButtonLabel.string = `📜 卷轴 ×${scrolls}`;
+      if (this._scrollButtonLabel) this._scrollButtonLabel.string = `卷轴 x${scrolls}`;
     }
   }
 
-  /**
-   * 刷新命运碎片余额（AC-20 局外资产，不在 ExpeditionState 中，单独更新）。
-   * 在 bootstrap 加载元进度后调用一次；结算后用新余额再次调用。
-   */
+  /** 命运碎片来自局外 PveMeta，单独注入（不在 ExpeditionState 里） */
   refreshMeta(destinyShards: number): void {
-    this._shardsLabel.string = `💎${destinyShards}`;
+    this._destinyShards = destinyShards;
+    this._shardsLabel.string = `${destinyShards}`;
   }
 
   setVisible(visible: boolean): void {

@@ -97,3 +97,19 @@ node scripts/patch-wechatgame-config.js  # Cocos 构建后跑（细节见 .curso
 - 改了 `cloudfunctions/common/**` → 提醒用户跑 sync 脚本
 - 改 PVE/PVP 玩法 → 主动询问是否同步对应 design.md
 - specs/ 已有的 design.md 就是当前的"代码地图"，不要再造 PROJECT_MAP.md 类文档
+
+## 排查规则（用户强制反馈，必须遵守）
+
+**渲染 / 资源 / 构建 / 平台适配类 bug**：每次构建+部署+刷新成本高（3-5 分钟），猜错代价大。
+
+- **第一次猜测修复失败后，立刻切换系统化排查模式**。禁止连续盲改代码。
+- 系统化排查 = 每步只验证一个假设 + 必须输出日志/截图证据 + 给"如果 A 则进 X，如果 B 则进 Y"决策矩阵。
+- 排查从最便宜的步骤开始：浏览器预览 > 编辑器预览 > devtools > 真机；纯代码构造 > 走加载链路；对照已知能用的 case > 直接调试目标。
+- 完整模板和反例见 `memory/feedback-systematic-debugging.md`。
+
+**微信小游戏 Sprite 不显示**：
+- 第一反应查 **DynamicAtlas**，不要去查 layer / UITransform / normalize / ensureArtChild 那些表层细节。
+- 新项目 GameApp.onLoad 顶部必须 `dynamicAtlasManager.enabled = false`。
+- 详见 `memory/feedback-wechat-dynamic-atlas.md`。
+
+**Cocos 资源 SpriteFrame UUID 引用**：场景里的 SpriteFrame 引用用 `<uuid>@f9941` 格式，UUID 在对应 `.png.meta` 文件的 `f9941` subMeta 里。MCP `cocos_component.set_property` 设 spriteFrame 时，**参数名是 `node` 不是 `nodeUuid`**；`contentSize` 写入回读 `actualValue` 常为 100×100（验证失败），但实际可能已生效，宁可用 `scale` 调整尺寸或在编辑器里手动改。
