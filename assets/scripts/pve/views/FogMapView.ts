@@ -11,7 +11,10 @@ const AOE_SAFE_STROKE = new Color(90, 200, 120, 200);
 const AOE_WARNING_FILL = new Color(220, 50, 50, 80);
 const AOE_WARNING_STROKE = new Color(220, 50, 50, 220);
 const ATTACK_TARGET_STROKE = new Color(255, 215, 80, 220);
-const BOSS_ICON_SCALE = 1.6;
+const NORMAL_MONSTER_ICON_SCALE = 0.68;
+const PLAYER_ICON_SCALE = 0.82;
+const ELITE_MONSTER_ICON_SCALE = 0.98;
+const BOSS_ICON_SCALE = 1.38;
 const FROZEN_BORDER_STROKE = new Color(120, 220, 255, 255);
 const FOG_REVEAL_DURATION = 0.45;
 const FOG_REVEAL_SCALE = 1.08;
@@ -429,9 +432,11 @@ export class FogMapView {
 
     const occupantScale = occupantKey === 'MONSTER_BOSS'
       ? BOSS_ICON_SCALE
-      : occupantKey === 'PLAYER' && hasEntity
-        ? 0.66
-        : 0.78;
+      : occupantKey === 'MONSTER_ELITE'
+        ? ELITE_MONSTER_ICON_SCALE
+        : occupantKey === 'PLAYER' && hasEntity
+          ? PLAYER_ICON_SCALE
+          : NORMAL_MONSTER_ICON_SCALE;
     paintArt(entityArt, entityKey, entityKey === 'ENTITY_ICE_WALL' ? 0.74 : 0.84);
     paintArt(occupantArt, occupantKey, occupantScale, occupantKey === 'PLAYER' && hasEntity ? 238 : 255);
 
@@ -455,12 +460,6 @@ export class FogMapView {
     }
     if (hpLbl) {
       hpLbl.string = entityKey === 'ENTITY_ICE_WALL' && entityHpText ? `${entityHpText}/${CHAPTER3_ICE_WALL_HP}` : '';
-    }
-    if (occupantKey === 'MONSTER_BOSS') {
-      g.strokeColor = new Color(230, 60, 60, 220);
-      g.lineWidth = 2;
-      g.circle(0, 0, sz * 0.32);
-      g.stroke();
     }
     if (occupantKey === 'MONSTER_FATE_MIRROR' && occupantMeta === 'SHIELD') {
       g.strokeColor = new Color(120, 200, 255, 240);
