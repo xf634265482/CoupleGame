@@ -291,6 +291,7 @@ export interface LuckySpinState {
 export interface GameMoveEvent {
   type: string;
   message: string;
+  actorSeat?: number;
   cellIndex?: number;
 }
 

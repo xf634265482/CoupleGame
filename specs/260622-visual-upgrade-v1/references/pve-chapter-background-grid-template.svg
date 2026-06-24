@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
+  <!-- PVE chapter background production guide. Do not bake this overlay into final art. -->
+  <rect width="720" height="215" fill="#173B68" fill-opacity="0.24"/>
+  <rect y="215" width="720" height="777" fill="#D92D20" fill-opacity="0.06"/>
+  <rect y="992" width="720" height="288" fill="#173B68" fill-opacity="0.24"/>
+  <rect x="1" y="215" width="718" height="777" fill="none" stroke="#FF3B30" stroke-width="4"/>
+  <g stroke="#FF3B30" stroke-opacity="0.62" stroke-width="2" stroke-dasharray="10 8">
+    <path d="M131 215V992 M262 215V992 M393 215V992 M524 215V992 M655 215V992"/>
+    <path d="M0 346V992 M0 477V992 M0 608V992 M0 739V992 M0 870V992"/>
+  </g>
+  <g fill="#FF3B30">
+    <circle cx="0" cy="215" r="6"/><circle cx="720" cy="215" r="6"/>
+    <circle cx="0" cy="992" r="6"/><circle cx="720" cy="992" r="6"/>
+  </g>
+</svg>

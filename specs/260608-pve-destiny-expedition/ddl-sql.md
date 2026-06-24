@@ -57,6 +57,8 @@ PVE 与 PVP **共享** `users.diamond`（账户钻石）。新增 PVE 专属字�
 | `destinyShards` | number | 命运碎片（PVE 专属，死亡保留 → AC-12） |
 | `pveAchievements` | string[] | 成就 id 列表（死亡保留） |
 | `pveCodex` | object | 图鉴解锁记录（死亡保留） |
+| `pveHighestFloor` | number | 历史最高到达层（排行榜依据，仅在新高分时更新） |
+| `pveHighestFloorUpdatedAt` | Date | 首次达到 `pveHighestFloor` 的服务端时间戳（同层平局破局用，仅随 `pveHighestFloor` 同步写入） |
 
 ## 3. 奖励入账与防作弊（→ AC-14）
 
@@ -72,3 +74,6 @@ PVE 与 PVP **共享** `users.diamond`（账户钻石）。新增 PVE 专属字�
 |------------|------|------|
 | `pve_saves` | `userId`（唯一） | 按用户读取活跃存档 |
 | `users` | 沿用现有 `openId` | 元进度读写 |
+| `users` | `pveHighestFloor desc` + `pveHighestFloorUpdatedAt asc`（复合） | 排行榜查询（AC-508 sort + 同层平局破局） |
+
+> **创建索引操作**：微信云开发控制台 → 数据库 → `users` → 索引管理 → 新建索引，填入两个字段：`pveHighestFloor`（降序）、`pveHighestFloorUpdatedAt`（升序）。不建索引时排行榜仍可工作，但条目数多时查询会慢。

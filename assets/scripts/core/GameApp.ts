@@ -10,8 +10,7 @@ import { ensurePrivacyAuthorized } from '../platform/wechat/WxPrivacy';
 import {
   ensureResourcesBundle,
   getCachedSprite,
-  preloadLobbyBackgroundAssets,
-  preloadLobbyUi,
+  preloadPveLobbyUi,
 } from '../ui/UiAssets';
 
 const { ccclass, property } = _decorator;
@@ -69,7 +68,7 @@ export class GameApp extends Component {
       // 关键的 bg_lobby 仍尽量在切场景前到位（≤1.5s）；超时后由 LobbyController 内部
       // applyScreenBackground / loadUiSprite 链路自然补刷。
       const lobbyUiSoftTimeoutMs = 1500;
-      const lobbyUiReady = preloadLobbyUi();
+      const lobbyUiReady = preloadPveLobbyUi();
       await Promise.race([
         lobbyUiReady,
         new Promise<void>((resolve) => setTimeout(resolve, lobbyUiSoftTimeoutMs)),
@@ -82,9 +81,6 @@ export class GameApp extends Component {
       SceneLoader.loadLobby();
       if (PERF_TRACE_ENABLED) PerfMarks.mark('lobby_scene_loaded');
       void lobbyUiReady; // 后台继续 preload，缺图回填由 LobbyController 处理
-      void preloadLobbyBackgroundAssets().then(() => {
-        if (PERF_TRACE_ENABLED) PerfMarks.mark('lobby_bg_preload_done');
-      });
       if (PERF_TRACE_ENABLED) setTimeout(() => PerfMarks.dump(), 0);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

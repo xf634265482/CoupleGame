@@ -36,7 +36,7 @@ const COPY_FILES = [
 ];
 
 /** 子目录下的文件需保留相对路径复制（如 pve/PveSave.js）。 */
-const COPY_SUBDIR_FILES = ['pve/PveSave.js', 'pve/PveValidate.js', 'pve/PveReward.js', 'pve/PveDestinyTree.js', 'pve/PveMeta.js'];
+const COPY_SUBDIR_FILES = ['pve/PveSave.js', 'pve/PveValidate.js', 'pve/PveReward.js', 'pve/PveDestinyTree.js', 'pve/PveMeta.js', 'pve/PveStamina.js'];
 
 function sync() {
   for (const fn of TARGET_FUNCTIONS) {

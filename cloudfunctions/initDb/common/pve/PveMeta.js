@@ -9,7 +9,13 @@
  *   users.unlockedTreeNodes – 已解锁的命运树节点 id 列表（→ unlockTreeNode）
  */
 
-const { getUserPveMeta, updateUserPveMeta, unlockUserTreeNode, resetUserTreeNodes } = require('../db');
+const {
+  getUserPveMeta,
+  updateUserPveMeta,
+  unlockUserTreeNode,
+  resetUserTreeNodes,
+  listPveLeaderboard,
+} = require('../db');
 
 /**
  * 读取用户 PVE 元进度快照。
@@ -58,4 +64,15 @@ async function resetTreeNodes(user) {
   return { meta };
 }
 
-module.exports = { loadMeta, updateMeta, unlockTreeNode, resetTreeNodes };
+async function loadLeaderboard(user, limit) {
+  const { entries, myRank } = await listPveLeaderboard(user.id, limit);
+  return { entries, myRank };
+}
+
+module.exports = {
+  loadMeta,
+  updateMeta,
+  unlockTreeNode,
+  resetTreeNodes,
+  loadLeaderboard,
+};

@@ -1,7 +1,8 @@
 // 远征提示视图（design §6/§9）：战斗/拾取/开箱/钥匙/通关等事件文字提示，以及满 100 灵气触发的 3 选 1 强化弹窗。
-// M1 无美术资源：纯色面板 + Label，参考 CellEventToast 的「显示→定时/按钮关闭」模式。
+// 图片仅作为底框；动态 Label、按钮与交互仍由代码构建，Graphics 保留为加载失败兜底。
 
 import { Color, Graphics, Label, Node, UITransform } from 'cc';
+import { Effects } from '../../fx/Effects';
 import {
   BLACKSMITH_ENHANCE_STEP,
   BLACKSMITH_FAIL_BASE,
@@ -11,12 +12,18 @@ import {
   BLACKSMITH_UPGRADE_COST,
 } from '../core/PveConstants';
 import type { Equipment, EquipItem, EquipSlot } from '../core/PveTypes';
+import { loadUiSprite } from '../../ui/UiAssets';
+import { ensureArtCover, ensureArtSliced, ensureArtStretch } from '../../ui/UiSprite';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const TOAST_W = 520;
-const TOAST_H = 64;
+const TOAST_H = 76;
 const PANEL_COLOR = new Color(26, 30, 42, 220);
+const IMPORTANT_PANEL_COLOR = new Color(72, 24, 18, 238);
+const IMPORTANT_STROKE_COLOR = new Color(255, 174, 72, 255);
 const TEXT_COLOR = new Color(235, 238, 245, 255);
+const IMPORTANT_TEXT_COLOR = new Color(255, 238, 188, 255);
+const PANEL_INSETS = { top: 48, bottom: 48, left: 48, right: 48 };
 
 /** 所有灵气强化词条的显示标签（ADVENTURER 通用 + 三职业 15 词条，AC-16 M2）。供角色面板等外部读取。 */
 export const STRENGTHEN_LABEL: Record<string, { title: string; desc: string }> = {
@@ -82,7 +89,7 @@ export const STRENGTHEN_LABEL: Record<string, { title: string; desc: string }> =
   awakened_shadow_strike: { title: '影袭',    desc: '每回合可触发2次背刺伤害' },
 };
 
-function strengthenInfo(id: string): { title: string; desc: string } {
+export function strengthenInfo(id: string): { title: string; desc: string } {
   return STRENGTHEN_LABEL[id] ?? { title: id, desc: '' };
 }
 
@@ -112,7 +119,7 @@ export class PveToastView {
   }
 
   /** 顶部居中文字提示，自动定时消失；连续提示会顶替前一条。 */
-  toast(message: string, durationMs = 1600): void {
+  toast(message: string, durationMs = 1600, important = false): void {
     if (this._toastTimer) {
       clearTimeout(this._toastTimer);
       this._toastTimer = null;
@@ -120,20 +127,48 @@ export class PveToastView {
     if (!this._toastNode) {
       const n = new Node('Toast');
       n.setParent(this._root);
-      n.setPosition(0, this._screenH / 2 - 96, 0);
+      // 放在战场底部居中：mapBottom = -screenH/2 + PVE_HUD_INFO_TOP_OFFSET + 10。
+      // 这里直接复用同样的常量（348 = PVE_HUD_INFO_H/2 + 274），toast 中心比 mapBottom 再高 30px。
+      const battlefieldBottomY = -this._screenH / 2 + 348 + 10;
+      n.setPosition(0, battlefieldBottomY + TOAST_H / 2 + 12, 0);
       n.addComponent(UITransform).setContentSize(TOAST_W, TOAST_H);
-      const g = n.addComponent(Graphics);
-      g.fillColor = PANEL_COLOR;
-      g.rect(-TOAST_W / 2, -TOAST_H / 2, TOAST_W, TOAST_H);
-      g.fill();
-      this._toastLabel = makeLabel(n, 0, 0, TOAST_W - 32, TOAST_H, 24, TEXT_COLOR, Label.HorizontalAlign.CENTER);
+      n.addComponent(Graphics);
+      this._toastLabel = makeLabel(n, 0, 0, TOAST_W - 40, TOAST_H - 8, 24, TEXT_COLOR, Label.HorizontalAlign.CENTER);
       this._toastNode = n;
     }
+    const g = this._toastNode.getComponent(Graphics);
+    if (g) {
+      g.clear();
+      g.fillColor = important ? IMPORTANT_PANEL_COLOR : PANEL_COLOR;
+      g.roundRect(-TOAST_W / 2, -TOAST_H / 2, TOAST_W, TOAST_H, 10);
+      g.fill();
+      if (important) {
+        g.strokeColor = IMPORTANT_STROKE_COLOR;
+        g.lineWidth = 3;
+        g.roundRect(-TOAST_W / 2 + 2, -TOAST_H / 2 + 2, TOAST_W - 4, TOAST_H - 4, 9);
+        g.stroke();
+      }
+    }
     this._toastNode.active = true;
-    if (this._toastLabel) this._toastLabel.string = message;
+    if (this._toastLabel) {
+      this._toastLabel.string = message;
+      this._toastLabel.color = important ? IMPORTANT_TEXT_COLOR : TEXT_COLOR;
+      this._toastLabel.isBold = important;
+    }
+    // 每次弹出都 pop（important 力度更大）；fire-and-forget，不阻塞 toast 计时。
+    void Effects.pop(this._toastNode, { strength: important ? 1.4 : 1.0 });
     this._toastTimer = setTimeout(() => {
       if (this._toastNode) this._toastNode.active = false;
     }, durationMs);
+  }
+
+  toastImportant(message: string, durationMs = 2800): void {
+    this.toast(`⚠ ${message}`, durationMs, true);
+  }
+
+  /** 错误操作反馈：toast 节点横向抖动（AP 不足 / 方向阻塞等）。 */
+  shakeToast(): void {
+    if (this._toastNode?.active) void Effects.hit(this._toastNode, { strength: 0.8 });
   }
 
   /**
@@ -144,37 +179,56 @@ export class PveToastView {
     return new Promise((resolve) => {
       this._closeChoice();
 
+      // 统一与玩家状态卡同款半透明圆角风格；移除红底 panel_strengthen_9s 与
+      // card_strengthen_choice_9s 不透明叠层，按钮全部走 noArt。
+      const boxW = 620;
+      const titlePadTop = 24;
+      const titleH = 36;
+      const titleToBtnGap = 18;
+      const btnH = 64;
+      const btnGap = 14;
+      const bottomPad = 24;
+      const boxH = titlePadTop + titleH + titleToBtnGap + choices.length * btnH
+        + (choices.length - 1) * btnGap + bottomPad;
+
       const box = new Node('StrengthenChoice');
       box.setParent(this._root);
       box.setPosition(0, 0, 0);
-      const boxW = 620;
-      const boxH = 120 + choices.length * 84;
       box.addComponent(UITransform).setContentSize(boxW, boxH);
       const g = box.addComponent(Graphics);
-      g.fillColor = PANEL_COLOR;
-      g.rect(-boxW / 2, -boxH / 2, boxW, boxH);
+      g.fillColor = new Color(7, 31, 70, 170);
+      g.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 18);
       g.fill();
+      g.strokeColor = new Color(84, 200, 239, 240);
+      g.lineWidth = 2;
+      g.roundRect(-boxW / 2 + 1, -boxH / 2 + 1, boxW - 2, boxH - 2, 17);
+      g.stroke();
 
-      makeLabel(
-        box, 0, boxH / 2 - 44, boxW - 60, 40, 28,
+      const titleLbl = makeLabel(
+        box, 0, boxH / 2 - titlePadTop - titleH / 2, boxW - 60, titleH, 26,
         new Color(255, 220, 120, 255), Label.HorizontalAlign.CENTER,
-      ).string = '灵气满溢 · 选择一项强化';
+      );
+      titleLbl.string = '灵气满溢 · 选择一项强化';
+      titleLbl.isBold = true;
 
-      let y = boxH / 2 - 110;
+      let y = boxH / 2 - titlePadTop - titleH - titleToBtnGap - btnH / 2;
       for (const choiceId of choices) {
         const info = strengthenInfo(choiceId);
-        makeFlatButton(
-          box, `${info.title}：${info.desc}`, 0, y, boxW - 80, 64,
+        const btn = makeFlatButton(
+          box, `${info.title}：${info.desc}`, 0, y, boxW - 80, btnH,
           () => {
             this._closeChoice();
             resolve(choiceId);
           },
-          new Color(70, 110, 160, 255),
+          new Color(52, 73, 95, 170),
+          { noArt: true, border: new Color(255, 214, 110, 240) },
         );
-        y -= 84;
+        const lbl = btn.getChildByName('Label')?.getComponent(Label);
+        if (lbl) lbl.isBold = true;
+        y -= (btnH + btnGap);
       }
 
-      this._choiceNode = box;
+      this._setChoiceNode(box);
     });
   }
 
@@ -196,6 +250,7 @@ export class PveToastView {
       g.fillColor = PANEL_COLOR;
       g.rect(-boxW / 2, -boxH / 2, boxW, boxH);
       g.fill();
+      this._decoratePanel(box, 'pve/popup/panel_interact_9s', boxW, boxH);
 
       makeLabel(
         box, 0, boxH / 2 - 44, boxW - 60, 40, 28,
@@ -215,7 +270,7 @@ export class PveToastView {
         y -= 84;
       });
 
-      this._choiceNode = box;
+      this._setChoiceNode(box);
     });
   }
 
@@ -227,33 +282,58 @@ export class PveToastView {
     return new Promise((resolve) => {
       this._closeChoice();
 
+      // 标题按显式 \n 计行；每行字号 24/行高 32。预留上下 padding 各 24，
+      // 与按钮区之间 16 间距，避免多行标题被按钮遮挡（图1/图2 问题）。
+      const titleLines = Math.max(1, title.split('\n').length);
+      const lineH = 32;
+      const titleH = titleLines * lineH;
+      const titlePadTop = 24;
+      const titleToBtnGap = 16;
+      const btnH = 60;
+      const btnGap = 14;
+      const btnAreaH = options.length * btnH + (options.length - 1) * btnGap;
+      const bottomPad = 24;
+
+      const boxW = 540;
+      const boxH = titlePadTop + titleH + titleToBtnGap + btnAreaH + bottomPad;
+
       const box = new Node('ConfirmChoice');
       box.setParent(this._root);
       box.setPosition(0, 0, 0);
-      const boxW = 540;
-      const boxH = 100 + options.length * 76;
       box.addComponent(UITransform).setContentSize(boxW, boxH);
+      // 统一返回 / 通关 / 远征结束等所有确认弹窗：与玩家状态卡同款半透明圆角底（α≈170）。
       const g = box.addComponent(Graphics);
-      g.fillColor = PANEL_COLOR;
-      g.rect(-boxW / 2, -boxH / 2, boxW, boxH);
+      g.fillColor = new Color(7, 31, 70, 170);
+      g.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 18);
       g.fill();
+      g.strokeColor = new Color(84, 200, 239, 240);
+      g.lineWidth = 2;
+      g.roundRect(-boxW / 2 + 1, -boxH / 2 + 1, boxW - 2, boxH - 2, 17);
+      g.stroke();
 
-      makeLabel(
-        box, 0, boxH / 2 - 38, boxW - 40, 36, 26,
+      const titleLbl = makeLabel(
+        box, 0, boxH / 2 - titlePadTop - titleH / 2, boxW - 40, titleH, 24,
         new Color(235, 238, 245, 255), Label.HorizontalAlign.CENTER,
-      ).string = title;
+      );
+      titleLbl.lineHeight = lineH;
+      titleLbl.verticalAlign = Label.VerticalAlign.CENTER;
+      titleLbl.isBold = true;
+      titleLbl.string = title;
 
-      let y = boxH / 2 - 90;
+      let y = boxH / 2 - titlePadTop - titleH - titleToBtnGap - btnH / 2;
       for (const opt of options) {
-        makeFlatButton(
-          box, opt.label, 0, y, boxW - 80, 60,
+        const btn = makeFlatButton(
+          box, opt.label, 0, y, boxW - 80, btnH,
           () => { this._closeChoice(); resolve(opt.value); },
-          new Color(55, 90, 140, 255),
+          new Color(52, 73, 95, 170),
+          { noArt: true, border: new Color(255, 214, 110, 240) },
         );
-        y -= 76;
+        const lbl = btn.getChildByName('Label')?.getComponent(Label);
+        if (lbl) lbl.isBold = true;
+        y -= (btnH + btnGap);
       }
 
-      this._choiceNode = box;
+      this._setChoiceNode(box);
     });
   }
 
@@ -281,6 +361,7 @@ export class PveToastView {
       g.fillColor = PANEL_COLOR;
       g.rect(-boxW / 2, -boxH / 2, boxW, boxH);
       g.fill();
+      this._decoratePanel(box, 'pve/popup/panel_interact_9s', boxW, boxH);
 
       makeLabel(
         box, 0, boxH / 2 - 40, boxW - 40, 40, 26,
@@ -304,7 +385,7 @@ export class PveToastView {
         new Color(60, 60, 80, 255),
       );
 
-      this._choiceNode = box;
+      this._setChoiceNode(box);
     });
   }
 
@@ -327,6 +408,7 @@ export class PveToastView {
       g.fillColor = PANEL_COLOR;
       g.rect(-boxW / 2, -boxH / 2, boxW, boxH);
       g.fill();
+      this._decoratePanel(box, 'pve/popup/panel_interact_9s', boxW, boxH);
 
       makeLabel(
         box, 0, boxH / 2 - 40, boxW - 40, 40, 26,
@@ -349,7 +431,7 @@ export class PveToastView {
         new Color(60, 60, 80, 255),
       );
 
-      this._choiceNode = box;
+      this._setChoiceNode(box);
     });
   }
 
@@ -419,6 +501,7 @@ export class PveToastView {
         bg.fillColor = PANEL_COLOR;
         bg.rect(-BOX_W / 2, -BOX_H / 2, BOX_W, BOX_H);
         bg.fill();
+        this._decorateCamp(box, BOX_W, BOX_H);
 
         // ── 从顶部依次摆放 ──
         let curY = BOX_H / 2 - 20;
@@ -546,7 +629,7 @@ export class PveToastView {
         makeFlatButton(box, '返回大厅', rightX, curY, btnW, 64,
           () => { this._closeChoice(); resolve('quit'); }, new Color(90, 55, 55, 255));
 
-        this._choiceNode = box;
+        this._setChoiceNode(box);
       };
 
       buildEquipPanel = () => {
@@ -562,6 +645,7 @@ export class PveToastView {
         ebg.fillColor = PANEL_COLOR;
         ebg.rect(-EQ_W / 2, -EQ_H / 2, EQ_W, EQ_H);
         ebg.fill();
+        this._decoratePanel(equip, 'pve/popup/panel_interact_9s', EQ_W, EQ_H);
 
         let curY = EQ_H / 2 - 40;
         makeLabel(equip, 0, curY, EQ_W - 40, 50, 24,
@@ -597,7 +681,7 @@ export class PveToastView {
         makeFlatButton(equip, '← 返回营地', 0, curY, EQ_W - 80, 56,
           () => buildModal(), new Color(55, 90, 140, 255));
 
-        this._choiceNode = equip;
+        this._setChoiceNode(equip);
       };
 
       buildModal();
@@ -656,6 +740,7 @@ export class PveToastView {
         bg.fillColor = PANEL_COLOR;
         bg.rect(-BOX_W / 2, -BOX_H / 2, BOX_W, BOX_H);
         bg.fill();
+        this._decoratePanel(box, 'pve/popup/panel_interact_9s', BOX_W, BOX_H);
 
         let curY = BOX_H / 2 - 20;
 
@@ -759,7 +844,7 @@ export class PveToastView {
           new Color(55, 90, 140, 255),
         );
 
-        this._choiceNode = box;
+        this._setChoiceNode(box);
       };
 
       buildPanel();
@@ -771,6 +856,41 @@ export class PveToastView {
       this._choiceNode.destroy();
       this._choiceNode = null;
     }
+  }
+
+  /** 弹窗节点登记 helper：所有 `_choiceNode = box;` 都改走这里，统一获得 pop 进场动画。 */
+  private _setChoiceNode(node: Node, strength = 1.2): void {
+    this._choiceNode = node;
+    void Effects.pop(node, { strength });
+  }
+
+  private _decoratePanel(
+    node: Node,
+    key: string,
+    width: number,
+    height: number,
+    insets = PANEL_INSETS,
+  ): void {
+    void loadUiSprite(key).then((frame) => {
+      if (!frame || !node.isValid) return;
+      ensureArtSliced(node, 'PanelArt', frame, width, height, insets).node.setSiblingIndex(0);
+    }).catch(() => null);
+  }
+
+  private _decorateCamp(node: Node, panelW: number, panelH: number): void {
+    void Promise.all([
+      loadUiSprite('pve/backgrounds/bg_pve_camp'),
+      loadUiSprite('pve/camp/panel_camp_main_9s'),
+    ]).then(([background, panel]) => {
+      if (!node.isValid) return;
+      if (background) {
+        ensureArtCover(node, 'CampBackground', background, this._screenW, this._screenH).node.setSiblingIndex(0);
+      }
+      if (panel) {
+        const art = ensureArtStretch(node, 'CampPanel', panel, panelW, panelH);
+        art.node.setSiblingIndex(background ? 1 : 0);
+      }
+    }).catch(() => null);
   }
 
   destroy(): void {

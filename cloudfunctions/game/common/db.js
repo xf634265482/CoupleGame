@@ -6,6 +6,11 @@
 const cloud = require('wx-server-sdk');
 const { COLLECTIONS } = require('./constants');
 const { canUnlockNode, getNodeDef } = require('./pve/PveDestinyTree');
+const {
+  STAMINA_MAX,
+  resolveStamina,
+  consumeForNewRun,
+} = require('./pve/PveStamina');
 
 function getDb() {
   return cloud.database();
@@ -134,9 +139,36 @@ async function incrementUserDiamond(userId, delta) {
  */
 async function getUserPveMeta(userId) {
   const user = await getUserById(userId);
+  const stamina = resolveStamina(
+    user?.pveStamina ?? STAMINA_MAX,
+    user?.pveStaminaUpdatedAt,
+  );
+  if (
+    user
+    && (
+      user.pveStamina !== stamina.stamina
+      || user.pveStaminaUpdatedAt !== stamina.updatedAt
+    )
+  ) {
+    await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
+      data: {
+        pveStamina: stamina.stamina,
+        pveStaminaUpdatedAt: stamina.updatedAt,
+        updatedDate: serverDate(),
+      },
+    });
+  }
   return {
     destinyShards: user?.destinyShards ?? 0,
     diamond: user?.diamond ?? 0,
+    stamina: stamina.stamina,
+    staminaMax: STAMINA_MAX,
+    staminaNextRecoveryAt: stamina.nextRecoveryAt,
+    hasPendingRun: Number.isInteger(user?.pvePendingRunSeed) && user.pvePendingRunSeed > 0,
+    nextRunCost: Number.isInteger(user?.pvePendingRunSeed) && user.pvePendingRunSeed > 0
+      ? 0
+      : user?.pveFirstRunStarted === true ? 20 : 0,
+    highestFloor: user?.pveHighestFloor ?? 0,
     achievements: user?.achievements ?? [],
     codex: {
       monsters: user?.pveCodex?.monsters ?? [],
@@ -206,7 +238,7 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
 }
 
 /** PVE 元进度账户资产入账：钻石（与 PVP 共享）+ 命运碎片（PVE 专属，→ ddl-sql.md §2）。 */
-async function incrementUserPveRewards(userId, { diamond = 0, destinyShards = 0 }) {
+async function incrementUserPveRewards(userId, { diamond = 0, destinyShards = 0, highestFloor = 0 }) {
   const db = getDb();
   const _ = db.command;
   const user = await getUserById(userId);
@@ -218,7 +250,122 @@ async function incrementUserPveRewards(userId, { diamond = 0, destinyShards = 0 
   const data = { updatedDate: serverDate() };
   if (diamond) data.diamond = _.inc(diamond);
   if (destinyShards) data.destinyShards = _.inc(destinyShards);
+  if (highestFloor > (user.pveHighestFloor ?? 0)) {
+    data.pveHighestFloor = Math.trunc(highestFloor);
+    // 记录首次达到该层的时间戳，用于同层排名时"先到先得"的第二排序键
+    data.pveHighestFloorUpdatedAt = serverDate();
+  }
   await db.collection(COLLECTIONS.USERS).doc(user._id).update({ data });
+}
+
+/**
+ * 为新远征预留服务端种子并权威扣除体力。
+ * pending seed 使客户端重试保持幂等：同一轮尚未写入首层存档前不会重复扣费。
+ */
+async function reservePveRunStart(user, proposedSeed) {
+  const db = getDb();
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(COLLECTIONS.USERS).doc(user._id);
+    const snapshot = await ref.get();
+    const doc = snapshot.data;
+    if (!doc) {
+      const err = new Error('USER_NOT_FOUND');
+      err.code = 'USER_NOT_FOUND';
+      throw err;
+    }
+
+    const stamina = resolveStamina(
+      doc.pveStamina ?? STAMINA_MAX,
+      doc.pveStaminaUpdatedAt,
+    );
+    if (Number.isInteger(doc.pvePendingRunSeed) && doc.pvePendingRunSeed > 0) {
+      return {
+        runSeed: doc.pvePendingRunSeed,
+        charged: 0,
+        stamina,
+      };
+    }
+
+    const consumed = consumeForNewRun(stamina, doc.pveFirstRunStarted === true);
+    await ref.update({
+      data: {
+        pveStamina: consumed.stamina,
+        pveStaminaUpdatedAt: consumed.updatedAt,
+        pveFirstRunStarted: true,
+        pvePendingRunSeed: proposedSeed,
+        updatedDate: serverDate(),
+      },
+    });
+    return {
+      runSeed: proposedSeed,
+      charged: consumed.charged,
+      stamina: {
+        stamina: consumed.stamina,
+        updatedAt: consumed.updatedAt,
+        nextRecoveryAt: consumed.stamina >= STAMINA_MAX
+          ? null
+          : consumed.updatedAt + 5 * 60 * 1000,
+      },
+    };
+  });
+}
+
+async function clearPendingPveRun(userId) {
+  const user = await getUserById(userId);
+  if (!user || user.pvePendingRunSeed === undefined) return;
+  await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
+    data: {
+      pvePendingRunSeed: getDb().command.remove(),
+      updatedDate: serverDate(),
+    },
+  });
+}
+
+/**
+ * 排行榜查询（→ AC-508）：
+ * - 仅含至少通关第 1 层的玩家（pveHighestFloor > 0）
+ * - 主排序：最高楼层降序；第二排序：pveHighestFloorUpdatedAt 升序（先到先得，稳定排名）
+ * - limit 范围 [1, 100]，默认 50
+ * - 额外查询当前用户排名（myRank = 比自己楼层高的人数 + 1；0 层时为 null 即"未上榜"）
+ *
+ * 需要复合索引：users.pveHighestFloor desc + users.pveHighestFloorUpdatedAt asc
+ */
+async function listPveLeaderboard(userId, limit = 50) {
+  const db = getDb();
+  const _ = db.command;
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit) || 50));
+
+  const { data } = await db
+    .collection(COLLECTIONS.USERS)
+    .where({ pveHighestFloor: _.gt(0) })
+    .orderBy('pveHighestFloor', 'desc')
+    .orderBy('pveHighestFloorUpdatedAt', 'asc')
+    .limit(safeLimit)
+    .get();
+
+  const entries = data.map((user, index) => ({
+    rank: index + 1,
+    userId: user.id,
+    nickname: (user.nickname || '玩家').slice(0, 12),
+    avatarUrl: user.avatarUrl || '',
+    highestFloor: user.pveHighestFloor ?? 0,
+  }));
+
+  // 查询当前用户排名
+  let myRank = null;
+  if (userId) {
+    const myUser = await getUserById(userId);
+    const myFloor = myUser?.pveHighestFloor ?? 0;
+    if (myFloor > 0) {
+      const { total } = await db
+        .collection(COLLECTIONS.USERS)
+        .where({ pveHighestFloor: _.gt(myFloor) })
+        .count();
+      myRank = total + 1;
+    }
+  }
+
+  return { entries, myRank };
 }
 
 /**
@@ -261,16 +408,7 @@ async function unlockUserTreeNode(userId, nodeId) {
       },
     });
 
-  return {
-    destinyShards: nextShards,
-    diamond: user.diamond ?? 0,
-    achievements: user.achievements ?? [],
-    codex: {
-      monsters: user.pveCodex?.monsters ?? [],
-      equipment: user.pveCodex?.equipment ?? [],
-    },
-    unlockedTreeNodes: nextUnlocked,
-  };
+  return getUserPveMeta(userId);
 }
 
 /**
@@ -313,16 +451,7 @@ async function resetUserTreeNodes(userId) {
       },
     });
 
-  return {
-    destinyShards: nextShards,
-    diamond: diamond - RESET_COST,
-    achievements: user.achievements ?? [],
-    codex: {
-      monsters: user.pveCodex?.monsters ?? [],
-      equipment: user.pveCodex?.equipment ?? [],
-    },
-    unlockedTreeNodes: [],
-  };
+  return getUserPveMeta(userId);
 }
 
 async function getPveSaveByUserId(userId) {
@@ -384,6 +513,9 @@ module.exports = {
   updateGameDoc,
   incrementUserDiamond,
   incrementUserPveRewards,
+  reservePveRunStart,
+  clearPendingPveRun,
+  listPveLeaderboard,
   getUserPveMeta,
   updateUserPveMeta,
   unlockUserTreeNode,

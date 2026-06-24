@@ -68,6 +68,9 @@ export async function loadPveSave(): Promise<LoadPveSaveResponse> {
 export interface StartRunResponse extends CloudOk {
   runSeed: number;
   resume: boolean;
+  charged?: number;
+  stamina?: number;
+  staminaNextRecoveryAt?: number | null;
 }
 
 /** 开始一次远征：runSeed 由服务端生成，客户端不可重试以套取有利地图（→ AC-503/504）。 */
@@ -100,6 +103,20 @@ export interface LoadMetaResponse extends CloudOk {
   meta: PveMeta;
 }
 
+export interface PveLeaderboardEntry {
+  rank: number;
+  userId: string;
+  nickname: string;
+  avatarUrl: string;
+  highestFloor: number;
+}
+
+export interface LoadPveLeaderboardResponse extends CloudOk {
+  entries: PveLeaderboardEntry[];
+  /** 当前玩家全服排名（比自己层数高的人数 + 1）；0 层或未上榜时为 null */
+  myRank?: number | null;
+}
+
 export interface UpdateMetaReport {
   /** 本次新解锁的成就 id 列表。 */
   newAchievements?: string[];
@@ -119,6 +136,16 @@ export async function loadPveMeta(): Promise<LoadMetaResponse> {
   return ensureOk(
     await callFunction<LoadMetaResponse>('pve', { action: 'loadMeta' }),
     'PVE_LOAD_META_FAILED',
+  );
+}
+
+export async function loadPveLeaderboard(limit = 50): Promise<LoadPveLeaderboardResponse> {
+  return ensureOk(
+    await callFunction<LoadPveLeaderboardResponse>('pve', {
+      action: 'loadLeaderboard',
+      limit,
+    }),
+    'PVE_LOAD_LEADERBOARD_FAILED',
   );
 }
 

@@ -88,10 +88,15 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'lobby/panel_lobby_main_9s': 'edc5c209-6f75-4d1b-8079-9a01f2cd0695@f9941',
   'pve/backgrounds/bg_destiny_tree': 'b84fda9d-7263-47fc-a4f3-04c6050f6c72@f9941',
   'pve/backgrounds/bg_pve_camp': '93eabd9b-34de-480d-ba17-b8ce8f4690ad@f9941',
+  'pve/backgrounds/bg_pve_ch1': '41cfbfa8-79b3-4c15-8e9b-24539c23cd1d@f9941',
   'pve/backgrounds/bg_pve_ch2': '94de010e-c1e9-437b-87db-57b460a2756b@f9941',
   'pve/backgrounds/bg_pve_ch3': 'dcb41494-9338-4cda-bb3d-e2a87df38184@f9941',
   'pve/backgrounds/bg_pve_ch4': '00c422be-4c5e-4d1e-91e4-a8437515a442@f9941',
   'pve/backgrounds/bg_pve_ch5': 'f8eb92ee-f6d2-461c-af0a-1dbfd97a45b8@f9941',
+  'pve/backgrounds/bg_pve_ch2_runtime': '0571d640-33d1-4cdb-8db1-5783a54812d3@f9941',
+  'pve/backgrounds/bg_pve_ch3_runtime': 'f5c61bff-8c24-4617-829c-cb5839e0691b@f9941',
+  'pve/backgrounds/bg_pve_ch4_runtime': '3b53fb41-695d-4bcc-a99d-66e23fbb4716@f9941',
+  'pve/backgrounds/bg_pve_ch5_runtime': '56c21963-e9aa-4414-82c5-7dd6655afe1b@f9941',
   'pve/camp/panel_camp_main_9s': '750cb7e3-fb89-4042-8dfd-b6bfd61698cc@f9941',
   'pve/class/icon_class_adventurer': 'c3c96b12-3d37-4e95-ba49-b45b0d33df86@f9941',
   'pve/class/icon_class_archer': 'be5c49d3-acf7-46cb-a5a9-3b2cfe1e6498@f9941',
@@ -100,9 +105,15 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/destiny/node_frame': 'db81866d-7d58-4103-aaf0-ceb0ecef0311@f9941',
   'pve/hud/bar_pve_info_9s': '2ad83a84-63f1-4ca1-a1ff-88322d24be6d@f9941',
   'pve/hud/bg_dpad': 'e9214c11-1db7-4dec-a06d-4d9290a63dae@f9941',
-  'pve/hud/btn_pve_attack': '353bafaf-5e1f-409d-bf13-5a1af07e769f@f9941',
-  'pve/hud/btn_pve_end_turn': 'cad6e080-53fa-420d-b727-b3f618bff022@f9941',
   'pve/hud/btn_pve_interact': '0affe775-4482-49b2-91ac-a591b7fa8606@f9941',
+  'pve/lobby/logo_destiny_tower': '4f0fa81a-aed1-44c8-a308-868ccd52189b@f9941',
+  'pve/lobby/asset_top_chip_blue_9s': 'cb390222-af68-4338-b233-fb68249a3a76@f9941',
+  'pve/lobby/icon_chip_destiny_shards': 'e4e41762-5cb6-4f3c-9e16-e33fb6287283@f9941',
+  'pve/lobby/icon_chip_diamond': '0291cd6d-d83a-404e-9c19-27e740a81156@f9941',
+  'pve/lobby/icon_chip_stamina': 'ca8b3db2-9f83-4686-bf48-68c0ac4c2ea5@f9941',
+  'pve/lobby/icon_nav_expedition': '22a5cfbd-2a04-47db-b57b-5bbc03ce767b@f9941',
+  'pve/lobby/icon_nav_destiny_tree': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
+  'pve/lobby/icon_nav_leaderboard': '2fbbe305-2f22-451b-9180-f50af9d94437@f9941',
   'pve/icons/icon_block': 'c3ba5bc7-6418-4c9f-9132-7a00cbe97d65@f9941',
   'pve/icons/icon_boss_warn': '47c4ca2c-3b72-443c-9a19-e42c7932467e@f9941',
   'pve/icons/icon_crit': '4d1fb0cb-c865-477d-9f9c-5d7216ada90f@f9941',
@@ -110,6 +121,7 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/icons/icon_hud_ap': 'f853553b-2106-4934-949c-16e20e9da708@f9941',
   'pve/icons/icon_hud_attack': '7c5237b7-b939-4ff5-80e5-d399221a2a01@f9941',
   'pve/icons/icon_hud_dice': 'f4ec4196-8dcf-4c66-9bb2-c43f279cf609@f9941',
+  'pve/icons/icon_hud_diamond': '7f3b6d21-8c42-4c0a-a136-8e57d13e7a91@f9941',
   'pve/icons/icon_hud_gold': '59a3bef4-2c1c-43e7-9872-351d4d0bb543@f9941',
   'pve/icons/icon_hud_hp': '3c1851c1-6cee-4b06-98b7-8ceca889a3e2@f9941',
   'pve/icons/icon_hud_key': '97f6c5d6-0fad-4fc5-8808-6e0425f1ec69@f9941',
@@ -127,16 +139,46 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/icon_hot_spring': 'b00d36f7-7a69-4e3c-9ca7-12295f8efec2@f9941',
   'pve/map/icon_idol': '04aa29b5-1fd1-4897-98a1-7b42e21f825e@f9941',
   'pve/map/icon_key': '87815865-6e1a-48fc-a7f1-a558c1f50f52@f9941',
+  'pve/map/icon_fragment': 'c01a3727-e289-4555-a2b9-e7ecd03a5d74@f9941',
+  'pve/map/icon_monster_fire_goblin': '12cff37f-cd70-4383-9110-dd4e3f842b38@f9941',
+  'pve/map/icon_monster_frost_goblin': '72d722b2-6dee-4867-a7fe-f52050095b91@f9941',
+  'pve/map/icon_monster_goblin_archer': 'be793e36-444e-464c-be97-0b8a2294c609@f9941',
+  'pve/map/icon_monster_goblin_chief': 'f38df912-d0ef-417e-89b6-ae5cafeb31c5@f9941',
+  'pve/map/icon_monster_goblin_warrior': 'd6b048c1-f591-45e4-9942-5132661d1ddb@f9941',
+  'pve/map/icon_monster_spirit_rat': '0c8e40ff-837c-4310-841d-b5cc4b58714c@f9941',
   'pve/map/icon_monster_anima': '29b46c10-beb4-4598-977a-7e9e69ee378e@f9941',
   'pve/map/icon_monster_boss': 'cd9e9f82-2c80-4375-8f52-0f5bced1256c@f9941',
   'pve/map/icon_monster_ch1_normal': '83a5fda4-9dc8-4754-8d70-6ccb0ffe5c0b@f9941',
+  'pve/map/icon_monster_ch1_elite': 'a5361819-031b-4b77-a572-646bfc3c9edc@f9941',
+  'pve/map/icon_monster_ch1_anima': 'acb754d0-d795-43a7-b846-79e1bc8b70f4@f9941',
+  'pve/map/icon_monster_ch1_boss': '4051ffdd-2918-48b6-b827-230dc0353f47@f9941',
+  'pve/map/icon_monster_ch2_normal': 'a40a74d6-5716-4cad-87d1-6b23ba4b490a@f9941',
+  'pve/map/icon_monster_ch2_elite': '86482252-26dc-404b-99ee-818c202ef2a0@f9941',
+  'pve/map/icon_monster_ch2_anima': '3a2ba686-59e3-4acc-9583-3579427edaa9@f9941',
+  'pve/map/icon_monster_ch2_boss': '588f96bd-4552-4463-ae7b-468832854c6f@f9941',
+  'pve/map/icon_monster_ch3_normal': 'ea6bbcb6-0391-40c2-af0d-2106046ebcd0@f9941',
+  'pve/map/icon_monster_ch3_elite': 'ab8045bb-6422-4a22-8b2a-bede2b877f84@f9941',
+  'pve/map/icon_monster_ch3_anima': '7d4ad8be-5d66-4613-aa20-733d2ab82139@f9941',
+  'pve/map/icon_monster_ch3_boss': '29a377eb-11f6-4b26-8d84-03b02c5693b5@f9941',
+  'pve/map/icon_monster_ch4_normal': '7ebc8e60-92ff-4541-883a-2dd6e1b3d08d@f9941',
+  'pve/map/icon_monster_ch4_elite': 'd7fca926-2100-43fb-accb-c90c9485af53@f9941',
+  'pve/map/icon_monster_ch4_anima': '5e78b744-b067-4190-940e-792f988604da@f9941',
+  'pve/map/icon_monster_ch4_boss': '8d666502-18b8-4927-8752-1429a2440310@f9941',
+  'pve/map/icon_monster_ch5_normal': '69217ae5-1071-4684-9639-9ce6d1119e49@f9941',
+  'pve/map/icon_monster_ch5_elite': 'a9234413-234c-48ab-92ec-1fb4ea936ad1@f9941',
+  'pve/map/icon_monster_ch5_anima': '75e7d718-5de4-40de-a074-6c9077809904@f9941',
+  'pve/map/icon_monster_ch5_boss': '571800a6-1f4c-4ec0-89ab-92a2c886671e@f9941',
   'pve/map/icon_monster_elite': '4393b67e-6e9e-4414-a452-c9b50ff2475a@f9941',
   'pve/map/icon_monster_normal': '4acc5677-9e5e-42c2-910c-95a6550fa61f@f9941',
   'pve/map/icon_player': 'f621a780-95f7-4cab-bfd0-71de76b89e44@f9941',
+  'pve/map/icon_player_berserker': '3eb74915-eb1a-4fe9-9269-6f1aaeaac54a@f9941',
+  'pve/map/icon_player_archer': '60b71ffd-a93b-49a3-8aed-d05d11817b09@f9941',
+  'pve/map/icon_player_rogue': '03e14bae-3952-4aab-a903-c42110a386fa@f9941',
   'pve/map/icon_portal': 'b6e018c4-5a3a-4384-ba92-394bd03c574d@f9941',
   'pve/map/mark_attack_range': '19c2ac62-f809-4b87-a26b-7b2a8f2b567b@f9941',
   'pve/map/mark_move_range': '7cd41b51-8d59-4da8-b245-b2d2c86c9ba2@f9941',
   'pve/map/tile_floor_ch1': '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6@f9941',
+  'pve/map/tile_floor_ch1L': '6b9be095-3a24-4603-83f0-e81dafd9c46b@f9941',
   'pve/map/tile_floor_ch2': '76b4a3db-b2b9-472e-bf86-a61d0de2419c@f9941',
   'pve/map/tile_floor_ch3': '1f4d79be-7014-4707-9079-b4b83c14df36@f9941',
   'pve/map/tile_floor_ch4': '8a57498e-8f89-4244-9818-f3cd8f7fd230@f9941',
@@ -236,9 +278,37 @@ export const PVE_MAP_KEYS = [
   'pve/map/mark_move_range',
   'pve/map/mark_attack_range',
   'pve/map/icon_player',
+  'pve/map/icon_player_berserker',
+  'pve/map/icon_player_archer',
+  'pve/map/icon_player_rogue',
   'pve/map/icon_portal',
   'pve/map/icon_monster_normal',
   'pve/map/icon_monster_ch1_normal',
+  'pve/map/icon_monster_ch1_elite',
+  'pve/map/icon_monster_ch1_anima',
+  'pve/map/icon_monster_ch1_boss',
+  'pve/map/icon_monster_goblin_warrior',
+  'pve/map/icon_monster_goblin_archer',
+  'pve/map/icon_monster_frost_goblin',
+  'pve/map/icon_monster_fire_goblin',
+  'pve/map/icon_monster_spirit_rat',
+  'pve/map/icon_monster_goblin_chief',
+  'pve/map/icon_monster_ch2_normal',
+  'pve/map/icon_monster_ch2_elite',
+  'pve/map/icon_monster_ch2_anima',
+  'pve/map/icon_monster_ch2_boss',
+  'pve/map/icon_monster_ch3_normal',
+  'pve/map/icon_monster_ch3_elite',
+  'pve/map/icon_monster_ch3_anima',
+  'pve/map/icon_monster_ch3_boss',
+  'pve/map/icon_monster_ch4_normal',
+  'pve/map/icon_monster_ch4_elite',
+  'pve/map/icon_monster_ch4_anima',
+  'pve/map/icon_monster_ch4_boss',
+  'pve/map/icon_monster_ch5_normal',
+  'pve/map/icon_monster_ch5_elite',
+  'pve/map/icon_monster_ch5_anima',
+  'pve/map/icon_monster_ch5_boss',
   'pve/map/icon_monster_elite',
   'pve/map/icon_monster_anima',
   'pve/map/icon_monster_boss',
@@ -249,6 +319,14 @@ export const PVE_MAP_KEYS = [
   'pve/map/icon_blacksmith',
   'pve/map/icon_hot_spring',
   'pve/map/icon_idol',
+  'pve/map/icon_fragment',
+  'pve/map/terrain_rock',
+  'pve/map/icon_sand_pit_permanent',
+  'pve/map/terrain_ice_wall',
+  'pve/map/terrain_ice_tile',
+  'pve/map/terrain_freeze_wall',
+  'pve/map/terrain_shattered_ice',
+  'pve/map/terrain_lava',
 ] as const;
 
 export const PVE_HUD_KEYS = [
@@ -259,11 +337,10 @@ export const PVE_HUD_KEYS = [
   'pve/icons/icon_hud_anima',
   'pve/icons/icon_hud_key',
   'pve/icons/icon_hud_dice',
+  'pve/icons/icon_hud_diamond',
   'pve/icons/icon_hud_shards',
   'pve/icons/icon_hud_scroll',
-  'pve/hud/btn_pve_attack',
   'pve/hud/btn_pve_interact',
-  'pve/hud/btn_pve_end_turn',
 ] as const;
 
 /** 战斗状态/战报/遗物图标 */
@@ -295,19 +372,23 @@ export const PVE_POPUP_KEYS = [
 ] as const;
 
 /** 大章节背景（720×1280 竖图）；微信真机走分包，不进主包 native */
+// 首章背景是远征首屏关键图，需进入主包；其余大背景继续走资源分包。
+export const PVE_CHAPTER_BG_KEYS = {
+  1: 'pve/backgrounds/bg_pve_ch1',
+  2: 'pve/backgrounds/bg_pve_ch2_runtime',
+  3: 'pve/backgrounds/bg_pve_ch3_runtime',
+  4: 'pve/backgrounds/bg_pve_ch4_runtime',
+  5: 'pve/backgrounds/bg_pve_ch5_runtime',
+} as const;
+
 export const PVE_BG_KEYS = [
-  'pve/backgrounds/bg_pve_ch2',
-  'pve/backgrounds/bg_pve_ch3',
-  'pve/backgrounds/bg_pve_ch4',
-  'pve/backgrounds/bg_pve_ch5',
+  ...Object.values(PVE_CHAPTER_BG_KEYS),
   'pve/backgrounds/bg_pve_camp',
   'pve/backgrounds/bg_destiny_tree',
 ] as const;
 
 /** 面板/弹窗/营地/命运树底框，与弹窗一起预加载 */
 export const PVE_PANEL_KEYS = [
-  'pve/hud/bar_pve_info_9s',
-  'pve/hud/bg_dpad',
   'pve/panel/panel_char_bg_9s',
   'pve/panel/slot_equip_empty',
   'pve/camp/panel_camp_main_9s',
@@ -327,6 +408,19 @@ export const PVE_UI_KEYS = [
 const LOBBY_ESSENTIAL_KEYS = [
   'backgrounds/bg_lobby',
   ...LOBBY_UI_KEYS,
+] as const;
+
+/** PVE-only 大厅最小图集；不触发输入框、匹配按钮、房间或棋盘资源加载。 */
+const PVE_LOBBY_ESSENTIAL_KEYS = [
+  'backgrounds/bg_lobby',
+  'pve/lobby/logo_destiny_tower',
+  'pve/lobby/asset_top_chip_blue_9s',
+  'pve/lobby/icon_chip_destiny_shards',
+  'pve/lobby/icon_chip_diamond',
+  'pve/lobby/icon_chip_stamina',
+  'pve/lobby/icon_nav_expedition',
+  'pve/lobby/icon_nav_destiny_tree',
+  'pve/lobby/icon_nav_leaderboard',
 ] as const;
 
 /** 大厅次要：房间背景/卡片/棋子等，可在大厅显示后后台预加载，玩家点"创建房间"前几乎肯定已就绪。 */
@@ -482,12 +576,33 @@ const WECHAT_SUBPACKAGE_ONLY_KEYS = new Set([
   'pve/backgrounds/bg_pve_ch3',
   'pve/backgrounds/bg_pve_ch4',
   'pve/backgrounds/bg_pve_ch5',
+  'pve/backgrounds/bg_pve_ch2_runtime',
+  'pve/backgrounds/bg_pve_ch3_runtime',
+  'pve/backgrounds/bg_pve_ch4_runtime',
+  'pve/backgrounds/bg_pve_ch5_runtime',
   'pve/backgrounds/bg_pve_camp',
   'pve/backgrounds/bg_destiny_tree',
 ]);
 
+function isPveCriticalNative(key: string): boolean {
+  if (
+    key === 'pve/map/tile_floor_ch1L'
+    || key === 'pve/map/tile_floor_ch1'
+    || /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(key)
+  ) {
+    return false;
+  }
+  return key === 'pve/backgrounds/bg_pve_ch1'
+    || key.startsWith('pve/map/')
+    || key.startsWith('pve/hud/')
+    || key.startsWith('pve/lobby/')
+    || key.startsWith('pve/icons/icon_hud_');
+}
+
 function usesSubpackageOnlyNative(key: string): boolean {
-  return WECHAT_SUBPACKAGE_ONLY_KEYS.has(key) || key.startsWith('settlement/') || key.startsWith('pve/backgrounds/');
+  return WECHAT_SUBPACKAGE_ONLY_KEYS.has(key)
+    || key.startsWith('settlement/')
+    || (key.startsWith('pve/') && !isPveCriticalNative(key));
 }
 const WECHAT_SUBPACKAGE_DOWNLOAD_WAIT_MS = 30000;
 
@@ -531,14 +646,14 @@ function patchWechatSubpackageImageDownloader(): void {
   if (dl.__coupleSubNativePatched || typeof dl.downloadDomImage !== 'function') {
     return;
   }
-  const original = dl.downloadDomImage.bind(dl);
-  dl.downloadDomImage = (url, options, onComplete) => {
+  const original = dl.downloadDomImage.bind(dl) as Downloader['downloadDomImage'];
+  dl.downloadDomImage = ((url, options, onComplete) => {
     let bare = url.replace(/^\/+/, '');
     if (bare.includes('subpackages/resources/native/')) {
       bare = bare.replace('subpackages/resources/native/', `${MAIN_NATIVE_ROOT}/`);
     }
-    original(bare, options, onComplete);
-  };
+    original?.(bare, options, onComplete);
+  }) as Downloader['downloadDomImage'];
   dl.__coupleSubNativePatched = true;
   console.log('[UiAssets] patched downloadDomImage strip-leading-slash');
 }
@@ -582,10 +697,10 @@ function loadWechatSubpackage(name: string): Promise<void> {
       resolve();
     };
 
-    const settleFail = (err: Error) => {
+    const settleFail = (err: unknown) => {
       if (settled) return;
       settled = true;
-      reject(err);
+      reject(err instanceof Error ? err : new Error(String(err)));
     };
 
     const isDownloadComplete = () => {
@@ -619,7 +734,7 @@ function loadWechatSubpackage(name: string): Promise<void> {
       fail: (err) => settleFail(err ?? new Error(`loadSubpackage ${name} failed`)),
     });
 
-    if (task?.onProgressUpdate) {
+    if (task && typeof task.onProgressUpdate === 'function') {
       task.onProgressUpdate((res) => {
         bytesExpected = res.totalBytesExpectedToWrite || bytesExpected;
         bytesWritten = res.totalBytesWritten || bytesWritten;
@@ -758,9 +873,10 @@ function cacheSprite(key: string, sf: SpriteFrame | null): SpriteFrame | null {
 const MAIN_NATIVE_ROOT = ['assets', 'resources', 'native'].join('/');
 const SUB_NATIVE_ROOT = ['subpackages', 'resources', 'native'].join('/');
 
-function nativeTexturePathsFromUuid(uuidWithSuffix: string): string[] {
+function nativeTexturePathsFromUuid(key: string, uuidWithSuffix: string): string[] {
   const uuid = uuidWithSuffix.split('@')[0];
-  const rel = `${uuid.slice(0, 2)}/${uuid}.png`;
+  const ext = /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(key) ? '.jpg' : '.png';
+  const rel = `${uuid.slice(0, 2)}/${uuid}${ext}`;
   const paths = [`${MAIN_NATIVE_ROOT}/${rel}`, `${SUB_NATIVE_ROOT}/${rel}`];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -879,7 +995,7 @@ async function loadWechatNativeSprite(key: string): Promise<SpriteFrame | null> 
   if (!uuid || !isWechatRuntime()) {
     return null;
   }
-  const paths = nativeTexturePathsFromUuid(uuid);
+  const paths = nativeTexturePathsFromUuid(key, uuid);
   const skipMain = usesWechatNativeFs() && usesSubpackageOnlyNative(key);
   const mainPaths = skipMain ? [] : paths.filter((p) => p.startsWith(`${MAIN_NATIVE_ROOT}/`));
   const subPaths = paths.filter((p) => p.startsWith(`${SUB_NATIVE_ROOT}/`));
@@ -1063,6 +1179,11 @@ export function getBoardButtonSprite(key: keyof typeof BOARD_BTN_KEYS): SpriteFr
 export async function preloadLobbyUi(): Promise<void> {
   if (!(await ensureResourcesBundle())) return;
   await preloadKeys([...LOBBY_ESSENTIAL_KEYS], { parallel: true });
+}
+
+export async function preloadPveLobbyUi(): Promise<void> {
+  if (!(await ensureResourcesBundle())) return;
+  await preloadKeys([...PVE_LOBBY_ESSENTIAL_KEYS], { parallel: true });
 }
 
 /** 大厅显示后异步预热的次要图集（房间/棋子）。fire-and-forget，错误吞掉不阻塞玩家。 */

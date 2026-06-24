@@ -2,7 +2,13 @@ const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
 const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
-const { loadMeta, updateMeta, unlockTreeNode, resetTreeNodes } = require('./common/pve/PveMeta');
+const {
+  loadMeta,
+  updateMeta,
+  unlockTreeNode,
+  resetTreeNodes,
+  loadLeaderboard,
+} = require('./common/pve/PveMeta');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -23,8 +29,8 @@ exports.main = async (event = {}) => {
     }
 
     if (action === 'startRun') {
-      const { runSeed, resume } = await startRun(user);
-      return { ok: true, runSeed, resume };
+      const result = await startRun(user);
+      return { ok: true, ...result };
     }
 
     if (action === 'saveFloor') {
@@ -55,6 +61,11 @@ exports.main = async (event = {}) => {
     if (action === 'resetTreeNodes') {
       const { meta } = await resetTreeNodes(user);
       return { ok: true, meta };
+    }
+
+    if (action === 'loadLeaderboard') {
+      const { entries, myRank } = await loadLeaderboard(user, event.limit);
+      return { ok: true, entries, myRank: myRank ?? null };
     }
 
     return { ok: false, code: 'UNKNOWN_ACTION', message: `未知 action: ${action}` };

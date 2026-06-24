@@ -46,7 +46,7 @@ export const CHAPTER_BOSS = {
 } as const;
 
 // ── 玩家初始状态 ───────────────────────────────────────
-export const INITIAL_HP = 200;
+export const INITIAL_HP = 2000;
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
@@ -586,3 +586,6 @@ export function bossChapterScaling(chapter: number): { hpMult: number; attackMul
   const idx = Math.max(0, Math.min(chapter - 1, SCALING.length - 1));
   return SCALING[idx];
 }
+export const PVE_STAMINA_MAX = 60;
+export const PVE_STAMINA_RUN_COST = 20;
+export const PVE_STAMINA_RECOVERY_MS = 5 * 60 * 1000;

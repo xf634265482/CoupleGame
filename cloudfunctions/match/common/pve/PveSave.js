@@ -10,6 +10,8 @@ const {
   putPveSave,
   deletePveSave,
   incrementUserPveRewards,
+  reservePveRunStart,
+  clearPendingPveRun,
 } = require('../db');
 const { validateSaveFloorReport, validateSettleReport } = require('./PveValidate');
 const { computeSettleReward } = require('./PveReward');
@@ -40,10 +42,17 @@ async function loadActiveSave(user) {
 async function startRun(user) {
   const current = await getPveSaveByUserId(user.id);
   if (current) {
-    return { runSeed: current.runSeed, resume: true };
+    return { runSeed: current.runSeed, resume: true, charged: 0 };
   }
   const runSeed = Math.floor(Math.random() * 0x7fffffff) || 1;
-  return { runSeed, resume: false };
+  const reserved = await reservePveRunStart(user, runSeed);
+  return {
+    runSeed: reserved.runSeed,
+    resume: false,
+    charged: reserved.charged,
+    stamina: reserved.stamina.stamina,
+    staminaNextRecoveryAt: reserved.stamina.nextRecoveryAt,
+  };
 }
 
 /**
@@ -65,6 +74,15 @@ async function saveFloorProgress(user, report = {}) {
   };
 
   const saved = await putPveSave(user.id, patch, current ? current.version : undefined);
+  await clearPendingPveRun(user.id);
+
+  // 中途存档也同步"已通关最高层"，用于排行榜与大厅"最高 X 层"显示。
+  // 玩家当前所在层为 floor，则已通关层数 = floor - 1（floor=1 时为 0，不入榜）。
+  const clearedFloor = Math.max(0, Math.trunc(patch.floor) - 1);
+  if (clearedFloor > 0) {
+    await incrementUserPveRewards(user.id, { highestFloor: clearedFloor });
+  }
+
   return { save: toSaveVO(saved) };
 }
 
@@ -84,11 +102,13 @@ async function settleExpedition(user, report = {}) {
   await incrementUserPveRewards(user.id, {
     diamond: rewards.diamond,
     destinyShards: rewards.destinyShards,
+    highestFloor: finalFloor,
   });
 
   if (current) {
     await deletePveSave(current._id);
   }
+  await clearPendingPveRun(user.id);
 
   return { rewards };
 }

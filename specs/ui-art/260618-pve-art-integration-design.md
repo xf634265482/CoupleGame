@@ -53,3 +53,20 @@ PVP code and assets are out of scope.
 - Before a WeChat release, rebuild, compress large UI assets, patch the build,
   and verify the main package remains below 4 MB.
 
+## Implementation Status (2026-06-19)
+
+- `UiAssets` contains UUID entries for every imported PVE PNG.
+- Critical native is limited to the core map set, including all five chapter
+  floor tiles. HUD art, large backgrounds, and secondary panels stay in the
+  resources subpackage and retain code-drawn fallbacks.
+- `FogMapView` selects `tile_floor_ch1` through `tile_floor_ch5` from the
+  current floor chapter. Chapter backgrounds render as a full-scene layer and
+  do not affect grid coordinates.
+- HUD, character information, five equipment slots, strengthen choices, camp,
+  interaction/result dialogs, and destiny tree nodes use image frames while
+  retaining code-built labels and handlers.
+- Graphics remain as a fallback. This is required on WeChat devices because
+  non-critical subpackage-native images may be unavailable through the native
+  filesystem even after `loadSubpackage` succeeds.
+- PVP views and assets are unchanged.
+

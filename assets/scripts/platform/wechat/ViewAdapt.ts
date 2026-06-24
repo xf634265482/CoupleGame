@@ -36,6 +36,38 @@ export function visibleDesignSize(): { w: number; h: number } {
 }
 
 /**
+ * 微信右上角胶囊按钮底边对应的设计坐标 Y。
+ * 内容应放在返回值以下；非微信环境使用与常见异形屏接近的保守兜底。
+ */
+export function topSafeBoundaryY(margin = 12): number {
+  const { h } = visibleDesignSize();
+  try {
+    if (typeof wx === 'undefined') return h / 2 - 166 - margin;
+    const wxApi = wx as unknown as {
+      getMenuButtonBoundingClientRect?: () => { bottom?: number };
+      getWindowInfo?: () => { windowWidth?: number; screenWidth?: number };
+      getSystemInfoSync?: () => { windowWidth?: number; screenWidth?: number };
+    };
+    if (
+      typeof wxApi.getMenuButtonBoundingClientRect === 'function'
+    ) {
+      const rect = wxApi.getMenuButtonBoundingClientRect();
+      const info = typeof wxApi.getWindowInfo === 'function'
+        ? wxApi.getWindowInfo()
+        : wxApi.getSystemInfoSync?.();
+      const windowW = info?.windowWidth || info?.screenWidth;
+      if (rect?.bottom > 0 && typeof windowW === 'number' && windowW > 0) {
+        const pxToDesign = DESIGN_W / windowW;
+        return h / 2 - rect.bottom * pxToDesign - margin;
+      }
+    }
+  } catch (err) {
+    console.warn('[ViewAdapt] menu safe boundary', err);
+  }
+  return h / 2 - 166 - margin;
+}
+
+/**
  * 微信竖屏适配组合（需配合 game.json portrait + patch 脚本）：
  * - Widget 关闭，Canvas 固定宽 720、高随设备扩展，位置 (0,0)
  * - alignCanvasWithScreen 关闭，避免与手动原点双重偏移

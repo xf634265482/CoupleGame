@@ -2,23 +2,30 @@
 // 职业 / HP / 攻击力 / 装备 / 词条 / 职业碎片 / 成就 / 图鉴。
 // 半透明遮罩 + 居中面板；点击遮罩或关闭按钮收起，期间冻结主场景输入由 Controller 负责。
 
-import { Color, EventTouch, Graphics, Label, Node, UITransform } from 'cc';
+import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, UITransform } from 'cc';
 import { findAchievement } from '../core/AchievementSystem';
 import { playerAttackPower } from '../core/CombatSystem';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD, SHOES_STEALTH_THRESHOLD, shoesStealthReduction } from '../core/EquipmentSystem';
 import { AP_BASE, AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
 import { RELIC_DEFS } from '../core/RelicSystem';
 import type { EquipItem, EquipSlot, ExpeditionState, PveMeta } from '../core/PveTypes';
-import { EQUIP_TRAIT_LABEL, STRENGTHEN_LABEL } from './PveToastView';
-import { makeFlatButton, makeLabel } from './pveUiKit';
+import { loadUiSprite } from '../../ui/UiAssets';
+import { ensureArtChild } from '../../ui/UiSprite';
+import { STRENGTHEN_LABEL } from './PveToastView';
+import { makeLabel } from './pveUiKit';
+import { Effects } from '../../fx/Effects';
 
-const TITLE_COLOR  = new Color(245, 220, 130, 255);
-const TEXT_COLOR   = new Color(225, 230, 240, 255);
-const DIM_COLOR    = new Color(160, 165, 180, 255);
-const BG_COLOR     = new Color(28, 32, 44, 240);
-const MASK_COLOR   = new Color(0, 0, 0, 170);
-const BORDER_COLOR = new Color(120, 130, 160, 200);
-const POPUP_BG     = new Color(18, 22, 36, 255);  // 完全不透明，防止底层内容透出
+const TITLE_COLOR  = new Color(255, 226, 138, 255);
+const TEXT_COLOR   = new Color(238, 244, 252, 255);
+const DIM_COLOR    = new Color(180, 210, 236, 255);
+// 与 PveHudView 的 PANEL / PANEL_BORDER 保持一致（玩家状态卡/战报卡同款半透明 α≈170）
+const BG_COLOR     = new Color(7, 31, 70, 170);
+const MASK_COLOR   = new Color(0, 8, 24, 185);
+const BORDER_COLOR = new Color(84, 200, 239, 240);
+const POPUP_BG     = new Color(7, 31, 70, 170);
+// 关闭按钮：与 HUD「结束回合」同款（深蓝 + 金黄边），同步降为半透明
+const CLOSE_BTN_FILL   = new Color(52, 73, 95, 170);
+const CLOSE_BTN_BORDER = new Color(255, 214, 110, 240);
 
 /** 装备品质的文字颜色（用于弹窗标题）。 */
 const QUALITY_TEXT: Record<string, Color> = {
@@ -37,8 +44,13 @@ const QUALITY_BORDER: Record<string, Color> = {
   LEGENDARY: new Color(240, 150,  30, 255),
 };
 
-const PANEL_W = 580;
-const PANEL_H = 760; // 760px：成就区段 + 遗物/卷轴展示区段（Task #10）
+const PANEL_W = 640;
+const PANEL_H = 920;
+const PANEL_INSETS = { top: 48, bottom: 48, left: 48, right: 48 };
+const TITLE_AREA_H = 64;
+const BTN_AREA_H = 88;
+const SV_W = PANEL_W - 56;
+const SV_H = PANEL_H - TITLE_AREA_H - BTN_AREA_H;
 
 const CLASS_LABEL: Record<string, string> = {
   ADVENTURER: '冒险者',
@@ -67,6 +79,8 @@ const SLOT_ORDER: EquipSlot[] = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'
 /** 角色信息弹窗 → 由 ExpeditionController 在「角色」按钮回调中 show()/hide()。 */
 export class PveCharacterPanel {
   private _root: Node;
+  private _panel!: Node;
+  private _content!: Node;
   private _statsLabel:        Label;
   /** 装备槽位行（可点击，点击弹出 _detailPopup）。 */
   private _equipRowLabels:    Label[]  = [];
@@ -101,82 +115,168 @@ export class PveCharacterPanel {
       onClose?.();
     });
 
-    // 面板背景
+    // 面板背景（圆角深蓝 + 青边框，与玩家状态卡/最近战报同款）
     const panel = new Node('Panel');
+    this._panel = panel;
     panel.setParent(this._root);
     panel.setPosition(0, 0, 0);
     panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
-    // 阻止点击穿透：面板内的点击不应触发遮罩关闭
     panel.on(Node.EventType.TOUCH_END, (e: EventTouch) => e.propagationStopped = true);
     const pg = panel.addComponent(Graphics);
     pg.fillColor = BG_COLOR;
-    pg.rect(-PANEL_W / 2, -PANEL_H / 2, PANEL_W, PANEL_H);
+    pg.roundRect(-PANEL_W / 2, -PANEL_H / 2, PANEL_W, PANEL_H, 18);
     pg.fill();
     pg.strokeColor = BORDER_COLOR;
     pg.lineWidth = 2;
-    pg.rect(-PANEL_W / 2 + 1, -PANEL_H / 2 + 1, PANEL_W - 2, PANEL_H - 2);
+    pg.roundRect(-PANEL_W / 2 + 1, -PANEL_H / 2 + 1, PANEL_W - 2, PANEL_H - 2, 17);
     pg.stroke();
+    // 移除不透明的 panel_char_bg_9s 底图叠层，保持与玩家状态卡同款半透明 Graphics 风格。
 
-    // 标题
-    makeLabel(
-      panel, 0, PANEL_H / 2 - 30,
-      PANEL_W - 40, 32, 24, TITLE_COLOR, Label.HorizontalAlign.CENTER,
-    ).string = '👤 角色信息';
+    // 标题（顶部固定，不参与滚动）
+    const titleLbl = makeLabel(
+      panel, 0, PANEL_H / 2 - 36,
+      PANEL_W - 40, 38, 28, TITLE_COLOR, Label.HorizontalAlign.CENTER,
+    );
+    titleLbl.string = '👤 角色信息';
+    titleLbl.isBold = true;
 
-    // 基础属性（7 行：职业/HP/攻击/金币&灵气/AP/骰子/钥匙）
-    this._statsLabel     = this._makeSection(panel, PANEL_H / 2 - 80,  170, TEXT_COLOR);
+    // ── ScrollView 中部 ──
+    const svNode = new Node('ScrollArea');
+    svNode.setParent(panel);
+    // 中心 Y：标题占 TITLE_AREA_H 顶端，按钮占 BTN_AREA_H 底端，剩下垂直居中。
+    svNode.setPosition(0, (TITLE_AREA_H - BTN_AREA_H) / -2, 0);
+    svNode.addComponent(UITransform).setContentSize(SV_W, SV_H);
+    const sv = svNode.addComponent(ScrollView);
+    sv.horizontal = false;
+    sv.vertical = true;
+    sv.inertia = true;
+    sv.brake = 0.75;
+    (sv as ScrollView & { elasticScale?: number }).elasticScale = 0.1;
 
-    // 装备（1 行标题 + 5 行可点击槽位行）
-    this._buildEquipRows(panel);
+    const viewNode = new Node('View');
+    viewNode.setParent(svNode);
+    viewNode.addComponent(UITransform).setContentSize(SV_W, SV_H);
+    viewNode.addComponent(Mask);
+
+    // 各 section 的高度（顺序 = 渲染顺序，自上而下）
+    // 行高、装备槽高都放宽，避免玩家点击误触相邻槽位。
+    const SEC_GAP = 18;
+    const statsH       = 260;             // 8 行 × 32 行高
+    const equipBlockH  = 36 + 5 * 42;     // 标题 36 + 5 槽位 × 42
+    const traitsH      = 108;             // 3 行 × 32 行高 + padding
+    const fragmentsH   = 44;
+    const achieveH     = 230;
+    const codexH       = 64;
+    const CONTENT_H = statsH + equipBlockH + traitsH + fragmentsH + achieveH + codexH + SEC_GAP * 5 + 28;
+
+    const contentNode = new Node('Content');
+    contentNode.setParent(viewNode);
+    contentNode.addComponent(UITransform).setContentSize(SV_W - 12, CONTENT_H);
+    contentNode.setPosition(0, (CONTENT_H - SV_H) / 2, 0); // top-anchor 起点
+    sv.content = contentNode;
+    this._content = contentNode;
+
+    // 顺序排布各 section：cursorY 跟踪下一段顶部 Y（相对 content）
+    let cursorY = CONTENT_H / 2; // content 顶
+    const place = (h: number, color: Color): Label => {
+      const lbl = this._makeSection(contentNode, cursorY, h, color);
+      lbl.isBold = true;
+      cursorY -= (h + SEC_GAP);
+      return lbl;
+    };
+
+    this._statsLabel     = place(statsH, TEXT_COLOR);
+
+    // 装备（标题 + 5 行）单独构建
+    this._buildEquipRows(contentNode, cursorY);
+    cursorY -= (equipBlockH + SEC_GAP);
+
+    this._traitsLabel    = place(traitsH, DIM_COLOR);
+    this._fragmentsLabel = place(fragmentsH, DIM_COLOR);
+    this._achievementsLabel = place(achieveH, new Color(255, 215, 100, 255));
+    this._achievementsLabel.overflow = Label.Overflow.CLAMP;
+    this._codexLabel     = place(codexH, DIM_COLOR);
+
     this._buildDetailPopup(panel);
 
-    // 词条 + 遗物 + 卷轴（3 行：词条 / 遗物 / 卷轴）
-    this._traitsLabel    = this._makeSection(panel, PANEL_H / 2 - 395,  95, DIM_COLOR);
-
-    // 职业碎片（下移 60px 以适应 traits 区段扩展）
-    this._fragmentsLabel = this._makeSection(panel, PANEL_H / 2 - 500,  35, DIM_COLOR);
-
-    // 成就（CLAMP 防溢出，120px 足够 5 行）
-    this._achievementsLabel = this._makeSection(panel, PANEL_H / 2 - 545, 120, new Color(255, 215, 100, 255));
-    this._achievementsLabel.overflow = Label.Overflow.CLAMP;
-
-    // 图鉴
-    this._codexLabel = this._makeSection(panel, PANEL_H / 2 - 685,  50, DIM_COLOR);
-
-    // 关闭按钮
-    makeFlatButton(
-      panel, '关闭', 0, -PANEL_H / 2 + 30, 120, 40,
-      () => { this.hide(); onClose?.(); },
-      new Color(120, 130, 145, 255),
-    );
+    // 关闭按钮（底部固定）— 与 HUD「结束回合」同款 Graphics 圆角按钮，不加 sprite 叠层
+    this._buildCloseButton(panel, () => { this.hide(); onClose?.(); });
   }
 
-  /** 构建装备标题行 + 5 个可点击槽位行（占据原 _makeSection y=PANEL_H/2-265 h=120 区域）。 */
-  private _buildEquipRows(panel: Node): void {
-    const TOP_Y = PANEL_H / 2 - 265;   // 同原 _makeSection 第一参数
-    const ROW_H = 20;
+  private _buildCloseButton(panel: Node, onClick: () => void): void {
+    const w = 220;
+    const h = 60;
+    const node = new Node('Btn_Close');
+    node.setParent(panel);
+    node.setPosition(0, -PANEL_H / 2 + BTN_AREA_H / 2, 0);
+    node.addComponent(UITransform).setContentSize(w, h);
+    const g = node.addComponent(Graphics);
+    g.fillColor = CLOSE_BTN_FILL;
+    g.roundRect(-w / 2, -h / 2, w, h, 12);
+    g.fill();
+    g.strokeColor = CLOSE_BTN_BORDER;
+    g.lineWidth = 2;
+    g.roundRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2, 11);
+    g.stroke();
+    const lblNode = new Node('Label');
+    lblNode.setParent(node);
+    lblNode.addComponent(UITransform).setContentSize(w, h);
+    const lbl = lblNode.addComponent(Label);
+    lbl.string = '关闭';
+    lbl.fontSize = 26;
+    lbl.lineHeight = 30;
+    lbl.isBold = true;
+    lbl.color = new Color(255, 255, 255, 255);
+    lbl.horizontalAlign = Label.HorizontalAlign.CENTER;
+    lbl.verticalAlign = Label.VerticalAlign.CENTER;
+    node.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      onClick();
+    });
+  }
+
+  /** 构建装备标题行 + 5 个可点击槽位行；topY 为该区块顶部 Y（相对 parent）。 */
+  private _buildEquipRows(parent: Node, topY: number): void {
+    const ROW_W = SV_W - 24;
+    const TITLE_H = 36;
+    const ROW_H = 42;
+    const ICON_SIZE = 32;
 
     // 标题行
-    makeLabel(panel, 0, TOP_Y - ROW_H / 2, PANEL_W - 60, ROW_H, 16, TEXT_COLOR, Label.HorizontalAlign.LEFT)
-      .string = '装备：（点击查看详情）';
+    const titleLbl = makeLabel(parent, 0, topY - TITLE_H / 2, ROW_W, TITLE_H, 20, TEXT_COLOR, Label.HorizontalAlign.LEFT);
+    titleLbl.string = '装备：（点击查看详情）';
+    titleLbl.isBold = true;
 
     // 5 个槽位行
     this._equipRowLabels = [];
     this._currentItems   = new Array(SLOT_ORDER.length).fill(undefined);
     SLOT_ORDER.forEach((slot, i) => {
-      const rowY = TOP_Y - ROW_H - i * ROW_H;   // 每行中心 y
+      const rowCenterY = topY - TITLE_H - ROW_H / 2 - i * ROW_H;
       const rowNode = new Node(`EquipRow_${slot}`);
-      rowNode.setParent(panel);
-      rowNode.setPosition(0, rowY - ROW_H / 2, 0);
-      rowNode.addComponent(UITransform).setContentSize(PANEL_W - 60, ROW_H);
+      rowNode.setParent(parent);
+      rowNode.setPosition(0, rowCenterY, 0);
+      rowNode.addComponent(UITransform).setContentSize(ROW_W, ROW_H);
 
-      const lbl = rowNode.addComponent(Label);
-      lbl.fontSize = 15;
+      const labelNode = new Node('Label');
+      labelNode.setParent(rowNode);
+      labelNode.addComponent(UITransform).setContentSize(ROW_W, ROW_H);
+      const lbl = labelNode.addComponent(Label);
+      lbl.fontSize = 20;
+      lbl.lineHeight = 24;
+      lbl.isBold = true;
       lbl.color    = DIM_COLOR;
       lbl.string   = `  ${SLOT_LABEL[slot]}：(空)`;
       lbl.horizontalAlign = Label.HorizontalAlign.LEFT;
       lbl.verticalAlign   = Label.VerticalAlign.CENTER;
       this._equipRowLabels.push(lbl);
+      void loadUiSprite('pve/panel/slot_equip_empty').then((frame) => {
+        if (!frame || !rowNode.isValid) return;
+        const art = ensureArtChild(rowNode, 'SlotArt', frame, ICON_SIZE, ICON_SIZE);
+        art.node.setPosition(-ROW_W / 2 + ICON_SIZE / 2 + 4, 0, 0);
+        art.node.setSiblingIndex(0);
+        labelNode.setPosition(ICON_SIZE / 2 + 10, 0, 0);
+        labelNode.setSiblingIndex(1);
+      });
 
       rowNode.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
         e.propagationStopped = true;
@@ -188,38 +288,56 @@ export class PveCharacterPanel {
 
   /** 构建装备详情浮层（默认隐藏，_showEquipDetail 时显示）。 */
   private _buildDetailPopup(panel: Node): void {
-    const POP_W = 440;
-    const POP_H = 210;
+    const POP_W = 480;
+    const POP_H = 240;
 
     const popup = new Node('EquipDetailPopup');
     popup.setParent(panel);
-    popup.setPosition(0, -80, 0);  // 面板中下区域
-    popup.setSiblingIndex(9999);   // 确保渲染在面板所有子节点之上
+    popup.setPosition(0, -40, 0);
+    popup.setSiblingIndex(9999);
     popup.addComponent(UITransform).setContentSize(POP_W, POP_H);
     popup.active = false;
 
-    // 背景 + 边框（边框颜色在 _showEquipDetail 中动态更新）
+    // 背景 + 边框（圆角，与主面板风格一致）
     const gfx = popup.addComponent(Graphics);
     gfx.fillColor = POPUP_BG;
-    gfx.rect(-POP_W / 2, -POP_H / 2, POP_W, POP_H);
+    gfx.roundRect(-POP_W / 2, -POP_H / 2, POP_W, POP_H, 14);
     gfx.fill();
     gfx.strokeColor = BORDER_COLOR;
     gfx.lineWidth = 2;
-    gfx.rect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2);
+    gfx.roundRect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2, 13);
     gfx.stroke();
 
-    // 装备名标题（颜色由品质决定，动态设置）
-    const titleLbl = makeLabel(popup, 0, POP_H / 2 - 22, POP_W - 24, 28, 19, TEXT_COLOR, Label.HorizontalAlign.CENTER);
+    // 装备名标题
+    const titleLbl = makeLabel(popup, 0, POP_H / 2 - 28, POP_W - 24, 32, 24, TEXT_COLOR, Label.HorizontalAlign.CENTER);
+    titleLbl.isBold = true;
 
-    // 属性正文（多行）
-    const bodyLbl = makeLabel(popup, 0, POP_H / 2 - 70, POP_W - 32, 110, 15, TEXT_COLOR, Label.HorizontalAlign.LEFT);
+    // 属性正文
+    const bodyLbl = makeLabel(popup, 0, POP_H / 2 - 80, POP_W - 36, 130, 19, TEXT_COLOR, Label.HorizontalAlign.LEFT);
     bodyLbl.verticalAlign = Label.VerticalAlign.TOP;
+    bodyLbl.lineHeight = 26;
+    bodyLbl.isBold = true;
 
-    // 关闭按钮
-    makeFlatButton(popup, '关闭', 0, -POP_H / 2 + 22, 100, 36,
-      () => { popup.active = false; },
-      new Color(80, 90, 110, 255),
-    );
+    // 关闭按钮（HUD 风格）
+    const closeBtnNode = new Node('Btn_DetailClose');
+    closeBtnNode.setParent(popup);
+    closeBtnNode.setPosition(0, -POP_H / 2 + 32, 0);
+    closeBtnNode.addComponent(UITransform).setContentSize(140, 44);
+    const cbg = closeBtnNode.addComponent(Graphics);
+    cbg.fillColor = CLOSE_BTN_FILL;
+    cbg.roundRect(-70, -22, 140, 44, 10);
+    cbg.fill();
+    cbg.strokeColor = CLOSE_BTN_BORDER;
+    cbg.lineWidth = 2;
+    cbg.roundRect(-69, -21, 138, 42, 9);
+    cbg.stroke();
+    const cbLbl = makeLabel(closeBtnNode, 0, 0, 140, 44, 20, new Color(255, 255, 255, 255), Label.HorizontalAlign.CENTER);
+    cbLbl.string = '关闭';
+    cbLbl.isBold = true;
+    closeBtnNode.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      popup.active = false;
+    });
 
     // 点击弹窗背景本身也关闭
     popup.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
@@ -246,16 +364,16 @@ export class PveCharacterPanel {
     this._detailTitleLabel.color  = titleColor;
     this._detailTitleLabel.string = item.name;
 
-    // 动态更新边框颜色（重绘）
-    const POP_W = 440, POP_H = 210;
+    // 动态更新边框颜色（重绘，圆角）
+    const POP_W = 480, POP_H = 240;
     const gfx = this._detailGfx;
     gfx.clear();
     gfx.fillColor = POPUP_BG;
-    gfx.rect(-POP_W / 2, -POP_H / 2, POP_W, POP_H);
+    gfx.roundRect(-POP_W / 2, -POP_H / 2, POP_W, POP_H, 14);
     gfx.fill();
     gfx.strokeColor = borderColor;
     gfx.lineWidth = 2;
-    gfx.rect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2);
+    gfx.roundRect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2, 13);
     gfx.stroke();
 
     // 正文内容
@@ -320,9 +438,10 @@ export class PveCharacterPanel {
   private _makeSection(parent: Node, y: number, h: number, color: Color): Label {
     const lbl = makeLabel(
       parent, 0, y - h / 2,
-      PANEL_W - 60, h, 16, color, Label.HorizontalAlign.LEFT,
+      SV_W - 24, h, 21, color, Label.HorizontalAlign.LEFT,
     );
     lbl.verticalAlign = Label.VerticalAlign.TOP;
+    lbl.lineHeight = 33;
     return lbl;
   }
 
@@ -443,11 +562,18 @@ export class PveCharacterPanel {
     this.update(state, meta);
     this._root.active = true;
     this._visible = true;
+    void Effects.pop(this._panel);
   }
 
   hide(): void {
-    this._root.active = false;
-    this._visible = false;
+    // 收起前先对 panel 做一个 fade，再统一关闭 _root（避免下次 show 时 opacity 残留）。
+    void Effects.fade(this._panel, 0, { duration: 0.15, onComplete: () => {
+      this._root.active = false;
+      this._visible = false;
+      // 恢复到 255，下次 show + pop 的 fadeIn 才能从 0→255 显示。
+      const op = this._panel.getComponent(UIOpacity);
+      if (op) op.opacity = 255;
+    } });
   }
 
   get visible(): boolean {

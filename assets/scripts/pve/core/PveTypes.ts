@@ -503,6 +503,18 @@ export interface PveMeta {
   destinyShards: number;
   /** 当前钻石余额（用户级累计货币，由结算云函数累加，此处为只读快照）。 */
   diamond: number;
+  /** 当前远征体力；新远征消耗 20，继续存档不消耗。 */
+  stamina?: number;
+  /** 体力上限，当前固定为 60。 */
+  staminaMax?: number;
+  /** 未满体力时下一点恢复的服务端时间戳；满体力时为 null。 */
+  staminaNextRecoveryAt?: number | null;
+  /** 下次新远征实际消耗；首次为 0，之后为 20。 */
+  nextRunCost?: number;
+  /** 已扣费并预留种子、但尚未写入首层存档的远征。 */
+  hasPendingRun?: boolean;
+  /** 历史到达的最高楼层，用于大厅身份卡与排行榜。 */
+  highestFloor?: number;
   /** 已解锁的成就 id 列表（AchievementId[]）。 */
   achievements: string[];
   /** 图鉴：已见过的怪物/装备类型。 */

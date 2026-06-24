@@ -2,10 +2,14 @@
 // 三层结构落地：Controller 仅做编排与输入处理，规则全部委托 pve/core 纯函数，渲染委托 views/*。
 // M1 垂直切片：第一章 1~5 层端到端打通；存档/云端校验留待 P3（见 specs/260608-pve-destiny-expedition）。
 
-import { _decorator, Component, EventKeyboard, Input, input, KeyCode, Node, sys } from 'cc';
+import { _decorator, Color, Component, EventKeyboard, Input, input, KeyCode, Node, sys, tween, UITransform, Vec3 } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
-import { applyUiLayerTree, refreshScreenAdapt, visibleDesignSize } from '../../platform/wechat/ViewAdapt';
+import {
+  applyUiLayerTree,
+  refreshScreenAdapt,
+  visibleDesignSize,
+} from '../../platform/wechat/ViewAdapt';
 import { applyStrengthen } from '../core/AnimaSystem';
 import { ACHIEVEMENT_DEFS, checkNewAchievements, collectCodexEntries } from '../core/AchievementSystem';
 import type { AchievementDef, AchievementId } from '../core/AchievementSystem';
@@ -39,11 +43,12 @@ import { loadPveSave, loadPveMeta, startRun, savePveFloor, settlePveRun, updateP
 import type { PveSaveVO } from '../../network/PveService';
 import { FogMapView } from '../views/FogMapView';
 import { PveCharacterPanel } from '../views/PveCharacterPanel';
-import { PveHudView } from '../views/PveHudView';
+import { PVE_HUD_INFO_H, PveHudView } from '../views/PveHudView';
 import type { LogKind } from '../views/PveMessageLog';
 import { PveMessageLog } from '../views/PveMessageLog';
-import { PveToastView, STRENGTHEN_LABEL } from '../views/PveToastView';
+import { PveToastView, STRENGTHEN_LABEL, strengthenInfo } from '../views/PveToastView';
 import { preloadPveUi } from '../../ui/UiAssets';
+import { Effects } from '../../fx/Effects';
 
 const { ccclass } = _decorator;
 
@@ -748,6 +753,8 @@ export class ExpeditionController extends Component {
   private _busy = false;
   /** wx.onKeyDown 兜底是否已绑定（用于 onDestroy 对称解绑，见 onLoad 注释）。 */
   private _wxKeyBound = false;
+  /** 移动动画：pre-clone 的玩家幽灵节点，key = "x,y"（from 坐标）。在 _spawnKillFloaters 写入，_playFxFor(MOVE) 消费。 */
+  private _moveGhosts = new Map<string, Node>();
 
   onLoad(): void {
     lockPortrait();
@@ -868,38 +875,71 @@ export class ExpeditionController extends Component {
 
     const mapRoot = new Node('MapRoot');
     mapRoot.setParent(this.node);
-    // 竖屏：地图占据屏幕上半部分（原顶部状态条已下移至地图与战报栏之间），
-    // mapRoot.y=293 与可用高度 610 是与 PveHudView 状态条 Y 坐标
-    // （ROW1_Y=-screenH/2+571 等）联动推导出的常量，详见 design 文档。
-    // cellSize 按楼层尺寸（8x8/9x9/10x10）动态计算，尽量填满可用宽度，避免左右黑边。
-    mapRoot.setPosition(0, 293, 0);
-    this._map = new FogMapView(mapRoot, screenW - 16, screenH - 610, {
+    // 按 2026-06-23 最新真机红框像素实测：窗口顶/底分别位于屏幕自上而下约 16.8% / 77.5%。
+    // 直接使用截图对照物，不再由背景生成稿的石板比例反推。
+    const mapTop = screenH * 0.332;
+    const mapBottom = -screenH * 0.275;
+    const mapHeight = Math.max(520, mapTop - mapBottom);
+    mapRoot.setPosition(0, (mapTop + mapBottom) / 2, 0);
+    // UITransform 确保 mapRoot 的坐标系基准稳定；缺失时 Cocos 布局组件在内容尺寸变化时
+    // 可能推动父节点坐标，导致主战场窗口随玩家位置漂移（见 handoff §3.2）。
+    mapRoot.addComponent(UITransform).setContentSize(screenW, mapHeight);
+    // 横向完全铺满屏幕，避免章节背景从两侧露出竖向缝隙。
+    this._map = new FogMapView(mapRoot, screenW, mapHeight, {
       onCellTap: (coord) => this._onTapCell(coord),
-    });
+    }, { parent: this.node, width: screenW, height: screenH });
 
     this._hud = new PveHudView(this.node, screenW, screenH, {
       onMove: (dir) => this._onMove(dir),
       onAttack: () => this._onAttack(),
       onInteract: () => this._onInteract(),
       onEndTurn: () => this._onEndTurn(),
-      onQuit: () => SceneLoader.loadLobby(),
+      onQuit: () => void this._onQuitRequested(),
       onShowCharacter: () => this._onShowCharacter(),
       onUseScroll: () => this._onUseScroll(),
     });
 
     this._toast = new PveToastView(this.node, screenW, screenH);
 
-    // 战报栏：移至地图下方的横向宽条，水平居中
-    this._log = new PveMessageLog(this.node, 0, -screenH / 2 + 390, 640, 180);
+    // 地图与操作区之间仅保留最近 3～4 条，完整历史仍可滚动查看。
+    // Y/H 与 PveHudView 的 playerPanel 完全对齐（同 infoY = -screenH/2+274，同 INFO_H）。
+    const infoW = screenW - 40;
+    const infoGap = 12;
+    const logW = Math.round((infoW - infoGap) * 0.6);
+    const logX = -screenW / 2 + 20 + logW / 2;
+    this._log = new PveMessageLog(this.node, logX, -screenH / 2 + 274, logW, PVE_HUD_INFO_H);
 
     // 角色信息弹窗：默认 hidden；点击 HUD「角色」按钮唤起
     this._character = new PveCharacterPanel(this.node, screenW, screenH);
+
+    // fx 程序动画框架 screenRoot：飘字池 __fxNumbers + cameraShake 都挂在这下面。
+    Effects.setScreenRoot(this.node);
   }
 
   /** HUD「角色」按钮回调：弹出角色详情面板（基础属性 / 装备 / 词条 / 职业碎片 / 成就）。 */
   private _onShowCharacter(): void {
     if (!this._state || !this._character) return;
     this._character.show(this._state, this._meta ?? undefined);
+  }
+
+  /** 返回大厅前二次确认，并先保存当前楼层，避免移动时误触导致进度丢失。 */
+  private async _onQuitRequested(): Promise<void> {
+    if (this._busy || !this._state || !this._toast) return;
+    this._busy = true;
+    try {
+      const choice = await this._toast.showConfirm(
+        '返回大厅？\n当前楼层进度会自动保存，可稍后继续远征。',
+        [
+          { label: '继续冒险', value: 'cancel' },
+          { label: '返回大厅', value: 'quit' },
+        ],
+      );
+      if (choice !== 'quit') return;
+      await this._autoSaveCurrentFloor();
+      SceneLoader.loadLobby();
+    } finally {
+      this._busy = false;
+    }
   }
 
   /** 进入场景：优先从云端存档续玩（固定从下一层开始 → AC-11），否则开启新远征。 */
@@ -1017,7 +1057,24 @@ export class ExpeditionController extends Component {
     if (!this._state) return;
     this._map?.refresh(this._state.floorState);
     this._hud?.refresh(this._state);
+    this._map?.showMoveRange(this._currentMoveTargets());
     this._map?.showAttackTarget(this._currentAttackTarget()?.pos ?? this._currentAttackTargetEntity()?.pos ?? null);
+  }
+
+  /** 当前四方向中真正可执行的移动落点；复用纯函数 dry-run，包含冰面滑行与装备/AP 修正。 */
+  private _currentMoveTargets(): Coord[] {
+    if (!this._state || this._state.status !== 'ACTIVE' || this._state.floorState.status !== 'EXPLORING') {
+      return [];
+    }
+    const dirs: Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+    const targets = new Map<string, Coord>();
+    for (const dir of dirs) {
+      const result = applyMove(this._state, dir);
+      if (result.events.length === 0) continue;
+      const pos = result.state.floorState.player;
+      targets.set(`${pos.x},${pos.y}`, pos);
+    }
+    return [...targets.values()];
   }
 
   /**
@@ -1067,6 +1124,7 @@ export class ExpeditionController extends Component {
       } else {
         this._toast?.toast('该方向无法移动');
       }
+      this._toast?.shakeToast();
       void this._maybeAutoEndTurn();
       return;
     }
@@ -1078,6 +1136,7 @@ export class ExpeditionController extends Component {
     if (this._busy || !this._state) return;
     const target = this._currentAttackTarget();
     if (target) {
+      this._hud?.focusMonster(target.id);
       this._attack(target.id);
       return;
     }
@@ -1096,6 +1155,7 @@ export class ExpeditionController extends Component {
       (m) => m.aiState !== 'DEAD' && m.pos.x === coord.x && m.pos.y === coord.y,
     );
     if (monster) {
+      this._hud?.focusMonster(monster.id);
       this._attack(monster.id);
       return;
     }
@@ -1109,6 +1169,7 @@ export class ExpeditionController extends Component {
 
   private _attack(monsterId: string): void {
     if (!this._state) return;
+    this._hud?.focusMonster(monsterId);
     const result = playerAttack(this._state, monsterId);
     if (result.events.length === 0) {
       this._toast?.toast('目标不在攻击范围内或 AP 不足');
@@ -1234,6 +1295,11 @@ export class ExpeditionController extends Component {
     if (!this._state) return;
     const t0 = perfNow();
     this._busy = true;
+
+    // fx 死亡退场：必须在 state 切换 + _refreshAll 之前，用旧 state 找怪物坐标，
+    // 复制当前 OccupantArt 画面成临时节点；refresh 把原节点隐藏后，临时节点继续飘走。
+    this._spawnKillFloaters(this._state, result.events);
+
     this._state = result.state;
     const tRefresh = perfNow();
     this._refreshAll();
@@ -1420,6 +1486,378 @@ export class ExpeditionController extends Component {
     return false;
   }
 
+  /**
+   * 退场 fx：扫所有"对象消失"事件，refresh 之前克隆当前画面 → fire-and-forget 退场动画 → destroy。
+   * 必须在 _refreshAll 之前调用（refresh 会把消失的目标节点 active=false / spriteFrame=null）。
+   *
+   * - KILL：怪物 OccupantArt → float（上飘 + 淡出）
+   * - OPEN_CHEST：宝箱 EntityArt → shake + pop（开箱仪式感）
+   * - ROCK_DESTROYED：石块 EntityArt → float（碎裂上飘）
+   */
+  private _spawnKillFloaters(oldState: ExpeditionState, events: PveEvent[]): void {
+    if (!this._map) return;
+    const map = this._map;
+    for (const ev of events) {
+      // 移动动画：_refreshAll 前克隆玩家当前外观，_playFxFor(MOVE) 再滑到新格
+      if (ev.type === 'MOVE' && ev.entityId === 'PLAYER') {
+        const fromWp = map.getCellWorldPosition(ev.from);
+        const ghost = map.cloneOccupantForFx(ev.from);
+        if (ghost) {
+          ghost.setParent(this.node);
+          ghost.setPosition(fromWp.x, fromWp.y, 0);
+          this._moveGhosts.set(`${ev.from.x},${ev.from.y}`, ghost);
+        }
+        continue;
+      }
+      if (ev.type === 'KILL') {
+        const target = oldState.floorState.monsters.find((m) => m.id === ev.monsterId);
+        if (!target) continue;
+        const floater = map.cloneOccupantForFx(target.pos);
+        if (floater) void Effects.float(floater).then(() => floater.destroy());
+      } else if (ev.type === 'OPEN_CHEST') {
+        const entity = oldState.floorState.entities.find((e) => e.id === ev.entityId);
+        if (!entity) continue;
+        const floater = map.cloneEntityForFx(entity.pos);
+        if (!floater) continue;
+        // 宝箱：先抖（蓄力）再 pop（迸开），然后淡出销毁
+        void (async () => {
+          await Effects.shake(floater, { duration: 0.25, strength: 0.8 });
+          await Effects.pop(floater);
+          await Effects.fade(floater, 0, { duration: 0.2 });
+          floater.destroy();
+        })();
+      } else if (ev.type === 'ROCK_DESTROYED') {
+        const entity = oldState.floorState.entities.find((e) => e.id === ev.entityId);
+        if (!entity) continue;
+        const floater = map.cloneEntityForFx(entity.pos);
+        if (floater) void Effects.float(floater).then(() => floater.destroy());
+      }
+    }
+  }
+
+  /**
+   * 为单个事件触发 fx 程序动画（fire-and-forget，不 await，不阻塞 _playEvents 主循环）。
+   *
+   * - ATTACK：怪物受击 → hit + damageNumber（伤害飘字落在怪物格子上）
+   * - PLAYER_DAMAGED：玩家受击 → hit + cameraShake + damageNumber
+   * - KILL：怪物死亡 → float + fade（轻量退场提示，避免被回放主循环阻塞）
+   *
+   * 节点丢失（grid 未初始化 / EntityArt 缺失）时静默跳过，确保 fx 失败不影响主流程。
+   */
+  private _playFxFor(ev: PveEvent): void {
+    if (!this._state || !this._map) return;
+    switch (ev.type) {
+      case 'ATTACK': {
+        const target = this._state.floorState.monsters.find((m) => m.id === ev.targetId);
+        const node = target ? this._map.getOccupantArtAt(target.pos) : null;
+        if (node) {
+          void Effects.hit(node, { strength: 1.4 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        break;
+      }
+      case 'PLAYER_DAMAGED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.hit(node, { strength: 1.8 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        void Effects.cameraShake({ strength: 1.2 });
+        break;
+      }
+      case 'HOT_SPRING_HEAL': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          if (ev.healed > 0) void Effects.healNumber(node, ev.healed);
+          void Effects.pop(node);
+        }
+        break;
+      }
+      case 'IDOL_BLESSING': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.buffGain(node);
+        break;
+      }
+      case 'FRAGMENT_PICKED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.buffGain(node);
+        break;
+      }
+      case 'BOSS_ENRAGED': {
+        void Effects.cameraPunch({ strength: 1.4 });
+        break;
+      }
+      // 哥布林酋长 / 冰霜巨人 重击实际结算时整屏轻晃（红圈预警阶段不晃，避免干扰玩家走位）
+      case 'HEAVY_STRIKE_RESOLVED':
+      case 'FROST_HEAVY_STRIKE_RESOLVED': {
+        void Effects.cameraShake({ strength: 1.0, duration: 0.35 });
+        break;
+      }
+      // 持续伤害 tick（灼烧/中毒每回合开始扣血）：玩家轻 hit + 红字飘字
+      case 'BURN_TICK':
+      case 'POISON_TICK': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.hit(node, { strength: 0.8 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        break;
+      }
+      // 灼烧爆裂（清空所有灼烧 → 真实伤害爆炸）：玩家位置大震屏
+      case 'BURN_BURST': {
+        void Effects.cameraShake({ strength: 1.8, duration: 0.45 });
+        break;
+      }
+      // 命运守卫 5×5 命运爆炸：超大震屏（design 里这是最高威胁的 AOE）
+      case 'DESTINY_5X5_EXPLODED': {
+        void Effects.cameraShake({ strength: 2.2, duration: 0.5 });
+        break;
+      }
+      // ── Debuff 上身：玩家位置红色 flash 提示（不缩不淡，避免视觉上玩家"消失"） ──
+      case 'POISON_APPLIED':
+      case 'FIRE_BURN_APPLIED':
+      case 'MOVE_PENALTY_APPLIED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          const color = ev.type === 'POISON_APPLIED'
+            ? new Color(140, 220, 100, 255)   // 中毒：黄绿色
+            : ev.type === 'FIRE_BURN_APPLIED'
+              ? new Color(255, 110, 60, 255)  // 灼烧：橙红
+              : new Color(120, 180, 240, 255); // 减速：冰蓝
+          void Effects.flash(node, { color });
+        }
+        break;
+      }
+      // ── 沙暴命中玩家：玩家受击 + 中等震屏 ──
+      case 'SANDSTORM_HIT': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.hit(node, { strength: 1.0 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        void Effects.cameraShake({ strength: 0.8, duration: 0.3 });
+        break;
+      }
+      // ── Boss 流沙巨蝎 钻出/潜入 ──
+      case 'BOSS_EMERGED': {
+        const node = this._map.getOccupantArtAt(ev.pos);
+        if (node) void Effects.pop(node);
+        void Effects.cameraPunch({ strength: 1.2 });
+        break;
+      }
+      // ── 冲锋/喷发"实际命中"才晃，预警不动 ──
+      case 'CHARGE_EXECUTED':
+      case 'ERUPTION_RESOLVED': {
+        void Effects.cameraShake({ strength: 1.2, duration: 0.35 });
+        break;
+      }
+      // ── 增援召唤新怪：在新怪位置 pop 弹出 ──
+      case 'MONSTER_SPAWNED': {
+        // MONSTER_SPAWNED 事件在 state 更新后立即触发，新怪应该已在 state.monsters 里
+        const target = this._state.floorState.monsters.find((m) => m.id === ev.monsterId);
+        const node = target ? this._map.getOccupantArtAt(target.pos) : null;
+        if (node) void Effects.pop(node);
+        break;
+      }
+      // ── 拾取奖励：装备金光、灵气紫光（金币太频繁不接） ──
+      case 'LOOT': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (!node) break;
+        if (ev.equip) {
+          void Effects.flash(node, { color: new Color(255, 215, 90, 255), times: 2 });
+          void Effects.pop(node);
+        } else if (ev.anima && ev.anima > 0) {
+          void Effects.flash(node, { color: new Color(200, 130, 240, 255) });
+        }
+        break;
+      }
+      // ── 拾取钥匙：玩家小 pop ──
+      case 'PICK_KEY': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.pop(node);
+        break;
+      }
+      // ── 命运重写完成 ──
+      case 'DESTINY_REWRITE_RESOLVED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(200, 130, 240, 255), times: 2 });
+        break;
+      }
+      // ── 职业进阶/觉醒：玩家位置强力 buffGain（金色 pop+flash） ──
+      case 'CLASS_ADVANCED':
+      case 'CLASS_AWAKENED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.buffGain(node, { strength: 1.6 });
+        void Effects.cameraPunch({ strength: 0.8 });
+        break;
+      }
+      // ── 命运树 buff 生效（开局应用）：玩家 buffGain ──
+      case 'TREE_BONUSES_APPLIED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.buffGain(node);
+        break;
+      }
+      // ── 传送门生成：在 pos 处 pop 浮现 ──
+      case 'PORTAL_SPAWNED': {
+        const node = this._map.getEntityArtAt(ev.pos);
+        if (node) void Effects.pop(node, { strength: 1.4 });
+        break;
+      }
+      // ── 通关本层：整屏顿冲 ──
+      case 'FLOOR_CLEARED': {
+        void Effects.cameraPunch({ strength: 1.5 });
+        break;
+      }
+      // ── 玩家死亡：整屏最强震 + slowMotion 收尾 ──
+      case 'PLAYER_DEAD': {
+        void Effects.cameraShake({ strength: 2.5, duration: 0.6 });
+        Effects.slowMotion(0.3, 1.2);
+        break;
+      }
+      // ── 玩家移动：pre-clone 幽灵滑到新格（0.15s quadOut） ──
+      case 'MOVE': {
+        if (ev.entityId !== 'PLAYER') break;
+        const key = `${ev.from.x},${ev.from.y}`;
+        const ghost = this._moveGhosts.get(key);
+        if (!ghost?.isValid) break;
+        this._moveGhosts.delete(key);
+        const toWp = this._map.getCellWorldPosition(ev.to);
+        tween(ghost)
+          .to(0.15, { position: new Vec3(toWp.x, toWp.y, 0) }, { easing: 'quadOut' })
+          .call(() => { if (ghost.isValid) ghost.destroy(); })
+          .start();
+        break;
+      }
+      // ── 灼烧上身（熔岩领主专属）：橙红 flash ──
+      case 'BURN_APPLIED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(255, 110, 60, 255) });
+        break;
+      }
+      // ── 流沙巨蝎潜入地下：中等震屏（Boss 消失是重大状态转换） ──
+      case 'BOSS_BURROWED': {
+        void Effects.cameraShake({ strength: 0.9, duration: 0.35 });
+        break;
+      }
+      // ── 祭坛使用：玩家紫色 flash（神圣仪式感） ──
+      case 'ALTAR_USED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(180, 100, 255, 255) });
+        break;
+      }
+      // ── 铁匠强化成功：金色双 flash + pop（装备升级感） ──
+      case 'BLACKSMITH_UPGRADE': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.flash(node, { color: new Color(255, 215, 0, 255), times: 2 });
+          void Effects.pop(node);
+        }
+        break;
+      }
+      // ── 铁匠强化失败：灰色 flash（挫败感） ──
+      case 'BLACKSMITH_UPGRADE_FAIL': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(130, 130, 130, 255) });
+        break;
+      }
+      // ── 营地购买：玩家 buffGain ──
+      case 'SHOP_BUY': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.buffGain(node);
+        break;
+      }
+      // ── 成就解锁：整屏顿冲 ──
+      case 'ACHIEVEMENT_UNLOCKED': {
+        void Effects.cameraPunch({ strength: 1.2 });
+        break;
+      }
+      // ── 踩熔岩地块每回合扣血 ──
+      case 'LAVA_TILE_DAMAGED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.hit(node, { strength: 0.9 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        break;
+      }
+      // ── 熔岩领主锁链拉近：玩家受击 + 中等震屏 ──
+      case 'LAVA_CHAIN_PULL': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.hit(node, { strength: 1.2 });
+        void Effects.cameraShake({ strength: 0.8, duration: 0.3 });
+        break;
+      }
+      // ── 冰霜巨人寒气叠加：玩家冰蓝 flash ──
+      case 'CHILL_STACK_APPLIED': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(120, 180, 240, 255) });
+        break;
+      }
+      // ── 被冻结（寒气满）：强冰蓝双 flash + cameraPunch ──
+      case 'PLAYER_FROZEN': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.flash(node, { color: new Color(100, 200, 255, 255), times: 2 });
+        void Effects.cameraPunch({ strength: 1.0 });
+        break;
+      }
+      // ── 解除冻结：玩家 pop（轻松弹出感） ──
+      case 'PLAYER_UNFROZEN': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.pop(node);
+        break;
+      }
+      // ── 被冰霜重击击退：玩家受击 + 震屏 ──
+      case 'KNOCKBACK': {
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) void Effects.hit(node, { strength: 1.2 });
+        void Effects.cameraShake({ strength: 1.0, duration: 0.3 });
+        break;
+      }
+      // ── 命运守卫预言结算（3×3 爆炸）：重震屏（玩家实际受伤由 PLAYER_DAMAGED 负责） ──
+      case 'PROPHECY_RESOLVED': {
+        void Effects.cameraShake({ strength: 1.8, duration: 0.45 });
+        break;
+      }
+      // ── 命运镜像攻击玩家 ──
+      case 'MIRROR_ATTACKED': {
+        if (!ev.hit) break;
+        const node = this._map.getOccupantArtAt(this._state.floorState.player);
+        if (node) {
+          void Effects.hit(node, { strength: 1.2 });
+          if (ev.damage > 0) void Effects.damageNumber(node, ev.damage);
+        }
+        void Effects.cameraShake({ strength: 0.8 });
+        break;
+      }
+      // ── 命运守卫生成镜像：在镜像格 pop + 轻顿冲 ──
+      case 'MIRROR_SPAWNED': {
+        const node = this._map.getOccupantArtAt(ev.pos);
+        if (node) void Effects.pop(node);
+        void Effects.cameraPunch({ strength: 0.8 });
+        break;
+      }
+      // ── 精英自爆（火焰元素死亡）：大震屏 + 伤害飘字 ──
+      case 'ELITE_EXPLODE': {
+        void Effects.cameraShake({ strength: 1.4, duration: 0.4 });
+        if (ev.damage > 0) {
+          const node = this._map.getOccupantArtAt(this._state.floorState.player);
+          if (node) void Effects.damageNumber(node, ev.damage);
+        }
+        break;
+      }
+      // ── 精英复活（虚空虫双生）：在原位 pop 弹出 ──
+      case 'ELITE_REVIVE': {
+        const target = this._state.floorState.monsters.find((m) => m.id === ev.monsterId);
+        const node = target ? this._map.getOccupantArtAt(target.pos) : null;
+        if (node) void Effects.pop(node, { strength: 1.2 });
+        break;
+      }
+      // KILL：死亡退场 fx 在 _apply 中（_refreshAll 之前）已用克隆节点触发，这里不重复
+      default:
+        break;
+    }
+  }
+
   private async _playEvents(events: PveEvent[]): Promise<void> {
     // 跟踪"当前事件归属哪个回合"：TURN_END / AP_ROLLED 自带 turn，期间所有怪物 MOVE
     // 都视为 TURN_END 那个旧回合的尾声，让战报栏分组直观（玩家操作 T2 → 回合结束 T2
@@ -1442,6 +1880,11 @@ export class ExpeditionController extends Component {
       if (ev.type === 'TURN_END') logTurn = ev.turn;
       else if (ev.type === 'AP_ROLLED') logTurn = ev.turn;
 
+      // 0) fx 程序动画：受击三件套（hit + damageNumber + cameraShake）。
+      // 节点查找走 _state 的"最终态"：怪物 KILL 后仍保留在 monsters 列表（aiState=DEAD），
+      // 玩家位置即 floorState.player —— 都能稳定拿到 EntityArt 节点。
+      this._playFxFor(ev);
+
       // 1) 战报栏（覆盖更广，包含 MOVE/TURN_END）
       const logEntry = describeForLog(ev, this._state);
       if (logEntry && this._log) {
@@ -1451,7 +1894,25 @@ export class ExpeditionController extends Component {
       // 2) Toast（仅展示关键反馈）
       const text = describeEvent(ev, this._state);
       if (text) {
-        this._toast?.toast(text);
+        const bossImportant = new Set<PveEvent['type']>([
+          'HEAVY_STRIKE_WARNING',
+          'HEAVY_STRIKE_RESOLVED',
+          'BOSS_ENRAGED',
+          'CHARGE_TELEGRAPHED',
+          'CHARGE_EXECUTED',
+          'ERUPTION_TELEGRAPHED',
+          'ERUPTION_RESOLVED',
+          'BURN_BURST',
+          'SANDSTORM_SPAWNED',
+          'SANDSTORM_HIT',
+          'PROPHECY_MARKED',
+          'PROPHECY_RESOLVED',
+          'DESTINY_REWRITE_OFFERED',
+          'DESTINY_REWRITE_RESOLVED',
+          'DESTINY_5X5_EXPLODED',
+        ]);
+        if (bossImportant.has(ev.type)) this._toast?.toastImportant(text);
+        else this._toast?.toast(text);
         if (toastDelays < MAX_TOAST_DELAYS) {
           await delay(TOAST_DELAY_MS);
           toastDelays++;
@@ -1482,7 +1943,10 @@ export class ExpeditionController extends Component {
           this._state = result.state;
           this._hud?.refresh(this._state);
           this._toast.toast('卷轴词条已生效');
-          this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `📜 卷轴生效:${choiceId}`);
+          {
+            const info = strengthenInfo(choiceId);
+            this._log?.push(this._state.floorState.turn, 'PLAYER_ACT', `📜 卷轴生效：${info.title}（${info.desc}）`);
+          }
           await delay(420);
         }
       }

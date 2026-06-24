@@ -24,13 +24,13 @@ const COLOR_BY_KIND: Record<LogKind, Color> = {
 };
 
 const TITLE_COLOR = new Color(225, 230, 240, 255);
-const BG_COLOR = new Color(20, 22, 32, 180);
-const BORDER_COLOR = new Color(90, 98, 122, 160);
+const BG_COLOR = new Color(7, 29, 64, 205);
+const BORDER_COLOR = new Color(94, 191, 235, 195);
 
-const LINE_H = 22;
-const PAD_X = 10;
-const PAD_TOP = 8;
-const TITLE_H = 26;
+const LINE_H = 32;
+const PAD_X = 14;
+const PAD_TOP = 10;
+const TITLE_H = 30;
 /** 判断"是否已滚到底部"的容差像素，浮点误差用。 */
 const SCROLL_EPS = 4;
 
@@ -47,14 +47,14 @@ export class PveMessageLog {
     this._root.setPosition(x, y, 0);
     this._root.addComponent(UITransform).setContentSize(w, h);
 
-    // 半透明背景 + 边框（M1 占位，未来可换成 sprite frame）
+    // 半透明背景 + 边框（与玩家状态卡同款 α≈170）
     const bg = this._root.addComponent(Graphics);
-    bg.fillColor = BG_COLOR;
-    bg.rect(-w / 2, -h / 2, w, h);
+    bg.fillColor = new Color(7, 31, 70, 170);
+    bg.roundRect(-w / 2, -h / 2, w, h, 16);
     bg.fill();
     bg.strokeColor = BORDER_COLOR;
     bg.lineWidth = 1;
-    bg.rect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
+    bg.roundRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2, 16);
     bg.stroke();
 
     // 标题
@@ -64,10 +64,10 @@ export class PveMessageLog {
       h / 2 - PAD_TOP - TITLE_H / 2,
       w - PAD_X * 2,
       TITLE_H,
-      18,
+      22,
       TITLE_COLOR,
       Label.HorizontalAlign.CENTER,
-    ).string = '📜 战报';
+    ).string = '最近战报';
 
     // 可视区域（Mask 裁剪），位于标题下方，左右各留 PAD_X，底部留 PAD_TOP
     const viewW = w - PAD_X * 2;
@@ -111,8 +111,12 @@ export class PveMessageLog {
     const wasAtBottom = this._isAtBottom();
 
     const contentW = this._content.getComponent(UITransform)!.width;
-    const lbl = makeLabel(this._content, 0, 0, contentW, LINE_H, 14, COLOR_BY_KIND[kind], Label.HorizontalAlign.LEFT);
+    const lbl = makeLabel(this._content, 0, 0, contentW, LINE_H, 21, COLOR_BY_KIND[kind], Label.HorizontalAlign.LEFT);
+    lbl.isBold = true;
+    lbl.overflow = Label.Overflow.RESIZE_HEIGHT;
+    lbl.enableWrapText = true;
     lbl.string = str;
+    lbl.updateRenderData(true);
 
     // 立即重排，使 ScrollView 的滚动范围马上反映新内容（避免下一帧才生效）
     this._content.getComponent(Layout)?.updateLayout();

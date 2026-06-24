@@ -2,7 +2,7 @@ import { _decorator, Component, director, Enum } from 'cc';
 import {
   applyScreenBackground,
   preloadBoardUi,
-  preloadLobbyUi,
+  preloadPveLobbyUi,
   preloadSettlementUi,
   type ScreenBgKey,
 } from './UiAssets';
@@ -58,7 +58,7 @@ export class SceneUiBackground extends Component {
       } else if (key === 'settlement') {
         await preloadSettlementUi();
       } else {
-        await preloadLobbyUi();
+        await preloadPveLobbyUi();
       }
       await applyScreenBackground(this.node, key);
     } catch (err) {
