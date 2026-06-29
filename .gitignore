@@ -16,6 +16,8 @@ __pycache__/
 *.pyc
 
 # Local PVE AI art batches and approved working copies
+assets/generated/
+_ai_staging/
 art_pipeline/generated/
 art_pipeline/approved/
 
