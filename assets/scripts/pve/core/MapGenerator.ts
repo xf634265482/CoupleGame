@@ -32,7 +32,7 @@ function floorInChapter(floor: number): number {
 }
 const CHEST_COUNT = 1;
 const IDOL_COUNT = 1;       // 神像：+1 maxHp（每普通层 1 个）
-const HOT_SPRING_COUNT = 1; // 温泉：仅每章第6层（Boss前一层）生成 1 个
+const HOT_SPRING_COUNT = 1; // 温泉：每章第4层（精英后）和第6层（Boss前）各生成 1 个
 const ALTAR_COUNT = 1;      // 祭坛：随机 20–35 灵气（每普通层 1 个）
 
 /** 铁匠仅在章节营地（Boss 通关后）提供，楼层地图不生成铁匠实体。 */
@@ -42,7 +42,9 @@ function isBlacksmithFloor(_floor: number): boolean {
 }
 
 function isHotSpringFloor(floor: number): boolean {
-  return floorInChapter(floor) === FLOORS_PER_CHAPTER - 1; // Boss 前一层（章内第 6 层）
+  const fi = floorInChapter(floor);
+  // V3：每章 2 个温泉：章内第 4 层（精英后恢复）+ 章内第 6 层（Boss 前恢复）
+  return fi === 4 || fi === FLOORS_PER_CHAPTER - 1;
 }
 
 /** 关键实体（钥匙/出口门/Boss）之间的最小曼哈顿间距，避免扎堆。 */

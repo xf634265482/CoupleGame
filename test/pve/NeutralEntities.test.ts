@@ -74,12 +74,12 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
         playerOverrides: { hp: 5, maxHp: 20 },
       });
 
-      // 40% × 20 = 8，hp: 5 → 13，healed = 8
+      // 30% × 20 = 6，hp: 5 → 11，healed = 6（V3：每章 2 个温泉，削减单次回量）
       const result = useHotSpring(state, 's1');
-      expect(result.state.player.hp).toBe(13);
+      expect(result.state.player.hp).toBe(11);
       expect(result.state.floorState.ap).toBe(4);
       const heal = result.events.find((e) => e.type === 'HOT_SPRING_HEAL');
-      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(8);
+      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(6);
       expect(HOT_SPRING_HEAL_RATIO).toBeGreaterThan(0);
     });
 

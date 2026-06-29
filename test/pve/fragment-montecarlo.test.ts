@@ -158,10 +158,10 @@ describe('Phase B Monte Carlo — 碎片节奏验收（AC-P3-4 / AC-P3-5）', ()
     expect(advanceFloors.length).toBeGreaterThan(N * 0.99);
   });
 
-  it('AC-P3-4：一阶进阶层数中位数 ∈ [6, 8]', () => {
+  it('AC-P3-4：一阶进阶层数中位数 ∈ [8, 10]', () => {
     const med = median(advanceFloors);
-    expect(med).toBeGreaterThanOrEqual(6);
-    expect(med).toBeLessThanOrEqual(8);
+    expect(med).toBeGreaterThanOrEqual(8);
+    expect(med).toBeLessThanOrEqual(10);
   });
 
   it('AC-P3-5：觉醒在 N 次模拟中大多数能达成（达成率 > 85%）', () => {

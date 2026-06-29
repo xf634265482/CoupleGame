@@ -23,7 +23,7 @@ export const AP_CARRY_CAP = 3;
 
 // ── 中立交互实体效果（M1 占位数值，待与设计师对齐回写 design.md） ──
 export const IDOL_MAX_HP_BONUS = 10; // 神像祝福：永久 +10 maxHp（数值×10基准下 = 原 +1）
-export const HOT_SPRING_HEAL_RATIO = 0.4; // 温泉：恢复 maxHp 的 40%（削弱自回满，避免玩家无损通层）
+export const HOT_SPRING_HEAL_RATIO = 0.3; // 温泉：恢复 maxHp 的 30%（V3：每章 2 个，削减单次回量）
 
 // ── 地图尺寸（design §3 / §5） ─────────────────────────
 export const MAP_SIZE = {
@@ -63,7 +63,7 @@ export const CLASS_STATS = {
   ROGUE: { attackBonus: 10, attackRangeBonus: 0, moveBonus: 1, hpCost: 0 },
 } as const;
 
-export const CLASS_FRAGMENTS_TO_ADVANCE = 5; // 集齐 5 个同职业碎片可进阶（V2 节奏调整：第一章 Boss 前裸随机上限为 3，需命运树 B3 / 精英碎片对掉落补足）
+export const CLASS_FRAGMENTS_TO_ADVANCE = 7; // 集齐 7 个同职业碎片可进阶（V3：目标进阶落点第 8-10 层）
 
 // ── 灵气（design §9） ──────────────────────────────────
 export const ANIMA_PER_STRENGTHEN = 100; // 初始强化阈值
@@ -108,8 +108,8 @@ export const ELITE_MONSTER_COUNT = 1; // 精英怪：巡逻→追击，掉落更
 // ── 职业碎片产出（V3 §3.1）────────────────────────────────
 /** 每普通层保底 1 个碎片（V3：废除固定 2 个，改保底+概率）。 */
 export const FRAGMENT_COUNT = 1; // 保底数量（legacy，V3 已切换到概率模型）
-/** 第 2 个碎片的追加概率（V3 §3.1 首发值，Monte Carlo 校准后取 0.40）。 */
-export const FRAGMENT_SECOND_CHANCE = 0.40;
+/** 第 2 个碎片的追加概率（V3 §3.1 首发值）。 */
+export const FRAGMENT_SECOND_CHANCE = 0.70;
 /** 第 3 个碎片的追加概率（V3 §3.1 首发值，独立于第 2 个）。 */
 export const FRAGMENT_THIRD_CHANCE = 0.25;
 /** 进阶后偏向主职业的概率（70%；其余 30% 均分另外两职业，各 15%）。 */
