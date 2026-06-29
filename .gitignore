@@ -18,8 +18,6 @@ __pycache__/
 # Local PVE AI art batches and approved working copies
 assets/generated/
 _ai_staging/
-art_pipeline/generated/
-art_pipeline/approved/
 
 # 本地微信 AppID / 云环境 ID（勿提交）
 config/wechat.local.json

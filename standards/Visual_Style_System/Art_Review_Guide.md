@@ -196,7 +196,7 @@
 - 评审时间：YYYY-MM-DD
 ```
 
-每次资产入库时**必须把评分卡存入** `art_pipeline/manifests/` 对应 entry。
+每次资产入库时**必须把评分卡存入**对应迭代的 `specs/<iter>/` 评审记录。
 
 ---
 

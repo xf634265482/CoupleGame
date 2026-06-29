@@ -31,8 +31,8 @@
 > 若任何 03_Art 子规范与下列冲突，以下列为准。
 
 1. **同一套视觉语言**：所有 03_Art 子规范的产物**必须**符合 `Character_Art_Guide.md` §2 定义的"PVE Fantasy v1"风格锚点。
-2. **同一份风格锚图**：所有 AI Prompt 必须引用 `art_pipeline/references/pve-style-reference.png` 与 `art_pipeline/styles/pve_fantasy.json`。
-3. **同一条 pipeline**：任何最终入库的资产都必须经过 `art_pipeline/` 的 `todo → generated → selected → processed → integrated` 流程，禁止旁路。
+2. **同一份风格锚点**：所有 AI Prompt 必须引用 `standards/Visual_Style_System/` 与本目录的权威规则。
+3. **同一条入库流程**：任何最终入库的资产都必须先在 `_ai_staging/generated/` 做本地暂存与评审，再写入正式资源目录。
 
 ### 3.2 与其他模块的关系
 
@@ -41,7 +41,7 @@
 | `04_AI/*Prompt_Template.md` | 直接消费本模块的 §2 风格锚点、§7 描边规范、§10 缩放可读性 |
 | `05_UI/*` | UI 视觉细节归 `UI_Art_Guide.md`；UI 行为/布局归 `05_UI` |
 | `08_Assets/*` | 资产命名、目录、导入参数；本模块只管"长什么样"，不管"叫什么名" |
-| `art_pipeline/styles/pve_fantasy.json` | 是本模块 §2 的机器可读版本；二者必须一致 |
+| `specs/<iter>/` 评审记录 | 用于归档 Prompt、选型依据与评审结论 |
 
 ## Examples
 
@@ -62,5 +62,5 @@
 
 - [ ] 我已读 `Character_Art_Guide.md` §2 / §7 / §10
 - [ ] 我已确认产物会符合 3.1 三条元规则
-- [ ] 我已用 `art_pipeline/styles/pve_fantasy.json` 校对风格关键词
+- [ ] 我已用 `standards/Visual_Style_System/` 与本目录规则校对风格关键词
 - [ ] 我已确认走 pipeline，不直接写 `assets/resources/art/**`

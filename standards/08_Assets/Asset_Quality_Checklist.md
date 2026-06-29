@@ -2,7 +2,7 @@
 
 ## Purpose
 
-任何资产从 `art_pipeline/selected` → `processed` → `integrated` 之前必须过本清单。
+任何资产从本地评审稿进入正式资源目录 `assets/resources/art/**` 之前必须过本清单。
 
 ## Standards
 
@@ -30,7 +30,7 @@
 
 - [ ] 符合 `Naming.md`
 - [ ] 文件名在 `Folder_Structure.md` 对应目录
-- [ ] manifest 已更新（`art_pipeline/manifests/*.json`）
+- [ ] 对应 `specs/<iter>/` 的评审 / 交付记录已更新
 
 ### 4. 引用
 

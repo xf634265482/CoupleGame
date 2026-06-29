@@ -15,7 +15,6 @@ CoupleGame/
 ├── shared/                    # 前后端共享类型
 ├── specs/                     # 设计文档（按迭代）
 ├── standards/                 # AI 开发规范库（本目录）
-├── art_pipeline/              # AI 美术生产 pipeline
 ├── scripts/                   # 构建 / 同步脚本
 ├── test/                      # 客户端单测（独立于 assets）
 ├── build/                     # 构建产物（gitignore）
@@ -69,7 +68,7 @@ prefab/             — 不推荐用 prefab（代码构建优先）
 - 导航：`PROJECT_NAVIGATION.md` `CALL_FLOW.md`
 - 规范：`standards/` ← 本目录
 - 迭代设计：`specs/<date>-<slug>/design.md`
-- 美术 pipeline：`art_pipeline/README.md`
+- AI 美术暂存：`_ai_staging/generated/`（本地、不跟踪）
 
 ### 6. 新文件放哪
 
@@ -80,7 +79,7 @@ prefab/             — 不推荐用 prefab（代码构建优先）
 | PVE 控制 | `assets/scripts/pve/controllers/` |
 | PVE 云端逻辑 | `cloudfunctions/common/pve/` + `cloudfunctions/pve/` |
 | 共享类型 | `shared/protocol.ts` |
-| 新资源 | `art_pipeline/generated/` → 审核 → `assets/resources/art/` |
+| 新资源 | `_ai_staging/generated/` → 审核留痕到 `specs/<iter>/` → `assets/resources/art/` |
 | 新文档 | 按主题归 `specs/` 或 `standards/` |
 
 ### 7. 不允许

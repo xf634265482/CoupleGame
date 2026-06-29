@@ -26,10 +26,10 @@
 ### 4.1 元规则
 
 1. **任何图像生成 Prompt 必须基于本目录模板**，禁止"现编"。
-2. **任何模板的"风格段落"必须引用** `art_pipeline/styles/pve_fantasy.json` 中的 `style[]` 字段，避免人工 paraphrase 偏移。
+2. **任何模板的"风格段落"必须引用** `standards/Visual_Style_System/` 与 `standards/03_Art/` 的权威文字规则，避免人工 paraphrase 偏移。
 3. **每次生成必须附加** `Prompt_Negative.md` 全文。
 4. **Prompt 不允许涉及外部艺术家名字、品牌、知名 IP**。
-5. **生成结果必须走 `art_pipeline/` 流程**，不直接覆盖项目资产。
+5. **生成结果先落到** `_ai_staging/generated/` **做本地暂存**，评审通过后再入库项目资产。
 
 ### 4.2 与 03_Art 的关系
 
@@ -52,7 +52,7 @@
 ## AI Notes
 
 - 模板里 `{xxx}` 占位符必须全部填空才能提交
-- Prompt 写好后必须粘到 `art_pipeline/manifests/*.json` 的对应 entry 里保留可追溯
+- Prompt 写好后必须在对应 `specs/<iter>/` 或评审记录里留痕，保证可追溯
 
 ## Checklist
 

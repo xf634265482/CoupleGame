@@ -15,7 +15,7 @@
 | 项 | 状态 |
 |----|------|
 | 文字规则 | 本文件与 VSS 其它文件为当前权威 |
-| 旧锚图 `art_pipeline/references/pve-style-reference.png` | 历史参考，不再用于新资产最终裁决 |
+| 旧锚图（原 `art_pipeline/references/pve-style-reference.png`） | 历史参考，不再用于新资产最终裁决；如需追溯，转存到对应 `specs/<iter>/` |
 | 新 Gold Standard 锚图 | 待制作、真机验证和用户批准 |
 | 现有云暮概念稿 | 方向参考，不等同最终锚图 |
 | 旧 Prompt 与机器 Style Anchor | 暂停用于生成新资产，待新锚图批准后统一重建 |

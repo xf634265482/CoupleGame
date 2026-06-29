@@ -50,7 +50,7 @@
 - 但若反馈与规范长期冲突，按 `AI_AGENT_RULES.md` §5 处理
 
 #### Integrate
-- 美术资产 → `art_pipeline/manifests/*.json`
+- 美术资产 → 对应 `specs/<iter>/` 的评审 / 交付记录
 - 代码 → 跑测试 + 同步 `cloudfunctions/common/` sync 脚本（如适用）
 - 玩法 → 同步 `specs/<iter>/design.md`
 - 规范变更 → 更新 `standards/`
@@ -70,7 +70,7 @@
 ### 5. 审计可追溯
 
 - 重要 AI 输出（设计 / Prompt / 大段代码）应在 commit message 或 PR 描述里标记 `[AI-assisted]` 并指明用的什么模型
-- AI Prompt 应保留在 `art_pipeline/generated/` 对应 entry，不要"用完即删"
+- AI Prompt 应保留在 `_ai_staging/generated/` 或对应 `specs/<iter>/` 记录中，不要"用完即删"
 
 ## Examples
 

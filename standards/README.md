@@ -192,7 +192,7 @@ AI 在使用此规范时的特别注意事项（陷阱、常见误用、与其�
 | `CALL_FLOW.md` | 调用链文档，本规范在"理解流程"问题上指向它 |
 | `DEVELOPMENT_GUIDE.md` | 工程惯例，与 `02_Programming/` 互补；冲突时以 `02_Programming/` 为准 |
 | `specs/<iter>/design.md` | 单次迭代设计文档，**实现细节权威**；与本规范冲突时按"玩法细节走 specs，跨迭代规则走 standards"区分 |
-| `art_pipeline/` | 美术生产流水线；本规范定义"应该长什么样"，pipeline 负责"怎么生成出来" |
+| `_ai_staging/generated/` | 本地 AI 美术暂存区（不跟踪）；本规范定义"应该长什么样"，评审记录放回对应 `specs/<iter>/` |
 | `.cursor/rules/**` | Cursor 专用规则文件，是本规范的子集 / 摘要 |
 | `memory/**` | 跨会话个人化记忆，**不属于** project standards，不强制其他 AI 遵守 |
 

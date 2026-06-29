@@ -53,14 +53,14 @@
   3. 在输出末尾建议用户是否要把该假设写入 `standards/` 形成长期规范。
 
 ### R4 不破坏已批准资产
-- 已批准（`art_pipeline/approved/**`、`assets/resources/art/**`）的图像、模型、音频、prefab，**不允许**直接重生成覆盖。
+- 已批准（`assets/resources/art/**`）的图像、模型、音频、prefab，**不允许**直接重生成覆盖。
 - 必须新增版本（如 `xxx_v2.png`），由用户决定替换时机。
 - 已上线、已被代码引用的命名（类名、文件名、UUID、cloud function 名）**不允许**为了风格改名。
 
 ### R5 改动必须双写
 - 改 PVE 玩法代码 → 同步 `specs/260608-pve-destiny-expedition/design.md` 与 `standards/01_Game_Design/`。
 - 改 PVP 玩法代码 → 同步 `specs/260529-combat-board-game-rework/design.md`。
-- 改美术风格 / Prompt → 同步 `standards/03_Art/` 与 `art_pipeline/styles/*.json`。
+- 改美术风格 / Prompt → 同步 `standards/03_Art/` 与 `standards/04_AI/` 的相关模板 / 流程说明。
 - 改命名规则 / 架构 → 同步 `standards/02_Programming/` 与 `CLAUDE.md` / `DEVELOPMENT_GUIDE.md`。
 - 改云函数 common → 必须跑 `node scripts/sync-cloud-common.js`，否则提交无效。
 
@@ -112,9 +112,9 @@
 - 错误处理统一 `err instanceof Error ? err.message : String(err)`
 
 ### 美术资源输出
-- 一律走 `art_pipeline/` 流程：`todo → generated → selected → processed → integrated`
-- 不直接写 `assets/resources/art/**`
-- 必须更新 `art_pipeline/manifests/*.json` 的 status
+- 本地 AI 美术中间产物放 `_ai_staging/generated/`，不进仓库、不进 Cocos 资源索引。
+- 最终入库资源写入 `assets/resources/art/**` 前必须先完成评审并在对应 `specs/<iter>/` 留痕。
+- 不再维护 `art_pipeline/manifests/*.json` 这类仓库内流水线状态文件。
 
 ### Prompt 输出
 - 当前视觉 Prompt 生产状态以 `standards/Visual_Style_System/Prompt_Style_Template.md` 为准

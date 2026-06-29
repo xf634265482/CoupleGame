@@ -51,7 +51,7 @@
 
 ## AI Notes
 
-- 图标 Prompt 用 `art_pipeline/prompts/icon.json`
+- 图标 Prompt 复用 `standards/04_AI/` 的当前模板与本文件约束，不再依赖已移除的 `art_pipeline` prompt 文件
 - 不要让 AI 在图标上"加些装饰让画面丰富" — 装饰会让 32 px 时主体糊掉
 - 复用现有 `assets/resources/art/ui/pve/map/icon_*` 的描边粗细做基准
 

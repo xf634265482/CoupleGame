@@ -18,11 +18,11 @@
 | **`standards/Visual_Style_System/`** ← 本目录 | **视觉事实来源** · 所有视觉决策的最高权威 |
 | `standards/03_Art/` | **应用规则**，按"类目"组织（Character / UI / Icon / Item / VFX 等），全部**实现** VSS 原则 |
 | `standards/04_AI/` | **生成方法**（Prompt 怎么写、流程怎么走），消费 `Prompt_Style_Template.md` 与 VSS 风格段 |
-| `art_pipeline/styles/pve_fantasy.json` | VSS 的**机器可读快照**；与本目录冲突时以本目录为准并同步该 JSON |
-| `art_pipeline/references/pve-style-reference.png` | 历史锚图；已降级，不再裁决新资产 |
+| `_ai_staging/generated/` | 本地 AI 美术暂存区；不再把流水线状态文件放进仓库 |
+| `specs/<iter>/` 评审记录 | 历史锚图、Prompt 与打分表的归档位置 |
 
 > **冲突仲裁**：
-> 视觉问题 → VSS > 03_Art > 04_AI > art_pipeline JSON > 任何外部参考。
+> 视觉问题 → VSS > 03_Art > 04_AI > 任何外部参考。
 > 非视觉问题（命名、架构、流程）→ 仍以 `AI_AGENT_RULES.md` 与对应模块为准。
 
 ---

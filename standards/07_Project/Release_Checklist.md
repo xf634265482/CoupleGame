@@ -32,7 +32,7 @@
 ### 4. 美术
 
 - [ ] 新增美术资产已走 pipeline `integrated`
-- [ ] manifest `art_pipeline/manifests/*.json` 状态同步
+- [ ] 如有 AI 美术产出，对应 `specs/<iter>/` 的评审 / 交付记录已同步
 - [ ] 视觉风格与 `03_Art/Character_Art_Guide.md` 一致
 
 ### 5. 文档

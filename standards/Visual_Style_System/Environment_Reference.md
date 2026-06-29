@@ -205,7 +205,7 @@
 
 - Tile / 背景 / 装饰的 Prompt 必须包含 "muted saturation, soft soft painted ambient, no internal outline, do not steal attention from foreground entities"
 - 不要让模型自由发挥背景细节 — 背景越简单越好
-- 装饰物用 `art_pipeline/prompts/map_entity.json` 模板
+- 装饰物 Prompt 直接复用本节关键词与 `standards/04_AI/` 的当前模板，不再依赖已移除的 `art_pipeline` 模板
 - §7 实体不归本文件，跳到 Character / Item Reference
 
 ---
