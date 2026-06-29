@@ -43,6 +43,7 @@ import { lavaChainStep, lavaEruptionStep, lavaLordAttack, lavaTideStep } from '.
 import { isBurrowTurn, quicksandScorpionBurrow, quicksandScorpionAttack } from './bosses/QuicksandScorpion';
 import { QUICKSAND_SCORPION_ENRAGE_HP_RATIO } from './PveConstants';
 import { monsterAttack } from './CombatSystem';
+import { checkLos } from './LosSystem';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent } from './PveTypes';
 
 function manhattan(a: Coord, b: Coord): number {
@@ -508,10 +509,20 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   }
 
   if (dist <= monster.range) {
-    return attackByType(
-      withMonsterPatch(state, monsterId, { aiState: 'CHASE' }),
-      monster,
-    );
+    // 远程怪（range≥2）：先做 LOS 校验；被掩体遮挡时不站桩空放，改为移动找射界（AC-MT-6）。
+    // 近战（range=1）无中间格，直接攻击。
+    if (monster.range >= 2) {
+      const stateChased = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
+      if (!checkLos(stateChased.floorState, monster.pos, floor.player)) {
+        return attackByType(stateChased, monster);
+      }
+      // LOS 被遮挡 → fall through 到移动逻辑，让怪物继续逼近找射界
+    } else {
+      return attackByType(
+        withMonsterPatch(state, monsterId, { aiState: 'CHASE' }),
+        monster,
+      );
+    }
   }
 
   // 冲锋变体（SANDWORM_LARVA/SNOW_WOLF/VOID_WORM）每回合最多移动 2 格，普通怪 1 格。

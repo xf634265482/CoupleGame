@@ -1,8 +1,8 @@
-// 视线（LOS）系统单测（specs/260629-map-terrain Phase 2，AC-MT-4/5/8）
+// 视线（LOS）系统单测（specs/260629-map-terrain Phase 2/3，AC-MT-4/5/6/8）
 
 import { bresenhamLine, checkLos } from '../../assets/scripts/pve/core/LosSystem';
-import { playerAttack } from '../../assets/scripts/pve/core/CombatSystem';
-import { monsterAttack } from '../../assets/scripts/pve/core/CombatSystem';
+import { playerAttack, monsterAttack } from '../../assets/scripts/pve/core/CombatSystem';
+import { stepMonsters } from '../../assets/scripts/pve/core/MonsterAI';
 import { makeExpeditionState, makeEntity, makeMonster } from './helpers';
 import type { Coord } from '../../assets/scripts/pve/core/PveTypes';
 
@@ -203,6 +203,66 @@ describe('monsterAttack — 远程怪 LOS 对称（AC-MT-4）', () => {
       playerOverrides: { hp: 200, maxHp: 200 },
     });
     const result = monsterAttack(state, 'm1');
+    expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(true);
+  });
+});
+
+// ── MonsterAI：远程怪 LOS 找射界（AC-MT-6）────────────────────
+
+describe('MonsterAI — 远程怪 LOS 找射界（AC-MT-6）', () => {
+  it('远程怪在射程内且 LOS 通畅时直接攻击（不移动）', () => {
+    // 怪物 range=3，玩家距离=3，无遮挡 → 攻击
+    const state = makeExpeditionState({
+      floorOverrides: {
+        player: { x: 0, y: 0 },
+        monsters: [makeMonster('m1', { x: 0, y: 3 }, {
+          hp: 100, maxHp: 100, attack: 10, range: 3, aggroRadius: 99, aiState: 'CHASE',
+        })],
+        entities: [],
+        ap: 0,
+      },
+      playerOverrides: { hp: 200, maxHp: 200 },
+    });
+    const result = stepMonsters(state);
+    expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(true);
+    expect(result.events.some((e) => e.type === 'MOVE')).toBe(false);
+  });
+
+  it('远程怪在射程内但 LOS 被遮挡时改为移动找射界（不攻击，AC-MT-6）', () => {
+    // 怪物 range=3，玩家距离=3，中间 (0,1) 有 ROCK → 遮挡
+    const rock = makeEntity('r1', 'ROCK', { x: 0, y: 1 });
+    const state = makeExpeditionState({
+      floorOverrides: {
+        player: { x: 0, y: 0 },
+        monsters: [makeMonster('m1', { x: 0, y: 3 }, {
+          hp: 100, maxHp: 100, attack: 10, range: 3, aggroRadius: 99, aiState: 'CHASE',
+        })],
+        entities: [rock],
+        ap: 0,
+      },
+      playerOverrides: { hp: 200, maxHp: 200 },
+    });
+    const result = stepMonsters(state);
+    // 被遮挡时不攻击玩家
+    expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(false);
+    // 改为移动
+    expect(result.events.some((e) => e.type === 'MOVE' && e.entityId === 'm1')).toBe(true);
+  });
+
+  it('近战怪（range=1）在射程内时不受 LOS 影响，直接攻击（AC-MT-6 近战不变）', () => {
+    const rock = makeEntity('r1', 'ROCK', { x: 0, y: 2 }); // rock 在怪物身后，无关
+    const state = makeExpeditionState({
+      floorOverrides: {
+        player: { x: 0, y: 0 },
+        monsters: [makeMonster('m1', { x: 0, y: 1 }, {
+          hp: 100, maxHp: 100, attack: 10, range: 1, aggroRadius: 99, aiState: 'CHASE',
+        })],
+        entities: [rock],
+        ap: 0,
+      },
+      playerOverrides: { hp: 200, maxHp: 200 },
+    });
+    const result = stepMonsters(state);
     expect(result.events.some((e) => e.type === 'PLAYER_DAMAGED')).toBe(true);
   });
 });

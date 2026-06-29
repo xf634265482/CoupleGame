@@ -29,6 +29,7 @@ import {
 } from '../core/ExpeditionState';
 import { interactPortal, openExit, pickKey, spawnPortal } from '../core/FloorRules';
 import { isRevealed } from '../core/FogSystem';
+import { checkLos } from '../core/LosSystem';
 import { openChest } from '../core/LootSystem';
 import { RELIC_DEFS } from '../core/RelicSystem';
 import { claimScrollChoice, useScroll } from '../core/ScrollSystem';
@@ -1565,13 +1566,21 @@ export class ExpeditionController extends Component {
     if (!this._state) return undefined;
     const floor = this._state.floorState;
     const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
-    return floor.monsters
+    const inRange = floor.monsters
       .filter((m) =>
         m.aiState !== 'DEAD' &&
         manhattan(floor.player, m.pos) <= range &&
         isRevealed(floor.revealed, m.pos),
       )
-      .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos))[0];
+      .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos));
+    // 远程（range≥2）优先选 LOS 通畅的目标；若全被遮挡则退化选最近者（让玩家感受遮挡反馈）。
+    if (range >= 2) {
+      const visible = inRange.filter(
+        (m) => manhattan(floor.player, m.pos) < 2 || !checkLos(floor, floor.player, m.pos),
+      );
+      return visible.length > 0 ? visible[0] : inRange[0];
+    }
+    return inRange[0];
   }
 
   /**
