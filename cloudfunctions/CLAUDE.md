@@ -5,7 +5,7 @@
 ```
 cloudfunctions/
   common/              ← ★ 唯一权威源，所有共享逻辑只改这里 ★
-  login/  room/  match/  game/  pve/  initDb/  scheduler/
+  login/  pve/  initDb/  adminLogin/  adminTool/
     └─ common/         ← 自动同步副本，禁止手改
 ```
 
@@ -15,7 +15,7 @@ cloudfunctions/
 
 ## 工作流
 
-修改共享逻辑（如 `GameEngine.js` / `CellResolver.js` / `Settlement.js` / `pve/PveValidate.js` 等）：
+修改共享逻辑（如 `pve/PveSave.js` / `pve/PveValidate.js` / `db.js` 等）：
 
 1. 改 `cloudfunctions/common/<file>.js`
 2. `node scripts/sync-cloud-common.js`
@@ -39,7 +39,7 @@ Grep 这个目录时一定要排除副本，不然每个名字会命中 8 次：
 cd cloudfunctions/common && npm test
 ```
 
-测试在 `cloudfunctions/common/__tests__/`，覆盖 `GameEngine` / `Settlement` / `BoardGenerator` / `pve/PveValidate` / `pve/PveReward` 等。
+测试在 `cloudfunctions/common/__tests__/`，覆盖 `pve/PveSave` / `pve/PveValidate` / `pve/PveReward` / `pve/PveStamina` / `pve/PveLeaderboard` 等。
 
 ## 同步清单
 
@@ -50,11 +50,9 @@ cd cloudfunctions/common && npm test
 | 函数 | 干什么 |
 |------|--------|
 | `login` | OPENID 登录、用户初始化 |
-| `room` | 房间创建/加入/退出 |
-| `match` | 匹配 |
-| `game` | PVP 棋盘对战核心（回合/掷骰/落子/结算） |
 | `pve` | PVE 存档 + 结算校验（action: loadSave/saveFloor/settleRun/unlockTreeNode） |
 | `initDb` | 集合初始化 + 索引 |
-| `scheduler` | 定时任务（如 turnDeadline） |
+| `adminLogin` | GM 后台登录 |
+| `adminTool` | GM 后台管理工具 |
 
 云数据库集合定义见 `cloudfunctions/initDb/index.js` 的 `COLLECTIONS`。

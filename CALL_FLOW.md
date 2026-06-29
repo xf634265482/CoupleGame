@@ -1,7 +1,5 @@
 # CALL_FLOW.md
-> 2026-06-19 PVE-only 启动链：`GameApp` → `lobby.scene` → `PveLobbyController`
-> ???????`PveLobbyController` ???????????????`_startRun()` / `_showDestinyTreeModal()`??
-> PVP 房间、棋盘、结算场景当前不进入微信构建。
+> 2026-06-29 PVP 棋盘对战已彻底移除。启动链：`GameApp` → `lobby.scene` → `PveLobbyController` → `_startRun()` / `_showDestinyTreeModal()`
 > 主要调用链速查。理解某个操作的完整执行路径时，从这里找起。
 > 层次标记：`[Controller]` = controller 层（Cocos Component）/ `[Core]` = pve/core 纯函数 / `[View]` = 渲染层 / `[Net]` = 网络层 / `[Cloud]` = 云函数
 
@@ -26,9 +24,6 @@
   - [13. 命运树解锁](#13-命运树解锁)
   - [14. 营地商店购买](#14-营地商店购买)
   - [15. 楼层地图生成](#15-楼层地图生成)
-- [PVP 调用链](#pvp-调用链)
-  - [16. 玩家走格子](#16-玩家走格子)
-  - [17. PVP 战斗结算](#17-pvp-战斗结算)
 
 ---
 
@@ -582,61 +577,6 @@ runSeed（服务端生成，全程不变）
   ├─ 放置实体（宝箱/铁匠/神像/温泉等）数量由楼层决定
   ├─ 放置钥匙 + 出口门
   └─ 返回 FloorState（fog 全隐藏）
-```
-
----
-
-## PVP 调用链
-
-### 16. 玩家走格子
-
-```
-[Controller] BoardController._tapCell(cellIndex)
-  │
-  ▼
-[Net] GameService.submitTurn({ cellIndex })
-  │
-  ▼
-[Cloud] GameEngine.processTurn(gameState, turnData)
-  ├─ 校验合法性（是否轮到该玩家、格子是否可走）
-  ├─ 更新棋子位置
-  └─ CellResolver.resolve(cell, gameState)
-       ├─ 普通格 → 无事
-       ├─ 战斗格 → CombatResolver.resolve()
-       ├─ 事件格 → EventResolver.resolve()
-       └─ 商店格 → ShopResolver.resolve()
-  │
-  ▼
-[Cloud] 写入新 gameState 到数据库
-  │
-  ▼
-[Net] GameWatcher（实时监听）触发 onStateChange
-  │
-  ▼
-[Controller] BoardController.onStateChange(newState)
-  │
-  ▼
-[View] BoardView.refresh(newState)
-[View] HudController.refresh(newState)
-```
-
----
-
-### 17. PVP 战斗结算
-
-```
-[Cloud] CombatResolver.resolve(attacker, defender, gameState)
-  ├─ 计算双方攻防（装备 + 事件加成）
-  ├─ 掷骰子决定伤害
-  ├─ defender.hp -= damage
-  ├─ defender.hp <= 0 → 复活惩罚（扣金币/退步）
-  └─ 返回 combatResult
-  │
-  ▼
-[Cloud] GameEngine 写入 combatResult 到 gameState
-  │
-  ▼
-[Controller] BoardCombatUi.show(combatResult) — 展示战报动画
 ```
 
 ---

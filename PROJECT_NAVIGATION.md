@@ -1,6 +1,5 @@
 # PROJECT_NAVIGATION.md
-> 2026-06-19 PVE-only 发布入口：`assets/scripts/lobby/PveLobbyController.ts`。
-> 完整 PVP 大厅保存在 `assets/scenes/lobby_pvp.scene`，当前不进入微信构建。
+> 2026-06-29 PVP 棋盘对战已彻底移除，仅保留 PVE「命运远征」。发布入口：`assets/scripts/lobby/PveLobbyController.ts`。
 > 代码导航索引。排查 Bug / 实现新功能时，**先查本文定位入口，再开文件**，避免盲目全局搜索。
 > 更新规则：改动涉及新系统或重命名文件时，同步更新本文。
 
@@ -24,8 +23,7 @@
   - [11 存档系统](#11-存档系统)
   - [12 PVE UI 系统](#12-pve-ui-系统)
   - [13 事件系统（PVE）](#13-事件系统pve)
-- [PVP 模块](#pvp-模块)
-  - [14 棋盘对战系统](#14-棋盘对战系统)
+
 - [公共基础层](#公共基础层)
   - [15 应用启动](#15-应用启动)
   - [16 网络层](#16-网络层)
@@ -34,7 +32,7 @@
   - [19 微信平台适配](#19-微信平台适配)
 - [云函数层](#云函数层)
   - [20 PVE 云函数](#20-pve-云函数)
-  - [21 PVP 云函数](#21-pvp-云函数)
+
 - [已知问题与命名混乱](#已知问题与命名混乱)
 
 ---
@@ -327,33 +325,6 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 
 ---
 
-## PVP 模块
-
-### 14 棋盘对战系统
-
-**职责**：联机棋盘对战（云端权威）；棋子移动、战斗结算、事件/商店/营地结算；机器人 AI。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/game/board/BoardController.ts` | **客户端主控** — 接收云端状态 → 驱动 View |
-| `assets/scripts/game/board/BoardView.ts` | 棋盘渲染 |
-| `assets/scripts/game/board/BoardSceneBootstrap.ts` | 场景启动入口 |
-| `assets/scripts/game/board/HudController.ts` | 棋盘 HUD（HP/金币/回合） |
-| `assets/scripts/game/board/BoardCombatUi.ts` | 战斗结算 UI |
-| `assets/scripts/game/board/BoardSidePanel.ts` | 侧边面板 |
-| `cloudfunctions/common/GameEngine.js` | **云端权威逻辑入口** — 回合推进、权威状态机 |
-| `cloudfunctions/common/CombatResolver.js` | 战斗结算（云端） |
-| `cloudfunctions/common/CellResolver.js` | 格子事件解析（云端） |
-| `cloudfunctions/common/ShopResolver.js` | 商店结算（云端） |
-| `cloudfunctions/common/EventResolver.js` | 事件结算（云端） |
-| `cloudfunctions/common/BoardGenerator.js` | 棋盘布局生成 |
-| `cloudfunctions/common/BotPlayer.js` | 机器人 AI |
-| `cloudfunctions/common/constants.js` | PVP 数值常量 |
-
-**推荐入口**：客户端渲染 Bug → `BoardController.ts` / `BoardView.ts`；规则 Bug → `GameEngine.js` → 对应 Resolver。
-
----
-
 ## 公共基础层
 
 ### 15 应用启动
@@ -377,18 +348,14 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 
 ### 16 网络层
 
-**职责**：封装微信云函数调用；对外暴露业务 API（PVE / PVP / 大厅 / 匹配）。
+**职责**：封装微信云函数调用；对外暴露业务 API（PVE）。
 
 | 文件 | 说明 |
 |------|------|
 | `assets/scripts/network/CloudService.ts` | **底层封装** — `callFunction(name, data)` 统一错误处理 |
 | `assets/scripts/network/PveService.ts` | **PVE 业务 API** — startRun / loadSave / saveFloor / settle / loadMeta / unlockTreeNode |
-| `assets/scripts/network/GameService.ts` | **PVP 业务 API** — 回合提交、状态拉取 |
-| `assets/scripts/network/LobbyService.ts` | **大厅 API** — 创建/加入/离开房间 |
-| `assets/scripts/network/GameStateMirror.ts` | 客户端状态镜像（PVP 云端状态同步缓存）|
-| `assets/scripts/network/GameWatcher.ts` | 云数据库实时监听（PVP 推送更新）|
 
-**推荐入口**：PVE 网络问题 → `PveService.ts`；PVP 同步问题 → `GameWatcher.ts` / `GameStateMirror.ts`。
+**推荐入口**：PVE 网络问题 → `PveService.ts`。
 
 ---
 
@@ -462,30 +429,7 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 | `cloudfunctions/common/pve/PveReward.js` | 按章节完成度计算钻石/碎片奖励 |
 | `cloudfunctions/common/pve/PveDestinyTree.js` | 命运树解锁权威校验 |
 
-> ⚠️ **只改 `cloudfunctions/common/pve/`，改完跑 `node scripts/sync-cloud-common.js`**，其余 6 个目录是自动同步副本。
-
----
-
-### 21 PVP 云函数
-
-**职责**：PVP 回合权威、房间管理、匹配、登录、定时调度。
-
-| 文件 | 说明 |
-|------|------|
-| `cloudfunctions/common/GameEngine.js` | PVP 核心引擎 |
-| `cloudfunctions/common/CombatResolver.js` | 战斗结算 |
-| `cloudfunctions/common/CellResolver.js` | 格子事件解析 |
-| `cloudfunctions/common/ShopResolver.js` | 商店结算 |
-| `cloudfunctions/common/EventResolver.js` | 事件结算 |
-| `cloudfunctions/common/BoardGenerator.js` | 棋盘生成 |
-| `cloudfunctions/common/Settlement.js` | 终局结算 |
-| `cloudfunctions/common/BotPlayer.js` | 机器人 AI |
-| `cloudfunctions/game/index.js` | PVP 云函数主入口 |
-| `cloudfunctions/room/index.js` | 房间管理 |
-| `cloudfunctions/match/index.js` | 匹配服务 |
-| `cloudfunctions/login/index.js` | 登录云函数 |
-
-> ⚠️ 同上，只改 `cloudfunctions/common/`。
+> ⚠️ **只改 `cloudfunctions/common/pve/`，改完跑 `node scripts/sync-cloud-common.js`**，其余 4 个目录（login/initDb/adminLogin/adminTool）是自动同步副本。
 
 ---
 
@@ -508,7 +452,7 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
    `PveEvent` 是 core 层的事件数据对象（plain object 数组，表示一次操作产生的副作用序列）；`EventBus` 是框架级的观察者模式发布订阅。两者完全独立，不要混用。
 
 4. **`cloudfunctions/common/constants.js` vs `assets/scripts/pve/core/PveConstants.ts`**  
-   前者是 PVP 数值常量（云端）；后者是 PVE 数值常量（客户端）。同名不同内容。
+   前者是云端共享常量（PVE 难度档、层数等）；后者是客户端 PVE 数值常量。同名不同内容。
 
 5. **`EquipTraitEffects.ts` vs `BossEquipTraitEffects.ts` vs `StrengthenEffects.ts`**  
    三个"效果"文件：装备词条效果 / Boss 专属装备词条效果 / 灵气强化词条效果。功能分工清晰但文件数量多，查询时注意区分触发来源（装备 vs 强化）。
