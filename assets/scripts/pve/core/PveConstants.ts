@@ -46,7 +46,7 @@ export const CHAPTER_BOSS = {
 } as const;
 
 // ── 玩家初始状态 ───────────────────────────────────────
-export const INITIAL_HP = 230;
+export const INITIAL_HP = 280; // V3 §4b.2：上调基础 HP（原 230），新手缓冲
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
@@ -67,7 +67,7 @@ export const CLASS_FRAGMENTS_TO_ADVANCE = 7; // 集齐 7 个同职业碎片可�
 
 // ── 灵气（design §9） ──────────────────────────────────
 export const ANIMA_PER_STRENGTHEN = 100; // 初始强化阈值
-export const ANIMA_THRESHOLD_MULTIPLIER = 1.5; // 每次触发后阈值 × 此系数（100→150→225→337...）
+export const ANIMA_THRESHOLD_MULTIPLIER = 1.35; // 每次触发后阈值 × 此系数（V3 §4b.1：1.5→1.35，延缓后期断供）
 export const STRENGTHEN_CHOICES = 3; // 3 选 1
 
 // ── 战斗基础值（M1：冒险者无武器基础攻击；装备后叠加） ──

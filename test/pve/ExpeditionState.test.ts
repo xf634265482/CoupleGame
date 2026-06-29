@@ -401,8 +401,8 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       expect(result.state.player.classTraits).toEqual([]);
       expect(result.state.player.equipment).toEqual({});
       expect(result.state.player.classFragments).toEqual({});
-      expect(result.state.player.hp).toBe(230);
-      expect(result.state.player.maxHp).toBe(230);
+      expect(result.state.player.hp).toBe(280);
+      expect(result.state.player.maxHp).toBe(280);
     });
 
     it('非 DEAD 状态时为 no-op', () => {

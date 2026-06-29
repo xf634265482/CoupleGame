@@ -96,17 +96,17 @@ describe('AnimaSystem — 灵气强化（AC-7）', () => {
     expect(second.events).toEqual([]);
   });
 
-  it('applyStrengthen 每次成功强化后 animaThreshold × 1.5（100→150→225）', () => {
+  it('applyStrengthen 每次成功强化后 animaThreshold × 1.35（100→135→183）', () => {
     const state = makeExpeditionState();
     // 初始阈值：animaThreshold undefined → 等效 100
     const r1 = applyStrengthen(state, 'strengthen_hp_up');
-    expect(r1.state.player.animaThreshold).toBe(150); // ceil(100 * 1.5)
+    expect(r1.state.player.animaThreshold).toBe(135); // ceil(100 * 1.35)
 
     const r2 = applyStrengthen(r1.state, 'strengthen_attack_up');
-    expect(r2.state.player.animaThreshold).toBe(225); // ceil(150 * 1.5)
+    expect(r2.state.player.animaThreshold).toBe(183); // ceil(135 * 1.35)
 
     const r3 = applyStrengthen(r2.state, 'strengthen_ap_up');
-    expect(r3.state.player.animaThreshold).toBe(338); // ceil(225 * 1.5)
+    expect(r3.state.player.animaThreshold).toBe(248); // ceil(183 * 1.35)
   });
 
   it('addAnima 使用玩家当前 animaThreshold（阈值 150 需要 150 灵气才触发）', () => {
