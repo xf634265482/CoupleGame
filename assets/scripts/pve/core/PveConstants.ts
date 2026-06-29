@@ -22,8 +22,10 @@ export const AP_COST = {
 export const AP_CARRY_CAP = 3;
 
 // ── 中立交互实体效果（M1 占位数值，待与设计师对齐回写 design.md） ──
-export const IDOL_MAX_HP_BONUS = 10; // 神像祝福：永久 +10 maxHp（数值×10基准下 = 原 +1）
-export const HOT_SPRING_HEAL_RATIO = 0.3; // 温泉：恢复 maxHp 的 30%（V3：每章 2 个，削减单次回量）
+export const IDOL_MAX_HP_BONUS = 10;    // 神像祝福：永久 +10 maxHp
+export const IDOL_ATTACK_BONUS = 2;     // 神像祝福：永久 +2 攻击
+export const IDOL_ARMOR_BONUS = 3;      // 神像祝福：永久 +3 护甲（减少怪物对玩家的伤害）
+export const HOT_SPRING_HEAL_RATIO = 0.5; // 温泉：恢复 maxHp 的 50%
 
 // ── 地图尺寸（design §3 / §5） ─────────────────────────
 export const MAP_SIZE = {
@@ -130,20 +132,24 @@ export const AWAKEN_REQUIRED_CHAPTER = 3;
 /** 觉醒形态 id：职业 + 形态序号（1/2，由副职业碎片对比决定）。 */
 export type AwakenForm = 'BERSERKER_1' | 'BERSERKER_2' | 'ARCHER_1' | 'ARCHER_2' | 'ROGUE_1' | 'ROGUE_2';
 
-/** 觉醒形态定义：statTrait 为轻量属性加成（复用现有通用词条 A），traitId/traitName/traitDesc 为专属觉醒词条（B）。 */
+/** 觉醒形态定义：核心天赋、玩法标签与现有美术资源的统一数据源。 */
 export interface AwakenFormDef {
   id: AwakenForm;
   classId: AdvancableClass;
   /** 中文形态名（界面展示，不含英文）。 */
   name: string;
-  /** 轻量属性加成：复用现有通用词条 id。 */
-  statTrait: string;
+  /** 形态玩法标签。 */
+  routeTag: string;
+  /** 觉醒美术资源 key。 */
+  iconKey: string;
+  /** 旧版自动附赠词条，仅用于活动存档迁移。 */
+  legacyStatTrait: string;
   /** 专属觉醒词条 id（CombatSystem 内联判断）。 */
   traitId: string;
-  /** 专属觉醒词条中文名。 */
-  traitName: string;
-  /** 专属觉醒词条中文描述。 */
-  traitDesc: string;
+  /** 核心天赋中文名。 */
+  coreName: string;
+  /** 核心天赋中文描述。 */
+  coreDesc: string;
 }
 
 export const AWAKEN_FORMS: Record<AwakenForm, AwakenFormDef> = {
@@ -151,68 +157,73 @@ export const AWAKEN_FORMS: Record<AwakenForm, AwakenFormDef> = {
     id: 'BERSERKER_1',
     classId: 'BERSERKER',
     name: '狂战士·破阵型',
-    statTrait: 'eagle_eye', // 轻量A：攻击范围 +1
+    routeTag: '范围破阵',
+    iconKey: 'pve/class/icon_awaken_berserker_a',
+    legacyStatTrait: 'eagle_eye',
     traitId: 'awakened_cleave',
-    traitName: '横扫',
-    traitDesc: '攻击命中后，对目标周围的相邻怪物造成50%溅射伤害',
+    coreName: '裂阵横扫',
+    coreDesc: '主动攻击对相邻敌人造成50%次生伤害；无相邻敌人时主目标伤害+15%',
   },
   BERSERKER_2: {
     id: 'BERSERKER_2',
     classId: 'BERSERKER',
     name: '狂战士·嗜杀型',
-    statTrait: 'swift', // 轻量A：移动消耗 -1 AP
+    routeTag: '击杀连锁',
+    iconKey: 'pve/class/icon_awaken_berserker_b',
+    legacyStatTrait: 'swift',
     traitId: 'awakened_frenzy',
-    traitName: '狂热',
-    traitDesc: '击杀目标后，下一次攻击必定暴击并额外回复20点HP',
+    coreName: '杀意沸腾',
+    coreDesc: '主动攻击击杀后回复10生命，下一次主动攻击伤害+40%；再次击杀可刷新',
   },
   ARCHER_1: {
     id: 'ARCHER_1',
     classId: 'ARCHER',
     name: '射手·强击型',
-    statTrait: 'strengthen_attack_up', // 轻量A：攻击 +5
+    routeTag: '定点狙击',
+    iconKey: 'pve/class/icon_awaken_archer_a',
+    legacyStatTrait: 'strengthen_attack_up',
     traitId: 'awakened_power_shot',
-    traitName: '强弓',
-    traitDesc: '基础伤害额外提升15点',
+    coreName: '蓄势强弓',
+    coreDesc: '本回合未移动且目标距离至少3格时，首次主动攻击伤害+50%并无视护甲',
   },
   ARCHER_2: {
     id: 'ARCHER_2',
     classId: 'ARCHER',
     name: '射手·游击型',
-    statTrait: 'swift', // 轻量A：移动消耗 -1 AP
+    routeTag: '移动连射',
+    iconKey: 'pve/class/icon_awaken_archer_b',
+    legacyStatTrait: 'swift',
     traitId: 'awakened_volley',
-    traitName: '连珠',
-    traitDesc: '连射概率提升至60%，且连射命中后有30%概率触发连锁射击',
+    coreName: '疾行连珠',
+    coreDesc: '本回合移动后，首次主动攻击必定追加一箭，造成主攻击50%次生伤害',
   },
   ROGUE_1: {
     id: 'ROGUE_1',
     classId: 'ROGUE',
     name: '隐匿者·屠戮型',
-    statTrait: 'strengthen_attack_up', // 轻量A：攻击 +5
+    routeTag: '单体斩杀',
+    iconKey: 'pve/class/icon_awaken_rogue_a',
+    legacyStatTrait: 'strengthen_attack_up',
     traitId: 'awakened_execute',
-    traitName: '处决',
-    traitDesc: '目标HP低于30%时直接处决，背刺伤害提升至3倍',
+    coreName: '致命处决',
+    coreDesc: '背刺加成提升至+100%；普通/精英低于20%生命时处决，Boss改为伤害+30%',
   },
   ROGUE_2: {
     id: 'ROGUE_2',
     classId: 'ROGUE',
     name: '隐匿者·影袭型',
-    statTrait: 'eagle_eye', // 轻量A：攻击范围 +1
+    routeTag: '连续背刺',
+    iconKey: 'pve/class/icon_awaken_rogue_b',
+    legacyStatTrait: 'eagle_eye',
     traitId: 'awakened_shadow_strike',
-    traitName: '影袭',
-    traitDesc: '每回合可触发2次背刺伤害',
+    coreName: '双重影袭',
+    coreDesc: '每回合第一次主动移动后获得2层影袭，接下来两次主动攻击获得背刺加成',
   },
 };
 
-/**
- * 觉醒形态判定：副职业（另外两个职业）碎片数较多者决定形态。
- * 数组 [classA, classB]：classA 碎片数 > classB → 形态一；否则（含相等，理论上因 AWAKEN_SECONDARY_TOTAL 为奇数不会发生）→ 形态二。
- * 形态主题对应：BERSERKER ←→ ARCHER（远程/范围）/ ROGUE（机动）；ARCHER ←→ BERSERKER（输出）/ ROGUE（机动）；ROGUE ←→ BERSERKER（输出）/ ARCHER（范围）。
- */
-export const AWAKEN_SECONDARY_ORDER: Record<AdvancableClass, [AdvancableClass, AdvancableClass]> = {
-  BERSERKER: ['ARCHER', 'ROGUE'],
-  ARCHER: ['BERSERKER', 'ROGUE'],
-  ROGUE: ['BERSERKER', 'ARCHER'],
-};
+export function awakenFormsForClass(classId: ClassId): AwakenFormDef[] {
+  return Object.values(AWAKEN_FORMS).filter((form) => form.classId === classId);
+}
 
 // ── M2 灵气怪掉落 ─────────────────────────────────────────
 export const ANIMA_MONSTER_DROP = {
@@ -263,8 +274,8 @@ export const BOSS_RARE_DROP = {
 
 /** 营地遗物宝箱（每个营地楼层绑定上一个 Boss 层的章节，只能开出该章节遗物）。 */
 export const RELIC_CHEST = {
-  /** 单次开箱花费金币。 */
-  COST_GOLD: 1000,
+  /** 单次开箱花费金币（0 = 仅消耗钻石）。 */
+  COST_GOLD: 0,
   /** 单次开箱花费钻石。 */
   COST_DIAMOND: 50,
   /** 开箱开出本章遗物的概率（剩余 90% 为「未中」）。 */
@@ -589,6 +600,32 @@ export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
   { id: 'E8', column: 'E', order: 8, name: '命轮余辉', cost: 190, desc: '首次卷轴候选+1' },
   { id: 'E9', column: 'E', order: 9, name: '改命之刻', cost: 240, desc: '三选一高阶重抽' },
 ] as const;
+
+// ── 普通层地形生成（specs/260629-map-terrain Phase 1）─────────────
+/** 每章普通层主地形类型（第5章沿用石块作走位障碍）。 */
+export const NORMAL_FLOOR_TERRAIN_TYPE = {
+  1: 'ROCK',
+  2: 'SAND_PIT',
+  3: 'ICE_WALL',
+  4: 'LAVA_TILE',
+  5: 'ROCK',
+} as const;
+
+/** 第3章普通层额外铺设冰面数量（ICE_TILE，非阻挡，引发滑行走位）。 */
+export const CHAPTER3_NORMAL_ICE_TILE_COUNT = 2;
+
+/**
+ * 普通层地形数量区间 [min, max]，按章内层号（1-6；第7层是 Boss，不走此表）。
+ * 节拍：1-2 探索铺垫（稀疏）→ 3 精英关（中等）→ 4-6 机关主场（密集）。
+ */
+export const NORMAL_FLOOR_TERRAIN_COUNT: Readonly<Record<number, readonly [number, number]>> = {
+  1: [3, 5],
+  2: [3, 5],
+  3: [5, 7],
+  4: [8, 12],
+  5: [8, 12],
+  6: [8, 12],
+};
 
 // ── 仅开发调试（正式构建前必须置 0）────────────────────────
 /**

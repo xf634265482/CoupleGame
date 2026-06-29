@@ -10,6 +10,7 @@ import {
   CHAPTER2_SAND_PIT_COUNT,
   CHAPTER3_ICE_WALL_COUNT,
   CHAPTER3_ICE_WALL_HP,
+  CHAPTER3_NORMAL_ICE_TILE_COUNT,
   CHAPTER_BOSS,
   FLOORS_PER_CHAPTER,
   FOG_REVEAL_RADIUS,
@@ -17,6 +18,8 @@ import {
   FRAGMENT_SECOND_CHANCE,
   FRAGMENT_THIRD_CHANCE,
   MONSTER_BASE,
+  NORMAL_FLOOR_TERRAIN_COUNT,
+  NORMAL_FLOOR_TERRAIN_TYPE,
   bossChapterScaling,
   chapterOfFloor,
   isBossFloor,
@@ -86,6 +89,43 @@ function takeFarFrom(pool: Coord[], from: Coord, minDist: number): Coord {
   }
   const [picked] = pool.splice(idx, 1);
   return picked;
+}
+
+/**
+ * BFS 连通性检查：从 start 出发，blocked 格子视为墙，确认所有 targets 均可达。
+ * 仅用于地形生成后的可解性校验（AC-MT-2）。
+ */
+function bfsAllReachable(size: number, blocked: Set<string>, start: Coord, targets: Coord[]): boolean {
+  const needed = new Set<string>();
+  for (const t of targets) {
+    const k = `${t.x},${t.y}`;
+    if (k !== `${start.x},${start.y}`) needed.add(k);
+  }
+  if (needed.size === 0) return true;
+
+  const visited = new Set<string>();
+  const queue: Coord[] = [start];
+  visited.add(`${start.x},${start.y}`);
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const neighbors: Coord[] = [
+      { x: cur.x, y: cur.y - 1 },
+      { x: cur.x, y: cur.y + 1 },
+      { x: cur.x - 1, y: cur.y },
+      { x: cur.x + 1, y: cur.y },
+    ];
+    for (const nb of neighbors) {
+      if (nb.x < 0 || nb.y < 0 || nb.x >= size || nb.y >= size) continue;
+      const k = `${nb.x},${nb.y}`;
+      if (visited.has(k) || blocked.has(k)) continue;
+      visited.add(k);
+      needed.delete(k);
+      if (needed.size === 0) return true;
+      queue.push(nb);
+    }
+  }
+  return false;
 }
 
 /** 各章 Boss 护甲（第一章 Boss 无护甲，第二章起逐步递增）。 */
@@ -244,6 +284,45 @@ export function generateFloor(floor: number, seed: number, classId: ClassId = 'A
       }
       const pos = pool.shift() as Coord;
       entities.push(makeFragment(nextEntityId('frag'), pos, fragClass));
+    }
+
+    // 普通层地形生成 pass（Phase 1，AC-MT-1/2/3）：按章调色板 + 章内节拍强度铺设地形。
+    // 阻挡型地形（ROCK/ICE_WALL）每放一块都做 BFS 校验，不通则跳过该格，保证可解性。
+    const fi = floorInChapter(floor);
+    const terrainRange = NORMAL_FLOOR_TERRAIN_COUNT[fi];
+    if (terrainRange) {
+      const [tMin, tMax] = terrainRange;
+      const terrainCount = tMin + Math.floor(rng.next() * (tMax - tMin + 1));
+      const primaryType = NORMAL_FLOOR_TERRAIN_TYPE[chapter as keyof typeof NORMAL_FLOOR_TERRAIN_TYPE] ?? 'ROCK';
+      const isBlocking = primaryType === 'ROCK' || primaryType === 'ICE_WALL';
+      const blockedSet = new Set<string>();
+
+      for (let ti = 0; ti < terrainCount && pool.length > 0; ti++) {
+        const tPos = pool.shift() as Coord;
+        const tKey = `${tPos.x},${tPos.y}`;
+
+        if (isBlocking) {
+          blockedSet.add(tKey);
+          if (!bfsAllReachable(size, blockedSet, player, [keyPos, exitPos])) {
+            blockedSet.delete(tKey);
+            continue;
+          }
+        }
+
+        if (primaryType === 'ICE_WALL') {
+          entities.push({ id: nextEntityId('iwall'), type: 'ICE_WALL', pos: tPos, consumed: false, hp: CHAPTER3_ICE_WALL_HP });
+        } else {
+          entities.push(makeEntity(nextEntityId('terrain'), primaryType, tPos));
+        }
+      }
+
+      // 第3章：额外铺冰面（非阻挡，踩上引发滑行走位）
+      if (chapter === 3) {
+        for (let ti = 0; ti < CHAPTER3_NORMAL_ICE_TILE_COUNT && pool.length > 0; ti++) {
+          const tPos = pool.shift() as Coord;
+          entities.push(makeEntity(nextEntityId('icetile'), 'ICE_TILE', tPos));
+        }
+      }
     }
   }
 

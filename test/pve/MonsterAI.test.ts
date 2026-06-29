@@ -180,11 +180,13 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
 
     it('Boss 重击回合「先原地释放、再追击移动」（2026-06-15）：以起手位置结算，释放后逼近一格', () => {
       // 重击回合 boss(4,1) 与玩家(4,4) 距离 3（≤ HEAVY_STRIKE_RANGE=4，命中）
+      // entities:[] 清空地形实体，避免普通层 ROCK 地形吸收 AOE 干扰断言。
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 4, y: 4 },
           turn: HEAVY_STRIKE_INTERVAL,
           monsters: [makeGoblinChief({ x: 4, y: 1 })],
+          entities: [],
         },
         playerOverrides: { hp: 2000, maxHp: 2000 },
       });
