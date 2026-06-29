@@ -9,7 +9,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'cloudfunctions', 'common');
-const TARGET_FUNCTIONS = ['login', 'room', 'match', 'game', 'scheduler', 'initDb', 'pve', 'adminLogin', 'adminTool'];
+const TARGET_FUNCTIONS = ['login', 'initDb', 'pve', 'adminLogin', 'adminTool'];
 
 const COPY_FILES = [
   'constants.js',
@@ -17,22 +17,6 @@ const COPY_FILES = [
   'db.js',
   'index.js',
   'auth.js',
-  'BoardGenerator.js',
-  'CellResolver.js',
-  'EventResolver.js',
-  'GameEngine.js',
-  'turnDeadline.js',
-  'luckySpin.js',
-  'luckyRewards.js',
-  'finalShop.js',
-  'ShopResolver.js',
-  'CombatResolver.js',
-  'boardRegions.js',
-  'Settlement.js',
-  'roomService.js',
-  'matchService.js',
-  'botNames.js',
-  'BotPlayer.js',
 ];
 
 /** 子目录下的文件需保留相对路径复制（如 pve/PveSave.js）。 */

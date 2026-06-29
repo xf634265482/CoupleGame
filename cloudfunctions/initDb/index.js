@@ -6,9 +6,6 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const COLLECTIONS = [
   'users',
-  'rooms',
-  'games',
-  'match_queue',
   'pve_saves',
   'pve_balance_configs',
   'admin_accounts',
