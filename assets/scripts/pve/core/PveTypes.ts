@@ -140,6 +140,10 @@ export interface RunPlayer {
   classFragments: Partial<Record<ClassId, number>>;
   /** 二阶觉醒形态（已觉醒时有值，一局内最多觉醒一次）。 */
   awakenForm?: AwakenForm;
+  /** 觉醒数据版本；2 表示已迁移到主动分流与专属词条规则。 */
+  awakenVersion?: 2;
+  /** 觉醒后的下一次强化至少出现一条当前形态专属词条。 */
+  awakenFirstOfferPending?: boolean;
   /** 已通关的最大章节号（每章 Boss 击败后更新，用于觉醒条件判定）。 */
   maxChapterCleared?: number;
   /** 命运碎片成长树效果快照（由 startExpedition 时根据 PveMeta.unlockedTreeNodes 计算并固化，
@@ -158,6 +162,10 @@ export interface RunPlayer {
   scrolls?: number;
   /** 背包（槽位已占时装备入包，可手动装备 / 置换）。 */
   bag?: EquipItem[];
+  /** 神像祝福累计攻击加成（永久，跨层保留）。 */
+  idolAttackBonus?: number;
+  /** 神像祝福累计护甲加成（永久，减少怪物伤害，跨层保留）。 */
+  idolArmorBonus?: number;
   /** 遗物运行态：CHIEF_ROAR/PERMAFROST_CORE 累计与待触发标记；FATE_ECHO 一次性消耗标记。 */
   relicState?: {
     /** CHIEF_ROAR：上次击杀后下一次普攻 +50%，触发后置 false。 */
@@ -334,10 +342,27 @@ export interface FloorState {
   playerFireBurnAccum?: number;
   /** 毒蝎中毒剩余回合数（每回合 8HP，不叠加，刷新计时）。 */
   playerPoisonRounds?: number;
-  /** 觉醒·狂热(awakened_frenzy)：击杀后下一次攻击必定暴击+回血，触发后置 false。 */
+  /** 杀意沸腾：击杀后下一次主动攻击增伤，触发后消费。 */
   frenzyPending?: boolean;
-  /** 觉醒·影袭(awakened_shadow_strike)：本回合已触发的背刺次数（上限2），回合结束时重置为0。 */
-  shadowStrikeCount?: number;
+  /** 无尽杀意层数（最多3层，强化攻击未击杀时清空）。 */
+  awakenSlayerIntentStacks?: number;
+  /** 双重影袭可消费层数（最多2层，新回合清空）。 */
+  awakenShadowCharges?: number;
+  /** 双重影袭本回合是否已经由主动移动授予过层数。 */
+  awakenShadowGrantedThisTurn?: boolean;
+  /** 破绽锁定目标。 */
+  awakenSniperExposedTargetId?: string;
+  /** 精确校准：下一次蓄势强弓必定暴击。 */
+  awakenSniperGuaranteedCrit?: boolean;
+  /** 震慑余波：怪物下一次行动伤害降低。 */
+  awakenWeakenedMonsterIds?: string[];
+  /** 死亡宣告标记目标。 */
+  awakenExecutionMarkId?: string;
+  /** 各觉醒专属词条每回合一次的触发标记。 */
+  awakenBreakerShieldUsed?: boolean;
+  awakenSniperDecisiveUsed?: boolean;
+  awakenExecutionStealthUsed?: boolean;
+  awakenShadowTradeUsed?: boolean;
   /** 熔岩领主第二阶段标记（Boss HP/maxHp ≤ CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO 后置 true，不可逆）。 */
   lavaLordPhase2?: boolean;
   /** 熔岩潮汐回合计数器：phase2 期间每回合 +1，达到 CHAPTER4_LAVA_TIDE_INTERVAL 时推进下一排并归零。 */
@@ -448,8 +473,10 @@ export type PveEvent =
   | { type: 'AP_CARRIED'; amount: number }
   /** Boss 阵亡 + 持有钥匙时在 Boss 位置浮现传送门（玩家需踏入并交互才通关，design AC-9）。 */
   | { type: 'PORTAL_SPAWNED'; entityId: string; pos: Coord }
-  /** 神像祝福：永久 +1 maxHp（M1 占位数值，待设计师定稿）。 */
-  | { type: 'IDOL_BLESSING'; entityId: string; maxHpBonus: number }
+  /** 神像祝福：三选一随机，仅携带本次命中的那项加成。 */
+  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'MAX_HP'; maxHpBonus: number }
+  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ATTACK'; attackBonus: number }
+  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ARMOR'; armorBonus: number }
   /** 温泉治疗：当次回满 HP（M1 占位规则，design.md 未详述）。 */
   | { type: 'HOT_SPRING_HEAL'; entityId: string; healed: number }
   /** 拾取职业碎片（AC-15 M2）：totalFragments 为该职业当前累计数。 */
@@ -462,6 +489,8 @@ export type PveEvent =
   | { type: 'CLASS_CAN_AWAKEN'; classId: ClassId }
   /** 二阶觉醒完成：form 为最终判定的觉醒形态。 */
   | { type: 'CLASS_AWAKENED'; classId: ClassId; form: AwakenForm }
+  /** 觉醒核心或专属机制触发，供 Controller 组合程序动画与战报。 */
+  | { type: 'AWAKEN_EFFECT_TRIGGERED'; effectId: string; sourceId?: string; targetIds?: string[]; amount?: number }
   | { type: 'SHOP_BUY'; itemId: string; cost: number; effect: string }
   /** 成就解锁（Controller 合成，不由 core 纯函数产生；供 _playEvents 展示 toast）。 */
   | { type: 'ACHIEVEMENT_UNLOCKED'; achievementId: string; name: string }
@@ -618,7 +647,9 @@ export type PveEvent =
   /** C3 FIRE_ELEMENTAL 爆裂自爆：死亡时对 2 格内玩家造成等攻击力真实伤害（无视护甲）。 */
   | { type: 'ELITE_EXPLODE'; monsterId: string; pos: Coord; damage: number; hp: number }
   /** C2 FROST_SPRITE 寒冰光环：存活且在玩家 3 格内时每回合开始 AP -1。 */
-  | { type: 'FROST_AURA_DRAINED'; ap: number };
+  | { type: 'FROST_AURA_DRAINED'; ap: number }
+  /** 远程攻击（range≥2）被掩体地形遮挡、打不出（Phase 2 LOS，AC-MT-4）。 */
+  | { type: 'ATTACK_BLOCKED_BY_COVER'; attackerId: string; targetId: string; blockerPos: Coord };
 
 /** core 纯函数统一返回：变更后的状态 + 本次产生的事件序列。 */
 export interface ApplyResult {

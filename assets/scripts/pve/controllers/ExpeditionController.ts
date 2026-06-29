@@ -36,8 +36,9 @@ import { applyMove } from '../core/MovementSystem';
 import { resolveTreeChoice } from '../core/DestinyTreeSystem';
 import { CAMP_BLACKSMITH_ID, rerollEquipTrait, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
 import { equipFromBag } from '../core/EquipHelper';
+import { getBalancedActionCost } from '../core/PveBalance';
 import type { Direction } from '../core/MovementSystem';
-import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, DEV_SKIP_TO_FLOOR, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS, TOTAL_FLOORS } from '../core/PveConstants';
+import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, DEV_SKIP_TO_FLOOR, FLOORS_PER_CHAPTER, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS, TOTAL_FLOORS } from '../core/PveConstants';
 import type { ClassId } from '../core/PveConstants';
 import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta, RelicId } from '../core/PveTypes';
 import { loadPveSave, loadPveMeta, startRun, savePveFloor, settlePveRun, updatePveMeta } from '../../network/PveService';
@@ -312,8 +313,12 @@ function describeForLog(
       return { kind: 'LOOT', text: '📦 打开宝箱' };
     case 'PORTAL_SPAWNED':
       return { kind: 'SYSTEM', text: '🌀 传送门浮现，可继续探索或踏入通关' };
-    case 'IDOL_BLESSING':
-      return { kind: 'LOOT', text: `🛐 神像祝福（HP 上限 +${ev.maxHpBonus}）` };
+    case 'IDOL_BLESSING': {
+      const idolDesc = ev.effect === 'MAX_HP' ? `HP 上限 +${ev.maxHpBonus}`
+        : ev.effect === 'ATTACK' ? `攻击 +${ev.attackBonus}`
+        : `护甲 +${ev.armorBonus}`;
+      return { kind: 'LOOT', text: `🛐 神像祝福（${idolDesc}）` };
+    }
     case 'HOT_SPRING_HEAL':
       return { kind: 'LOOT', text: `♨️ 温泉治疗（恢复 ${ev.healed} 血）` };
     case 'FRAGMENT_PICKED': {
@@ -333,8 +338,10 @@ function describeForLog(
       return { kind: 'SYSTEM', text: '🌟 二阶觉醒条件已满足！可进行觉醒' };
     case 'CLASS_AWAKENED': {
       const form = AWAKEN_FORMS[ev.form];
-      return { kind: 'SYSTEM', text: `🌟 觉醒成功 → ${form.name}（获得「${form.traitName}」）` };
+      return { kind: 'SYSTEM', text: `🌟 觉醒成功 → ${form.name}（核心天赋「${form.coreName}」）` };
     }
+    case 'AWAKEN_EFFECT_TRIGGERED':
+      return { kind: 'SYSTEM', text: `觉醒效果触发 · ${STRENGTHEN_LABEL[ev.effectId]?.title ?? ev.effectId}` };
     case 'ANIMA_STRENGTHEN':
       return { kind: 'SYSTEM', text: '✨ 灵气满了，可强化属性' };
     case 'TURN_END':
@@ -550,6 +557,10 @@ function describeForLog(
       return { kind: 'PLAYER_HURT', text: `💥 火焰元素爆裂！真实伤害 -${ev.damage}（剩余 ${ev.hp} 血）` };
     case 'FROST_AURA_DRAINED':
       return { kind: 'PLAYER_HURT', text: `❄️ 寒冰光环！AP -1（剩余 ${ev.ap}）` };
+    case 'ATTACK_BLOCKED_BY_COVER':
+      return ev.attackerId === 'PLAYER'
+        ? { kind: 'PLAYER_ACT', text: `🪨 攻击被掩体遮挡！` }
+        : { kind: 'ENEMY_ACT', text: `🪨 敌方攻击被掩体遮挡` };
     default:
       return null;
   }
@@ -572,8 +583,12 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return null;
     case 'PORTAL_SPAWNED':
       return '🌀 传送门浮现，踏入即可通关（可先继续探索）';
-    case 'IDOL_BLESSING':
-      return `🛐 神像赐予祝福 · HP 上限 +${ev.maxHpBonus}`;
+    case 'IDOL_BLESSING': {
+      const idolToast = ev.effect === 'MAX_HP' ? `HP 上限 +${ev.maxHpBonus}`
+        : ev.effect === 'ATTACK' ? `攻击 +${ev.attackBonus}`
+        : `护甲 +${ev.armorBonus}`;
+      return `🛐 神像赐予祝福 · ${idolToast}`;
+    }
     case 'HOT_SPRING_HEAL':
       return `♨️ 温泉治疗 +${ev.healed} HP`;
     case 'FRAGMENT_PICKED': {
@@ -593,8 +608,10 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `🌟 二阶觉醒条件已满足，可进行觉醒！`;
     case 'CLASS_AWAKENED': {
       const form = AWAKEN_FORMS[ev.form];
-      return `🌟 [${CLASS_CN[ev.classId] ?? ev.classId}] 觉醒为「${form.name}」，获得「${form.traitName}」：${form.traitDesc}`;
+      return `🌟 [${CLASS_CN[ev.classId] ?? ev.classId}] 觉醒为「${form.name}」，获得「${form.coreName}」：${form.coreDesc}`;
     }
+    case 'AWAKEN_EFFECT_TRIGGERED':
+      return null;
     case 'SHOP_BUY':
       return `🏕️ 购买成功 · ${ev.effect}`;
     case 'ACHIEVEMENT_UNLOCKED':
@@ -722,6 +739,8 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `💥 火焰元素爆裂！真实伤害 -${ev.damage}（剩余 ${ev.hp} 血）`;
     case 'FROST_AURA_DRAINED':
       return `❄️ 寒冰光环！AP -1（剩余 ${ev.ap}）`;
+    case 'ATTACK_BLOCKED_BY_COVER':
+      return ev.attackerId === 'PLAYER' ? '🪨 攻击被掩体遮挡！' : null;
     default:
       return null;
   }
@@ -1187,6 +1206,9 @@ export class ExpeditionController extends Component {
           equipment: this._state.player.equipment,
           bag: this._state.player.bag ?? [],
           scrolls: this._state.player.scrolls ?? 0,
+          classFragments: this._state.player.classFragments,
+          classId: this._state.player.classId,
+          awakenForm: this._state.player.awakenForm,
         },
         (itemId) => {
           if (!this._state) return null;
@@ -1399,7 +1421,7 @@ export class ExpeditionController extends Component {
   }
 
   private _floorInChapter(floor: number): number {
-    return ((floor - 1) % 5) + 1;
+    return ((floor - 1) % FLOORS_PER_CHAPTER) + 1;
   }
 
   private _showFloorEntryAlerts(): void {
@@ -1410,7 +1432,7 @@ export class ExpeditionController extends Component {
       this._log?.push(floorState.turn, 'SYSTEM', `⚠ 第${chapter}章 Boss 层 · 首领来袭`);
       return;
     }
-    if (this._floorInChapter(floor) === 4) {
+    if (this._floorInChapter(floor) === FLOORS_PER_CHAPTER - 1) {
       this._toast.toast(`⚠ 下一层将进入 Boss 战，建议先整理状态`, 2200);
       this._log?.push(floorState.turn, 'SYSTEM', '⚠ 下一层将进入 Boss 战');
     }
@@ -1478,7 +1500,7 @@ export class ExpeditionController extends Component {
 
   private _refreshAll(): void {
     if (!this._state) return;
-    this._map?.refresh(this._state.floorState, this._state.player.classId);
+    this._map?.refresh(this._state.floorState, this._state.player.classId, this._state.player.awakenForm);
     this._hud?.refresh(this._state);
     this._map?.showMoveRange(this._cachedMoveTargets);
     this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
@@ -1542,7 +1564,7 @@ export class ExpeditionController extends Component {
   private _computeAttackTarget(): Monster | undefined {
     if (!this._state) return undefined;
     const floor = this._state.floorState;
-    const { range } = playerAttackPower(this._state.player);
+    const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
     return floor.monsters
       .filter((m) =>
         m.aiState !== 'DEAD' &&
@@ -1559,7 +1581,7 @@ export class ExpeditionController extends Component {
   private _computeAttackTargetEntity(): FixedEntity | undefined {
     if (!this._state) return undefined;
     const floor = this._state.floorState;
-    const { range } = playerAttackPower(this._state.player);
+    const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
     return floor.entities
       .filter((e) =>
         e.type === 'ICE_WALL' &&
@@ -1595,10 +1617,16 @@ export class ExpeditionController extends Component {
       const noViableDir = this._cachedMoveTargets.length === 0;
       const reason = noViableDir ? `无路可走(ap=${apNow})` : '方向阻塞';
       perfMark('tap.move.blocked', perfNow(), reason);
+      // 计算当前实际移动消耗（含减速惩罚，不含靴子首次免费特例）
+      const moveCost = getBalancedActionCost(this._state.balanceSnapshot, this._state.chapter, 'MOVE');
+      const slowPenalty = (this._state.floorState.playerMoveApPenaltyRounds ?? 0) > 0 ? 1 : 0;
+      const effectiveCost = moveCost + slowPenalty;
       if (noViableDir) {
         // 4 方向全 noop：可能是 AP 不够（含 debuff 推高成本）、全被怪/石头/边界堵死。
-        // 直接给玩家明确反馈，_maybeAutoEndTurn 会接着结束回合。
-        this._toast?.toast(apNow < AP_COST.MOVE ? `AP 不足（剩余 ${apNow}）` : 'AP 不足或无路可走');
+        this._toast?.toast(apNow < effectiveCost ? `行动力不足（剩余 ${apNow}，移动需要 ${effectiveCost}）` : '无路可走');
+      } else if (apNow < effectiveCost) {
+        // 某些方向靠靴子首次免费通过了 dryRun，但此方向有实体阻挡且 AP 实际不足。
+        this._toast?.toast(`行动力不足（剩余 ${apNow}，移动需要 ${effectiveCost}）`);
       } else {
         this._toast?.toast('该方向无法移动');
       }
@@ -1996,10 +2024,10 @@ export class ExpeditionController extends Component {
     const ap = fs.ap;
 
     // 移动可行：AP 够 + 至少一个方向有合法落点（dryRun 已过滤怪/石/边界）。
-    if (ap >= AP_COST.MOVE && this._cachedMoveTargets.length > 0) return true;
+    if (ap >= getBalancedActionCost(this._state.balanceSnapshot, this._state.chapter, 'MOVE') && this._cachedMoveTargets.length > 0) return true;
 
     // 攻击可行：AP 够 + 范围内、已揭示区域有目标（_computeAttackTarget 已限定）。
-    if (ap >= AP_COST.ATTACK && (this._cachedAttackTarget || this._cachedAttackEntityTarget)) {
+    if (ap >= getBalancedActionCost(this._state.balanceSnapshot, this._state.chapter, 'ATTACK') && (this._cachedAttackTarget || this._cachedAttackEntityTarget)) {
       return true;
     }
 
@@ -2301,6 +2329,21 @@ export class ExpeditionController extends Component {
         const node = this._map.getOccupantArtAt(this._state.floorState.player);
         if (node) void Effects.buffGain(node, { strength: 1.6 });
         void Effects.cameraPunch({ strength: 0.8 });
+        break;
+      }
+      case 'AWAKEN_EFFECT_TRIGGERED': {
+        const playerNode = this._map.getOccupantArtAt(this._state.floorState.player);
+        const isExecute = ev.effectId === 'awakened_execute';
+        const isSniper = ev.effectId === 'awakened_power_shot';
+        const isShadow = ev.effectId === 'awakened_shadow_strike' || ev.effectId === 'awaken_shadow_trade';
+        if (playerNode) {
+          const color = isShadow
+            ? new Color(180, 100, 255, 255)
+            : isExecute ? new Color(255, 80, 80, 255)
+              : new Color(255, 196, 90, 255);
+          void Effects.flash(playerNode, { color, times: isExecute ? 2 : 1 });
+        }
+        if (isSniper || isExecute) void Effects.cameraPunch({ strength: isExecute ? 1.2 : 0.7 });
         break;
       }
       // ── 命运树 buff 生效（开局应用）：玩家 buffGain ──
@@ -2870,10 +2913,10 @@ export class ExpeditionController extends Component {
       // 5) 二阶觉醒确认（design §七）
       if (ev.type === 'CLASS_CAN_AWAKEN' && this._toast && this._state) {
         const tChoice = perfNow();
-        const confirmed = await this._toast.showClassAwakenChoice(CLASS_CN[ev.classId] ?? ev.classId);
+        const formId = await this._toast.showClassAwakenChoice(ev.classId);
         perfMark('blockingChoice.classAwaken', tChoice);
-        if (confirmed && this._state) {
-          const r = applyClassAwaken(this._state);
+        if (formId && this._state) {
+          const r = applyClassAwaken(this._state, formId);
           if (r.events.length > 0) {
             this._state = r.state;
             this._rebuildInputHints();

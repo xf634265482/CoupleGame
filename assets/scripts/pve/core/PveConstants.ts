@@ -601,6 +601,10 @@ export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
   { id: 'E9', column: 'E', order: 9, name: '改命之刻', cost: 240, desc: '三选一高阶重抽' },
 ] as const;
 
+// ── 掩体视线（LOS，specs/260629-map-terrain Phase 2）─────────────
+/** 挡视线的地形类型（墙体型；地面型 SAND_PIT / ICE_TILE / LAVA_TILE 不挡，AC-MT-5）。 */
+export const BLOCKS_LOS_TYPES = new Set(['ROCK', 'ICE_WALL', 'FREEZE_WALL']);
+
 // ── 普通层地形生成（specs/260629-map-terrain Phase 1）─────────────
 /** 每章普通层主地形类型（第5章沿用石块作走位障碍）。 */
 export const NORMAL_FLOOR_TERRAIN_TYPE = {
