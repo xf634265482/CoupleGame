@@ -12,7 +12,6 @@ import {
 } from 'cc';
 import { EDITOR } from 'cc/env';
 import { applyUiLayerTree, visibleDesignSize } from '../platform/wechat/ViewAdapt';
-import type { GameDoc, GamePlayer } from '../types/GameTypes';
 import {
   ensureArtCover,
   normalizeUiSpriteFrame,
@@ -21,71 +20,7 @@ import {
 
 /** art/ui 下首批资源的 SpriteFrame UUID（备用：resources / main 失败时） */
 export const UI_SPRITE_UUID: Record<string, string> = {
-  'backgrounds/bg_board': '9dab1592-e610-4b0e-8557-9b0ad3ed894c@f9941',
   'backgrounds/bg_lobby': '61d7272b-0616-4fd0-b218-e6379344531e@f9941',
-  'backgrounds/bg_room': '1201f551-924a-4b0f-b9b7-fc2c8adf1808@f9941',
-  'backgrounds/bg_settlement': '3af7d3db-39e6-4c45-bb10-ae01b6694821@f9941',
-  'board/buttons/btn_board_attack_9s': 'e4cf0cd5-ea60-44b0-917f-c056e787b35f@f9941',
-  'board/buttons/btn_board_bag_9s': 'c7128bb5-74f0-4f6a-9ce1-d697cf763a31@f9941',
-  'board/buttons/btn_board_disabled_9s': '1238f061-38f2-4b93-838b-ffae130fab11@f9941',
-  'board/buttons/btn_board_end_9s': '5162564d-0148-42fd-9639-c2293c4d33d0@f9941',
-  'board/buttons/btn_board_help_9s': 'cacef5c3-2efc-4f5a-a711-3c4b51e501de@f9941',
-  'board/buttons/btn_board_quick_chat': 'a05c41a2-4065-4687-bb98-83842c2789cd@f9941',
-  'board/buttons/btn_board_roll_9s': '0e03e5ae-e684-44cf-ae53-d7af0d2ea2ea@f9941',
-  'board/cells/cell_burning': '86cc73ab-a343-4056-a7a4-e9e80a173fe4@f9941',
-  'board/cells/cell_diamond': 'eb3cb51e-0637-4567-aff5-140ed2a70a41@f9941',
-  'board/cells/cell_event': 'c4f2fff8-076a-42da-b8d6-102e82c4f11e@f9941',
-  'board/cells/cell_final_shop': 'ef99f250-1697-4cf2-811f-1e43816a011a@f9941',
-  'board/cells/cell_gold': 'a2d560e3-950f-4b15-9fd0-d096ab16e348@f9941',
-  'board/cells/cell_gold_shop': '3fb8241a-0bb3-4f89-91dc-84d8055ebe4c@f9941',
-  'board/cells/cell_legendary_shop': '47d93f97-71b0-4e10-8faf-c0f51076b7b1@f9941',
-  'board/cells/cell_lucky': '2416831f-c507-4016-8a08-df8fb563e573@f9941',
-  'board/cells/cell_minigame': 'e5a36cdc-04a7-4ddc-9d96-e1a9a56b6916@f9941',
-  'board/cells/cell_normal': 'd59b1125-d459-4004-828a-db866b5d6bc5@f9941',
-  'board/cells/cell_region_frame_1': 'c856c96b-a1a9-4496-8910-f0eda9fc31f3@f9941',
-  'board/cells/cell_region_frame_2': 'fc79ff81-a47c-485a-ac8a-7fe6c6d9ffed@f9941',
-  'board/cells/cell_region_frame_3': 'd5c82cbe-eede-42b7-9acf-569fdca9d2c8@f9941',
-  'board/cells/cell_supply': 'df60c5a3-d5f0-4084-81e5-6a018ac75e82@f9941',
-  'board/cells/cell_waste': '60db7c6f-7eca-4dd0-acdd-9e4820ec0747@f9941',
-  'board/panels/bar_turn_status_9s': '096c39a0-275a-4542-bf35-68feb3e9626b@f9941',
-  'board/panels/card_board_player_9s': 'c9bddfd4-50d4-4026-afc0-6fb0b23c291a@f9941',
-  'board/panels/card_board_player_selected_9s': 'bb019742-a4ae-4d6e-92c8-1dcfdb6f3adc@f9941',
-  'board/panels/panel_board_guide_9s': '51cdfedf-6a79-464d-bfd9-e2c23a8f73a4@f9941',
-  'board/panels/panel_board_hud_9s': '841a0210-8e90-4b8d-b1d0-13b187a8bff2@f9941',
-  'board/panels/panel_board_message_9s': '6a91b91e-aace-4236-8f62-8dd390f12af3@f9941',
-  'board/panels/panel_board_modal_9s': '79a605c1-397c-4734-ba93-79233c6def70@f9941',
-  'board/panels/panel_board_toast_9s': 'ee42c1b7-96da-42d5-9490-930f43be3376@f9941',
-  'board/pawns/neutral_region_1': 'f909efc3-4c18-47e3-86e9-91face90d8b8@f9941',
-  'board/pawns/neutral_region_2': '889366c9-c4cd-414a-8ae2-400c6f939284@f9941',
-  'board/pawns/neutral_region_3': 'ffa40252-7770-45a2-834e-89c878fc6314@f9941',
-  'board/pawns/pawn_player_1': '269cfaaf-86ed-4a1b-8141-666f8a6b874d@f9941',
-  'board/pawns/pawn_player_2': '63300801-224e-4fc6-8b83-607a7fcd2ac5@f9941',
-  'board/pawns/pawn_player_3': 'e437c523-c68c-444f-ac6a-5dd54cd55e82@f9941',
-  'board/pawns/pawn_player_4': 'ee086de7-9705-45e2-ba5c-9753d8ce519a@f9941',
-  'icons/icon_armor_armor': '7b036436-2b39-4328-8797-28c0c8960ea4@f9941',
-  'icons/icon_armor_helmet': 'f26b39da-5f5b-49cb-aa90-2a7ab1515c82@f9941',
-  'icons/icon_connected': '6523c396-ffba-4578-9784-b484ffd45b11@f9941',
-  'icons/icon_item_dice': 'cb41b591-2030-4679-af0d-14bf3255ef90@f9941',
-  'icons/icon_item_immunity': 'd50ae392-7418-4795-b806-2f7affdca589@f9941',
-  'icons/icon_item_medkit': '6afb5301-2fe8-4fda-b8f4-01c185e13d68@f9941',
-  'icons/icon_item_trap': '0fbf1016-eb1a-452f-b5ff-86fa8112ce4d@f9941',
-  'icons/icon_item_vampire': '661af1f2-0dff-4d3a-8349-19deff5cd93b@f9941',
-  'icons/icon_kill': 'a2588237-5962-4b6e-9835-4bd98f5faea3@f9941',
-  'icons/icon_shoes_marching': 'b5056cb2-1c8a-4422-b3a8-ff8c88a2cb28@f9941',
-  'icons/icon_shoes_rapid': 'e56f790e-21cb-45bf-9875-8c3ca388556f@f9941',
-  'icons/icon_status_amulet': '5c68efed-fb09-4110-b522-9a438513dfa7@f9941',
-  'icons/icon_status_bounty': '89633cd5-921e-4709-b027-b7a3a38b9551@f9941',
-  'icons/icon_status_infected': '9931b0c8-352b-4df8-9926-40a869b5d04e@f9941',
-  'icons/icon_warning': '0632447c-1e7c-42c8-a67d-9877f03a5253@f9941',
-  'icons/icon_weapon_gun': '1635d088-18bd-4a2c-871c-aa5d2192498f@f9941',
-  'icons/icon_weapon_rocket': '017a9adb-8614-442b-a6db-cd6323a93784@f9941',
-  'icons/icon_weapon_sword': 'ab059d3c-267e-4438-9c9c-e947d750b60c@f9941',
-  'lobby/btn_lobby_create_9s': '675daa6a-6531-4745-9b59-0382aede67d9@f9941',
-  'lobby/btn_lobby_join_9s': '51406360-308d-4024-9aa1-74d31f28135f@f9941',
-  'lobby/btn_lobby_match_9s': 'bb37a4d7-222e-4178-9492-5c02534b599a@f9941',
-  'lobby/input_lobby_name_9s': 'be3ed857-affc-4056-a18c-330277e66f09@f9941',
-  'lobby/logo_game': '32c676f7-3434-49a5-b02b-f96ba623c038@f9941',
-  'lobby/panel_lobby_main_9s': 'edc5c209-6f75-4d1b-8079-9a01f2cd0695@f9941',
   'pve/backgrounds/bg_destiny_tree': 'b84fda9d-7263-47fc-a4f3-04c6050f6c72@f9941',
   'pve/backgrounds/bg_pve_camp': '93eabd9b-34de-480d-ba17-b8ce8f4690ad@f9941',
   'pve/backgrounds/bg_pve_ch1': '41cfbfa8-79b3-4c15-8e9b-24539c23cd1d@f9941',
@@ -93,10 +28,7 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/backgrounds/bg_pve_ch3': 'dcb41494-9338-4cda-bb3d-e2a87df38184@f9941',
   'pve/backgrounds/bg_pve_ch4': '00c422be-4c5e-4d1e-91e4-a8437515a442@f9941',
   'pve/backgrounds/bg_pve_ch5': 'f8eb92ee-f6d2-461c-af0a-1dbfd97a45b8@f9941',
-  'pve/backgrounds/bg_pve_ch2_runtime': '0571d640-33d1-4cdb-8db1-5783a54812d3@f9941',
-  'pve/backgrounds/bg_pve_ch3_runtime': 'f5c61bff-8c24-4617-829c-cb5839e0691b@f9941',
-  'pve/backgrounds/bg_pve_ch4_runtime': '3b53fb41-695d-4bcc-a99d-66e23fbb4716@f9941',
-  'pve/backgrounds/bg_pve_ch5_runtime': '56c21963-e9aa-4414-82c5-7dd6655afe1b@f9941',
+  'pve/backgrounds/bg_pve_loading_expedition': '7e917902-16e6-4f4b-a30b-bd248d3a478b@f9941',
   'pve/camp/panel_camp_main_9s': '750cb7e3-fb89-4042-8dfd-b6bfd61698cc@f9941',
   'pve/class/icon_class_adventurer': 'c3c96b12-3d37-4e95-ba49-b45b0d33df86@f9941',
   'pve/class/icon_class_archer': 'be5c49d3-acf7-46cb-a5a9-3b2cfe1e6498@f9941',
@@ -107,10 +39,10 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/hud/bg_dpad': 'e9214c11-1db7-4dec-a06d-4d9290a63dae@f9941',
   'pve/hud/btn_pve_interact': '0affe775-4482-49b2-91ac-a591b7fa8606@f9941',
   'pve/lobby/logo_destiny_tower': '4f0fa81a-aed1-44c8-a308-868ccd52189b@f9941',
-  'pve/lobby/asset_top_chip_blue_9s': 'cb390222-af68-4338-b233-fb68249a3a76@f9941',
-  'pve/lobby/icon_chip_destiny_shards': 'e4e41762-5cb6-4f3c-9e16-e33fb6287283@f9941',
   'pve/lobby/icon_chip_diamond': '0291cd6d-d83a-404e-9c19-27e740a81156@f9941',
+  'pve/lobby/icon_chip_stardust': '0e5dd488-3382-4590-9c91-78fcc7bc356a@f9941',
   'pve/lobby/icon_chip_stamina': 'ca8b3db2-9f83-4686-bf48-68c0ac4c2ea5@f9941',
+  'pve/lobby/icon_nav_relic': '0e57749f-e803-4056-8671-6d85a1772da9@f9941',
   'pve/lobby/icon_nav_expedition': '22a5cfbd-2a04-47db-b57b-5bbc03ce767b@f9941',
   'pve/lobby/icon_nav_destiny_tree': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
   'pve/lobby/icon_nav_leaderboard': '2fbbe305-2f22-451b-9180-f50af9d94437@f9941',
@@ -151,23 +83,10 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/icon_monster_ch1_normal': '83a5fda4-9dc8-4754-8d70-6ccb0ffe5c0b@f9941',
   'pve/map/icon_monster_ch1_elite': 'a5361819-031b-4b77-a572-646bfc3c9edc@f9941',
   'pve/map/icon_monster_ch1_anima': 'acb754d0-d795-43a7-b846-79e1bc8b70f4@f9941',
-  'pve/map/icon_monster_ch1_boss': '4051ffdd-2918-48b6-b827-230dc0353f47@f9941',
-  'pve/map/icon_monster_ch2_normal': 'a40a74d6-5716-4cad-87d1-6b23ba4b490a@f9941',
-  'pve/map/icon_monster_ch2_elite': '86482252-26dc-404b-99ee-818c202ef2a0@f9941',
-  'pve/map/icon_monster_ch2_anima': '3a2ba686-59e3-4acc-9583-3579427edaa9@f9941',
-  'pve/map/icon_monster_ch2_boss': '588f96bd-4552-4463-ae7b-468832854c6f@f9941',
-  'pve/map/icon_monster_ch3_normal': 'ea6bbcb6-0391-40c2-af0d-2106046ebcd0@f9941',
-  'pve/map/icon_monster_ch3_elite': 'ab8045bb-6422-4a22-8b2a-bede2b877f84@f9941',
-  'pve/map/icon_monster_ch3_anima': '7d4ad8be-5d66-4613-aa20-733d2ab82139@f9941',
-  'pve/map/icon_monster_ch3_boss': '29a377eb-11f6-4b26-8d84-03b02c5693b5@f9941',
-  'pve/map/icon_monster_ch4_normal': '7ebc8e60-92ff-4541-883a-2dd6e1b3d08d@f9941',
-  'pve/map/icon_monster_ch4_elite': 'd7fca926-2100-43fb-accb-c90c9485af53@f9941',
-  'pve/map/icon_monster_ch4_anima': '5e78b744-b067-4190-940e-792f988604da@f9941',
-  'pve/map/icon_monster_ch4_boss': '8d666502-18b8-4927-8752-1429a2440310@f9941',
-  'pve/map/icon_monster_ch5_normal': '69217ae5-1071-4684-9639-9ce6d1119e49@f9941',
-  'pve/map/icon_monster_ch5_elite': 'a9234413-234c-48ab-92ec-1fb4ea936ad1@f9941',
-  'pve/map/icon_monster_ch5_anima': '75e7d718-5de4-40de-a074-6c9077809904@f9941',
-  'pve/map/icon_monster_ch5_boss': '571800a6-1f4c-4ec0-89ab-92a2c886671e@f9941',
+  // ch2 怪物图标已迁入 chapter_2 分包（assets/chapter_backgrounds/chapter_2/map/），不再走 UiAssets。
+  // ch3 怪物图标已迁入 chapter_3 分包（assets/chapter_backgrounds/chapter_3/map/），不再走 UiAssets。
+  // ch4 怪物图标已迁入 chapter_4 分包，不再走 UiAssets。
+  // ch5 怪物图标已迁入 chapter_5 分包，不再走 UiAssets。
   'pve/map/icon_monster_elite': '4393b67e-6e9e-4414-a452-c9b50ff2475a@f9941',
   'pve/map/icon_monster_normal': '4acc5677-9e5e-42c2-910c-95a6550fa61f@f9941',
   'pve/map/icon_player': 'f621a780-95f7-4cab-bfd0-71de76b89e44@f9941',
@@ -179,11 +98,13 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/mark_move_range': '7cd41b51-8d59-4da8-b245-b2d2c86c9ba2@f9941',
   'pve/map/tile_floor_ch1': '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6@f9941',
   'pve/map/tile_floor_ch1L': '6b9be095-3a24-4603-83f0-e81dafd9c46b@f9941',
-  'pve/map/tile_floor_ch2': '76b4a3db-b2b9-472e-bf86-a61d0de2419c@f9941',
-  'pve/map/tile_floor_ch3': '1f4d79be-7014-4707-9079-b4b83c14df36@f9941',
-  'pve/map/tile_floor_ch4': '8a57498e-8f89-4244-9818-f3cd8f7fd230@f9941',
-  'pve/map/tile_floor_ch5': '0613b374-6008-4582-b4dc-993457f49a30@f9941',
+  // tile_floor_ch2 历史声明，源 PNG 从未存在；FogMapView 取不到自动 fallback 不显示地砖。
+  // tile_floor_ch3 历史声明，源 PNG 从未存在；FogMapView 取不到自动 fallback 不显示地砖。
+  // tile_floor_ch4 历史声明，源 PNG 从未存在。
+  // tile_floor_ch5 历史声明，源 PNG 从未存在。
   'pve/map/tile_fog': 'cb221eaf-62c2-42df-b751-2d6d521e1652@f9941',
+  // terrain_rock 跨章共享（ch1 GoblinChief 召唤 + ch3 FrostGiant 路径检测），留主包 critical。
+  'pve/map/terrain_rock': '6de48a38-f929-42c3-9fdc-f02682a9013e@f9941',
   'pve/map/tile_selected_frame': 'd92094e5-211d-460b-88c0-919a9775b933@f9941',
   'pve/panel/panel_char_bg_9s': '1b6233d0-eb91-4fc5-b3ca-728573a47442@f9941',
   'pve/panel/slot_equip_empty': '813a20e5-014e-4d22-bad8-707344802b0e@f9941',
@@ -192,88 +113,12 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/popup/panel_floor_clear_9s': '2c33d542-f371-4218-a046-1c6476951872@f9941',
   'pve/popup/panel_interact_9s': '5c3eb0e2-e1e5-43de-9303-59aa2c451921@f9941',
   'pve/popup/panel_strengthen_9s': '15848f75-bfa3-4f32-aa0d-a7d2528fa09c@f9941',
-  'room/card_room_player_empty': 'ebc95ea1-0db2-4cf5-b848-a5780cd90d8d@f9941',
-  'room/card_room_player_ready': '31cc810e-f907-46ab-8dd8-d8864ae357bb@f9941',
-  'room/panel_room_main_9s': '3a884848-ff37-4199-b774-d15280308671@f9941',
-  'room/tag_room_host': 'ee53ec4e-11c8-48f4-bc24-3d7bce7ce2f7@f9941',
-  'settlement/btn_settlement_again_9s': 'cb6c0235-9149-4dbe-887e-79df0513cfd9@f9941',
-  'settlement/btn_settlement_back_9s': 'c94477aa-845d-4c6f-b8ee-3cbe189af70e@f9941',
-  'settlement/panel_settlement_main_9s': '30483805-adb1-4426-858a-22bbbb0e9ac0@f9941',
-  'settlement/rank_1': '3ac8ca77-2d06-421f-8a11-752f273a0be8@f9941',
-  'settlement/rank_2': '7a06375f-0d82-43bd-aeda-87c36f46dea9@f9941',
-  'settlement/rank_3': '32ad20eb-2a34-4a72-b672-221754991c3d@f9941',
-  'settlement/tag_defeated': '94066614-f4e1-4821-bd74-eb1920fbe18c@f9941',
-  'settlement/tag_winner': 'f2285c82-366e-4e00-bbd2-15967179486c@f9941',
 };
 
-export const CELL_TYPE_SPRITE: Record<string, string> = {
-  NORMAL: 'board/cells/cell_normal',
-  GOLD: 'board/cells/cell_gold',
-  DIAMOND: 'board/cells/cell_diamond',
-  SUPPLY: 'board/cells/cell_supply',
-  WASTE: 'board/cells/cell_waste',
-  BURNING: 'board/cells/cell_burning',
-  EVENT: 'board/cells/cell_event',
-  GOLD_SHOP: 'board/cells/cell_gold_shop',
-  LEGENDARY_SHOP: 'board/cells/cell_legendary_shop',
-  FINAL_SHOP: 'board/cells/cell_final_shop',
-  LUCKY: 'board/cells/cell_lucky',
-};
-
-const BOARD_BTN_KEYS: Record<string, string> = {
-  roll: 'board/buttons/btn_board_roll_9s',
-  bag: 'board/buttons/btn_board_bag_9s',
-  atk: 'board/buttons/btn_board_attack_9s',
-  help: 'board/buttons/btn_board_help_9s',
-  end: 'board/buttons/btn_board_end_9s',
-  quickChat: 'board/buttons/btn_board_quick_chat',
-  disabled: 'board/buttons/btn_board_disabled_9s',
-};
-
-export const BOARD_PAWN_KEYS = [
-  'board/pawns/pawn_player_1',
-  'board/pawns/pawn_player_2',
-  'board/pawns/pawn_player_3',
-  'board/pawns/pawn_player_4',
-  'board/pawns/neutral_region_1',
-  'board/pawns/neutral_region_2',
-  'board/pawns/neutral_region_3',
-] as const;
-
-const LOBBY_UI_KEYS = [
-  'lobby/logo_game',
-  'lobby/panel_lobby_main_9s',
-  'lobby/btn_lobby_create_9s',
-  'lobby/btn_lobby_join_9s',
-  'lobby/btn_lobby_match_9s',
-  'lobby/input_lobby_name_9s',
-] as const;
-
-export const ROOM_UI_KEYS = [
-  'room/panel_room_main_9s',
-  'room/card_room_player_empty',
-  'room/card_room_player_ready',
-  'room/tag_room_host',
-] as const;
-
-export const SETTLEMENT_UI_KEYS = [
-  'settlement/panel_settlement_main_9s',
-  'settlement/rank_1',
-  'settlement/rank_2',
-  'settlement/rank_3',
-  'settlement/tag_winner',
-  'settlement/tag_defeated',
-  'settlement/btn_settlement_back_9s',
-  'settlement/btn_settlement_again_9s',
-] as const;
 
 export const PVE_MAP_KEYS = [
   'pve/map/tile_fog',
   'pve/map/tile_floor_ch1',
-  'pve/map/tile_floor_ch2',
-  'pve/map/tile_floor_ch3',
-  'pve/map/tile_floor_ch4',
-  'pve/map/tile_floor_ch5',
   'pve/map/tile_selected_frame',
   'pve/map/mark_move_range',
   'pve/map/mark_attack_range',
@@ -286,29 +131,13 @@ export const PVE_MAP_KEYS = [
   'pve/map/icon_monster_ch1_normal',
   'pve/map/icon_monster_ch1_elite',
   'pve/map/icon_monster_ch1_anima',
-  'pve/map/icon_monster_ch1_boss',
   'pve/map/icon_monster_goblin_warrior',
   'pve/map/icon_monster_goblin_archer',
   'pve/map/icon_monster_frost_goblin',
   'pve/map/icon_monster_fire_goblin',
   'pve/map/icon_monster_spirit_rat',
   'pve/map/icon_monster_goblin_chief',
-  'pve/map/icon_monster_ch2_normal',
-  'pve/map/icon_monster_ch2_elite',
-  'pve/map/icon_monster_ch2_anima',
-  'pve/map/icon_monster_ch2_boss',
-  'pve/map/icon_monster_ch3_normal',
-  'pve/map/icon_monster_ch3_elite',
-  'pve/map/icon_monster_ch3_anima',
-  'pve/map/icon_monster_ch3_boss',
-  'pve/map/icon_monster_ch4_normal',
-  'pve/map/icon_monster_ch4_elite',
-  'pve/map/icon_monster_ch4_anima',
-  'pve/map/icon_monster_ch4_boss',
-  'pve/map/icon_monster_ch5_normal',
-  'pve/map/icon_monster_ch5_elite',
-  'pve/map/icon_monster_ch5_anima',
-  'pve/map/icon_monster_ch5_boss',
+  // ch2/ch3/ch4/ch5 怪物图标已迁入各自 chapter_N 分包，由 ChapterResourceLoader 进章时加载并回写 UiAssets 缓存。
   'pve/map/icon_monster_elite',
   'pve/map/icon_monster_anima',
   'pve/map/icon_monster_boss',
@@ -321,12 +150,10 @@ export const PVE_MAP_KEYS = [
   'pve/map/icon_idol',
   'pve/map/icon_fragment',
   'pve/map/terrain_rock',
-  'pve/map/icon_sand_pit_permanent',
-  'pve/map/terrain_ice_wall',
-  'pve/map/terrain_ice_tile',
-  'pve/map/terrain_freeze_wall',
-  'pve/map/terrain_shattered_ice',
-  'pve/map/terrain_lava',
+  // icon_sand_pit_permanent → chapter_2 分包；
+  // lava_chain（熔岩领主锁链 fx）→ chapter_4 分包，避免推主包过线（4096KB 限制）。
+  // 第3章冰系地形（terrain_ice_wall / terrain_ice_tile / terrain_freeze_wall / terrain_shattered_ice）→ chapter_3 分包；
+  // terrain_lava → chapter_4 分包。均由 ChapterResourceLoader 加载并回写 UiAssets 缓存。
 ] as const;
 
 export const PVE_HUD_KEYS = [
@@ -373,12 +200,10 @@ export const PVE_POPUP_KEYS = [
 
 /** 大章节背景（720×1280 竖图）；微信真机走分包，不进主包 native */
 // 首章背景是远征首屏关键图，需进入主包；其余大背景继续走资源分包。
+// 章节背景的运行时加载已收口到 pve/ChapterResourceLoader.ts。此表仅保留尚未迁移到
+// 独立分包的章节（第2章已迁出，走 chapter_2 bundle）；迁移完成后整表可删。
 export const PVE_CHAPTER_BG_KEYS = {
   1: 'pve/backgrounds/bg_pve_ch1',
-  2: 'pve/backgrounds/bg_pve_ch2_runtime',
-  3: 'pve/backgrounds/bg_pve_ch3_runtime',
-  4: 'pve/backgrounds/bg_pve_ch4_runtime',
-  5: 'pve/backgrounds/bg_pve_ch5_runtime',
 } as const;
 
 export const PVE_BG_KEYS = [
@@ -404,52 +229,19 @@ export const PVE_UI_KEYS = [
   ...PVE_PANEL_KEYS,
 ] as const;
 
-/** 大厅首屏必需：仅大厅背景 + 大厅 UI；阻塞启动流程，越小越快。 */
-const LOBBY_ESSENTIAL_KEYS = [
-  'backgrounds/bg_lobby',
-  ...LOBBY_UI_KEYS,
-] as const;
-
 /** PVE-only 大厅最小图集；不触发输入框、匹配按钮、房间或棋盘资源加载。 */
 const PVE_LOBBY_ESSENTIAL_KEYS = [
   'backgrounds/bg_lobby',
+  'pve/backgrounds/bg_pve_loading_expedition',
   'pve/lobby/logo_destiny_tower',
-  'pve/lobby/asset_top_chip_blue_9s',
-  'pve/lobby/icon_chip_destiny_shards',
-  'pve/lobby/icon_chip_diamond',
+  'pve/map/icon_fragment',
+  'pve/lobby/icon_chip_stardust',
   'pve/lobby/icon_chip_stamina',
+  'pve/lobby/icon_nav_relic',
   'pve/lobby/icon_nav_expedition',
   'pve/lobby/icon_nav_destiny_tree',
   'pve/lobby/icon_nav_leaderboard',
 ] as const;
-
-/** 大厅次要：房间背景/卡片/棋子等，可在大厅显示后后台预加载，玩家点"创建房间"前几乎肯定已就绪。 */
-const LOBBY_BACKGROUND_KEYS = [
-  'backgrounds/bg_room',
-  ...ROOM_UI_KEYS,
-  ...BOARD_PAWN_KEYS,
-] as const;
-
-const SETTLEMENT_KEYS = [
-  'backgrounds/bg_settlement',
-  ...SETTLEMENT_UI_KEYS,
-] as const;
-
-/** 装备 / 道具 / 商店商品 → art/ui 路径 */
-export const ITEM_ICON_KEY: Record<string, string> = {
-  SWORD: 'icons/icon_weapon_sword',
-  GUN: 'icons/icon_weapon_gun',
-  ROCKET: 'icons/icon_weapon_rocket',
-  HELMET: 'icons/icon_armor_helmet',
-  ARMOR: 'icons/icon_armor_armor',
-  MARCHING_SHOES: 'icons/icon_shoes_marching',
-  RAPID_SHOES: 'icons/icon_shoes_rapid',
-  DOUBLE_DICE: 'icons/icon_item_dice',
-  TRAP: 'icons/icon_item_trap',
-  MEDKIT: 'icons/icon_item_medkit',
-  IMMUNITY_POTION: 'icons/icon_item_immunity',
-  VAMPIRE_STONE: 'icons/icon_item_vampire',
-};
 
 /** Cocos 编译后 [...new Set(...)] 可能变成 Set 对象本身，禁止用于预加载列表 */
 function uniqueUiKeys(values: readonly string[]): string[] {
@@ -460,86 +252,11 @@ function uniqueUiKeys(values: readonly string[]): string[] {
   return out;
 }
 
-export const ITEM_ICON_PRELOAD_KEYS = uniqueUiKeys(Object.values(ITEM_ICON_KEY));
-
-/** 状态 / 战报角标 → art/ui 路径 */
-export const STATUS_ICON_KEY = {
-  KILL: 'icons/icon_kill',
-  INFECTED: 'icons/icon_status_infected',
-  BOUNTY: 'icons/icon_status_bounty',
-  AMULET: 'icons/icon_status_amulet',
-  WARNING: 'icons/icon_warning',
-  CONNECTED: 'icons/icon_connected',
-} as const;
-
-export const STATUS_ICON_PRELOAD_KEYS = uniqueUiKeys(Object.values(STATUS_ICON_KEY));
-
-export type StatusBadge = { key: string; count?: number };
-
-/** HUD 玩家卡角标：击杀、感染、悬赏、护符、低血/淘汰警告（在线图标暂时禁用） */
-export function playerStatusBadges(p: GamePlayer, game: GameDoc): StatusBadge[] {
-  const badges: StatusBadge[] = [];
-  const kills = p.kills ?? 0;
-  if (kills > 0) badges.push({ key: STATUS_ICON_KEY.KILL, count: kills });
-  if (p.infected) badges.push({ key: STATUS_ICON_KEY.INFECTED });
-  if (p.chosenOne || game.bountySeat === p.seat) {
-    badges.push({ key: STATUS_ICON_KEY.BOUNTY });
-  }
-  if (p.mysteriousAmulet) badges.push({ key: STATUS_ICON_KEY.AMULET });
-  const hp = p.hp ?? 0;
-  if (p.isDefeated || (!p.isDefeated && hp > 0 && hp <= 2)) {
-    badges.push({ key: STATUS_ICON_KEY.WARNING });
-  }
-  return badges;
-}
-
-/** 商店行 / 背包选项 / 玩家装备 → 图标 key */
-export function resolveItemIconKey(idOrKind: string): string | null {
-  const direct = ITEM_ICON_KEY[idOrKind];
-  if (direct) return direct;
-  if (idOrKind.startsWith('EW_')) {
-    return ITEM_ICON_KEY[idOrKind.slice(3)] ?? null;
-  }
-  if (idOrKind === 'U_DOUBLE_DICE') return ITEM_ICON_KEY.DOUBLE_DICE;
-  if (idOrKind === 'U_TRAP') return ITEM_ICON_KEY.TRAP;
-  if (idOrKind === 'U_MEDKIT') return ITEM_ICON_KEY.MEDKIT;
-  return null;
-}
-
-/** 预加载列表：仅 resources/art/ui 里实际存在的图（删资源后勿留死路径） */
-const BOARD_KEYS = [
-  'backgrounds/bg_board',
-  ...Object.values(CELL_TYPE_SPRITE),
-  'board/cells/cell_region_frame_1',
-  'board/cells/cell_region_frame_2',
-  'board/cells/cell_region_frame_3',
-  ...ITEM_ICON_PRELOAD_KEYS,
-  ...STATUS_ICON_PRELOAD_KEYS,
-] as const;
-
-export const BOARD_PANEL_KEYS = [
-  'board/panels/panel_board_hud_9s',
-  'board/panels/card_board_player_9s',
-  'board/panels/card_board_player_selected_9s',
-  'board/panels/panel_board_message_9s',
-  'board/panels/panel_board_modal_9s',
-  'board/panels/panel_board_guide_9s',
-  'board/panels/panel_board_toast_9s',
-  'board/panels/bar_turn_status_9s',
-] as const;
-
-/** 按钮/面板图放回 resources 后取消注释并跑 sync-ui-asset-uuids.py */
-export const BOARD_OPTIONAL_IMAGE_KEYS = [
-  ...Object.values(BOARD_BTN_KEYS),
-  ...BOARD_PANEL_KEYS,
-  ...BOARD_PAWN_KEYS,
-] as const;
-
 const cache = new Map<string, SpriteFrame>();
 
 let resourcesReady: Promise<AssetManager.Bundle | null> | null = null;
 
-function isWechatRuntime(): boolean {
+export function isWechatRuntime(): boolean {
   return typeof wx !== 'undefined' && typeof wx.loadSubpackage === 'function';
 }
 
@@ -576,10 +293,6 @@ const WECHAT_SUBPACKAGE_ONLY_KEYS = new Set([
   'pve/backgrounds/bg_pve_ch3',
   'pve/backgrounds/bg_pve_ch4',
   'pve/backgrounds/bg_pve_ch5',
-  'pve/backgrounds/bg_pve_ch2_runtime',
-  'pve/backgrounds/bg_pve_ch3_runtime',
-  'pve/backgrounds/bg_pve_ch4_runtime',
-  'pve/backgrounds/bg_pve_ch5_runtime',
   'pve/backgrounds/bg_pve_camp',
   'pve/backgrounds/bg_destiny_tree',
 ]);
@@ -593,6 +306,7 @@ function isPveCriticalNative(key: string): boolean {
     return false;
   }
   return key === 'pve/backgrounds/bg_pve_ch1'
+    || key === 'pve/backgrounds/bg_pve_loading_expedition'
     || key.startsWith('pve/map/')
     || key.startsWith('pve/hud/')
     || key.startsWith('pve/lobby/')
@@ -676,8 +390,9 @@ function waitForWechatSubpackageBytes(
   });
 }
 
-/** 微信：须先 loadSubpackage，再 loadBundle('resources')（由 engine-adapter 映射到分包目录） */
-function loadWechatSubpackage(name: string): Promise<void> {
+/** 微信：须先 loadSubpackage，再 loadBundle('resources')（由 engine-adapter 映射到分包目录）。
+ *  导出供 ChapterResourceLoader 复用：复用真机落盘等待 / devtools 跳过探针逻辑，勿重复实现。 */
+export function loadWechatSubpackage(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!isWechatRuntime()) {
       resolve();
@@ -875,7 +590,10 @@ const SUB_NATIVE_ROOT = ['subpackages', 'resources', 'native'].join('/');
 
 function nativeTexturePathsFromUuid(key: string, uuidWithSuffix: string): string[] {
   const uuid = uuidWithSuffix.split('@')[0];
-  const ext = /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(key) ? '.jpg' : '.png';
+  const ext = key === 'pve/backgrounds/bg_pve_loading_expedition'
+    || /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(key)
+    ? '.jpg'
+    : '.png';
   const rel = `${uuid.slice(0, 2)}/${uuid}${ext}`;
   const paths = [`${MAIN_NATIVE_ROOT}/${rel}`, `${SUB_NATIVE_ROOT}/${rel}`];
   const seen = new Set<string>();
@@ -1171,48 +889,20 @@ export function getCachedSprite(key: string): SpriteFrame | null {
   return cache.get(key) ?? null;
 }
 
-export function getBoardButtonSprite(key: keyof typeof BOARD_BTN_KEYS): SpriteFrame | null {
-  return getCachedSprite(BOARD_BTN_KEYS[key]);
-}
-
-/** 大厅首屏所需的最小图集；并行加载（7 张主包 native 小图，不受 PRELOAD_BATCH_SIZE 限制）。 */
-export async function preloadLobbyUi(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
-  await preloadKeys([...LOBBY_ESSENTIAL_KEYS], { parallel: true });
+/**
+ * 把外部加载到的 SpriteFrame 注入主缓存，使后续 getCachedSprite(key) 同步命中。
+ * 用途：ChapterResourceLoader 从 chapter_N 分包 bundle.load 出图后回写，
+ * 让 FogMapView 等同步取图层无须感知分包细节。
+ */
+export function cacheUiSprite(key: string, sf: SpriteFrame): SpriteFrame {
+  normalizeUiSpriteFrame(sf);
+  cache.set(key, sf);
+  return sf;
 }
 
 export async function preloadPveLobbyUi(): Promise<void> {
   if (!(await ensureResourcesBundle())) return;
   await preloadKeys([...PVE_LOBBY_ESSENTIAL_KEYS], { parallel: true });
-}
-
-/** 大厅显示后异步预热的次要图集（房间/棋子）。fire-and-forget，错误吞掉不阻塞玩家。 */
-export async function preloadLobbyBackgroundAssets(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
-  try {
-    await preloadKeys([...LOBBY_BACKGROUND_KEYS]);
-  } catch (err) {
-    console.warn('[UiAssets] background preload failed', err);
-  }
-}
-
-export async function preloadBoardUi(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
-  const allKeys = [
-    ...BOARD_KEYS,
-    ...BOARD_PANEL_KEYS,
-    ...Object.values(BOARD_BTN_KEYS),
-    ...BOARD_PAWN_KEYS,
-  ];
-  const keys = usesWechatNativeFs()
-    ? allKeys.filter((k) => !usesSubpackageOnlyNative(k))
-    : allKeys;
-  await preloadKeys(keys);
-}
-
-export async function preloadSettlementUi(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
-  await preloadKeys([...SETTLEMENT_KEYS]);
 }
 
 export async function preloadPveUi(): Promise<void> {
@@ -1224,13 +914,10 @@ export async function preloadPveUi(): Promise<void> {
   await preloadKeys(keys);
 }
 
-export type ScreenBgKey = 'lobby' | 'room' | 'board' | 'settlement';
+export type ScreenBgKey = 'lobby';
 
 const BG_KEY: Record<ScreenBgKey, string> = {
   lobby: 'backgrounds/bg_lobby',
-  room: 'backgrounds/bg_room',
-  board: 'backgrounds/bg_board',
-  settlement: 'backgrounds/bg_settlement',
 };
 
 /** 将 Canvas 下 ScreenBg 换为图片背景 */

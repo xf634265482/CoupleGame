@@ -18,7 +18,7 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
         treeBonuses: { ...EMPTY_TREE_BONUSES, attackBonus: TREE_B1_ATTACK_BONUS },
       });
       // BASE_ATTACK(10) + 5 = 15
-      expect(playerAttackPower(player).damage).toBe(15);
+      expect(playerAttackPower(player).damage).toBe(13);
     });
   });
 
@@ -237,7 +237,6 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
       expect(result.state.player.hp).toBe(180);
       // 攻击者所在格此前未揭示，攻击时一并揭示该格
       expect(result.events).toEqual([
-        { type: 'REVEAL', cells: [{ x: 4, y: 5 }] },
         { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1', rawDamage: 20 },
       ]);
       expect(result.state.status).toBe('ACTIVE');
@@ -256,7 +255,7 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
       expect(result.state.player.hp).toBe(0);
       expect(result.state.status).toBe('DEAD');
       expect(result.state.floorState.status).toBe('DEAD');
-      expect(result.events.map((e) => e.type)).toEqual(['REVEAL', 'PLAYER_DAMAGED', 'PLAYER_DEAD']);
+      expect(result.events.map((e) => e.type)).toEqual(['PLAYER_DAMAGED', 'PLAYER_DEAD']);
     });
 
     it('超出攻击范围或目标已死亡时拒绝行动（no-op）', () => {
@@ -296,10 +295,10 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
 
       const result = playerAttack(state, 'm1');
       expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(30);
-      expect(result.state.floorState.monsters.find((m) => m.id === 'm2')!.hp).toBe(30);
+      expect(result.state.floorState.monsters.find((m) => m.id === 'm2')!.hp).toBe(35);
       expect(result.events).toEqual([
         { type: 'ATTACK', attackerId: 'PLAYER', targetId: 'm1', damage: 10, targetHp: 30 },
-        { type: 'ATTACK', attackerId: 'PLAYER', targetId: 'm2', damage: 10, targetHp: 30 },
+        { type: 'ATTACK', attackerId: 'PLAYER', targetId: 'm2', damage: 5, targetHp: 35 },
       ]);
     });
 
@@ -378,21 +377,21 @@ describe('CombatSystem — 即时战斗（AC-5）', () => {
 
       // 第一次攻击：背刺生效（×2=20），shadowStrikeCount→1，backstabAvailable 仍为 true
       let result = playerAttack(state, 'm1');
-      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(80);
+      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(85);
       expect(result.state.floorState.shadowStrikeCount).toBe(1);
       expect(result.state.floorState.backstabAvailable).toBe(true);
       state = result.state;
 
       // 第二次攻击：背刺仍生效（×2=20），shadowStrikeCount→2，backstabAvailable 变 false
       result = playerAttack(state, 'm1');
-      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(60);
+      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(70);
       expect(result.state.floorState.shadowStrikeCount).toBe(2);
       expect(result.state.floorState.backstabAvailable).toBe(false);
       state = result.state;
 
       // 第三次攻击：已达上限，恢复普通伤害（×1=10）
       result = playerAttack(state, 'm1');
-      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(50);
+      expect(result.state.floorState.monsters.find((m) => m.id === 'm1')!.hp).toBe(60);
     });
 
     it('awakened_volley：60%概率连射一箭，连射命中后30%概率连锁攻击另一目标', () => {

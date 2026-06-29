@@ -182,7 +182,6 @@ function expectedPendingType(shopType) {
  * 购买商店商品 → AC-6～AC-9
  * @param {object} game
  * @param {object} player
- * @param {'GOLD'|'LEGENDARY'} shopType
  * @param {string} itemType
  */
 function buyCharityItem(game, player, itemType) {

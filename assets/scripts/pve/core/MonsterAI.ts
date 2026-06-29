@@ -404,7 +404,8 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   const stealthReduction = (state.player.classTraits.includes('stealth') ? 2 : 0)
     + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0);
   // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
-  const inAggroRange = dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);
+  const inAggroRange = !state.floorState.rogueHidden
+    && dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);
 
   // ── 灵气怪：FLEE ──────────────────────────────────────
   if (monster.type === 'ANIMA') {

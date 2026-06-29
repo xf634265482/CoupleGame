@@ -33,9 +33,9 @@ export const MAP_SIZE = {
 } as const;
 
 // ── 章节结构（design §3） ──────────────────────────────
-export const FLOORS_PER_CHAPTER = 5;
+export const FLOORS_PER_CHAPTER = 7;
 export const TOTAL_CHAPTERS = 5;
-export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * TOTAL_CHAPTERS; // 25
+export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * TOTAL_CHAPTERS; // 35
 
 export const CHAPTER_BOSS = {
   1: 'GOBLIN_CHIEF',
@@ -46,7 +46,7 @@ export const CHAPTER_BOSS = {
 } as const;
 
 // ── 玩家初始状态 ───────────────────────────────────────
-export const INITIAL_HP = 2000;
+export const INITIAL_HP = 230;
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
@@ -105,8 +105,15 @@ export type BossId = (typeof CHAPTER_BOSS)[keyof typeof CHAPTER_BOSS];
 export const ANIMA_MONSTER_COUNT = 1; // 灵气怪：逃跑，100% 大量灵气
 export const ELITE_MONSTER_COUNT = 1; // 精英怪：巡逻→追击，掉落更好
 
-// ── M2 职业碎片（每普通层，design §8 AC-15）──────────────
-export const FRAGMENT_COUNT = 2; // 每普通层生成 2 个职业碎片
+// ── 职业碎片产出（V3 §3.1）────────────────────────────────
+/** 每普通层保底 1 个碎片（V3：废除固定 2 个，改保底+概率）。 */
+export const FRAGMENT_COUNT = 1; // 保底数量（legacy，V3 已切换到概率模型）
+/** 第 2 个碎片的追加概率（V3 §3.1 首发值，Monte Carlo 校准后取 0.40）。 */
+export const FRAGMENT_SECOND_CHANCE = 0.40;
+/** 第 3 个碎片的追加概率（V3 §3.1 首发值，独立于第 2 个）。 */
+export const FRAGMENT_THIRD_CHANCE = 0.25;
+/** 进阶后偏向主职业的概率（70%；其余 30% 均分另外两职业，各 15%）。 */
+export const FRAGMENT_ADVANCED_BIAS = 0.70;
 
 /** 可进阶的职业列表（ADVENTURER 是初始职业，不作为进阶目标）。 */
 export const ADVANCABLE_CLASSES = ['BERSERKER', 'ARCHER', 'ROGUE'] as const;
@@ -247,9 +254,9 @@ export const BOSS_RARE_DROP = {
   /** 命运碎片掉落概率。 */
   SHARDS_CHANCE: 0.10,
   /** 命运词条卷轴掉落概率。 */
-  SCROLL_CHANCE: 0.30,
+  SCROLL_CHANCE: 0.20,
   /** Boss 遗物基础掉落概率（图鉴已解锁该遗物时 +RELIC_CODEX_BONUS）。 */
-  RELIC_BASE_CHANCE: 0.20,
+  RELIC_BASE_CHANCE: 0.10,
   /** 图鉴已解锁该遗物时的额外掉落概率加成。 */
   RELIC_CODEX_BONUS: 0.10,
 } as const;
@@ -443,11 +450,13 @@ export const DESTINY_5X5_DMG_MULT = 1.2;
 
 // ── 第一章专属机制常量 ─────────────────────────────────────
 /** 第一章 Boss 房随机石块数量。 */
-export const CHAPTER1_BOSS_ROCK_COUNT = 2;
+export const CHAPTER1_BOSS_ROCK_COUNT = 5;
 /** 增援号角每次召唤哥布林战士数（非狂暴）。 */
 export const HORN_WARRIOR_COUNT = 1;
 /** 增援号角每次召唤哥布林战士数（狂暴后）。 */
 export const HORN_WARRIOR_ENRAGE_COUNT = 2;
+/** 哥布林酋长场上同时允许存在的号角召唤兵上限，用于防止久战时怪物数量失控。 */
+export const GOBLIN_CHIEF_SUMMON_CAP = 8;
 /** 冰霜哥布林冰霜：移动AP+1的持续回合数（可叠加）。 */
 export const FROST_MOVE_PENALTY_ROUNDS = 2;
 /** 赤炎哥布林灼烧：5HP/回合的持续回合数（可叠加）。 */
@@ -472,35 +481,37 @@ export const ANIMA_MIRAGE_DEBUFF_IDS = ['HURT_20', 'FIRE_BURN_2', 'SLOW_2', 'AP_
 export type AnimaMirageBuffId = (typeof ANIMA_MIRAGE_BUFF_IDS)[number];
 export type AnimaMirageDebuffId = (typeof ANIMA_MIRAGE_DEBUFF_IDS)[number];
 
-// ── 命运碎片成长树（destiny tree，design「命运树 V1 数值调整建议」）──
-/** A1 坚韧之躯Ⅰ：maxHp/hp +20（×10 基准，原 +2）。 */
-export const TREE_A1_HP_BONUS = 20;
-/** A2 坚韧之躯Ⅱ：再 +20（与 A1 累计 +40，×10 基准，原 +2）。 */
-export const TREE_A2_HP_BONUS = 20;
-/** A3 遗产意志：死亡结算保留的金币比例。 */
-export const TREE_A3_DEATH_GOLD_RETENTION = 0.2;
-/** B1 武者直觉：攻击力加成 +5（×10 基准，原 +0.5）。 */
-export const TREE_B1_ATTACK_BONUS = 5;
-/** B2 急行军：AP 骰子上限 +1（dice 范围 [1,6]→[1,7]）。 */
+// ── 命运碎片成长树（destiny tree，V2：5 分支 x 9 节点）──
+/** 守护1 坚韧之躯：maxHp/hp +15。 */
+export const TREE_A1_HP_BONUS = 15;
+/** 守护2 厚甲本能：maxHp/hp +10。 */
+export const TREE_A2_HP_BONUS = 10;
+/** 守护3 坚韧之躯 II：再 +20。 */
+export const TREE_A3_HP_BONUS = 20;
+/** 征伐1 武者直觉：攻击力加成 +3。 */
+export const TREE_B1_ATTACK_BONUS = 3;
+/** 征伐3 急行军：AP 骰子上限 +1（dice 范围 [1,6]→[1,7]）。 */
 export const TREE_B2_AP_DICE_BONUS = 1;
-/** B2 急行军：AP 结转上限 +1（AP_CARRY_CAP 3→4）。 */
+/** 征伐2 余势不散：AP 结转上限 +1（AP_CARRY_CAP 3→4）。 */
 export const TREE_B2_AP_CARRY_BONUS = 1;
-/** B3 职业先驱：远征开始时随机一个可进阶职业的碎片 +1。 */
+/** 征伐4 职业先驱：远征开始时随机一个可进阶职业的碎片 +1。 */
 export const TREE_B3_FRAGMENT_BONUS = 1;
-/** C1 财富眼光：开局金币加成（原 +8 感知过弱，调整为 +12）。 */
+/** 富集1 财富眼光：开局金币加成。 */
 export const TREE_C1_GOLD_BONUS = 12;
-/** C2 宝箱老手：开宝箱额外获得的金币比例（原"金币下限+1"调整为"额外+20%金币"）。 */
+/** 富集2 宝箱老手：开宝箱额外获得的金币比例。 */
 export const TREE_C2_CHEST_GOLD_BONUS_PCT = 0.2;
-/** C3 铁匠熟客：铁匠强化费用减免（20→15）。 */
+/** 富集3 铁匠熟客：铁匠强化费用减免（20→15）。 */
 export const TREE_C3_BLACKSMITH_DISCOUNT = 5;
-/** D1 灵感涌现：开局灵气 +25。 */
+/** 富集4 商路嗅觉：营地商店价格降低 10%。 */
+export const TREE_C4_CAMP_SHOP_DISCOUNT_PCT = 0.1;
+/** 灵脉1 灵感涌现：开局灵气 +25。 */
 export const TREE_D1_ANIMA_BONUS = 25;
-/** D2 悟道加速：强化阈值整体 ×0.9（100→90，150→135...）。 */
-export const TREE_D2_THRESHOLD_MULT = 0.9;
-/** D3 灵脉共鸣：灵气获取额外 +10%。 */
+/** 灵脉2 悟道加速：强化阈值整体 ×0.92。 */
+export const TREE_D2_THRESHOLD_MULT = 0.92;
+/** 灵脉3 灵脉共鸣：灵气获取额外 +10%。 */
 export const TREE_D3_ANIMA_GAIN_PCT = 0.1;
-/** E1 誓石意志：maxHp/hp +40（×10 基准，原 +4）。 */
-export const TREE_E1_HP_BONUS = 40;
+/** 天命1 星盘初启：开局金币 +8，作为天命分支的轻量前置补给。 */
+export const TREE_E1_GOLD_BONUS = 8;
 /** 命运树重置：消耗钻石数（退还全部已解锁节点的命运碎片，清空 unlockedTreeNodes）。 */
 export const TREE_RESET_DIAMOND_COST = 20;
 
@@ -508,36 +519,82 @@ export const TREE_RESET_DIAMOND_COST = 20;
 export interface DestinyTreeNodeDef {
   id: string;
   column: 'A' | 'B' | 'C' | 'D' | 'E';
-  order: 1 | 2 | 3;
+  order: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   name: string;
   cost: number;
   /** 节点效果简述，常驻显示在命运树面板节点格内（specs/game-design/命运树设计V1.md §三）。 */
   desc: string;
 }
 
+export const DESTINY_TREE_LIVE_MAX_ORDER_BY_COLUMN: Record<DestinyTreeNodeDef['column'], number> = {
+  A: 9,
+  B: 9,
+  C: 9,
+  D: 9,
+  E: 9,
+};
+
+export function isDestinyTreeNodeLive(def: DestinyTreeNodeDef): boolean {
+  return def.order <= DESTINY_TREE_LIVE_MAX_ORDER_BY_COLUMN[def.column];
+}
+
 export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
-  { id: 'A1', column: 'A', order: 1, name: '坚韧之躯Ⅰ', cost: 15, desc: '生命上限+20' },
-  { id: 'A2', column: 'A', order: 2, name: '坚韧之躯Ⅱ', cost: 25, desc: '生命上限再+20' },
-  { id: 'A3', column: 'A', order: 3, name: '遗产意志', cost: 30, desc: '死亡保留20%金币' },
-  { id: 'B1', column: 'B', order: 1, name: '武者直觉', cost: 20, desc: '攻击力+5' },
-  { id: 'B2', column: 'B', order: 2, name: '急行军', cost: 25, desc: 'AP骰子上限+1，AP结转上限+1' },
-  { id: 'B3', column: 'B', order: 3, name: '职业先驱', cost: 30, desc: '开局职业碎片+1' },
+  { id: 'A1', column: 'A', order: 1, name: '坚韧之躯', cost: 15, desc: '生命上限+15' },
+  { id: 'A2', column: 'A', order: 2, name: '厚甲本能', cost: 25, desc: '生命上限+10' },
+  { id: 'A3', column: 'A', order: 3, name: '坚韧之躯 II', cost: 40, desc: '生命上限再+20' },
+  { id: 'A4', column: 'A', order: 4, name: '止血意志', cost: 60, desc: '低血首次回复' },
+  { id: 'A5', column: 'A', order: 5, name: '险境韧性', cost: 85, desc: '大伤害减免' },
+  { id: 'A6', column: 'A', order: 6, name: '守护回响', cost: 115, desc: 'Boss层回复' },
+  { id: 'A7', column: 'A', order: 7, name: '稳固阵脚', cost: 150, desc: '受击后减伤' },
+  { id: 'A8', column: 'A', order: 8, name: '余生火种', cost: 190, desc: '章节低血补给' },
+  { id: 'A9', column: 'A', order: 9, name: '不灭誓约', cost: 240, desc: '首次致死保命' },
+
+  { id: 'B1', column: 'B', order: 1, name: '武者直觉', cost: 15, desc: '攻击力+3' },
+  { id: 'B2', column: 'B', order: 2, name: '余势不散', cost: 25, desc: 'AP结转上限+1' },
+  { id: 'B3', column: 'B', order: 3, name: '急行军', cost: 40, desc: 'AP骰子上限+1' },
+  { id: 'B4', column: 'B', order: 4, name: '职业先驱', cost: 60, desc: '开局职业碎片+1' },
+  { id: 'B5', column: 'B', order: 5, name: '破甲手感', cost: 85, desc: '首击精英/Boss+20%' },
+  { id: 'B6', column: 'B', order: 6, name: '猎首本能', cost: 115, desc: '击杀精英本层+攻' },
+  { id: 'B7', column: 'B', order: 7, name: '战斗熟稔', cost: 150, desc: '普通怪伤害+10%' },
+  { id: 'B8', column: 'B', order: 8, name: '临门一击', cost: 190, desc: '斩杀线伤害+15%' },
+  { id: 'B9', column: 'B', order: 9, name: '破阵时刻', cost: 240, desc: '击杀后下击+50%' },
+
   { id: 'C1', column: 'C', order: 1, name: '财富眼光', cost: 15, desc: '开局金币+12' },
-  { id: 'C2', column: 'C', order: 2, name: '宝箱老手', cost: 20, desc: '宝箱金币+20%' },
-  { id: 'C3', column: 'C', order: 3, name: '铁匠熟客', cost: 25, desc: '强化费用-5' },
+  { id: 'C2', column: 'C', order: 2, name: '宝箱老手', cost: 25, desc: '宝箱金币+20%' },
+  { id: 'C3', column: 'C', order: 3, name: '铁匠熟客', cost: 40, desc: '强化费用-5' },
+  { id: 'C4', column: 'C', order: 4, name: '商路嗅觉', cost: 60, desc: '营地商店-10%' },
+  { id: 'C5', column: 'C', order: 5, name: '装备鉴赏', cost: 85, desc: '精英装备率+5%' },
+  { id: 'C6', column: 'C', order: 6, name: '锻造余温', cost: 115, desc: '强化失败返金' },
+  { id: 'C7', column: 'C', order: 7, name: '淘金路线', cost: 150, desc: '普通怪金币+10%' },
+  { id: 'C8', column: 'C', order: 8, name: '精炼手艺', cost: 190, desc: '章节首强额外+1' },
+  { id: 'C9', column: 'C', order: 9, name: '命运宝库', cost: 240, desc: 'Boss后经济奖励' },
+
   { id: 'D1', column: 'D', order: 1, name: '灵感涌现', cost: 15, desc: '开局灵气+25' },
-  { id: 'D2', column: 'D', order: 2, name: '悟道加速', cost: 25, desc: '强化阈值×0.9' },
-  { id: 'D3', column: 'D', order: 3, name: '灵脉共鸣', cost: 30, desc: '灵气获取+10%' },
-  { id: 'E1', column: 'E', order: 1, name: '誓石意志', cost: 20, desc: '生命上限+40' },
-  { id: 'E2', column: 'E', order: 2, name: '命运馈赠', cost: 30, desc: '开局三选一装备' },
+  { id: 'D2', column: 'D', order: 2, name: '悟道加速', cost: 25, desc: '强化阈值×0.92' },
+  { id: 'D3', column: 'D', order: 3, name: '灵脉共鸣', cost: 40, desc: '灵气获取+10%' },
+  { id: 'D4', column: 'D', order: 4, name: '专注冥想', cost: 60, desc: '首次强化可重抽' },
+  { id: 'D5', column: 'D', order: 5, name: '灵性筛选', cost: 85, desc: '降低满层词条' },
+  { id: 'D6', column: 'D', order: 6, name: '共振余波', cost: 115, desc: '强化返还灵气' },
+  { id: 'D7', column: 'D', order: 7, name: '灵气牵引', cost: 150, desc: '灵气怪灵气+15%' },
+  { id: 'D8', column: 'D', order: 8, name: '深层悟道', cost: 190, desc: '章节首强赠灵气' },
+  { id: 'D9', column: 'D', order: 9, name: '灵脉贯通', cost: 240, desc: '首次强化4选1' },
+
+  { id: 'E1', column: 'E', order: 1, name: '星盘初启', cost: 15, desc: '开局金币+8' },
+  { id: 'E2', column: 'E', order: 2, name: '命运馈赠', cost: 25, desc: '开局三选一装备' },
   { id: 'E3', column: 'E', order: 3, name: '命运护佑', cost: 40, desc: '开局三选一词条' },
+  { id: 'E4', column: 'E', order: 4, name: '星盘校准', cost: 60, desc: '馈赠装备升品' },
+  { id: 'E5', column: 'E', order: 5, name: '命运偏转', cost: 85, desc: '首次三选一重抽' },
+  { id: 'E6', column: 'E', order: 6, name: '星辉馈赠', cost: 115, desc: 'Boss后构筑奖励' },
+  { id: 'E7', column: 'E', order: 7, name: '预兆感知', cost: 150, desc: '章节Boss提示' },
+  { id: 'E8', column: 'E', order: 8, name: '命轮余辉', cost: 190, desc: '首次卷轴候选+1' },
+  { id: 'E9', column: 'E', order: 9, name: '改命之刻', cost: 240, desc: '三选一高阶重抽' },
 ] as const;
 
 // ── 仅开发调试（正式构建前必须置 0）────────────────────────
 /**
  * 自动跳至目标层（0 = 关闭）。
  * 将此值改为非零整数（例如 5）后重新构建，开局将直接跳到该层。
- * ⚠️ 正式构建 / 提测前必须改回 0！同时把上面的 INITIAL_HP 改回 200。
+ * ⚠️ 正式构建 / 提测前必须改回 0！同时确认上面的 INITIAL_HP 为正式目标值。
  */
 export const DEV_SKIP_TO_FLOOR = 0;
 
@@ -546,7 +603,7 @@ export function chapterOfFloor(floor: number): number {
   return Math.floor((floor - 1) / FLOORS_PER_CHAPTER) + 1;
 }
 
-/** 第 floor 层是否为章节 Boss 层（每章第 5 层）。 */
+/** 第 floor 层是否为章节 Boss 层（每章第 FLOORS_PER_CHAPTER 层，当前=7）。 */
 export function isBossFloor(floor: number): boolean {
   return floor % FLOORS_PER_CHAPTER === 0;
 }
@@ -589,3 +646,46 @@ export function bossChapterScaling(chapter: number): { hpMult: number; attackMul
 export const PVE_STAMINA_MAX = 60;
 export const PVE_STAMINA_RUN_COST = 20;
 export const PVE_STAMINA_RECOVERY_MS = 5 * 60 * 1000;
+
+// ── 难度档（design 260628-progression-pacing-v3 §5，→ AC-P3-6/7/9） ────────
+/** 难度档枚举（与云端 PVE_DIFFICULTY 镜像一致）。 */
+export const DIFFICULTY_TIER = {
+  NORMAL:    'NORMAL',
+  HARD:      'HARD',
+  NIGHTMARE: 'NIGHTMARE',
+  ABYSS:     'ABYSS',
+  INFERNO:   'INFERNO',
+} as const;
+export type DifficultyTier = typeof DIFFICULTY_TIER[keyof typeof DIFFICULTY_TIER];
+
+/** 难度档解锁顺序（索引 = 数值级别，与云端 PVE_DIFFICULTY_ORDER 保持一致）。 */
+export const DIFFICULTY_ORDER: readonly DifficultyTier[] = [
+  'NORMAL', 'HARD', 'NIGHTMARE', 'ABYSS', 'INFERNO',
+];
+
+/**
+ * 各难度档怪物 HP/攻击倍率与命运碎片结算倍率（与云端 PVE_DIFFICULTY_MULTIPLIERS 镜像一致）。
+ * - hpMult / atkMult：作用于生成怪物的章节缩放结果（冻结进存档，→ AC-P3-9）
+ * - shardMult：作用于结算产出命运碎片（云端权威计算，→ AC-P3-9）
+ */
+export const DIFFICULTY_MULTIPLIERS: Record<DifficultyTier, { hpMult: number; atkMult: number; shardMult: number }> = {
+  NORMAL:    { hpMult: 1.00, atkMult: 1.00, shardMult: 1.00 },
+  HARD:      { hpMult: 1.10, atkMult: 1.05, shardMult: 1.15 },
+  NIGHTMARE: { hpMult: 1.20, atkMult: 1.10, shardMult: 1.30 },
+  ABYSS:     { hpMult: 1.35, atkMult: 1.18, shardMult: 1.50 },
+  INFERNO:   { hpMult: 1.50, atkMult: 1.25, shardMult: 1.75 },
+};
+
+/** 难度快照（冻结进存档；续档时从存档读取，不可被后续配置变化影响，→ AC-P3-9）。 */
+export interface DifficultySnapshot {
+  tier: DifficultyTier;
+  hpMult: number;
+  atkMult: number;
+  shardMult: number;
+}
+
+/** 从难度档枚举创建快照对象（startExpedition 时调用并写入 ExpeditionState）。 */
+export function makeDifficultySnapshot(tier: DifficultyTier = 'NORMAL'): DifficultySnapshot {
+  const m = DIFFICULTY_MULTIPLIERS[tier] ?? DIFFICULTY_MULTIPLIERS.NORMAL;
+  return { tier, ...m };
+}

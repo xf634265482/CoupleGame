@@ -6,9 +6,10 @@ import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, 
 import { findAchievement } from '../core/AchievementSystem';
 import { playerAttackPower } from '../core/CombatSystem';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD, SHOES_STEALTH_THRESHOLD, shoesStealthReduction } from '../core/EquipmentSystem';
-import { AP_BASE, AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
+import { AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
+import { getBalancedApBase, getPlayerBalanceConfig } from '../core/PveBalance';
 import { RELIC_DEFS } from '../core/RelicSystem';
-import type { EquipItem, EquipSlot, ExpeditionState, PveMeta } from '../core/PveTypes';
+import type { EquipItem, EquipSlot, ExpeditionState, PveMeta, RelicId } from '../core/PveTypes';
 import { loadUiSprite } from '../../ui/UiAssets';
 import { ensureArtChild } from '../../ui/UiSprite';
 import { STRENGTHEN_LABEL } from './PveToastView';
@@ -94,6 +95,9 @@ export class PveCharacterPanel {
   private _fragmentsLabel:    Label;
   private _achievementsLabel: Label;
   private _codexLabel:        Label;
+  private _currentRelics:     RelicId[] = [];
+  private _relicPopup:        Node | null = null;
+  private _relicPopupLabel:   Label | null = null;
   private _visible = false;
 
   constructor(parent: Node, screenW: number, screenH: number, onClose?: () => void) {
@@ -192,12 +196,18 @@ export class PveCharacterPanel {
     cursorY -= (equipBlockH + SEC_GAP);
 
     this._traitsLabel    = place(traitsH, DIM_COLOR);
+    // 遗物行可点击——轻触整个词条区域弹出遗物详情
+    this._traitsLabel.node.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      if (this._currentRelics.length > 0) this._showRelicDetail();
+    });
     this._fragmentsLabel = place(fragmentsH, DIM_COLOR);
     this._achievementsLabel = place(achieveH, new Color(255, 215, 100, 255));
     this._achievementsLabel.overflow = Label.Overflow.CLAMP;
     this._codexLabel     = place(codexH, DIM_COLOR);
 
     this._buildDetailPopup(panel);
+    this._buildRelicPopup(panel);
 
     // 关闭按钮（底部固定）— 与 HUD「结束回合」同款 Graphics 圆角按钮，不加 sprite 叠层
     this._buildCloseButton(panel, () => { this.hide(); onClose?.(); });
@@ -351,6 +361,80 @@ export class PveCharacterPanel {
     this._detailGfx        = gfx;
   }
 
+  /** 构建遗物详情浮层（默认隐藏，_showRelicDetail 时填充并显示）。 */
+  private _buildRelicPopup(panel: Node): void {
+    const POP_W = 480;
+    const POP_H = 420;
+
+    const popup = new Node('RelicDetailPopup');
+    popup.setParent(panel);
+    popup.setPosition(0, -20, 0);
+    popup.setSiblingIndex(9999);
+    popup.addComponent(UITransform).setContentSize(POP_W, POP_H);
+    popup.active = false;
+
+    const gfx = popup.addComponent(Graphics);
+    gfx.fillColor = POPUP_BG;
+    gfx.roundRect(-POP_W / 2, -POP_H / 2, POP_W, POP_H, 14);
+    gfx.fill();
+    gfx.strokeColor = new Color(200, 170, 255, 240); // 遗物专属紫边框
+    gfx.lineWidth = 2;
+    gfx.roundRect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2, 13);
+    gfx.stroke();
+
+    const titleLbl = makeLabel(popup, 0, POP_H / 2 - 28, POP_W - 24, 32, 22, new Color(220, 190, 255, 255), Label.HorizontalAlign.CENTER);
+    titleLbl.isBold = true;
+    titleLbl.string = '🏺 遗物详情';
+
+    const bodyLbl = makeLabel(popup, 0, POP_H / 2 - 80, POP_W - 36, 290, 19, TEXT_COLOR, Label.HorizontalAlign.LEFT);
+    bodyLbl.verticalAlign = Label.VerticalAlign.TOP;
+    bodyLbl.lineHeight = 28;
+    bodyLbl.isBold = true;
+    bodyLbl.overflow = Label.Overflow.CLAMP;
+
+    const closeBtnNode = new Node('Btn_RelicClose');
+    closeBtnNode.setParent(popup);
+    closeBtnNode.setPosition(0, -POP_H / 2 + 32, 0);
+    closeBtnNode.addComponent(UITransform).setContentSize(140, 44);
+    const cbg = closeBtnNode.addComponent(Graphics);
+    cbg.fillColor = CLOSE_BTN_FILL;
+    cbg.roundRect(-70, -22, 140, 44, 10);
+    cbg.fill();
+    cbg.strokeColor = CLOSE_BTN_BORDER;
+    cbg.lineWidth = 2;
+    cbg.roundRect(-69, -21, 138, 42, 9);
+    cbg.stroke();
+    const cbLbl = makeLabel(closeBtnNode, 0, 0, 140, 44, 20, new Color(255, 255, 255, 255), Label.HorizontalAlign.CENTER);
+    cbLbl.string = '关闭';
+    cbLbl.isBold = true;
+    closeBtnNode.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      popup.active = false;
+    });
+    popup.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      popup.active = false;
+    });
+
+    this._relicPopup      = popup;
+    this._relicPopupLabel = bodyLbl;
+  }
+
+  /** 显示当前所有遗物的详情浮层。 */
+  private _showRelicDetail(): void {
+    if (!this._relicPopup || !this._relicPopupLabel) return;
+    const lines: string[] = [];
+    this._currentRelics.forEach((id, idx) => {
+      const def = RELIC_DEFS[id];
+      if (!def) return;
+      if (idx > 0) lines.push('');
+      lines.push(`【${def.name}】`);
+      lines.push(def.description);
+    });
+    this._relicPopupLabel.string = lines.join('\n');
+    this._relicPopup.active = true;
+  }
+
   /** 显示指定装备的详情浮层。 */
   private _showEquipDetail(item: EquipItem): void {
     if (!this._detailPopup || !this._detailTitleLabel || !this._detailBodyLabel || !this._detailGfx) return;
@@ -379,7 +463,7 @@ export class PveCharacterPanel {
     // 正文内容
     const effectLine = this._slotEffectDesc(item.slot, item.baseStat);
     const traitLine  = item.trait
-      ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? item.trait}`
+      ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? '特殊词条'}`
       : '词条：(未洗炼)';
 
     this._detailBodyLabel.string = [
@@ -410,6 +494,7 @@ export class PveCharacterPanel {
     'boss_sand_immune':   '沙坑地形免疫',
     'boss_phys_reduce_15':'物理减伤 15%',
     'boss_slow_on_hit':   '命中减速（冰冻1回合）',
+    'boss_active_ice':    '主动冰冻',
     'boss_ice_reduce_20': '站冰面时减伤 20%',
     'boss_burn_on_hit':   '命中附加灼烧',
     'boss_burn_immune':   '灼烧免疫',
@@ -449,7 +534,11 @@ export class PveCharacterPanel {
   update(state: ExpeditionState, meta?: PveMeta): void {
     const { player, floorState } = state;
     const cls = CLASS_LABEL[player.classId] ?? player.classId;
-    const { damage, range } = playerAttackPower(player);
+    const balanceConfig = getPlayerBalanceConfig(state.balanceSnapshot, state.chapter);
+    const baseHp = balanceConfig.initialHp ?? INITIAL_HP;
+    const baseAttack = balanceConfig.baseAttack ?? BASE_ATTACK;
+    const apBase = getBalancedApBase(state.balanceSnapshot, state.chapter);
+    const { damage, range } = playerAttackPower(player, state.balanceSnapshot, state.chapter);
     const threshold = player.animaThreshold ?? 100;
 
     // ── 基础属性 ──────────────────────────────────────────────
@@ -458,21 +547,21 @@ export class PveCharacterPanel {
       : null;
 
     // HP/攻击力/AP 数值组成：基础值 + 装备/词条/命运树等加成，方便玩家核对来源
-    const hpBonus = player.maxHp - INITIAL_HP;
+    const hpBonus = player.maxHp - baseHp;
     const hpLine = hpBonus !== 0
-      ? `HP：${player.hp} / ${player.maxHp}（${INITIAL_HP}+${hpBonus}）`
+      ? `HP：${player.hp} / ${player.maxHp}（${baseHp}+${hpBonus}）`
       : `HP：${player.hp} / ${player.maxHp}`;
 
-    const attackBonus = damage - BASE_ATTACK;
+    const attackBonus = damage - baseAttack;
     const attackLine = attackBonus !== 0
-      ? `攻击力：⚔️ ${damage}（${BASE_ATTACK}+${attackBonus}，攻击范围 ${range}）`
+      ? `攻击力：⚔️ ${damage}（${baseAttack}+${attackBonus}，攻击范围 ${range}）`
       : `攻击力：⚔️ ${damage}（攻击范围 ${range}）`;
 
-    // maxAp = AP_BASE + 骰子 + 加成（强化/命运树/冰冻惩罚等），骰子之外的加成按差值反推
-    const apBonus = floorState.maxAp - AP_BASE - floorState.dice;
+    // maxAp = 平衡配置 AP 基线 + 骰子 + 加成（强化/命运树/冰冻惩罚等），骰子之外的加成按差值反推
+    const apBonus = floorState.maxAp - apBase - floorState.dice;
     const apLine = apBonus !== 0
-      ? `当前回合 AP：${floorState.ap}/${floorState.maxAp}（${AP_BASE}+🎲${floorState.dice}${apBonus > 0 ? '+' : ''}${apBonus}）`
-      : `当前回合 AP：${floorState.ap}/${floorState.maxAp}（${AP_BASE}+🎲${floorState.dice}）`;
+      ? `当前回合 AP：${floorState.ap}/${floorState.maxAp}（${apBase}+🎲${floorState.dice}${apBonus > 0 ? '+' : ''}${apBonus}）`
+      : `当前回合 AP：${floorState.ap}/${floorState.maxAp}（${apBase}+🎲${floorState.dice}）`;
 
     this._statsLabel.string = [
       `职业：${cls}`,
@@ -506,8 +595,9 @@ export class PveCharacterPanel {
     const traitNames = traits.map((id) => STRENGTHEN_LABEL[id]?.title ?? id);
     const traitLine = `词条：${traitNames.length === 0 ? '(无)' : traitNames.join('、')}`;
     const relics = player.relics ?? [];
+    this._currentRelics = relics;
     const relicLine = relics.length > 0
-      ? `🏺 遗物：${relics.map((r) => RELIC_DEFS[r]?.name ?? r).join('、')}`
+      ? `🏺 遗物：${relics.map((r) => RELIC_DEFS[r]?.name ?? r).join('、')}  ▸点击查看`
       : '🏺 遗物：(无)';
     const scrolls = player.scrolls ?? 0;
     const scrollLine = scrolls > 0 ? `📜 命运卷轴：×${scrolls}` : '';

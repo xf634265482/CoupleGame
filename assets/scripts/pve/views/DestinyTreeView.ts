@@ -1,8 +1,8 @@
-// 命运之树视图（specs/260610-destiny-tree-ui）：账户级局外成长树，5 行（A-E 分支）× 3 节点（order 1-3，自左向右）。
+// 命运之树视图：账户级局外成长树，5 列分支 × 9 层节点。
 
 import { Color, Label, Node, UITransform } from 'cc';
-import { canUnlockNode } from '../core/DestinyTreeSystem';
-import { DESTINY_TREE_NODES } from '../core/PveConstants';
+import { canUnlockNode, getUnlockBlockReason } from '../core/DestinyTreeSystem';
+import { DESTINY_TREE_NODES, isDestinyTreeNodeLive } from '../core/PveConstants';
 import type { PveMeta } from '../core/PveTypes';
 import { loadUiSprite } from '../../ui/UiAssets';
 import { ensureArtCover } from '../../ui/UiSprite';
@@ -24,23 +24,23 @@ const BORDER_UNLOCKED  = new Color(230, 185, 80, 240);
 const TOP_INFO_OFFSET = 130;
 
 const COLUMN_LABEL: Record<string, string> = {
-  A: '生存',
-  B: '战斗',
-  C: '财富',
-  D: '强化',
+  A: '守护',
+  B: '征伐',
+  C: '富集',
+  D: '灵脉',
   E: '天命',
 };
 
 const COLUMNS: ReadonlyArray<'A' | 'B' | 'C' | 'D' | 'E'> = ['A', 'B', 'C', 'D', 'E'];
 
-const NODE_W = 180;
-const NODE_H = 130;
-const NODE_X_SPACING = 210;
-const ROW_SPACING = 200;
-const ROW0_TOP_OFFSET = 195;
-const ROW_LABEL_OFFSET = 95;
+const NODE_W = 126;
+const NODE_H = 78;
+const NODE_X_SPACING = 138;
+const NODE_Y_SPACING = 84;
+const GRID_TOP_OFFSET = 225;
+const COLUMN_LABEL_OFFSET = 58;
 
-/** 命运之树视图：render(meta) 重建 5 行 x 3 列节点布局（每行一个分支）；onUnlock 由 Controller 处理点击解锁请求。 */
+/** 命运之树视图：render(meta) 重建 5 列 x 9 层节点布局；onUnlock 由 Controller 处理点击解锁请求。 */
 export class DestinyTreeView {
   private _root: Node;
   private _gridRoot: Node;
@@ -70,11 +70,12 @@ export class DestinyTreeView {
     );
     this._shardsLabel.isBold = true;
 
-    // 行标签：每个分支（A-E）一行，标签居中显示在该行节点上方
+    // 分支标签：每个分支（A-E）一列，标签显示在该列顶部。
     COLUMNS.forEach((col, i) => {
-      const rowY = this._screenH / 2 - ROW0_TOP_OFFSET - i * ROW_SPACING;
-      const lbl = makeLabel(this._root, 0, rowY + ROW_LABEL_OFFSET, 300, 32, 22, TEXT_COLOR, Label.HorizontalAlign.CENTER);
-      lbl.string = `${col} · ${COLUMN_LABEL[col]}`;
+      const x = (i - 2) * NODE_X_SPACING;
+      const y = this._screenH / 2 - GRID_TOP_OFFSET + COLUMN_LABEL_OFFSET;
+      const lbl = makeLabel(this._root, x, y, NODE_W, 32, 20, TEXT_COLOR, Label.HorizontalAlign.CENTER);
+      lbl.string = COLUMN_LABEL[col];
       lbl.isBold = true;
     });
 
@@ -118,22 +119,35 @@ export class DestinyTreeView {
     const unlocked = new Set(meta.unlockedTreeNodes ?? []);
 
     for (const def of DESTINY_TREE_NODES) {
-      const rowIndex = COLUMNS.indexOf(def.column);
-      const x = (def.order - 2) * NODE_X_SPACING;
-      const y = this._screenH / 2 - ROW0_TOP_OFFSET - rowIndex * ROW_SPACING;
+      const columnIndex = COLUMNS.indexOf(def.column);
+      const x = (columnIndex - 2) * NODE_X_SPACING;
+      const y = this._screenH / 2 - GRID_TOP_OFFSET - (def.order - 1) * NODE_Y_SPACING;
 
       const isUnlocked = unlocked.has(def.id);
-      const canUnlock = !isUnlocked && canUnlockNode(meta, def.id);
+      const isLive = isDestinyTreeNodeLive(def);
+      const canUnlock = isLive && !isUnlocked && canUnlockNode(meta, def.id);
       const color = isUnlocked ? UNLOCKED_COLOR : canUnlock ? UNLOCKABLE_COLOR : LOCKED_COLOR;
       const text = isUnlocked
         ? `✅ ${def.name}\n${def.desc}`
-        : `${def.name}\n${def.desc}\n${def.cost} 碎片`;
+        : `${def.name}\n${def.desc}\n${isLive ? `${def.cost} 碎片` : '规划中'}`;
 
       const border = isUnlocked ? BORDER_UNLOCKED : canUnlock ? BORDER_AVAILABLE : BORDER_LOCKED;
       const btn = makeFlatButton(
         this._gridRoot, text, x, y, NODE_W, NODE_H,
         () => {
-          if (canUnlock) this._onUnlock(def.id);
+          if (isUnlocked) return;
+          if (canUnlock) {
+            this._onUnlock(def.id);
+            return;
+          }
+          const reason = getUnlockBlockReason(meta, def.id);
+          if (reason?.code === 'MISSING_PREREQUISITE') {
+            this._showUnlockNotice(`请先解锁「${reason.prerequisite.name}」`);
+          } else if (reason?.code === 'INSUFFICIENT_SHARDS') {
+            this._showUnlockNotice(`命运碎片不足，需要 ${reason.required} 片`);
+          } else if (reason?.code === 'NOT_LIVE') {
+            this._showUnlockNotice('该节点尚未开放');
+          }
         },
         color,
         { noArt: true, border },
@@ -146,6 +160,18 @@ export class DestinyTreeView {
         }
       }
     }
+  }
+
+  private _showUnlockNotice(message: string): void {
+    let notice = this._root.getChildByName('UnlockNotice')?.getComponent(Label) ?? null;
+    if (!notice) {
+      notice = makeLabel(
+        this._root, 0, -this._screenH / 2 + 92,
+        600, 36, 20, TITLE_COLOR, Label.HorizontalAlign.CENTER,
+      );
+      notice.node.name = 'UnlockNotice';
+    }
+    notice.string = message;
   }
 
   destroy(): void {

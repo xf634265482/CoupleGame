@@ -4,9 +4,10 @@
 // rollNormalMonsterDrop 是纯随机掷取函数：调用方传入 rng，便于复用同一份楼层 RNG 续算（AC-13 确定性）。
 // openChest 是 ApplyResult 纯函数：金币直接入账；灵气经 AnimaSystem.addAnima 计入进度并可能连锁触发强化。
 
-import { addAnima, traitCount } from './AnimaSystem';
+import { addAnima } from './AnimaSystem';
+import { generalChestGoldPct, generalGoldGainPct } from './strengthen/CommonStrengthenEffects';
 import { canAfford, spend } from './ApSystem';
-import { equipItem } from './EquipHelper';
+import { equipItem, putInBag } from './EquipHelper';
 import { rollEquipment, rollRandomSlot } from './EquipmentSystem';
 import { BOSS_SPOILS, rollBossSpoil } from './bosses/BossSpoils';
 import type { BossId } from './bosses/BossSpoils';
@@ -49,7 +50,11 @@ export function rollAnimaMonsterDrop(rng: Rng): DropResult {
  * 精英怪基础掉落：40% 金币 / 30% 金币+灵气 / 25% 高额金币 / 5% 进阶碎片对（design §6）。
  * 装备独立独立判定（EQUIP_CHANCE=15%），与基础掉落互相独立，由调用方追加。
  */
-export function rollEliteMonsterDrop(rng: Rng): DropResult {
+export function rollEliteMonsterDrop(
+  rng: Rng,
+  chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+): DropResult {
   const roll = rng.next();
   let result: DropResult;
   if (roll < ELITE_MONSTER_DROP.GOLD_ONLY) {
@@ -68,7 +73,7 @@ export function rollEliteMonsterDrop(rng: Rng): DropResult {
   }
   // 独立 15% 概率额外掉落 FINE 装备
   if (rng.chance(ELITE_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE') };
+    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE', chapter, balanceSnapshot) };
   }
   return result;
 }
@@ -77,7 +82,11 @@ export function rollEliteMonsterDrop(rng: Rng): DropResult {
  * 按 50%(金币) / 25%(灵气) / 25%(金币+灵气) 概率掷取一份基础掉落，
  * 再独立判定 3% 额外掉落 COMMON 装备（design §11.3 普通怪极低概率）。
  */
-export function rollNormalMonsterDrop(rng: Rng): DropResult {
+export function rollNormalMonsterDrop(
+  rng: Rng,
+  chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+): DropResult {
   const roll = rng.next();
   let result: DropResult;
   if (roll < NORMAL_MONSTER_DROP.GOLD_ONLY) {
@@ -89,7 +98,7 @@ export function rollNormalMonsterDrop(rng: Rng): DropResult {
   }
   // 独立 3% 概率额外掉落装备（不影响基础掉落结果）
   if (rng.chance(NORMAL_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'COMMON') };
+    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'COMMON', chapter, balanceSnapshot) };
   }
   return result;
 }
@@ -123,9 +132,9 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
   if (!canAfford(floor.ap, 'OPEN_CHEST')) return noop(state);
 
   const rng = createRng(floor.rngState);
-  const drop = rollNormalMonsterDrop(rng);
+  const drop = rollNormalMonsterDrop(rng, state.chapter, state.balanceSnapshot);
   // 10% 概率额外掉落 COMMON 品质装备（AC-17）；先算普通掉落以保证 rng 顺序向后兼容
-  const equip = rng.chance(0.10) ? rollEquipment(rng, rollRandomSlot(rng), 'COMMON') : undefined;
+  const equip = rng.chance(0.10) ? rollEquipment(rng, rollRandomSlot(rng), 'COMMON', state.chapter, state.balanceSnapshot) : undefined;
 
   let next: ExpeditionState = {
     ...state,
@@ -138,15 +147,18 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
   };
 
   // 命运树 C2 宝箱老手：宝箱金币 +chestGoldBonusPct（取整）
-  const chestGoldBonusPct = state.player.treeBonuses?.chestGoldBonusPct ?? 0;
+  const chestGoldBonusPct = (state.player.treeBonuses?.chestGoldBonusPct ?? 0)
+    + generalChestGoldPct(state.player.classTraits)
+    + generalGoldGainPct(state.player.classTraits);
   const actualGold = drop.gold ? Math.round(drop.gold * (1 + chestGoldBonusPct)) : undefined;
 
+  const slotOccupied = equip ? !!next.player.equipment[equip.slot] : false;
   const lootEvent: PveEvent = {
     type: 'LOOT',
     gold: actualGold,
     anima: drop.anima,
     source: entityId,
-    ...(equip ? { equip } : {}),
+    ...(equip ? { equip, bagged: slotOccupied } : {}),
   };
   const events: PveEvent[] = [
     { type: 'OPEN_CHEST', entityId },
@@ -162,7 +174,7 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
     events.push(...animaResult.events);
   }
   if (equip) {
-    next = { ...next, player: equipItem(next.player, equip) };
+    next = { ...next, player: slotOccupied ? putInBag(next.player, equip) : equipItem(next.player, equip) };
   }
 
   return { state: next, events };
@@ -172,11 +184,11 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
 function applySimpleDrop(
   state: ExpeditionState,
   monsterId: string,
-  roller: (rng: Rng) => DropResult,
+  roller: (rng: Rng, chapter: number, balanceSnapshot?: ExpeditionState['balanceSnapshot']) => DropResult,
 ): ApplyResult {
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
-  const drop = roller(rng);
+  const drop = roller(rng, state.chapter, state.balanceSnapshot);
 
   let next: ExpeditionState = {
     ...state,
@@ -184,17 +196,18 @@ function applySimpleDrop(
   };
 
   // strengthen_gold_find：拾取金币 +20%（可叠加，取整）
-  const goldFindCount = traitCount(state.player.classTraits, 'strengthen_gold_find');
+  const goldBonusPct = generalGoldGainPct(state.player.classTraits);
   const actualGold = drop.gold
-    ? (goldFindCount > 0 ? Math.round(drop.gold * (1 + goldFindCount * 0.2)) : drop.gold)
+    ? (goldBonusPct > 0 ? Math.round(drop.gold * (1 + goldBonusPct)) : drop.gold)
     : undefined;
 
+  const slotOccupiedForDrop = drop.equip ? !!next.player.equipment[drop.equip.slot] : false;
   const lootEvent: PveEvent = {
     type: 'LOOT',
     gold: actualGold,
     anima: drop.anima,
     source: monsterId,
-    ...(drop.equip ? { equip: drop.equip } : {}),
+    ...(drop.equip ? { equip: drop.equip, bagged: slotOccupiedForDrop } : {}),
     ...(drop.fragmentPair ? { fragmentPair: drop.fragmentPair } : {}),
   };
   const events: PveEvent[] = [lootEvent];
@@ -208,7 +221,10 @@ function applySimpleDrop(
     events.push(...animaResult.events);
   }
   if (drop.equip) {
-    next = { ...next, player: equipItem(next.player, drop.equip) };
+    next = {
+      ...next,
+      player: slotOccupiedForDrop ? putInBag(next.player, drop.equip) : equipItem(next.player, drop.equip),
+    };
   }
   if (drop.fragmentPair) {
     // 随机 2 个不同职业各 +1 碎片（随机职业由 rollEliteMonsterDrop 中的 rng.shuffle 决定，此处不再消耗 rng）
@@ -244,6 +260,7 @@ export function applyMonsterKillDrop(state: ExpeditionState, monsterId: string):
   if (!monster) return noop(state);
   // 增援召唤的怪物（Boss 号角等）击杀后不产生任何掉落，避免刷增援白嫖收益
   if (monster.summoned) return noop(state);
+  if (monster.tutorialDrop) return applySimpleDrop(state, monsterId, () => ({ ...monster.tutorialDrop }));
   if (monster.type === 'BOSS' && isKnownBossId(monster.bossId)) {
     return applyBossKillDrop(state, monsterId, monster.bossId);
   }
@@ -259,8 +276,8 @@ export function applyMonsterKillDrop(state: ExpeditionState, monsterId: string):
  *   2. 专属随机：从 BOSS_SPOILS[bossId] 等概率随机 1 件（rollBossSpoil）
  *   3. 稀有独立判定（互不影响）：
  *      - 10%  → 命运碎片 N 个（按章节缩放）
- *      - 30%  → 命运词条卷轴 1 张
- *      - 20%+10% → Boss 遗物（图鉴已解锁 +10%）
+ *      - 20%  → 命运词条卷轴 1 张
+ *      - 10%+10% → Boss 遗物（图鉴已解锁 +10%）
  *
  * emit 序列：LOOT(gold/anima/equip) → 可能的 SHARDS_PICKUP → 可能的 SCROLL_PICKUP →
  *           可能的 RELIC_PICKUP / CODEX_RELIC_UNLOCKED → 可能的 ANIMA_STRENGTHEN（由 addAnima 串联）。
@@ -273,7 +290,7 @@ function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: Bo
   const scaled = bossDropScaled(state.chapter);
 
   // 第 2 层：专属装备（等概率从 3 件中 1 件）
-  const equip = rollBossSpoil(rng, bossId);
+  const equip = rollBossSpoil(rng, bossId, state.chapter, state.balanceSnapshot);
 
   // 第 3 层：稀有掉落独立判定（顺序固定：碎片 → 卷轴 → 遗物）
   const dropShards = rng.chance(BOSS_RARE_DROP.SHARDS_CHANCE);
@@ -282,14 +299,15 @@ function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: Bo
   const relicChance = BOSS_RARE_DROP.RELIC_BASE_CHANCE + (codexHasRelic ? BOSS_RARE_DROP.RELIC_CODEX_BONUS : 0);
   const dropRelic = rng.chance(relicChance);
 
+  const bossSlotOccupied = !!state.player.equipment[equip.slot];
   let next: ExpeditionState = {
     ...state,
     floorState: { ...floor, rngState: rng.state() },
-    player: equipItem(state.player, equip),
+    player: bossSlotOccupied ? putInBag(state.player, equip) : equipItem(state.player, equip),
   };
 
   const events: PveEvent[] = [
-    { type: 'LOOT', gold: scaled.gold, anima: scaled.anima, equip, source: monsterId },
+    { type: 'LOOT', gold: scaled.gold, anima: scaled.anima, equip, source: monsterId, bagged: bossSlotOccupied },
   ];
 
   // 通用必掉：金币

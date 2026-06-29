@@ -15,10 +15,12 @@ function fail(code, message) {
  * 且远征种子必须与已有存档一致（不可中途换种子伪造进度）。
  * 不存在存档时，视为新远征，层号必须从 1 开始。
  */
+const MAX_FLOOR = 35;
+
 function validateSaveFloorReport(save, report) {
   const floor = Number(report.floor);
   const runSeed = Number(report.runSeed);
-  if (!Number.isInteger(floor) || floor < 1) {
+  if (!Number.isInteger(floor) || floor < 1 || floor > MAX_FLOOR) {
     fail('PVE_INVALID_FLOOR', 'floor 不合法');
   }
   if (!Number.isInteger(runSeed)) {
@@ -47,7 +49,7 @@ function validateSaveFloorReport(save, report) {
 function validateSettleReport(save, report) {
   const floor = Number(report.floor);
   const status = report.status;
-  if (!Number.isInteger(floor) || floor < 1) {
+  if (!Number.isInteger(floor) || floor < 1 || floor > MAX_FLOOR) {
     fail('PVE_INVALID_FLOOR', 'floor 不合法');
   }
   if (status !== 'DEAD' && status !== 'COMPLETED') {

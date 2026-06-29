@@ -91,8 +91,8 @@ describe('ScrollSystem', () => {
   it('claimScrollChoice：strengthen_hp_up 立即 +40 maxHp 和当前 hp', () => {
     const state = mockState(mockPlayer({ hp: 80, maxHp: 100 }));
     const result = claimScrollChoice(state, 'strengthen_hp_up');
-    expect(result.state.player.maxHp).toBe(140);
-    expect(result.state.player.hp).toBe(120);
+    expect(result.state.player.maxHp).toBe(120);
+    expect(result.state.player.hp).toBe(100);
   });
 
   it('claimScrollChoice：超过 stack 上限时 no-op', () => {

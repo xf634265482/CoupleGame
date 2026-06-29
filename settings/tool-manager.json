@@ -1,7 +1,7 @@
 {
   "configurations": [
     {
-      "id": "9524ce4a-b11e-4155-b6a7-1f7270cdbff1",
+      "id": "8ba0d92a-a21d-450f-a3c3-1b370235e458",
       "name": "默认配置",
       "description": "自动创建的默认工具配置",
       "tools": [
@@ -102,10 +102,10 @@
           "description": "Label & Text — manage cc.Label, cc.RichText, cc.EditBox. Query/set text, font, style, outline, shadow. Batch operations.\nActions: info, list, set_text, set_font, set_style, set_outline, set_shadow, batch_set_font, batch_set_style.\nSupports: cc.Label (full), cc.RichText (text/font/fontSize/color), cc.EditBox (text/placeholder).\nExample: {action:\"set_text\", node:\"Title\", text:\"Hello\"}\n{action:\"set_style\", node:\"Title\", fontSize:32, isBold:true, color:{r:255,g:0,b:0,a:255}}\n{action:\"batch_set_font\", font:\"db://assets/fonts/myfont.ttf\"}"
         }
       ],
-      "createdAt": "2026-06-03T11:01:02.683Z",
-      "updatedAt": "2026-06-03T11:01:02.683Z"
+      "createdAt": "2026-06-19T02:18:35.878Z",
+      "updatedAt": "2026-06-19T02:18:35.878Z"
     }
   ],
-  "currentConfigId": "9524ce4a-b11e-4155-b6a7-1f7270cdbff1",
+  "currentConfigId": "8ba0d92a-a21d-450f-a3c3-1b370235e458",
   "maxConfigSlots": 5
 }

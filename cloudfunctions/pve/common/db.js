@@ -4,7 +4,7 @@
  */
 
 const cloud = require('wx-server-sdk');
-const { COLLECTIONS } = require('./constants');
+const { COLLECTIONS, PVE_DIFFICULTY_ORDER } = require('./constants');
 const { canUnlockNode, getNodeDef } = require('./pve/PveDestinyTree');
 const {
   STAMINA_MAX,
@@ -175,6 +175,7 @@ async function getUserPveMeta(userId) {
       equipment: user?.pveCodex?.equipment ?? [],
     },
     unlockedTreeNodes: user?.unlockedTreeNodes ?? [],
+    tutorialCompleted: user?.pveTutorialCompleted === true,
   };
 }
 
@@ -182,7 +183,7 @@ async function getUserPveMeta(userId) {
  * 追加 PVE 元进度条目（成就 + 图鉴，→ AC-20）：读取已有数据 → 合并去重 → 写回。
  * 幂等：已有的条目不会重复写入。
  */
-async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters = [], codexEquipment = [], codexRelics = [], diamond = 0 }) {
+async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters = [], codexEquipment = [], codexRelics = [], diamond = 0, tutorialCompleted = false, resetTutorial = false }) {
   const user = await getUserById(userId);
   if (!user) {
     const err = new Error('USER_NOT_FOUND');
@@ -213,7 +214,7 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
     }
   }
 
-  if (addAch.length === 0 && addMon.length === 0 && addEq.length === 0 && addRelics.length === 0 && diamondDelta === 0) return;
+  if (addAch.length === 0 && addMon.length === 0 && addEq.length === 0 && addRelics.length === 0 && diamondDelta === 0 && !tutorialCompleted && !resetTutorial) return;
 
   // 合并后写回（整体替换数组，兼容微信云数据库）
   const mergedAch = [...existAch, ...addAch];
@@ -226,6 +227,8 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
     pveCodex: { monsters: mergedMon, equipment: mergedEq, relics: mergedRelics },
     updatedDate: serverDate(),
   };
+  if (tutorialCompleted) data.pveTutorialCompleted = true;
+  if (resetTutorial) data.pveTutorialCompleted = false;
   if (diamondDelta !== 0) {
     const _ = getDb().command;
     data.diamond = _.inc(diamondDelta);
@@ -237,8 +240,23 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
     .update({ data });
 }
 
-/** PVE 元进度账户资产入账：钻石（与 PVP 共享）+ 命运碎片（PVE 专属，→ ddl-sql.md §2）。 */
-async function incrementUserPveRewards(userId, { diamond = 0, destinyShards = 0, highestFloor = 0 }) {
+/**
+ * PVE 元进度账户资产入账：钻石（与 PVP 共享）+ 命运碎片（PVE 专属，→ ddl-sql.md §2）。
+ * 支持复合排行榜更新（→ AC-P3-7）和难度通关记录（→ AC-P3-6）。
+ *
+ * @param {string} userId
+ * @param {{ diamond?: number, destinyShards?: number, highestFloor?: number,
+ *           tier?: string, isClearRecord?: boolean }} opts
+ *   - tier: 难度档（缺省 NORMAL，→ AC-P3-10 老账号兼容）
+ *   - isClearRecord: true 时记录通关该难度档（用于下一档解锁校验）
+ */
+async function incrementUserPveRewards(userId, {
+  diamond = 0,
+  destinyShards = 0,
+  highestFloor = 0,
+  tier = 'NORMAL',
+  isClearRecord = false,
+} = {}) {
   const db = getDb();
   const _ = db.command;
   const user = await getUserById(userId);
@@ -250,11 +268,34 @@ async function incrementUserPveRewards(userId, { diamond = 0, destinyShards = 0,
   const data = { updatedDate: serverDate() };
   if (diamond) data.diamond = _.inc(diamond);
   if (destinyShards) data.destinyShards = _.inc(destinyShards);
-  if (highestFloor > (user.pveHighestFloor ?? 0)) {
+
+  // 复合排行榜：(tierLevel DESC, floor DESC, updatedAt ASC)，→ AC-P3-7
+  const newTierLevel = PVE_DIFFICULTY_ORDER.indexOf(tier) >= 0
+    ? PVE_DIFFICULTY_ORDER.indexOf(tier)
+    : 0;
+  const curTierLevel = user.pveHighestTierLevel ?? 0;
+  const curFloor = user.pveHighestFloor ?? 0;
+
+  // 仅当复合成绩严格高于历史时更新（tier 更高 OR 同 tier 且 floor 更高）
+  const isHigherRecord =
+    newTierLevel > curTierLevel ||
+    (newTierLevel === curTierLevel && highestFloor > curFloor);
+
+  if (isHigherRecord && highestFloor > 0) {
     data.pveHighestFloor = Math.trunc(highestFloor);
-    // 记录首次达到该层的时间戳，用于同层排名时"先到先得"的第二排序键
+    data.pveHighestTier = tier;
+    data.pveHighestTierLevel = newTierLevel;
     data.pveHighestFloorUpdatedAt = serverDate();
   }
+
+  // 难度通关记录：写入 pveClearedTiers（用于下一档解锁校验，→ AC-P3-6）
+  if (isClearRecord) {
+    const cleared = user.pveClearedTiers ?? [];
+    if (!cleared.includes(tier)) {
+      data.pveClearedTiers = _.push(tier);
+    }
+  }
+
   await db.collection(COLLECTIONS.USERS).doc(user._id).update({ data });
 }
 
@@ -322,13 +363,16 @@ async function clearPendingPveRun(userId) {
 }
 
 /**
- * 排行榜查询（→ AC-508）：
+ * 排行榜查询（→ AC-508, AC-P3-7）：
  * - 仅含至少通关第 1 层的玩家（pveHighestFloor > 0）
- * - 主排序：最高楼层降序；第二排序：pveHighestFloorUpdatedAt 升序（先到先得，稳定排名）
+ * - 主排序：最高难度档级别降序（pveHighestTierLevel）；次排序：档内最深层降序；
+ *   第三排序：首次到达时间升序（先到先得，稳定排名）
  * - limit 范围 [1, 100]，默认 50
- * - 额外查询当前用户排名（myRank = 比自己楼层高的人数 + 1；0 层时为 null 即"未上榜"）
+ * - 额外查询当前用户复合排名（比自己复合成绩高的人数 + 1；未上榜时为 null）
  *
- * 需要复合索引：users.pveHighestFloor desc + users.pveHighestFloorUpdatedAt asc
+ * 需要复合索引：
+ *   users.pveHighestTierLevel desc + users.pveHighestFloor desc + users.pveHighestFloorUpdatedAt asc
+ * 老账号（无 pveHighestTierLevel 字段）视为 NORMAL(0)，排在已更新账号之后（AC-P3-10）。
  */
 async function listPveLeaderboard(userId, limit = 50) {
   const db = getDb();
@@ -338,6 +382,7 @@ async function listPveLeaderboard(userId, limit = 50) {
   const { data } = await db
     .collection(COLLECTIONS.USERS)
     .where({ pveHighestFloor: _.gt(0) })
+    .orderBy('pveHighestTierLevel', 'desc')
     .orderBy('pveHighestFloor', 'desc')
     .orderBy('pveHighestFloorUpdatedAt', 'asc')
     .limit(safeLimit)
@@ -349,17 +394,26 @@ async function listPveLeaderboard(userId, limit = 50) {
     nickname: (user.nickname || '玩家').slice(0, 12),
     avatarUrl: user.avatarUrl || '',
     highestFloor: user.pveHighestFloor ?? 0,
+    highestTier: user.pveHighestTier ?? 'NORMAL',
   }));
 
-  // 查询当前用户排名
+  // 查询当前用户排名（比自己复合成绩严格高的人数 + 1）
   let myRank = null;
   if (userId) {
     const myUser = await getUserById(userId);
     const myFloor = myUser?.pveHighestFloor ?? 0;
+    const myTierLevel = myUser?.pveHighestTierLevel ?? 0;
     if (myFloor > 0) {
+      // 比自己排名高的条件：tierLevel 更高，或同 tierLevel 且 floor 更高
       const { total } = await db
         .collection(COLLECTIONS.USERS)
-        .where({ pveHighestFloor: _.gt(myFloor) })
+        .where(_.or([
+          { pveHighestTierLevel: _.gt(myTierLevel) },
+          {
+            pveHighestTierLevel: _.eq(myTierLevel),
+            pveHighestFloor: _.gt(myFloor),
+          },
+        ]))
         .count();
       myRank = total + 1;
     }

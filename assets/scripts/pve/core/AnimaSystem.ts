@@ -8,6 +8,18 @@ import { createRng } from './rng';
 import { ANIMA_PER_STRENGTHEN, ANIMA_THRESHOLD_MULTIPLIER, STRENGTHEN_CHOICES } from './PveConstants';
 import type { ClassId } from './PveConstants';
 import type { ApplyResult, ExpeditionState, PveEvent } from './PveTypes';
+import {
+  ADVENTURER_STRENGTHEN_DEFS,
+  ARCHER_STRENGTHEN_DEFS,
+  BERSERKER_STRENGTHEN_DEFS,
+  ROGUE_STRENGTHEN_DEFS,
+  STRENGTHEN_DEF_BY_ID,
+} from './strengthen/StrengthenCatalog';
+import { rollStrengthenOffers } from './strengthen/StrengthenOfferSystem';
+import {
+  generalAnimaGainPct,
+  generalDynamicMaxHpBonus,
+} from './strengthen/CommonStrengthenEffects';
 
 /** ADVENTURER 通用强化池（无职业时使用，M1 兼容）。 */
 export const ADVENTURER_STRENGTHEN_POOL = [
@@ -15,6 +27,10 @@ export const ADVENTURER_STRENGTHEN_POOL = [
   'strengthen_attack_up', // 攻击力 +5
   'strengthen_ap_up',     // 下回合起 AP 上限 +1
   'strengthen_gold_find', // 拾取金币 +20%
+  'general_guard_training', 'general_anima_sense', 'general_chest_lore', 'general_recovery_rhythm',
+  'general_first_strike', 'general_steady_finish', 'general_last_defense', 'general_reserve_setup',
+  'general_setback_counter', 'general_polymath', 'general_accumulation', 'general_cover_guard',
+  'general_terrain_power', 'general_stored_edge', 'general_overheal_anima', 'general_blood_price',
 ] as const;
 
 /** BERSERKER 职业强化池（15 条，AC-16 + AC-404）。 */
@@ -34,6 +50,8 @@ export const BERSERKER_STRENGTHEN_POOL = [
   'rage_strike_stack',  // 怒击连击（可叠加×5）：攻击力 + 层数×0.5
   'berserker_resolve',  // 进阶·背水一战：HP ≤ 30% 时攻击 ×1.5
   'final_charge',       // 进阶 oneShot：本层首次 HP ≤ 30% 时 AP +3
+  'berserker_blood_shield', 'berserker_bloody_chain', 'berserker_rage_boiling',
+  'berserker_death_feast', 'berserker_tooth_for_tooth',
 ] as const;
 
 /** ARCHER 职业强化池（15 条，AC-16 + AC-404）。 */
@@ -42,7 +60,7 @@ export const ARCHER_STRENGTHEN_POOL = [
   'marksman',      // 射手精通：攻击力 +5
   'multi_shot',    // 连射：30% 概率对同一目标再射一箭
   'pierce',        // 穿透：攻击无视护甲减伤
-  'crit',          // 暴击：20% 概率造成三倍伤害
+  'crit',          // 暴击：10% 概率造成双倍伤害
   'headshot',      // 致命狩猎：HP ≤ 25% 时攻击 ×2
   'retreat_shot',  // 回马枪：受击后下次攻击 +5 伤害
   'scatter_shot',  // 散射：命中后对相邻敌人造成 50% 溅射伤害
@@ -53,6 +71,8 @@ export const ARCHER_STRENGTHEN_POOL = [
   'focus_stack',   // 专注蓄力（可叠加×5）：攻击力 + 层数×0.5
   'deadeye',       // 进阶·死神之眼：HP ≤ 30% 时攻击 ×1.5
   'last_arrow',    // 进阶 oneShot：本层首次 HP ≤ 30% 时 AP +3
+  'archer_breath_focus', 'archer_line_pierce', 'archer_arrow_rhythm',
+  'archer_critical_reload', 'archer_mark_transfer',
 ] as const;
 
 /** ROGUE 职业强化池（15 条，AC-16 + AC-404）。 */
@@ -72,6 +92,8 @@ export const ROGUE_STRENGTHEN_POOL = [
   'flurry_stack',       // 连斩（可叠加×5）：攻击力 + 层数×0.5
   'survival_instinct',  // 进阶·求生本能：HP ≤ 30% 时攻击 ×1.5
   'desperate_gambit',   // 进阶 oneShot：本层首次 HP ≤ 30% 时 AP +3
+  'rogue_poison_spread', 'rogue_venom_burst', 'rogue_blade_dance',
+  'rogue_chain_backstab', 'rogue_vanish_shadow',
 ] as const;
 
 /** M1 兼容别名（指向 ADVENTURER 池）。 */
@@ -91,7 +113,7 @@ export interface StrengthenMeta {
 }
 
 /** 选中时立即生效 +3 maxHp/HP 的可叠加词条（铁骨/强化箭袋/灵巧）。 */
-export const IMMEDIATE_HP_STACK_TRAITS = new Set(['iron_skin_stack', 'quiver_stack', 'nimble_stack']);
+export const IMMEDIATE_HP_STACK_TRAITS = new Set(['iron_skin_stack']);
 
 /** 强化词条元数据表（AC-404~406）：覆盖 ADVENTURER + BERSERKER/ARCHER/ROGUE 全部 49 条词条。 */
 export const STRENGTHEN_META: Record<string, StrengthenMeta> = {
@@ -153,6 +175,16 @@ export const STRENGTHEN_META: Record<string, StrengthenMeta> = {
   desperate_gambit: { oneShot: true, tier: 'advanced', classId: 'ROGUE' },
 };
 
+for (const def of Object.values(STRENGTHEN_DEF_BY_ID)) {
+  STRENGTHEN_META[def.id] = {
+    stack: def.stack,
+    tier: def.kind === 'core' || def.kind === 'route' ? 'advanced'
+      : def.kind === 'stack' ? 'stack'
+        : def.kind === 'condition' || def.kind === 'anomaly' ? 'condition' : 'basic',
+    classId: def.classId,
+  };
+}
+
 /** 统计 traits 数组中某词条 id 出现的次数（用于数值型可叠加词条）。 */
 export function traitCount(traits: readonly string[], id: string): number {
   let count = 0;
@@ -164,10 +196,10 @@ export function traitCount(traits: readonly string[], id: string): number {
 
 /** 各职业对应的强化词条池（AC-16 M2）。 */
 const CLASS_STRENGTHEN_POOL: Partial<Record<ClassId, readonly string[]>> = {
-  ADVENTURER: ADVENTURER_STRENGTHEN_POOL,
-  BERSERKER: BERSERKER_STRENGTHEN_POOL,
-  ARCHER: ARCHER_STRENGTHEN_POOL,
-  ROGUE: ROGUE_STRENGTHEN_POOL,
+  ADVENTURER: ADVENTURER_STRENGTHEN_DEFS.map((def) => def.id),
+  BERSERKER: BERSERKER_STRENGTHEN_DEFS.map((def) => def.id),
+  ARCHER: ARCHER_STRENGTHEN_DEFS.map((def) => def.id),
+  ROGUE: ROGUE_STRENGTHEN_DEFS.map((def) => def.id),
 };
 
 /** 取指定职业的强化词条池（无对应池时回退到 ADVENTURER 通用池），供命运树 E3「命运护佑」复用。 */
@@ -184,7 +216,12 @@ export function rollChoices(
   rngState: number,
   pool: readonly string[],
   classTraits: readonly string[],
+  recentOffers: readonly string[] = [],
 ): { choices: string[]; nextRngState: number } {
+  const catalogPool = pool.map((id) => STRENGTHEN_DEF_BY_ID[id]).filter((def) => !!def);
+  if (catalogPool.length > 0) {
+    return rollStrengthenOffers({ rngState, pool: catalogPool, owned: classTraits, recentOffers, count: STRENGTHEN_CHOICES });
+  }
   const baseOrConditionOwned = pool.filter((id) => {
     const meta = STRENGTHEN_META[id];
     return meta && (meta.tier === 'basic' || meta.tier === 'condition') && classTraits.includes(id);
@@ -219,10 +256,11 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
   const trinketBonus = state.player.equipment.TRINKET?.baseStat ?? 0;
   // 命运树 D3 灵气亲和：灵气获取额外 +animaGainBonusPct
   const treeBonusPct = state.player.treeBonuses?.animaGainBonusPct ?? 0;
-  const totalPct = trinketBonus / 100 + treeBonusPct;
+  const totalPct = trinketBonus / 100 + treeBonusPct + generalAnimaGainPct(state.player.classTraits);
   const actualAmount = totalPct > 0 ? Math.round(amount * (1 + totalPct)) : amount;
 
   const events: PveEvent[] = [];
+  let recentStrengthenOffers = state.player.recentStrengthenOffers;
   let rngState = state.floorState.rngState;
   let progress = state.player.animaProgress + actualAmount;
   // 使用玩家当前阈值（兼容旧存档：undefined → 100）
@@ -232,8 +270,9 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
 
   while (progress >= threshold) {
     progress -= threshold;
-    const rolled = rollChoices(rngState, pool, state.player.classTraits);
+    const rolled = rollChoices(rngState, pool, state.player.classTraits, recentStrengthenOffers);
     rngState = rolled.nextRngState;
+    recentStrengthenOffers = rolled.choices;
     events.push({ type: 'ANIMA_STRENGTHEN', choices: rolled.choices });
   }
 
@@ -244,6 +283,7 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
         ...state.player,
         anima: state.player.anima + actualAmount,
         animaProgress: progress,
+        ...(events.length > 0 ? { recentStrengthenOffers } : {}),
       },
       floorState: { ...state.floorState, rngState },
     },
@@ -259,6 +299,8 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
  */
 export function applyStrengthen(state: ExpeditionState, choiceId: string): ApplyResult {
   const meta = STRENGTHEN_META[choiceId];
+  const def = STRENGTHEN_DEF_BY_ID[choiceId];
+  if (!meta || !def || def.classId !== state.player.classId) return { state, events: [] };
   const count = traitCount(state.player.classTraits, choiceId);
   const cap = meta?.stack ?? 1;
   if ((meta?.oneShot && count >= 1) || count >= cap) {
@@ -268,6 +310,7 @@ export function applyStrengthen(state: ExpeditionState, choiceId: string): Apply
   const prevThreshold = state.player.animaThreshold ?? ANIMA_PER_STRENGTHEN;
   const nextThreshold = Math.ceil(prevThreshold * ANIMA_THRESHOLD_MULTIPLIER);
 
+  const beforeDynamicHp = generalDynamicMaxHpBonus(state.player.classTraits);
   let newPlayer = {
     ...state.player,
     classTraits: [...state.player.classTraits, choiceId],
@@ -276,15 +319,19 @@ export function applyStrengthen(state: ExpeditionState, choiceId: string): Apply
 
   // 立即生效的属性词条
   if (choiceId === 'strengthen_hp_up') {
-    // 最大 HP +40，同时回复等量当前 HP（选取时视为立即补血）
-    const newMaxHp = newPlayer.maxHp + 40;
-    const newHp = Math.min(newPlayer.hp + 40, newMaxHp);
+    const newMaxHp = newPlayer.maxHp + 20;
+    const newHp = Math.min(newPlayer.hp + 20, newMaxHp);
     newPlayer = { ...newPlayer, maxHp: newMaxHp, hp: newHp };
   } else if (IMMEDIATE_HP_STACK_TRAITS.has(choiceId)) {
-    // 铁骨/强化箭袋/灵巧：每层 maxHp/HP +3
-    const newMaxHp = newPlayer.maxHp + 3;
-    const newHp = Math.min(newPlayer.hp + 3, newMaxHp);
+    const hpGain = choiceId === 'iron_skin_stack' ? 15 : 0;
+    const newMaxHp = newPlayer.maxHp + hpGain;
+    const newHp = Math.min(newPlayer.hp + hpGain, newMaxHp);
     newPlayer = { ...newPlayer, maxHp: newMaxHp, hp: newHp };
+  }
+
+  const dynamicHpGain = generalDynamicMaxHpBonus(newPlayer.classTraits) - beforeDynamicHp;
+  if (dynamicHpGain > 0) {
+    newPlayer = { ...newPlayer, maxHp: newPlayer.maxHp + dynamicHpGain, hp: newPlayer.hp + dynamicHpGain };
   }
 
   return {

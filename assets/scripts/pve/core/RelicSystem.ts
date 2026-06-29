@@ -1,5 +1,5 @@
 // Boss 遗物系统（design Boss设计V1 / 掉落系统）：
-// 5 件遗物对应 5 章 Boss，击杀 Boss 时 20%（图鉴已解锁 +10%）独立概率掉落。
+// 5 件遗物对应 5 章 Boss，击杀 Boss 时 10%（图鉴已解锁 +10%）独立概率掉落。
 // 本场远征局内生效，死亡清空（图鉴解锁记录保留在 PveMeta.codex.relics）。
 //
 // 实现策略：每件遗物在数据层声明属性，效果实现散布到对应系统的挂钩点：
@@ -25,6 +25,16 @@ import type {
 } from './PveTypes';
 import type { Rng } from './rng';
 import { createRng } from './rng';
+import {
+  getBalancedChiefRoarDamageMultiplier,
+  getBalancedFateEchoRevivePercent,
+  getBalancedMagmaReflectPercent,
+  getBalancedPermafrostChargeSteps,
+  getBalancedPermafrostFreezeRounds,
+  getBalancedQuicksandAttackBonus,
+  getBalancedQuicksandPitCount,
+  getBalancedQuicksandPitDuration,
+} from './PveBalance';
 
 // ── 数值常量（直接写文档化数值，避免反复跳转 PveConstants） ──
 /** CHIEF_ROAR：击杀后下一次普攻伤害倍率（+50% = ×1.5）。 */
@@ -131,6 +141,8 @@ export function relicOnNewFloor(state: ExpeditionState): ApplyResult {
   if (!playerHasRelic(state.player, 'QUICKSAND_HEART')) return { state, events: [] };
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
+  const pitCount = getBalancedQuicksandPitCount(state.balanceSnapshot, state.chapter);
+  const pitDuration = getBalancedQuicksandPitDuration(state.balanceSnapshot, state.chapter);
   const newPits: FixedEntity[] = [];
   const occupied = new Set<string>();
   const keyOf = (c: Coord) => `${c.x},${c.y}`;
@@ -143,7 +155,7 @@ export function relicOnNewFloor(state: ExpeditionState): ApplyResult {
   }
 
   let placed = 0;
-  for (let tries = 0; tries < 30 && placed < QUICKSAND_HEART_PIT_COUNT; tries++) {
+  for (let tries = 0; tries < 30 && placed < pitCount; tries++) {
     const pos: Coord = { x: rng.int(0, floor.size - 1), y: rng.int(0, floor.size - 1) };
     const k = keyOf(pos);
     if (occupied.has(k)) continue;
@@ -153,7 +165,7 @@ export function relicOnNewFloor(state: ExpeditionState): ApplyResult {
       type: 'SAND_PIT',
       pos,
       consumed: false,
-      remaining: QUICKSAND_HEART_PIT_DURATION,
+      remaining: pitDuration,
     });
     placed++;
   }
@@ -166,7 +178,7 @@ export function relicOnNewFloor(state: ExpeditionState): ApplyResult {
     {
       type: 'SAND_TIDE_SPAWNED',
       tiles: newPits.map((p) => p.pos),
-      duration: QUICKSAND_HEART_PIT_DURATION,
+      duration: pitDuration,
     },
     { type: 'RELIC_TRIGGERED', relicId: 'QUICKSAND_HEART', detail: `+${placed} 格流沙` },
   ];
@@ -201,9 +213,14 @@ export function relicComputeAttackBonus(
   const rstate = getRelicState(nextPlayer);
 
   if (playerHasRelic(nextPlayer, 'CHIEF_ROAR') && rstate.chiefRoarPending) {
-    bonus += Math.round(baseDamage * (CHIEF_ROAR_DAMAGE_MULT - 1.0));
+    const chiefRoarDamageMultiplier = getBalancedChiefRoarDamageMultiplier(state.balanceSnapshot, state.chapter);
+    bonus += Math.round(baseDamage * (chiefRoarDamageMultiplier - 1.0));
     nextPlayer = patchRelicState(nextPlayer, { chiefRoarPending: false });
-    events.push({ type: 'RELIC_TRIGGERED', relicId: 'CHIEF_ROAR', detail: '+50% 伤害' });
+    events.push({
+      type: 'RELIC_TRIGGERED',
+      relicId: 'CHIEF_ROAR',
+      detail: `+${Math.round((chiefRoarDamageMultiplier - 1) * 100)}% 伤害`,
+    });
   }
 
   if (playerHasRelic(nextPlayer, 'QUICKSAND_HEART')) {
@@ -212,8 +229,13 @@ export function relicComputeAttackBonus(
         && e.pos.x === state.floorState.player.x && e.pos.y === state.floorState.player.y,
     );
     if (onSand) {
-      bonus += QUICKSAND_HEART_ATTACK_BONUS;
-      events.push({ type: 'RELIC_TRIGGERED', relicId: 'QUICKSAND_HEART', detail: `+${QUICKSAND_HEART_ATTACK_BONUS} 流沙加成` });
+      const quicksandAttackBonus = getBalancedQuicksandAttackBonus(state.balanceSnapshot, state.chapter);
+      bonus += quicksandAttackBonus;
+      events.push({
+        type: 'RELIC_TRIGGERED',
+        relicId: 'QUICKSAND_HEART',
+        detail: `+${quicksandAttackBonus} 流沙加成`,
+      });
     }
   }
 
@@ -258,11 +280,16 @@ export function relicOnKill(player: RunPlayer): { nextPlayer: RunPlayer } {
  * 玩家移动一步后（PERMAFROST_CORE）：累计步数；达到 3 步时置 pending=true 并清零步数。
  * 滑行视为多步（调用方按真实位移格数循环调用本函数）。
  */
-export function relicOnMoveStep(player: RunPlayer): { nextPlayer: RunPlayer; events: PveEvent[] } {
+export function relicOnMoveStep(
+  player: RunPlayer,
+  snapshot?: ExpeditionState['balanceSnapshot'],
+  chapter = 1,
+): { nextPlayer: RunPlayer; events: PveEvent[] } {
   if (!playerHasRelic(player, 'PERMAFROST_CORE')) return { nextPlayer: player, events: [] };
   const rstate = getRelicState(player);
+  const requiredSteps = getBalancedPermafrostChargeSteps(snapshot, chapter);
   const steps = (rstate.permafrostSteps ?? 0) + 1;
-  if (steps >= PERMAFROST_CORE_STEPS) {
+  if (steps >= requiredSteps) {
     return {
       nextPlayer: patchRelicState(player, { permafrostSteps: 0, permafrostPending: true }),
       events: [{ type: 'RELIC_TRIGGERED', relicId: 'PERMAFROST_CORE', detail: '蓄能完成（下次普攻冰冻）' }],
@@ -275,10 +302,15 @@ export function relicOnMoveStep(player: RunPlayer): { nextPlayer: RunPlayer; eve
  * 玩家受到怪物攻击时（MAGMA_HEART）：返回反弹给攻击者的伤害值（30%，向上取整最低 1）。
  * 0 表示无遗物或反弹值为 0（damage 为 0 时）。
  */
-export function relicReflectDamage(player: RunPlayer, damage: number): number {
+export function relicReflectDamage(
+  player: RunPlayer,
+  damage: number,
+  snapshot?: ExpeditionState['balanceSnapshot'],
+  chapter = 1,
+): number {
   if (!playerHasRelic(player, 'MAGMA_HEART')) return 0;
   if (damage <= 0) return 0;
-  return Math.max(1, Math.ceil(damage * MAGMA_HEART_REFLECT_PCT));
+  return Math.max(1, Math.ceil(damage * getBalancedMagmaReflectPercent(snapshot, chapter)));
 }
 
 /**
@@ -286,7 +318,11 @@ export function relicReflectDamage(player: RunPlayer, damage: number): number {
  * 持有遗物且本场远征未触发过 → 标记已用 + 回复 30% maxHp，返回 { revived: true, restoredHp }。
  * 否则返回 { revived: false }。
  */
-export function relicTryRevive(player: RunPlayer): {
+export function relicTryRevive(
+  player: RunPlayer,
+  snapshot?: ExpeditionState['balanceSnapshot'],
+  chapter = 1,
+): {
   revived: boolean;
   restoredHp: number;
   nextPlayer: RunPlayer;
@@ -298,7 +334,7 @@ export function relicTryRevive(player: RunPlayer): {
   if (rstate.fateEchoUsed) {
     return { revived: false, restoredHp: 0, nextPlayer: player };
   }
-  const restoredHp = Math.max(1, Math.round(player.maxHp * FATE_ECHO_REVIVE_HP_PCT));
+  const restoredHp = Math.max(1, Math.round(player.maxHp * getBalancedFateEchoRevivePercent(snapshot, chapter)));
   return {
     revived: true,
     restoredHp,

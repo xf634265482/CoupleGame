@@ -4,8 +4,9 @@
 // trait id 命名约定：boss_<效果>_<数值>，实际效果实现见 EquipTraitEffects.ts / CombatSystem.ts
 // （Task #2 仅定义数据骨架，效果挂钩在后续 task 完成）。
 
-import type { EquipItem, EquipQuality, EquipSlot } from '../PveTypes';
+import type { EquipItem, EquipQuality, EquipSlot, PveBalanceSnapshot } from '../PveTypes';
 import type { Rng } from '../rng';
+import { getBalancedEquipmentBaseStat } from '../PveBalance';
 
 /** Boss id 联合（与 CHAPTER_BOSS 同步）。 */
 export type BossId = 'GOBLIN_CHIEF' | 'QUICKSAND_SCORPION' | 'FROST_GIANT' | 'LAVA_LORD' | 'FATE_GUARDIAN';
@@ -60,7 +61,12 @@ export const BOSS_SPOILS: Record<BossId, readonly BossSpoilTemplate[]> = {
  * 从指定 Boss 的专属掉落表中等概率随机 1 件，生成 EquipItem 实例。
  * 击杀 Boss 必调用一次，结果作为 100% 必掉的专属奖励。
  */
-export function rollBossSpoil(rng: Rng, bossId: BossId): EquipItem {
+export function rollBossSpoil(
+  rng: Rng,
+  bossId: BossId,
+  chapter = 1,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+): EquipItem {
   const table = BOSS_SPOILS[bossId];
   const template = rng.pick(table);
   const uid = rng.int(100000, 999999);
@@ -69,7 +75,7 @@ export function rollBossSpoil(rng: Rng, bossId: BossId): EquipItem {
     slot: template.slot,
     quality: template.quality,
     name: template.name,
-    baseStat: template.baseStat,
+    baseStat: getBalancedEquipmentBaseStat(balanceSnapshot, chapter, template.slot, template.baseStat),
     trait: template.trait,
   };
 }

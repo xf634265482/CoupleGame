@@ -11,7 +11,7 @@
     "6c48a": {
       "importer": "texture",
       "uuid": "0571d640-33d1-4cdb-8db1-5783a54812d3@6c48a",
-      "displayName": "bg_pve_ch2_runtime",
+      "displayName": "bg_pve_ch2",
       "id": "6c48a",
       "name": "texture",
       "userData": {
@@ -35,7 +35,7 @@
     "f9941": {
       "importer": "sprite-frame",
       "uuid": "0571d640-33d1-4cdb-8db1-5783a54812d3@f9941",
-      "displayName": "bg_pve_ch2_runtime",
+      "displayName": "bg_pve_ch2",
       "id": "f9941",
       "name": "spriteFrame",
       "userData": {

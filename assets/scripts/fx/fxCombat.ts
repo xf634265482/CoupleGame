@@ -126,7 +126,14 @@ function spawnNumber(host: Node, text: string, color: Color, opts: NumberOptions
   node.setPosition(world.x, world.y, 0);
 
   const label = node.getComponent(Label);
-  if (label) { label.string = text; label.color = opts.color ?? color; label.fontSize = opts.crit ? 44 : 32; }
+  if (label) {
+    label.string = text;
+    label.color = opts.color ?? color;
+    label.fontSize = opts.crit ? 80 : 56;
+    label.enableOutline = true;
+    label.outlineColor = new Color(0, 0, 0, 210);
+    label.outlineWidth = 3;
+  }
   const op = node.getComponent(UIOpacity);
   if (op) op.opacity = 255;
   node.setScale(opts.crit ? 1.4 : 1, opts.crit ? 1.4 : 1, 1);
@@ -150,9 +157,9 @@ function spawnNumber(host: Node, text: string, color: Color, opts: NumberOptions
   return parallel([moveH, fadeH]);
 }
 
-/** 伤害数字（默认白，crit 金色放大）。 */
+/** 伤害数字（默认红，crit 金色放大）。 */
 export function damageNumber(host: Node, value: number | string, opts: NumberOptions = {}): FxHandle {
-  return spawnNumber(host, `-${value}`, opts.crit ? GOLD : WHITE, opts);
+  return spawnNumber(host, `-${value}`, opts.crit ? GOLD : RED, opts);
 }
 
 /** 治疗数字（绿色）。 */

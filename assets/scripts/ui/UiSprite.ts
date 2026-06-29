@@ -54,6 +54,23 @@ export function pickSpriteLayout(
   };
 }
 
+/** 等比缩放进目标盒，但不允许放大超过素材原始裁切尺寸。 */
+export function pickSpriteLayoutNoUpscale(
+  sf: SpriteFrame,
+  boxW: number,
+  boxH: number,
+): { w: number; h: number } {
+  const { w: sw, h: sh } = spriteSourceSize(sf);
+  if (sw <= 0 || sh <= 0) {
+    return { w: boxW, h: boxH };
+  }
+  const scale = Math.min(1, boxW / sw, boxH / sh);
+  return {
+    w: Math.max(1, Math.round(sw * scale)),
+    h: Math.max(1, Math.round(sh * scale)),
+  };
+}
+
 /** 铺满目标盒（cover），用于全屏背景 */
 export function pickSpriteCover(
   sf: SpriteFrame,
@@ -141,6 +158,25 @@ export function ensureArtChild(
   boxH: number,
 ): Sprite {
   const lay = pickSpriteLayout(sf, boxW, boxH);
+  let ch = parent.getChildByName(childName);
+  if (!ch) {
+    ch = new Node(childName);
+    ch.setParent(parent);
+    ch.setSiblingIndex(0);
+    ch.setPosition(0, 0, 0);
+  }
+  return applySpriteSize(ch, sf, lay.w, lay.h);
+}
+
+/** 子节点等比 contain，但不放大超过素材原始裁切尺寸。 */
+export function ensureArtContainNoUpscale(
+  parent: Node,
+  childName: string,
+  sf: SpriteFrame,
+  boxW: number,
+  boxH: number,
+): Sprite {
+  const lay = pickSpriteLayoutNoUpscale(sf, boxW, boxH);
   let ch = parent.getChildByName(childName);
   if (!ch) {
     ch = new Node(childName);

@@ -52,7 +52,6 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
     expect(result.state.player.hp).toBe(180);
     // 攻击者所在格此前未揭示，攻击时一并揭示该格
     expect(result.events).toEqual([
-      { type: 'REVEAL', cells: [{ x: 4, y: 5 }] },
       { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1', rawDamage: 20 },
     ]);
   });

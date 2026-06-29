@@ -4,8 +4,9 @@
 //   （equipItem/unequipItem 应用），SHOES/TRINKET 见各自阈值常量与 AnimaSystem。
 // 纯函数，零框架依赖，所有随机走传入的 Rng（AC-13 确定性）。
 
-import type { EquipItem, EquipQuality, EquipSlot, RunPlayer } from './PveTypes';
+import type { EquipItem, EquipQuality, EquipSlot, PveBalanceSnapshot, RunPlayer } from './PveTypes';
 import type { Rng } from './rng';
+import { getBalancedEquipmentBaseStat } from './PveBalance';
 
 interface EquipTemplate {
   name: string;
@@ -84,7 +85,13 @@ export const EQUIP_TRAIT_POOL: readonly string[] = [
  * 生成指定槽位与品质的装备实例。
  * rng 用于生成唯一 id（保证同种子确定性，AC-13）。
  */
-export function rollEquipment(rng: Rng, slot: EquipSlot, quality: EquipQuality): EquipItem {
+export function rollEquipment(
+  rng: Rng,
+  slot: EquipSlot,
+  quality: EquipQuality,
+  chapter = 1,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+): EquipItem {
   const template = EQUIPMENT_TEMPLATES[slot][quality];
   const uid = rng.int(10000, 99999);
   return {
@@ -92,7 +99,7 @@ export function rollEquipment(rng: Rng, slot: EquipSlot, quality: EquipQuality):
     slot,
     quality,
     name: template.name,
-    baseStat: template.baseStat,
+    baseStat: getBalancedEquipmentBaseStat(balanceSnapshot, chapter, slot, template.baseStat),
   };
 }
 

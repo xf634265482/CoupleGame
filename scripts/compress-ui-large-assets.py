@@ -12,6 +12,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_ROOT = ROOT / "assets" / "resources" / "art" / "ui"
+BACKUP_ROOT = ROOT / ".asset-backups" / "compress-ui"
 BACKUP_SUFFIX = ".pngbak"
 
 # 规格见 specs/260603-ui-entry/ui-asset-checklist.md
@@ -20,6 +21,13 @@ BACKGROUND_SPECS: dict[str, tuple[int, int]] = {
     "backgrounds/bg_room.png": (1334, 750),
     "backgrounds/bg_board.png": (1334, 750),
     "backgrounds/bg_settlement.png": (1334, 750),
+    # bg_pve_ch1 进主包 critical native（patch-wechatgame-config.js: isMainNativeExcluded
+    # 对 'pve/backgrounds/bg_pve_ch1' 显式 return false）。其余章节背景留分包，无需压缩。
+    "pve/backgrounds/bg_pve_ch1.png": (576, 1024),
+}
+
+PROTECTED_SOURCE_ASSETS = {
+    "backgrounds/bg_lobby.png",
 }
 
 PANEL_SPECS: dict[str, int] = {
@@ -42,6 +50,16 @@ EXTRA_RGBA_SPECS: dict[str, dict] = {
     "lobby/logo_game.png": {"size": (520, 180), "colors": 128, "max_kb": 28},
     "board/panels/panel_board_modal_9s.png": {"size": None, "colors": 128, "max_kb": 28},
     "lobby/panel_lobby_main_9s.png": {"size": None, "colors": 128, "max_kb": 18},
+    # 迷雾是高频覆盖层，但天然柔和、重复铺满，适合轻度降分辨率/降色深来换主包空间。
+    "pve/map/tile_fog.png": {"size": (192, 192), "colors": 128, "max_kb": 120},
+    # 大厅首屏 chip：原图严重过大（图标 512×512 仅显示 58×58；9-slice 885×316）。
+    # 它们进主包 critical native，是 4MB 超限的主因，必须压。图标降到 128 仍 2x 清晰；
+    # 9-slice 不 resize（避免破坏边框），仅降色深。
+    "pve/lobby/icon_chip_diamond.png": {"size": (128, 128), "colors": 64, "max_kb": 24},
+    "pve/lobby/icon_chip_stamina.png": {"size": (128, 128), "colors": 64, "max_kb": 24},
+    # terrain_rock 跨章共享（第1章 GoblinChief 召唤 + 第3章 FrostGiant 路径碰撞检测），
+    # 留主包 critical。源图 512×512 / 292KB 过剩，战场显示约 60-80px。
+    "pve/map/terrain_rock.png": {"size": (128, 128), "colors": 64, "max_kb": 24},
 }
 
 BATCH_MIN_KB = 16
@@ -51,7 +69,7 @@ BATCH_DIRS = ("board/cells", "board/panels", "board/buttons", "board/pawns", "ic
 PALETTE_COLORS_BG = 128
 PALETTE_COLORS_BG_LOBBY = 64
 MAX_BG_KB = 280
-MAX_BG_LOBBY_KB = 140
+MAX_BG_LOBBY_KB = 120
 MAX_BG_BOARD_KB = 130
 MAX_BG_ROOM_KB = 220
 
@@ -60,9 +78,14 @@ def kb(path: Path) -> float:
     return path.stat().st_size / 1024
 
 
+def backup_path(src: Path) -> Path:
+    return BACKUP_ROOT / src.relative_to(ROOT).with_name(src.name + BACKUP_SUFFIX)
+
+
 def backup_once(src: Path) -> None:
-    bak = src.with_name(src.name + BACKUP_SUFFIX)
+    bak = backup_path(src)
     if not bak.exists():
+        bak.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, bak)
         print(f"  backup -> {bak.relative_to(ROOT)}")
 
@@ -77,24 +100,47 @@ def flatten_rgb(im: Image.Image) -> Image.Image:
     return im
 
 
-def save_quantized_png(im: Image.Image, dest: Path, colors: int) -> None:
+def save_quantized_png(
+    im: Image.Image,
+    dest: Path,
+    colors: int,
+    *,
+    preserve_colors: tuple[tuple[int, int, int], ...] = (),
+) -> None:
     if im.mode == "RGBA":
         quantized = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
     else:
         quantized = flatten_rgb(im).quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    if preserve_colors and im.mode != "RGBA":
+        palette = quantized.getpalette()[: colors * 3]
+        for index, color in enumerate(preserve_colors[:colors]):
+            offset = (colors - 1 - index) * 3
+            palette[offset:offset + 3] = list(color)
+        palette_image = Image.new("P", (1, 1))
+        palette_image.putpalette(palette + [0] * (768 - len(palette)))
+        quantized = flatten_rgb(im).quantize(
+            palette=palette_image,
+            dither=Image.Dither.FLOYDSTEINBERG,
+        )
     buf = io.BytesIO()
     quantized.save(buf, format="PNG", optimize=True, compress_level=9)
     dest.write_bytes(buf.getvalue())
 
 
-def save_quantized_capped(im: Image.Image, dest: Path, colors: int, max_kb: float) -> None:
+def save_quantized_capped(
+    im: Image.Image,
+    dest: Path,
+    colors: int,
+    max_kb: float,
+    *,
+    preserve_colors: tuple[tuple[int, int, int], ...] = (),
+) -> None:
     cur = colors
     while cur >= 32:
-        save_quantized_png(im, dest, cur)
-        if kb(dest) <= max_kb:
+        save_quantized_png(im, dest, cur, preserve_colors=preserve_colors)
+        if kb(dest) <= max_kb or cur == 32:
             return
         cur = max(32, cur // 2)
-    save_quantized_png(im, dest, 32)
 
 
 def update_sprite_meta(
@@ -149,18 +195,34 @@ def update_sprite_meta(
     meta_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def compress_background(rel: str, target_size: tuple[int, int], *, palette: int, max_kb: float) -> None:
+def compress_background(
+    rel: str,
+    target_size: tuple[int, int],
+    *,
+    palette: int,
+    max_kb: float,
+    preserve_colors: tuple[tuple[int, int, int], ...] = (),
+) -> None:
+    if rel in PROTECTED_SOURCE_ASSETS:
+        print(f"[protected] keep source unchanged: {rel}")
+        return
     src = UI_ROOT / rel
     if not src.exists():
         print(f"[skip] missing {rel}")
         return
     before = kb(src)
     backup_once(src)
-    im = Image.open(src)
-    im = flatten_rgb(im)
+    with Image.open(src) as opened:
+        im = flatten_rgb(opened).copy()
     if im.size != target_size:
         im = im.resize(target_size, Image.Resampling.LANCZOS)
-    save_quantized_capped(im, src, palette, max_kb)
+    save_quantized_capped(
+        im,
+        src,
+        palette,
+        max_kb,
+        preserve_colors=preserve_colors,
+    )
     after = kb(src)
     print(f"[bg] {rel}: {before:.0f} KB -> {after:.0f} KB ({im.size[0]}x{im.size[1]})")
 
@@ -221,13 +283,29 @@ def compress_bgm() -> None:
 
 def main() -> None:
     print("compress-ui-large-assets")
+    for rel in sorted(PROTECTED_SOURCE_ASSETS):
+        print(f"[protected] excluded from source compression: {rel}")
     for rel, size in BACKGROUND_SPECS.items():
-        if rel == "backgrounds/bg_lobby.png":
-            compress_background(rel, size, palette=PALETTE_COLORS_BG_LOBBY, max_kb=MAX_BG_LOBBY_KB)
-        elif rel == "backgrounds/bg_board.png":
+        if rel == "backgrounds/bg_board.png":
             compress_background(rel, size, palette=PALETTE_COLORS_BG_LOBBY, max_kb=MAX_BG_BOARD_KB)
         elif rel == "backgrounds/bg_room.png":
             compress_background(rel, size, palette=PALETTE_COLORS_BG, max_kb=MAX_BG_ROOM_KB)
+        elif rel == "pve/backgrounds/bg_pve_ch1.png":
+            # 第 1 章背景进入主包；576x1024 / 32 色约 175～205KB，可为 4MB 红线留出安全余量。
+            # 红旗占图面积很小，普通全局量化会被绿色吞并，显式保留 5 档哥布林旗帜红。
+            compress_background(
+                rel,
+                size,
+                palette=PALETTE_COLORS_BG,
+                max_kb=180,
+                preserve_colors=(
+                    (85, 25, 15),
+                    (125, 35, 20),
+                    (165, 48, 28),
+                    (195, 65, 38),
+                    (220, 90, 55),
+                ),
+            )
         else:
             compress_background(rel, size, palette=PALETTE_COLORS_BG, max_kb=MAX_BG_KB)
     for rel, colors in PANEL_SPECS.items():

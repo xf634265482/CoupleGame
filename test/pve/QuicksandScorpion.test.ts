@@ -14,6 +14,7 @@ function makeBossState(playerHp = 20, bossOverrides = {}) {
   return makeExpeditionState({
     chapter: 2,
     floorOverrides: {
+      rngState: 12345, // 固定 RNG，测试不受 generateFloor fragment 调用影响
       player: { x: 4, y: 4 },
       ap: 10,
       turn: 1,
@@ -150,8 +151,9 @@ describe('QuicksandScorpion', () => {
 
       const damaged = result.events.find((e) => e.type === 'PLAYER_DAMAGED');
       if (damaged && damaged.type === 'PLAYER_DAMAGED') {
-        // 冒出附近可能 range=1 未相邻，此时无伤害；若相邻伤害应为 6
-        expect([0, 6]).toContain(damaged.damage);
+        // adjacentEmptyCells 返回玩家相邻格，boss 冒出必在 range=1 内必然攻击；
+        // attack=3 × damageMult=2 = 6，但 monsterAttack 有 Math.max(10,...) 兜底，实际 10。
+        expect(damaged.damage).toBe(10);
       }
     });
 

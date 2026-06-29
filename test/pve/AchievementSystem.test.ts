@@ -92,13 +92,13 @@ describe('checkNewAchievements — 触发条件', () => {
     expect(result).toContain('CLASS_ADVANCED');
   });
 
-  it('CHAPTER_1_CLEARED：FLOOR_CLEARED floor=5 触发', () => {
-    const result = checkNewAchievements([ev.floorCleared(5)], 5, NONE);
+  it('CHAPTER_1_CLEARED：FLOOR_CLEARED floor=7 触发', () => {
+    const result = checkNewAchievements([ev.floorCleared(7)], 7, NONE);
     expect(result).toContain('CHAPTER_1_CLEARED');
   });
 
-  it('CHAPTER_1_CLEARED：FLOOR_CLEARED floor=4 不触发', () => {
-    const result = checkNewAchievements([ev.floorCleared(4)], 4, NONE);
+  it('CHAPTER_1_CLEARED：FLOOR_CLEARED floor=6 不触发', () => {
+    const result = checkNewAchievements([ev.floorCleared(6)], 6, NONE);
     expect(result).not.toContain('CHAPTER_1_CLEARED');
   });
 
@@ -112,8 +112,8 @@ describe('checkNewAchievements — 触发条件', () => {
     expect(result).not.toContain('REACH_FLOOR_10');
   });
 
-  it('FULL_CLEAR：FLOOR_CLEARED floor=25 触发', () => {
-    const result = checkNewAchievements([ev.floorCleared(25)], 25, NONE);
+  it('FULL_CLEAR：FLOOR_CLEARED floor=35 触发', () => {
+    const result = checkNewAchievements([ev.floorCleared(35)], 35, NONE);
     expect(result).toContain('FULL_CLEAR');
   });
 });
@@ -144,8 +144,8 @@ describe('checkNewAchievements — 去重与过滤', () => {
   it('无新成就返回空数组', () => {
     const alreadyAll = ACHIEVEMENT_DEFS.map((d) => d.id);
     const result = checkNewAchievements(
-      [ev.kill(), ev.openChest(), ev.floorCleared(25)],
-      25,
+      [ev.kill(), ev.openChest(), ev.floorCleared(35)],
+      35,
       alreadyAll,
     );
     expect(result).toEqual([]);

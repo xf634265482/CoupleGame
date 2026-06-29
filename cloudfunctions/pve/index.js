@@ -44,8 +44,8 @@ exports.main = async (event = {}) => {
     }
 
     if (action === 'loadMeta') {
-      const { meta } = await loadMeta(user);
-      return { ok: true, meta };
+      const { meta, balanceSnapshot } = await loadMeta(user);
+      return { ok: true, meta, balanceSnapshot };
     }
 
     if (action === 'updateMeta') {

@@ -65,37 +65,53 @@ export interface MonsterFloorRule {
  * - chapter 2-5 fl 1-4：P0 阶段统一为 normal=4, elite=1, anima=1（与重构前等价）
  *   ↑ 待 P1 按章节主题（沙漠/冰原/熔岩/命运回廊）填新变体与逐层差异
  */
+/**
+ * 章节×章内层号 → 怪物配比表。V3（260628）：每章扩到章内 1-6（Boss 在章内 7）。
+ * - 章内 1-2：探索铺垫，新怪登场，密度低
+ * - 章内 3：精英关卡（精英怪 ≥ 2），章中记忆点
+ * - 章内 4-6：机关地形主场，本章 gimmick 全开
+ */
 export const CHAPTER_MONSTER_RULES: Record<number, Record<number, MonsterFloorRule>> = {
   1: {
     1: { goblinWarrior: 3, spiritRat: 1 },
     2: { goblinWarrior: 2, goblinArcher: 2, spiritRat: 1 },
-    3: { goblinWarrior: 3, fireGoblin: 1, spiritRat: 1 },
+    3: { goblinWarrior: 2, fireGoblin: 2, spiritRat: 1 },            // 精英关卡：2× fireGoblin(ELITE)
     4: { goblinArcher: 3, frostGoblin: 1, spiritRat: 1 },
+    5: { goblinWarrior: 2, fireGoblin: 1, frostGoblin: 1, spiritRat: 1 }, // 火/冰机关全开
+    6: { goblinWarrior: 2, goblinArcher: 2, fireGoblin: 1, frostGoblin: 1, spiritRat: 1 },
   },
-  // P1 完整变体（260616 落地）
+  // P1 完整变体（260616 落地）+ V3 扩层（260628）
   2: {
     1: { desertRaider: 3, spiritBeetle: 1 },
     2: { desertRaider: 2, sandwormLarva: 2, spiritBeetle: 1 },
-    3: { sandwormLarva: 2, spiritBeetle: 1 },
+    3: { desertRaider: 2, poisonScorpion: 2, spiritBeetle: 1 },      // 精英关卡：2× poisonScorpion(ELITE)
     4: { desertRaider: 2, sandwormLarva: 2, poisonScorpion: 1, spiritBeetle: 1 },
+    5: { sandwormLarva: 2, poisonScorpion: 2, spiritBeetle: 1 },     // 沙坑/毒机关全开
+    6: { desertRaider: 2, sandwormLarva: 2, poisonScorpion: 2, spiritBeetle: 1 },
   },
   3: {
     1: { snowWolf: 2, spiritElf: 1 },
     2: { snowWolf: 2, iceSlime: 2, spiritElf: 1 },
-    3: { iceSlime: 2, spiritElf: 1 },
+    3: { snowWolf: 2, frostSprite: 2, spiritElf: 1 },                // 精英关卡：2× frostSprite(ELITE)
     4: { snowWolf: 2, iceSlime: 2, frostSprite: 1, spiritElf: 1 },
+    5: { iceSlime: 2, frostSprite: 2, spiritElf: 1 },                // 冰面机关全开
+    6: { snowWolf: 2, iceSlime: 2, frostSprite: 2, spiritElf: 1 },
   },
   4: {
     1: { lavaGrunt: 3, spiritEmber: 1 },
     2: { lavaGrunt: 2, lavaCrab: 2, spiritEmber: 1 },
-    3: { lavaCrab: 1, spiritEmber: 1 },
+    3: { lavaGrunt: 2, fireElemental: 2, spiritEmber: 1 },           // 精英关卡：2× fireElemental(ELITE)
     4: { lavaGrunt: 2, lavaCrab: 1, fireElemental: 1, spiritEmber: 1 },
+    5: { lavaCrab: 2, fireElemental: 2, spiritEmber: 1 },            // 熔岩机关全开
+    6: { lavaGrunt: 2, lavaCrab: 2, fireElemental: 2, spiritEmber: 1 },
   },
   5: {
     1: { fateWatcher: 2, spiritMirage: 1 },
     2: { shadowAssassin: 2, fateWatcher: 2, spiritMirage: 1 },
-    3: { shadowAssassin: 1, spiritMirage: 1 },
+    3: { shadowAssassin: 2, voidWorm: 2, spiritMirage: 1 },          // 精英关卡：2× voidWorm(ELITE)
     4: { shadowAssassin: 2, fateWatcher: 1, voidWorm: 1, spiritMirage: 1 },
+    5: { fateWatcher: 2, voidWorm: 2, spiritMirage: 1 },             // 命运机关全开
+    6: { shadowAssassin: 2, fateWatcher: 2, voidWorm: 2, spiritMirage: 1 },
   },
 };
 

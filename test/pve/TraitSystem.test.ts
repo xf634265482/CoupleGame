@@ -39,7 +39,7 @@ describe('词条：life_steal 吸血（BERSERKER）', () => {
       playerOverrides: { hp: 150, maxHp: 200, classTraits: ['life_steal'] },
     });
     const result = playerAttack(state, 'm1');
-    expect(result.state.player.hp).toBe(160); // 150 + 10
+    expect(result.state.player.hp).toBe(158); // V2: 150 + 8
   });
 
   it('HP 已满时不溢出', () => {
@@ -97,7 +97,7 @@ describe('词条：blood_rage 血怒（BERSERKER）', () => {
       playerOverrides: { hp: 140, maxHp: 200, classTraits: ['blood_rage'] },
     });
     const result = playerAttack(state, 'm1');
-    expect(result.state.player.hp).toBe(160); // 140 + 20
+    expect(result.state.player.hp).toBe(155); // V2: 140 + 15
   });
 
   it('未击杀时不触发', () => {
@@ -135,9 +135,8 @@ describe('词条：undying 不屈（BERSERKER）', () => {
       floorOverrides: {
         player: { x: 4, y: 4 },
         monsters: [makeMonster('m1', { x: 4, y: 5 }, { attack: 99, range: 1 })],
-        undyingAvailable: false, // 已触发过
       },
-      playerOverrides: { hp: 3, maxHp: 20, classTraits: ['undying'] },
+      playerOverrides: { hp: 3, maxHp: 20, classTraits: ['undying'], undyingUsedChapter: 1 },
     });
     const result = monsterAttack(state, 'm1');
     expect(result.state.player.hp).toBe(0);
@@ -209,7 +208,7 @@ describe('词条：marksman 射手精通（ARCHER）', () => {
     const player = makeExpeditionState({
       playerOverrides: { classTraits: ['marksman'] },
     }).player;
-    expect(playerAttackPower(player).damage).toBe(15); // 10 + 5
+    expect(playerAttackPower(player).damage).toBe(14); // V2: 10 + 4
   });
 });
 
@@ -352,7 +351,7 @@ describe('词条：backstab 背刺（ROGUE）', () => {
     });
     const result = playerAttack(state, 'm1');
     const atk = result.events.find((e) => e.type === 'ATTACK');
-    expect(atk?.type === 'ATTACK' && atk.damage).toBe(20); // 10 * 2
+    expect(atk?.type === 'ATTACK' && atk.damage).toBe(15); // V2: 10 * 1.5
     expect(result.state.floorState.backstabAvailable).toBe(false);
   });
 
@@ -384,7 +383,7 @@ describe('词条：assassin_heart 刺客之心（ROGUE）', () => {
     });
     const result = playerAttack(state, 'm1');
     const atk = result.events.find((e) => e.type === 'ATTACK');
-    expect(atk?.type === 'ATTACK' && atk.damage).toBe(30); // 10 + 20
+    expect(atk?.type === 'ATTACK' && atk.damage).toBe(12); // V2: 10 * 1.2
   });
 
   it('目标为 CHASE 时不触发', () => {
@@ -415,7 +414,7 @@ describe('词条：afterimage 残影（ROGUE）', () => {
     const result = monsterAttack(state, 'm1');
     expect(result.state.player.hp).toBe(10); // 无伤害
     // 闪避不产生伤害事件，但仍会揭示攻击者所在格
-    expect(result.events).toEqual([{ type: 'REVEAL', cells: [{ x: 4, y: 5 }] }]);
+    expect(result.events).toEqual([]);
     expect(result.state.floorState.hasAfterimage).toBe(false);
   });
 

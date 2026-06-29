@@ -19,12 +19,16 @@ import {
 } from 'cc';
 import { SceneLoader } from '../core/SceneLoader';
 import { GameSession } from '../core/GameSession';
+import { playSfx, SFX_IDS } from '../audio/AudioManager';
 import { login } from '../platform/wechat/WxAuth';
 import {
   loadPveLeaderboard,
   loadPveMeta,
   loadPveSave,
+  resetTree,
+  updatePveMeta,
   type PveLeaderboardEntry,
+  unlockTreeNode,
 } from '../network/PveService';
 import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
@@ -33,7 +37,7 @@ import {
   getCachedSprite,
   preloadPveLobbyUi,
 } from '../ui/UiAssets';
-import { ensureArtChild, ensureArtSliced, ensureArtStretch } from '../ui/UiSprite';
+import { ensureArtChild, ensureArtStretch } from '../ui/UiSprite';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import {
   applyUiLayerTree,
@@ -43,10 +47,15 @@ import {
 } from '../platform/wechat/ViewAdapt';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
 import {
+  DESTINY_TREE_NODES,
   PVE_STAMINA_MAX,
   PVE_STAMINA_RECOVERY_MS,
   PVE_STAMINA_RUN_COST,
+  TREE_RESET_DIAMOND_COST,
 } from '../pve/core/PveConstants';
+import { canUnlockNode, getUnlockBlockReason } from '../pve/core/DestinyTreeSystem';
+import { RELIC_DEFS } from '../pve/core/RelicSystem';
+import type { PveMeta, RelicId } from '../pve/core/PveTypes';
 
 const { ccclass } = _decorator;
 
@@ -78,8 +87,8 @@ export class PveLobbyController extends Component {
   private _diamondLabel: Label | null = null;
   private _staminaLabel: Label | null = null;
   private _staminaTimerLabel: Label | null = null;
-  // 新版玩家卡：副标题行合并"最高 N 层 · 全服第 N 名"为一行 _metaLine
-  private _metaLine: Label | null = null;
+  private _metaFloorLabel: Label | null = null;
+  private _metaRankLabel: Label | null = null;
   private _metaFloor = 0;
   private _metaRank: number | null = null;
   private _avatarNode: Node | null = null;
@@ -90,7 +99,11 @@ export class PveLobbyController extends Component {
   private _expeditionCostLabel: Label | null = null;
   private _statusLabel: Label | null = null;
   private _leaderboardModal: Node | null = null;
+  private _destinyTreeModal: Node | null = null;
+  private _relicCatalogModal: Node | null = null;
   private _leaderboardEntries: PveLeaderboardEntry[] | null = null;
+  private _destinyTreeMeta: PveMeta | null = null;
+  private _metaCodexRelics: RelicId[] = [];
   private _myRank: number | null = null;
   private _unbindResize: (() => void) | null = null;
   private _buttonSpriteKeys = new Map<Node, string>();
@@ -145,16 +158,12 @@ export class PveLobbyController extends Component {
   }
 
   private _buildTopBar(root: Node, y: number): void {
-    // 玩家卡布局（v3，两行式）：
-    //   Row1：[头像] 昵称（大号粗体）
-    //   Row2：最高 N 层 · 全服第 N 名（副标题，等宽点分割）
-    // 卡高对齐右侧资源 chip 行视觉，不再"挤压得很高"。
-    const CARD_W = 290;
-    const CARD_H = 84;
-    const AVATAR_SIZE = 52;
+    const CARD_W = 261;
+    const CARD_H = 94;
+    const AVATAR_SIZE = 78;
     const playerCard = new Node('PlayerCard');
     playerCard.setParent(root);
-    playerCard.setPosition(-216, y, 0);
+    playerCard.setPosition(-226, y, 0);
     playerCard.addComponent(UITransform).setContentSize(CARD_W, CARD_H);
     this._drawRoundedRect(
       playerCard,
@@ -165,78 +174,74 @@ export class PveLobbyController extends Component {
       new Color(120, 205, 255, 210),
     );
 
-    // ── Row1 头像（左上区域）──
-    const AVATAR_X = -CARD_W / 2 + 12 + AVATAR_SIZE / 2;
-    const AVATAR_Y = CARD_H / 2 - 12 - AVATAR_SIZE / 2; // 紧贴顶部
+    const AVATAR_X = -CARD_W / 2 + 8 + AVATAR_SIZE / 2;
     const avatar = new Node('Avatar');
     avatar.setParent(playerCard);
-    avatar.setPosition(AVATAR_X, AVATAR_Y, 0);
+    avatar.setPosition(AVATAR_X, 0, 0);
     avatar.addComponent(UITransform).setContentSize(AVATAR_SIZE, AVATAR_SIZE);
     const avatarG = avatar.addComponent(Graphics);
     avatarG.fillColor = new Color(50, 160, 230, 255);
-    avatarG.roundRect(-AVATAR_SIZE / 2, -AVATAR_SIZE / 2, AVATAR_SIZE, AVATAR_SIZE, 8);
+    avatarG.roundRect(-AVATAR_SIZE / 2, -AVATAR_SIZE / 2, AVATAR_SIZE, AVATAR_SIZE, 10);
     avatarG.fill();
     avatarG.strokeColor = new Color(255, 220, 110, 255);
     avatarG.lineWidth = 2;
-    avatarG.roundRect(-AVATAR_SIZE / 2 + 1, -AVATAR_SIZE / 2 + 1, AVATAR_SIZE - 2, AVATAR_SIZE - 2, 7);
+    avatarG.roundRect(-AVATAR_SIZE / 2 + 1, -AVATAR_SIZE / 2 + 1, AVATAR_SIZE - 2, AVATAR_SIZE - 2, 9);
     avatarG.stroke();
-    const avatarText = this._makeLabel(avatar, 'AvatarText', 0, 26, AVATAR_SIZE, AVATAR_SIZE);
+    const avatarText = this._makeLabel(avatar, 'AvatarText', 0, 28, AVATAR_SIZE, AVATAR_SIZE);
     avatarText.string = (GameSession.user?.nickname || '玩').slice(0, 1);
     avatarText.isBold = true;
     this._avatarNode = avatar;
     this._avatarTextLabel = avatarText;
 
-    // ── Row1 昵称（头像右侧，与头像同一水平线垂直居中）──
-    const NAME_LEFT = AVATAR_X + AVATAR_SIZE / 2 + 10;
+    const NAME_LEFT = AVATAR_X + AVATAR_SIZE / 2 + 14;
     const NAME_W = CARD_W / 2 - NAME_LEFT - 12;
     const nickname = this._makeLabel(playerCard, 'Nickname', 0, 24, NAME_W, 30);
-    nickname.node.setPosition(NAME_LEFT + NAME_W / 2, AVATAR_Y, 0);
+    nickname.node.setPosition(NAME_LEFT + NAME_W / 2, 16, 0);
     nickname.horizontalAlign = Label.HorizontalAlign.LEFT;
     nickname.string = GameSession.user?.nickname ?? '玩家';
     nickname.color = new Color(245, 250, 255, 255);
     nickname.isBold = true;
     this._nicknameLabel = nickname;
 
-    // ── Row2 副标题：最高 N 层 · 全服第 N 名（整行横跨卡片，居中） ──
-    const META_Y = -CARD_H / 2 + 16;
-    this._metaLine = this._makeLabel(playerCard, 'MetaLine', 0, 18, CARD_W - 24, 22);
-    this._metaLine.node.setPosition(0, META_Y, 0);
-    this._metaLine.horizontalAlign = Label.HorizontalAlign.CENTER;
-    this._metaLine.color = new Color(255, 226, 130, 255);
-    this._metaLine.isBold = true;
+    const metaY = -20;
+    this._metaFloorLabel = this._makeLabel(playerCard, 'MetaFloor', 0, 18, 66, 28);
+    this._metaFloorLabel.node.setPosition(NAME_LEFT + 34, metaY, 0);
+    this._metaFloorLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+    this._metaFloorLabel.color = new Color(255, 226, 130, 255);
+    this._metaFloorLabel.isBold = true;
+    const metaDot = this._makeLabel(playerCard, 'MetaDot', 0, 18, 20, 28);
+    metaDot.node.setPosition(NAME_LEFT + 81, metaY, 0);
+    metaDot.string = '·';
+    metaDot.color = new Color(255, 226, 130, 255);
+    metaDot.isBold = true;
+    this._metaRankLabel = this._makeLabel(playerCard, 'MetaRank', 0, 18, 66, 28);
+    this._metaRankLabel.node.setPosition(NAME_LEFT + 121, metaY, 0);
+    this._metaRankLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+    this._metaRankLabel.color = new Color(255, 226, 130, 255);
+    this._metaRankLabel.isBold = true;
     this._updateMetaLine();
 
-    // 点击 PlayerCard 任意位置触发改名 / 同步微信账号菜单（→ 用户需求 2026-06-23）。
     this._bindButton(playerCard, () => this._showProfileMenu());
-
-    // 若已存在远程头像 URL，尝试加载
     if (GameSession.user?.avatarUrl) {
       void this._applyRemoteAvatar(GameSession.user.avatarUrl);
     }
 
     const assetStrip = new Node('TopAssetStrip');
     assetStrip.setParent(root);
-    assetStrip.setPosition(98, y, 0);
-    assetStrip.addComponent(UITransform).setContentSize(458, 72);
+    assetStrip.setPosition(150, y + 2, 0);
+    assetStrip.addComponent(UITransform).setContentSize(390, 82);
 
-    this._shardsLabel = this._makeResourceChip(assetStrip, 'Shards', -150, 0, 'shards');
-    this._diamondLabel = this._makeResourceChip(assetStrip, 'Diamond', 0, 0, 'diamond');
-    this._staminaLabel = this._makeResourceChip(assetStrip, 'StaminaChip', 150, 0, 'stamina');
+    this._shardsLabel = this._makeTopAssetBadge(assetStrip, 'Shards', -130, 0, 'pve/map/icon_fragment', 114, 50, 44, 23);
+    this._diamondLabel = this._makeTopAssetBadge(assetStrip, 'Diamond', 0, 0, 'pve/lobby/icon_chip_stardust', 114, 50, 44, 23);
+    this._staminaLabel = this._makeTopAssetBadge(assetStrip, 'StaminaChip', 130, 0, 'pve/lobby/icon_chip_stamina', 118, 50, 42, 23);
     const staminaChip = assetStrip.getChildByName('StaminaChip');
     if (staminaChip) {
-      const timerBg = new Node('TimerBg');
-      timerBg.setParent(staminaChip);
-      timerBg.setPosition(24, -24, 0);
-      timerBg.addComponent(UITransform).setContentSize(86, 18);
-      this._drawRoundedRect(
-        timerBg,
-        86,
-        18,
-        9,
-        new Color(6, 25, 53, 150),
-      );
-      this._staminaTimerLabel = this._makeLabel(timerBg, 'StaminaTimer', 0, 12, 80, 16);
-      this._staminaTimerLabel.color = new Color(206, 236, 255, 210);
+      this._staminaTimerLabel = this._makeLabel(staminaChip, 'StaminaTimer', -16, 17, 96, 22);
+      this._staminaTimerLabel.node.setPosition(7, -30, 0);
+      this._staminaTimerLabel.color = new Color(212, 238, 255, 220);
+      this._staminaTimerLabel.enableOutline = true;
+      this._staminaTimerLabel.outlineColor = new Color(8, 24, 48, 200);
+      this._staminaTimerLabel.outlineWidth = 2;
     }
   }
 
@@ -254,15 +259,16 @@ export class PveLobbyController extends Component {
       new Color(105, 180, 235, 220),
     );
 
-    const navButtonW = 188;
+    const navButtonW = 160;
     const navButtonH = 142;
-    const navGap = 34;
+    const navGap = 16;
     const navStep = navButtonW + navGap;
+    // 4 个按钮居中排列，间距 16px，总宽 4×160+3×16=688 ≤ 700
     this._makeNavButton(
       dock,
       '排行榜',
       'pve/lobby/icon_nav_leaderboard',
-      -navStep,
+      -navStep * 1.5,
       -4,
       navButtonW,
       navButtonH,
@@ -270,9 +276,19 @@ export class PveLobbyController extends Component {
     );
     this._makeNavButton(
       dock,
+      '遗物',
+      'pve/lobby/icon_nav_relic',
+      -navStep * 0.5,
+      -4,
+      navButtonW,
+      navButtonH,
+      () => this._showRelicCatalog(),
+    );
+    this._makeNavButton(
+      dock,
       '远征',
       'pve/lobby/icon_nav_expedition',
-      0,
+      navStep * 0.5,
       -4,
       navButtonW,
       navButtonH,
@@ -282,11 +298,11 @@ export class PveLobbyController extends Component {
       dock,
       '命运树',
       'pve/lobby/icon_nav_destiny_tree',
-      navStep,
+      navStep * 1.5,
       -4,
       navButtonW,
       navButtonH,
-      () => this._gotoScene('加载命运树…', () => SceneLoader.loadDestinyTree()),
+      () => void this._showDestinyTreeModal(),
     );
     this._expeditionCostLabel = this._makeLabel(dock, 'ExpeditionCost', -76, 15, 320, 22);
     this._expeditionCostLabel.color = new Color(255, 226, 130, 255);
@@ -313,7 +329,7 @@ export class PveLobbyController extends Component {
       const size = key === 'pve/lobby/icon_nav_expedition' ? 82 : 76;
       ensureArtChild(iconNode, 'IconArt', frame, size, size);
     }
-    this._applyTopAssetStripArt();
+    this._applyTopAssetBadgeIcons();
     this._applyButtonArt(this.node);
   }
 
@@ -322,15 +338,8 @@ export class PveLobbyController extends Component {
       const [metaRes, saveRes] = await Promise.all([loadPveMeta(), loadPveSave()]);
       const { meta } = metaRes;
       this._hasActiveSave = Boolean(saveRes.save) || meta.hasPendingRun === true;
-      this._stamina = meta.stamina ?? PVE_STAMINA_MAX;
-      this._staminaMax = meta.staminaMax ?? PVE_STAMINA_MAX;
-      this._staminaNextRecoveryAt = meta.staminaNextRecoveryAt ?? null;
       this._nextRunCost = this._hasActiveSave ? 0 : (meta.nextRunCost ?? PVE_STAMINA_RUN_COST);
-
-      if (this._shardsLabel) this._shardsLabel.string = String(meta.destinyShards);
-      if (this._diamondLabel) this._diamondLabel.string = String(meta.diamond);
-      this._metaFloor = meta.highestFloor ?? 0;
-      this._updateMetaLine();
+      this._applyMetaSnapshot(meta);
       if (this._expeditionCostLabel) {
         this._expeditionCostLabel.string = this._hasActiveSave
           ? '继续远征 · 不消耗体力'
@@ -338,7 +347,6 @@ export class PveLobbyController extends Component {
             ? '首次远征免费'
             : `新远征 · 消耗 ${this._nextRunCost} 体力`;
       }
-      this._updateStaminaLabels();
     } catch (err: unknown) {
       this._setStatus(`大厅数据加载失败：${err instanceof Error ? err.message : String(err)}`);
     }
@@ -368,12 +376,18 @@ export class PveLobbyController extends Component {
     }
   }
 
-  /** 合并最高层 + 全服排名为一行副标题；任一字段更新都走这里。 */
+  /** 更新玩家卡内的“最高/全服”两枚短标签，保证文字不挤出底板。 */
   private _updateMetaLine(): void {
-    if (!this._metaLine) return;
-    const floor = `最高 ${this._metaFloor} 层`;
-    const rank = this._metaRank != null ? `全服第 ${this._metaRank} 名` : '未上榜';
-    this._metaLine.string = `${floor} · ${rank}`;
+    if (this._metaFloorLabel) {
+      this._metaFloorLabel.string = `最高 ${this._metaFloor}`;
+      this._metaFloorLabel.fontSize = 18;
+      this._metaFloorLabel.lineHeight = 22;
+    }
+    if (this._metaRankLabel) {
+      this._metaRankLabel.string = this._metaRank != null ? `全服 ${this._metaRank}` : '全服 -';
+      this._metaRankLabel.fontSize = 18;
+      this._metaRankLabel.lineHeight = 22;
+    }
   }
 
   private async _showLeaderboard(): Promise<void> {
@@ -398,6 +412,21 @@ export class PveLobbyController extends Component {
     }
   }
 
+  private async _showDestinyTreeModal(): Promise<void> {
+    if (this._destinyTreeModal?.isValid) return;
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const { meta } = await loadPveMeta();
+      this._applyMetaSnapshot(meta);
+      this._buildDestinyTreeModal(meta);
+    } catch (err: unknown) {
+      this._setStatus(`命运树加载失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._busy = false;
+    }
+  }
+
   private _buildLeaderboardModal(entries: PveLeaderboardEntry[], myRank: number | null): void {
     const { h } = visibleDesignSize();
     const overlay = new Node('LeaderboardModal');
@@ -411,7 +440,6 @@ export class PveLobbyController extends Component {
     const panel = new Node('Panel');
     panel.setParent(overlay);
     panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
-    // 全透明风格（与游戏内玩家状态卡同款 α≈170）
     this._drawRoundedRect(
       panel,
       PANEL_W,
@@ -423,18 +451,17 @@ export class PveLobbyController extends Component {
 
     const title = this._makeLabel(panel, 'Title', 0, 38, 520, 54);
     title.node.setPosition(0, 348, 0);
-    title.string = '命运之塔排行榜';
+    title.string = '排行榜';
     title.color = new Color(255, 220, 105, 255);
     title.isBold = true;
 
     const rankText = myRank != null ? `我的排名：全服第 ${myRank} 名` : '我尚未上榜';
     const subtitle = this._makeLabel(panel, 'Subtitle', 0, 20, 500, 32);
-    subtitle.node.setPosition(0, 304, 0);
+    subtitle.node.setPosition(0, 286, 0);
     subtitle.string = rankText;
     subtitle.color = new Color(170, 215, 255, 220);
     subtitle.isBold = true;
 
-    // 可滚动列表区域：行高 + 行距加大，避免名字贴在一起
     const ROW_H = 60;
     const ROW_GAP = 14;
     const ROW_STEP = ROW_H + ROW_GAP;
@@ -444,7 +471,7 @@ export class PveLobbyController extends Component {
 
     const svNode = new Node('ScrollArea');
     svNode.setParent(panel);
-    svNode.setPosition(0, 12, 0);
+    svNode.setPosition(0, -14, 0);
     svNode.addComponent(UITransform).setContentSize(SV_W, SV_H);
 
     const sv = svNode.addComponent(ScrollView);
@@ -462,11 +489,7 @@ export class PveLobbyController extends Component {
     const contentNode = new Node('Content');
     contentNode.setParent(viewNode);
     contentNode.addComponent(UITransform).setContentSize(SV_W, CONTENT_H);
-    // top-anchor：第一行从 content 顶部开始
     contentNode.setPosition(0, (CONTENT_H - SV_H) / 2, 0);
-
-    // 注意：Cocos 3.x ScrollView.view 是只读 getter（自动取 content.parent），不可赋值；
-    // 只设 content 即可，view 会自动绑定为 viewNode。
     sv.content = contentNode;
 
     if (entries.length === 0) {
@@ -483,7 +506,6 @@ export class PveLobbyController extends Component {
       row.setPosition(0, rowY, 0);
       row.addComponent(UITransform).setContentSize(SV_W - 16, ROW_H);
 
-      // 排行榜行底色配合面板全透明，仅保留 α≈110 用于行间分隔
       const rowBg = isSelf
         ? new Color(30, 100, 200, 150)
         : index % 2 === 0
@@ -492,7 +514,6 @@ export class PveLobbyController extends Component {
       const rowStroke = isSelf ? new Color(130, 210, 255, 240) : undefined;
       this._drawRoundedRect(row, SV_W - 16, ROW_H, 10, rowBg, rowStroke);
 
-      // 名次徽章（只画奖牌色圈 + 数字；不再放头像）
       const badgeNode = new Node('Badge');
       badgeNode.setParent(row);
       badgeNode.setPosition(-225, 0, 0);
@@ -515,7 +536,6 @@ export class PveLobbyController extends Component {
       rankLabel.color = entry.rank <= 3 ? new Color(12, 30, 60, 255) : new Color(180, 210, 245, 255);
       rankLabel.isBold = true;
 
-      // 昵称（占据原头像位置，左对齐，加粗）
       const nameLabel = this._makeLabel(row, 'Name', 0, 24, 320, ROW_H - 12);
       nameLabel.node.setPosition(-30, 0, 0);
       nameLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
@@ -523,7 +543,6 @@ export class PveLobbyController extends Component {
       nameLabel.color = isSelf ? new Color(200, 235, 255, 255) : new Color(228, 240, 255, 255);
       nameLabel.isBold = true;
 
-      // 层数
       const floorLabel = this._makeLabel(row, 'Floor', 0, 24, 110, ROW_H - 12);
       floorLabel.node.setPosition(208, 0, 0);
       floorLabel.string = `${entry.highestFloor} 层`;
@@ -533,7 +552,6 @@ export class PveLobbyController extends Component {
       floorLabel.isBold = true;
     });
 
-    // 关闭按钮：与玩家状态卡同款半透明（α≈170 + 金色描边），避免遮挡面板的全透明视觉
     const closeNode = new Node('Btn_Close');
     closeNode.setParent(panel);
     closeNode.setPosition(0, -350, 0);
@@ -559,9 +577,380 @@ export class PveLobbyController extends Component {
     this._leaderboardModal = null;
   }
 
-  // ── 资料卡（昵称 + 头像）─────────────────────────────────
-  // 点击 PlayerCard 弹出菜单：手动改名 / 同步微信账号。改完后排行榜读 users.nickname/avatarUrl
-  // 即刻生效（云端 listPveLeaderboard 是实时查询）。
+  private _showRelicCatalog(): void {
+    if (this._relicCatalogModal?.isValid) return;
+    this._buildRelicCatalogModal(this._metaCodexRelics);
+  }
+
+  private _closeRelicCatalog(): void {
+    this._relicCatalogModal?.destroy();
+    this._relicCatalogModal = null;
+  }
+
+  private _buildRelicCatalogModal(unlockedRelics: RelicId[]): void {
+    const { h } = visibleDesignSize();
+    const overlay = new Node('RelicCatalogModal');
+    overlay.setParent(this.node);
+    overlay.addComponent(UITransform).setContentSize(720, h);
+    this._drawRect(overlay, 720, h, new Color(0, 8, 24, 185));
+    overlay.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      if (event.target === overlay) this._closeRelicCatalog();
+    });
+    this._relicCatalogModal = overlay;
+
+    const PANEL_W = 600;
+    const PANEL_H = 840;
+    const panel = new Node('Panel');
+    panel.setParent(overlay);
+    panel.setPosition(0, -10, 0);
+    panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
+    this._drawRoundedRect(panel, PANEL_W, PANEL_H, 28,
+      new Color(12, 42, 86, 170),
+      new Color(200, 170, 255, 240),
+    );
+    panel.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      event.propagationStopped = true;
+    });
+
+    const title = this._makeLabel(panel, 'Title', 360, 30, 520, 48);
+    title.string = '🏺 遗物图鉴';
+    title.color = new Color(220, 190, 255, 255);
+    title.isBold = true;
+
+    // ── 遗物行（共 5 个，固定顺序）──
+    const ALL_RELICS: RelicId[] = ['CHIEF_ROAR', 'QUICKSAND_HEART', 'PERMAFROST_CORE', 'MAGMA_HEART', 'FATE_ECHO'];
+    const ROW_W = PANEL_W - 40;
+    const ROW_H = 80;
+    const ROW_GAP = 12;
+    const ROW_STEP = ROW_H + ROW_GAP;
+    const rowStartY = 258; // 第一行中心 Y
+
+    // 遗物详情浮层（单例，按行复用）
+    const detailPop = new Node('RelicDetailPop');
+    detailPop.setParent(panel);
+    detailPop.setPosition(0, -100, 0);
+    detailPop.setSiblingIndex(9999);
+    detailPop.addComponent(UITransform).setContentSize(ROW_W, 120);
+    detailPop.active = false;
+    this._drawRoundedRect(detailPop, ROW_W, 120, 14,
+      new Color(30, 20, 60, 230),
+      new Color(200, 170, 255, 220),
+    );
+    const detailTitleLbl = this._makeLabel(detailPop, 'DTitle', 30, 21, ROW_W - 20, 36);
+    detailTitleLbl.color = new Color(220, 190, 255, 255);
+    detailTitleLbl.isBold = true;
+    const detailDescLbl = this._makeLabel(detailPop, 'DDesc', -22, 18, ROW_W - 30, 36);
+    detailDescLbl.color = new Color(200, 220, 250, 220);
+    detailPop.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
+      e.propagationStopped = true;
+      detailPop.active = false;
+    });
+
+    ALL_RELICS.forEach((id, idx) => {
+      const unlocked = unlockedRelics.includes(id);
+      const def = RELIC_DEFS[id];
+      const rowY = rowStartY - idx * ROW_STEP;
+
+      const rowNode = new Node(`RelicRow_${id}`);
+      rowNode.setParent(panel);
+      rowNode.setPosition(0, rowY, 0);
+      rowNode.addComponent(UITransform).setContentSize(ROW_W, ROW_H);
+      this._drawRoundedRect(rowNode, ROW_W, ROW_H, 12,
+        unlocked ? new Color(50, 35, 100, 200) : new Color(20, 25, 55, 180),
+        unlocked ? new Color(160, 120, 240, 200) : new Color(60, 70, 110, 140),
+      );
+
+      const nameLbl = this._makeLabel(rowNode, 'Name', 14, 22, ROW_W - 20, 34);
+      nameLbl.string = unlocked ? def.name : '？？？';
+      nameLbl.color = unlocked ? new Color(220, 190, 255, 255) : new Color(90, 100, 130, 180);
+      nameLbl.isBold = true;
+
+      const hintLbl = this._makeLabel(rowNode, 'Hint', -18, 17, ROW_W - 20, 28);
+      hintLbl.string = unlocked ? '点击查看效果 ▸' : '（尚未获得）';
+      hintLbl.color = unlocked ? new Color(150, 130, 210, 200) : new Color(70, 80, 110, 160);
+
+      if (unlocked) {
+        this._bindButton(rowNode, () => {
+          detailTitleLbl.string = `【${def.name}】`;
+          detailDescLbl.string = def.description;
+          detailPop.active = true;
+          // 把 detailPop 定位到该行附近（向下偏移，避免遮住行本身）
+          const popY = rowY > -80 ? rowY - ROW_H - 10 : rowY + ROW_H + 10;
+          detailPop.setPosition(0, popY - 50, 0);
+        });
+      }
+    });
+
+    // ── 底部说明（按 specs/game-design/Boss设计V1.md §8.3-8.4 修正）──
+    // 旧版"持续生效/自动携带"是错误描述：遗物是单局 buff，远征结束清空。
+    // 图鉴点亮后下一次该章 Boss 掉率从 20% → 30%，并非"自动携带"。
+    const tipLbl = this._makeLabel(panel, 'Tip', -238, 17, PANEL_W - 40, 90);
+    tipLbl.string = '遗物仅在本场远征生效，远征结束清空\n图鉴点亮后，对应 Boss 再次掉落概率 +10%';
+    tipLbl.color = new Color(160, 180, 220, 200);
+    tipLbl.overflow = Label.Overflow.NONE;
+
+    // ── 关闭按钮 ──
+    const closeNode = new Node('Btn_Close');
+    closeNode.setParent(panel);
+    closeNode.setPosition(0, -362, 0);
+    closeNode.addComponent(UITransform).setContentSize(180, 60);
+    this._drawRoundedRect(closeNode, 180, 60, 14,
+      new Color(52, 73, 95, 170),
+      new Color(255, 214, 110, 240),
+    );
+    const closeLabel = this._makeLabel(closeNode, 'Label', 0, 28, 168, 52);
+    closeLabel.string = '关闭';
+    closeLabel.isBold = true;
+    this._bindButton(closeNode, () => this._closeRelicCatalog());
+
+    applyUiLayerTree(overlay, this.node.layer);
+  }
+
+  private _buildDestinyTreeModal(meta: PveMeta): void {
+    const { h } = visibleDesignSize();
+    const overlay = new Node('DestinyTreeModal');
+    overlay.setParent(this.node);
+    overlay.addComponent(UITransform).setContentSize(720, h);
+    this._drawRect(overlay, 720, h, new Color(0, 8, 24, 185));
+    this._destinyTreeModal = overlay;
+    overlay.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      if (event.target === overlay) this._closeDestinyTreeModal();
+    });
+
+    const PANEL_W = 668;
+    const PANEL_H = 1160;
+    const panel = new Node('Panel');
+    panel.setParent(overlay);
+    panel.setPosition(0, -18, 0);
+    panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
+    this._drawRoundedRect(
+      panel,
+      PANEL_W,
+      PANEL_H,
+      28,
+      new Color(12, 42, 86, 170),
+      new Color(255, 205, 85, 240),
+    );
+    panel.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      event.propagationStopped = true;
+    });
+
+    const title = this._makeLabel(panel, 'Title', 0, 34, 520, 48);
+    title.node.setPosition(0, 492, 0);
+    title.string = '命运树';
+    title.color = new Color(255, 220, 105, 255);
+    title.isBold = true;
+    title.horizontalAlign = Label.HorizontalAlign.CENTER;
+
+    const shards = this._makeLabel(panel, 'Shards', 0, 25, 250, 38);
+    shards.node.setPosition(182, 450, 0);
+    shards.string = `命运碎片 ${meta.destinyShards}`;
+    shards.color = new Color(170, 215, 255, 225);
+    shards.isBold = true;
+    shards.horizontalAlign = Label.HorizontalAlign.RIGHT;
+
+    const contentFrame = new Node('TreeContentFrame');
+    contentFrame.setParent(panel);
+    contentFrame.setPosition(0, -6, 0);
+    contentFrame.addComponent(UITransform).setContentSize(616, 818);
+    this._drawRoundedRect(
+      contentFrame,
+      616,
+      818,
+      24,
+      new Color(9, 32, 68, 88),
+      new Color(112, 178, 230, 66),
+    );
+
+    const rows = ['A', 'B', 'C', 'D', 'E'] as const;
+    const rowLabels: Record<typeof rows[number], string> = {
+      A: '生存',
+      B: '战斗',
+      C: '财富',
+      D: '强化',
+      E: '天命',
+    };
+    const unlockedSet = new Set(meta.unlockedTreeNodes ?? []);
+    const startY = 304;
+    const rowStep = 156;
+    const labelX = -238;
+    const rowScrollX = 96;
+    const rowScrollW = 430;
+    const rowScrollH = 126;
+    const cardGap = 18;
+    const cardWidth = 210;
+
+    rows.forEach((rowKey, rowIndex) => {
+      const rowY = startY - rowIndex * rowStep;
+      const rowLabel = this._makeLabel(contentFrame, `Row_${rowKey}`, 0, 28, 124, 44);
+      rowLabel.node.setPosition(labelX, rowY, 0);
+      rowLabel.string = rowLabels[rowKey];
+      rowLabel.color = new Color(210, 230, 248, 220);
+      rowLabel.isBold = true;
+
+      const rowDefs = DESTINY_TREE_NODES.filter((def) => def.column === rowKey);
+      const rowScrollNode = new Node(`RowScroll_${rowKey}`);
+      rowScrollNode.setParent(contentFrame);
+      rowScrollNode.setPosition(rowScrollX, rowY, 0);
+      rowScrollNode.addComponent(UITransform).setContentSize(rowScrollW, rowScrollH);
+
+      const rowScroll = rowScrollNode.addComponent(ScrollView);
+      rowScroll.horizontal = true;
+      rowScroll.vertical = false;
+      rowScroll.inertia = true;
+      rowScroll.elastic = false;
+      rowScroll.brake = 0.72;
+
+      const rowViewNode = new Node('View');
+      rowViewNode.setParent(rowScrollNode);
+      rowViewNode.addComponent(UITransform).setContentSize(rowScrollW, rowScrollH);
+      rowViewNode.addComponent(Mask);
+
+      const contentWidth = Math.max(rowScrollW, rowDefs.length * cardWidth + Math.max(0, rowDefs.length - 1) * cardGap + 24);
+      const rowContentNode = new Node('Content');
+      rowContentNode.setParent(rowViewNode);
+      rowContentNode.addComponent(UITransform).setContentSize(contentWidth, rowScrollH);
+      rowContentNode.setPosition(-(contentWidth - rowScrollW) / 2, 0, 0);
+      rowScroll.content = rowContentNode;
+      rowScroll.scrollToLeft(0);
+
+      rowDefs.forEach((def, colIndex) => {
+        const x = -contentWidth / 2 + 12 + cardWidth / 2 + colIndex * (cardWidth + cardGap);
+        this._makeDestinyTreeNodeCard(rowContentNode, meta, unlockedSet, def.id, x, 0);
+      });
+    });
+
+    const tip = this._makeLabel(panel, 'Tip', 0, 18, 580, 40);
+    tip.node.setPosition(0, -476, 0);
+    tip.string = `重置命运树消耗 ${TREE_RESET_DIAMOND_COST} 星尘，返还已投入的命运碎片`;
+    tip.color = new Color(182, 216, 246, 190);
+
+    this._makeTransparentButton(panel, '重置命运树', -126, -526, 228, 60, () => {
+      void this._onResetDestinyTree();
+    });
+    this._makeTransparentButton(panel, '关闭', 126, -526, 188, 60, () => this._closeDestinyTreeModal());
+
+    applyUiLayerTree(overlay, this.node.layer);
+  }
+
+  private _makeDestinyTreeNodeCard(
+    parent: Node,
+    meta: PveMeta,
+    unlockedSet: Set<string>,
+    nodeId: string,
+    x: number,
+    y: number,
+  ): void {
+    const def = DESTINY_TREE_NODES.find((item) => item.id === nodeId);
+    if (!def) return;
+    const isUnlocked = unlockedSet.has(def.id);
+    const isUnlockable = !isUnlocked && canUnlockNode(meta, def.id);
+    const width = 210;
+    const height = 122;
+    const node = new Node(`Node_${def.id}`);
+    node.setParent(parent);
+    node.setPosition(x, y, 0);
+    node.addComponent(UITransform).setContentSize(width, height);
+
+    const fill = isUnlocked
+      ? new Color(106, 82, 26, 150)
+      : isUnlockable
+        ? new Color(28, 100, 182, 148)
+        : new Color(44, 64, 95, 138);
+    const stroke = isUnlocked
+      ? new Color(255, 216, 118, 240)
+      : isUnlockable
+        ? new Color(126, 208, 255, 238)
+        : new Color(98, 130, 164, 210);
+    this._drawRoundedRect(node, width, height, 16, fill, stroke);
+
+    const name = this._makeLabel(node, 'Name', 24, 20, 188, 28);
+    name.string = def.name;
+    name.color = isUnlocked ? new Color(255, 230, 150, 255) : new Color(232, 242, 252, 255);
+    name.isBold = true;
+
+    const desc = this._makeLabel(node, 'Desc', -2, 17, 188, 52);
+    desc.string = def.desc;
+    desc.color = isUnlockable
+      ? new Color(214, 234, 250, 230)
+      : new Color(188, 206, 224, 215);
+
+    const cost = this._makeLabel(node, 'Cost', -36, 16, 176, 24);
+    cost.string = isUnlocked ? '已解锁' : `${def.cost} 碎片`;
+    cost.color = isUnlocked
+      ? new Color(255, 220, 120, 255)
+      : isUnlockable
+        ? new Color(255, 232, 148, 255)
+        : new Color(164, 188, 210, 220);
+    cost.isBold = true;
+
+    this._bindButton(node, () => {
+      if (isUnlocked) return;
+      const reason = getUnlockBlockReason(meta, def.id);
+      if (!reason) {
+        void this._onUnlockDestinyTreeNode(def.id);
+        return;
+      }
+
+      const tip = this._destinyTreeModal
+        ?.getChildByName('Panel')
+        ?.getChildByName('Tip')
+        ?.getComponent(Label);
+      if (!tip) return;
+      if (reason.code === 'MISSING_PREREQUISITE') {
+        tip.string = `请先解锁「${reason.prerequisite.name}」`;
+      } else if (reason.code === 'INSUFFICIENT_SHARDS') {
+        tip.string = `命运碎片不足，需要 ${reason.required} 片`;
+      } else if (reason.code === 'NOT_LIVE') {
+        tip.string = '该节点尚未开放';
+      }
+    });
+  }
+
+  private async _onUnlockDestinyTreeNode(nodeId: string): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const { meta } = await unlockTreeNode(nodeId);
+      this._applyMetaSnapshot(meta);
+      this._rebuildDestinyTreeModal(meta);
+    } catch (err: unknown) {
+      this._setStatus(`解锁失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private async _onResetDestinyTree(): Promise<void> {
+    if (this._busy || !this._destinyTreeMeta) return;
+    if ((this._destinyTreeMeta.unlockedTreeNodes?.length ?? 0) === 0) {
+      this._setStatus('命运树尚未解锁任何节点');
+      return;
+    }
+    this._busy = true;
+    try {
+      const { meta } = await resetTree();
+      this._applyMetaSnapshot(meta);
+      this._rebuildDestinyTreeModal(meta);
+    } catch (err: unknown) {
+      this._setStatus(`重置失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private _rebuildDestinyTreeModal(meta: PveMeta): void {
+    const parent = this._destinyTreeModal?.parent;
+    this._closeDestinyTreeModal();
+    if (!parent?.isValid) return;
+    this._buildDestinyTreeModal(meta);
+  }
+
+  private _closeDestinyTreeModal(): void {
+    this._destinyTreeModal?.destroy();
+    this._destinyTreeModal = null;
+  }
+
   private _showProfileMenu(): void {
     if (this._profileBusy || this._profileModal) return;
     const { h } = visibleDesignSize();
@@ -577,7 +966,7 @@ export class PveLobbyController extends Component {
     });
 
     const PANEL_W = 520;
-    const PANEL_H = 360;
+    const PANEL_H = 440;
     const panel = new Node('Panel');
     panel.setParent(overlay);
     panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
@@ -610,7 +999,16 @@ export class PveLobbyController extends Component {
     this._makeTransparentButton(panel, '手动改名', 0, -60, 420, 64, () => {
       void this._editNicknameManually();
     });
-    this._makeTransparentButton(panel, '取消', 0, -140, 200, 56, () => this._closeProfileMenu());
+    this._makeTransparentButton(panel, '重新进行新手教学', 0, -140, 420, 64, () => {
+      void updatePveMeta({ resetTutorial: true }).then(() => {
+        this._setStatus('已重置教学。下次开启新远征时会进入教学层');
+        if (this._destinyTreeMeta) this._destinyTreeMeta.tutorialCompleted = false;
+        this._closeProfileMenu();
+      }).catch((err) => {
+        this._setStatus(`重置失败：${this._formatErr(err)}`);
+      });
+    });
+    this._makeTransparentButton(panel, '取消', 0, -220, 200, 56, () => this._closeProfileMenu());
 
     applyUiLayerTree(overlay, this.node.layer);
   }
@@ -827,116 +1225,92 @@ export class PveLobbyController extends Component {
     });
   }
 
-  private _makeResourceChip(
+  private _makeTopAssetBadge(
     parent: Node,
     name: string,
     x: number,
     y: number,
-    iconKind: LobbyAssetIconKind,
+    iconKey: string,
+    width: number,
+    height: number,
+    iconSize: number,
+    valueFontSize = 25,
   ): Label {
-    const width = 138;
     const chip = new Node(name);
     chip.setParent(parent);
     chip.setPosition(x, y, 0);
-    chip.addComponent(UITransform).setContentSize(width, 68);
-
-    const halo = new Node('Halo');
-    halo.setParent(chip);
-    halo.setPosition(-27, 6, 0);
-    halo.addComponent(UITransform).setContentSize(58, 58);
-    this._drawCircle(halo, 22, new Color(110, 170, 255, 42));
-
-    const valueBg = new Node('ValueBg');
-    valueBg.setParent(chip);
-    valueBg.setPosition(24, 4, 0);
-    valueBg.addComponent(UITransform).setContentSize(96, 40);
+    chip.addComponent(UITransform).setContentSize(width, height);
     this._drawRoundedRect(
-      valueBg,
-      96,
-      40,
-      19,
-      new Color(9, 34, 72, 194),
-      new Color(134, 208, 255, 120),
+      chip,
+      width,
+      height,
+      22,
+      new Color(8, 28, 62, 214),
+      new Color(110, 182, 236, 185),
     );
-    const valueGlow = new Node('ValueGlow');
-    valueGlow.setParent(valueBg);
-    valueGlow.setPosition(0, 10, 0);
-    valueGlow.addComponent(UITransform).setContentSize(76, 10);
+
+    const topHighlight = new Node('TopHighlight');
+    topHighlight.setParent(chip);
+    topHighlight.setPosition(12, height / 2 - 10, 0);
+    topHighlight.addComponent(UITransform).setContentSize(width - 42, 8);
     this._drawRoundedRect(
-      valueGlow,
-      76,
-      10,
-      5,
-      new Color(225, 244, 255, 28),
+      topHighlight,
+      width - 42,
+      8,
+      4,
+      new Color(230, 245, 255, 34),
     );
+
+    const iconPlate = new Node('IconPlate');
+    iconPlate.setParent(chip);
+    iconPlate.setPosition(-width / 2 + 12, 0, 0);
+    iconPlate.addComponent(UITransform).setContentSize(50, 50);
+    this._drawCircle(
+      iconPlate,
+      23,
+      new Color(10, 36, 78, 238),
+      new Color(126, 196, 236, 224),
+      2,
+    );
+
     const icon = new Node('ResourceIcon');
-    icon.setParent(chip);
-    icon.setPosition(-41, 4, 0);
-    icon.addComponent(UITransform).setContentSize(58, 58);
-    this._drawLobbyAssetIcon(icon, iconKind);
-    const value = this._makeLabel(valueBg, 'Value', 0, 23, 88, 34);
+    icon.setParent(iconPlate);
+    icon.setPosition(-1, 0, 0);
+    icon.addComponent(UITransform).setContentSize(iconSize, iconSize);
+    const frame = getCachedSprite(iconKey);
+    if (frame) {
+      ensureArtChild(icon, 'IconArt', frame, iconSize, iconSize);
+    }
+
+    const value = this._makeLabel(chip, 'Value', 0, valueFontSize, width - 52, 30);
+    value.node.setPosition(16, 2, 0);
+    value.horizontalAlign = Label.HorizontalAlign.CENTER;
+    value.overflow = Label.Overflow.SHRINK;
+    value.fontSize = valueFontSize;
+    value.lineHeight = valueFontSize + 4;
     value.enableOutline = true;
-    value.outlineColor = new Color(5, 20, 46, 220);
+    value.outlineColor = new Color(7, 22, 48, 230);
     value.outlineWidth = 2;
+    value.color = new Color(244, 248, 255, 255);
     return value;
   }
 
-  private _applyTopAssetStripArt(): void {
-    const chipFrame = getCachedSprite('pve/lobby/asset_top_chip_blue_9s');
-    if (!chipFrame) return;
-    const iconMap: Record<LobbyAssetIconKind, string> = {
-      shards: 'pve/lobby/icon_chip_destiny_shards',
-      diamond: 'pve/lobby/icon_chip_diamond',
-      stamina: 'pve/lobby/icon_chip_stamina',
-    };
+  private _applyTopAssetBadgeIcons(): void {
     const strip = this.node.getChildByName('PveLobbyRoot')?.getChildByName('TopAssetStrip');
     if (!strip) return;
-    const chipOrder: Array<{ name: string; kind: LobbyAssetIconKind }> = [
-      { name: 'Shards', kind: 'shards' },
-      { name: 'Diamond', kind: 'diamond' },
-      { name: 'StaminaChip', kind: 'stamina' },
-    ];
-    for (const item of chipOrder) {
-      const chip = strip.getChildByName(item.name);
-      if (!chip) continue;
-      const size = chip.getComponent(UITransform)?.contentSize;
-      if (!size) continue;
-      ensureArtSliced(
-        chip,
-        'ChipArt',
-        chipFrame,
-        size.width,
-        size.height,
-        { top: 90, bottom: 90, left: 180, right: 180 },
-      );
-      chip.getChildByName('ChipArt')?.setSiblingIndex(0);
-      const iconNode = chip.getChildByName('ResourceIcon');
-      const iconFrame = getCachedSprite(iconMap[item.kind]);
-      if (iconNode && iconFrame) {
-        iconNode.removeAllChildren();
-        const iconSize = item.kind === 'diamond' ? 52 : item.kind === 'stamina' ? 48 : 50;
-        ensureArtChild(iconNode, 'IconArt', iconFrame, iconSize, iconSize);
-        iconNode.setPosition(-46, 3, 0);
-      }
-      this._disableGraphicsRecursive(chip);
-      const valueBg = chip.getChildByName('ValueBg');
-      if (valueBg) {
-        valueBg.setPosition(34, 2, 0);
-        const label = valueBg.getChildByName('Value')?.getComponent(Label);
-        if (label) {
-          label.node.setPosition(0, 1, 0);
-          label.fontSize = 24;
-          label.lineHeight = 28;
-          label.color = new Color(245, 248, 255, 255);
-        }
-      }
+    const iconMap: Record<string, { key: string; size: number }> = {
+      Shards: { key: 'pve/map/icon_fragment', size: 44 },
+      Diamond: { key: 'pve/lobby/icon_chip_stardust', size: 44 },
+      StaminaChip: { key: 'pve/lobby/icon_chip_stamina', size: 42 },
+    };
+    for (const [name, config] of Object.entries(iconMap)) {
+      const chip = strip.getChildByName(name);
+      const iconNode = chip?.getChildByName('ResourceIcon');
+      const frame = getCachedSprite(config.key);
+      if (!chip || !iconNode || !frame) continue;
+      iconNode.removeAllChildren();
+      ensureArtChild(iconNode, 'IconArt', frame, config.size, config.size);
     }
-  }
-
-  private _disableGraphicsRecursive(node: Node): void {
-    const graphics = node.getComponent(Graphics);
-    if (graphics) graphics.enabled = false;
-    node.children.forEach((child) => this._disableGraphicsRecursive(child));
   }
 
   private _drawLobbyAssetIcon(node: Node, kind: LobbyAssetIconKind): void {
@@ -1150,7 +1524,10 @@ export class PveLobbyController extends Component {
     button.transition = Button.Transition.SCALE;
     button.zoomScale = 0.96;
     button.target = node;
-    node.on(Button.EventType.CLICK, onClick, this);
+    node.on(Button.EventType.CLICK, () => {
+      playSfx(SFX_IDS.UI_CLICK);
+      onClick();
+    }, this);
   }
 
   private _applyButtonArt(root: Node): void {
@@ -1252,6 +1629,19 @@ export class PveLobbyController extends Component {
     }
   }
 
+  private _applyMetaSnapshot(meta: PveMeta): void {
+    this._destinyTreeMeta = meta;
+    this._metaCodexRelics = meta.codex.relics ?? [];
+    this._stamina = meta.stamina ?? this._stamina;
+    this._staminaMax = meta.staminaMax ?? this._staminaMax;
+    this._staminaNextRecoveryAt = meta.staminaNextRecoveryAt ?? null;
+    if (this._shardsLabel) this._shardsLabel.string = String(meta.destinyShards);
+    if (this._diamondLabel) this._diamondLabel.string = String(meta.diamond);
+    this._metaFloor = meta.highestFloor ?? 0;
+    this._updateMetaLine();
+    this._updateStaminaLabels();
+  }
+
   private _tickStamina = (): void => {
     if (
       this._staminaNextRecoveryAt
@@ -1283,7 +1673,7 @@ export class PveLobbyController extends Component {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const secondsText = seconds < 10 ? `0${seconds}` : String(seconds);
-    this._staminaTimerLabel.string = `+1  ${minutes}:${secondsText}`;
+    this._staminaTimerLabel.string = `${minutes}:${secondsText}`;
   }
 
   private _gotoScene(text: string, load: () => void): void {
@@ -1293,8 +1683,13 @@ export class PveLobbyController extends Component {
   }
 
   private _setStatus(text: string): void {
-    if (this._statusLabel) this._statusLabel.string = text;
-    console.log('[PveLobby]', text);
+    const displayText = this._formatDisplayText(text);
+    if (this._statusLabel) this._statusLabel.string = displayText;
+    console.log('[PveLobby]', displayText);
+  }
+
+  private _formatDisplayText(text: string): string {
+    return text.replace(/钻石/g, '星尘');
   }
 
   onDestroy(): void {

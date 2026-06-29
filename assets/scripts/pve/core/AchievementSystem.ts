@@ -12,9 +12,9 @@ export type AchievementId =
   | 'FIRST_CHEST'          // 首次开启宝箱
   | 'FIRST_EQUIPMENT'      // 首次获得装备
   | 'CLASS_ADVANCED'       // 首次完成职业进阶
-  | 'CHAPTER_1_CLEARED'    // 通过第一章（第5层通关）
+  | 'CHAPTER_1_CLEARED'    // 通过第一章（第7层通关）
   | 'REACH_FLOOR_10'       // 到达第10层
-  | 'FULL_CLEAR';          // 通关全部25层
+  | 'FULL_CLEAR';          // 通关全部35层
 
 export interface AchievementDef {
   id: AchievementId;
@@ -31,7 +31,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
   { id: 'CLASS_ADVANCED',    name: '职业觉醒',     desc: '首次完成职业进阶' },
   { id: 'CHAPTER_1_CLEARED', name: '第一章英雄',   desc: '通过第一章（击败哥布林酋长）' },
   { id: 'REACH_FLOOR_10',    name: '深入探索',     desc: '到达第10层' },
-  { id: 'FULL_CLEAR',        name: '命运征服者',   desc: '通关全部25层' },
+  { id: 'FULL_CLEAR',        name: '命运征服者',   desc: '通关全部35层' },
 ] as const;
 
 // ── 成就解锁检测 ──────────────────────────────────────────
@@ -73,8 +73,8 @@ export function checkNewAchievements(
         toUnlock.add('CLASS_ADVANCED');
         break;
       case 'FLOOR_CLEARED':
-        if (ev.floor === 5)  toUnlock.add('CHAPTER_1_CLEARED');
-        if (ev.floor === 25) toUnlock.add('FULL_CLEAR');
+        if (ev.floor === 7)  toUnlock.add('CHAPTER_1_CLEARED');
+        if (ev.floor === 35) toUnlock.add('FULL_CLEAR');
         break;
     }
   }

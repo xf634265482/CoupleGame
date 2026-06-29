@@ -1,5 +1,5 @@
 // 命运之树场景主控（specs/260610-destiny-tree-ui）：账户级局外成长树入口。
-// 拉取 PveMeta → 渲染 5x3 节点网格；点击可解锁节点时调用云端 unlockTreeNode（服务端权威重新校验）。
+// 拉取 PveMeta → 渲染命运树节点网格；点击可解锁节点时调用云端 unlockTreeNode（服务端权威重新校验）。
 
 import { _decorator, Component } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
@@ -50,7 +50,7 @@ export class DestinyTreeController extends Component {
       this._meta = meta;
       this._view?.render(meta);
     } catch (err) {
-      this._toast?.toast(`加载命运树失败：${err instanceof Error ? err.message : String(err)}`);
+      this._toast?.toast(`加载命运树失败：${this._formatDisplayText(err instanceof Error ? err.message : String(err))}`);
     }
   }
 
@@ -63,11 +63,12 @@ export class DestinyTreeController extends Component {
       return;
     }
     const confirmed = await this._toast?.showConfirm(
-      `重置命运树\n消耗 ${TREE_RESET_DIAMOND_COST} 💎（当前 ${diamond}），退还全部命运碎片`,
+      `重置命运树\n消耗 ${TREE_RESET_DIAMOND_COST} 星尘（当前 ${diamond}）\n退还全部命运碎片，操作不可撤销`,
       [
-        { label: '确认重置', value: 'yes' },
         { label: '取消', value: 'no' },
+        { label: '确认重置', value: 'yes' },
       ],
+      'danger',
     );
     if (confirmed !== 'yes') return;
     this._busy = true;
@@ -77,7 +78,7 @@ export class DestinyTreeController extends Component {
       this._view?.render(meta);
       this._toast?.toast('命运树已重置，碎片已全额退还');
     } catch (err) {
-      this._toast?.toast(`重置失败：${err instanceof Error ? err.message : String(err)}`);
+      this._toast?.toast(`重置失败：${this._formatDisplayText(err instanceof Error ? err.message : String(err))}`);
     } finally {
       this._busy = false;
     }
@@ -91,9 +92,13 @@ export class DestinyTreeController extends Component {
       this._meta = meta;
       this._view?.render(meta);
     } catch (err) {
-      this._toast?.toast(`解锁失败：${err instanceof Error ? err.message : String(err)}`);
+      this._toast?.toast(`解锁失败：${this._formatDisplayText(err instanceof Error ? err.message : String(err))}`);
     } finally {
       this._busy = false;
     }
+  }
+
+  private _formatDisplayText(text: string): string {
+    return text.replace(/钻石/g, '星尘');
   }
 }

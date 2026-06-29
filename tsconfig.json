@@ -4,6 +4,21 @@
 
   /* Add your custom configuration here. */
   "compilerOptions": {
-    "strict": false
-  }
+    "target": "ES2020",
+    "module": "ES2015",
+    "strict": false,
+    "skipLibCheck": true,
+    "lib": ["ES2020", "DOM"]
+  },
+  "include": [
+    "assets/scripts/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "test/**",
+    "extensions/**",
+    "cloudfunctions/**",
+    "temp/**",
+    "node_modules/**"
+  ]
 }

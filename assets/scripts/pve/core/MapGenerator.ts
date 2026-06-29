@@ -13,7 +13,9 @@ import {
   CHAPTER_BOSS,
   FLOORS_PER_CHAPTER,
   FOG_REVEAL_RADIUS,
-  FRAGMENT_COUNT,
+  FRAGMENT_ADVANCED_BIAS,
+  FRAGMENT_SECOND_CHANCE,
+  FRAGMENT_THIRD_CHANCE,
   MONSTER_BASE,
   bossChapterScaling,
   chapterOfFloor,
@@ -30,13 +32,17 @@ function floorInChapter(floor: number): number {
 }
 const CHEST_COUNT = 1;
 const IDOL_COUNT = 1;       // 神像：+1 maxHp（每普通层 1 个）
-const HOT_SPRING_COUNT = 1; // 温泉：HP 回满（每普通层 1 个）
+const HOT_SPRING_COUNT = 1; // 温泉：仅每章第6层（Boss前一层）生成 1 个
 const ALTAR_COUNT = 1;      // 祭坛：随机 20–35 灵气（每普通层 1 个）
 
 /** 铁匠仅在章节营地（Boss 通关后）提供，楼层地图不生成铁匠实体。 */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function isBlacksmithFloor(_floor: number): boolean {
   return false;
+}
+
+function isHotSpringFloor(floor: number): boolean {
+  return floorInChapter(floor) === FLOORS_PER_CHAPTER - 1; // Boss 前一层（章内第 6 层）
 }
 
 /** 关键实体（钥匙/出口门/Boss）之间的最小曼哈顿间距，避免扎堆。 */
@@ -80,6 +86,9 @@ function takeFarFrom(pool: Coord[], from: Coord, minDist: number): Coord {
   return picked;
 }
 
+/** 各章 Boss 护甲（第一章 Boss 无护甲，第二章起逐步递增）。 */
+const BOSS_ARMOR_BY_CHAPTER: Record<number, number> = { 1: 0, 2: 15, 3: 25, 4: 40, 5: 60 };
+
 function makeBoss(id: string, pos: Coord, floor: number): Monster {
   const base = MONSTER_BASE.BOSS;
   const chapter = chapterOfFloor(floor) as keyof typeof CHAPTER_BOSS;
@@ -89,6 +98,7 @@ function makeBoss(id: string, pos: Coord, floor: number): Monster {
   const hp = Math.round(base.hp * hpMult);
   // 哥布林酋长使用独立攻击范围
   const range = bossId === 'GOBLIN_CHIEF' ? GOBLIN_CHIEF_RANGE : base.range;
+  const armor = BOSS_ARMOR_BY_CHAPTER[chapter] ?? 0;
 
   return {
     id,
@@ -101,6 +111,7 @@ function makeBoss(id: string, pos: Coord, floor: number): Monster {
     aggroRadius: base.aggroRadius,
     aiState: 'IDLE',
     bossId,
+    ...(armor > 0 ? { armor } : {}),
   };
 }
 
@@ -115,8 +126,10 @@ function makeFragment(id: string, pos: Coord, fragmentClass: ClassId): FixedEnti
 /**
  * 生成第 floor 层（1-based）地图。普通层：钥匙×1 + 出口门×1 + 宝箱 + 普通怪×N；
  * Boss 层：钥匙×1 + Boss×1（无出口门，Boss 死亡后由 FloorRules 在原地生成传送门）。
+ *
+ * @param classId 玩家当前职业（V3 §3.2 偏向规则）。缺省按冒险者等权处理。
  */
-export function generateFloor(floor: number, seed: number): FloorState {
+export function generateFloor(floor: number, seed: number, classId: ClassId = 'ADVENTURER'): FloorState {
   const size = mapSizeOfFloor(floor);
   const rng = createRng(seed);
   const pool = rng.shuffle(allCells(size));
@@ -185,9 +198,11 @@ export function generateFloor(floor: number, seed: number): FloorState {
       const pos = pool.shift() as Coord;
       entities.push(makeEntity(nextEntityId('idol'), 'IDOL', pos));
     }
-    for (let i = 0; i < HOT_SPRING_COUNT && pool.length > 0; i++) {
-      const pos = pool.shift() as Coord;
-      entities.push(makeEntity(nextEntityId('spring'), 'HOT_SPRING', pos));
+    if (isHotSpringFloor(floor)) {
+      for (let i = 0; i < HOT_SPRING_COUNT && pool.length > 0; i++) {
+        const pos = pool.shift() as Coord;
+        entities.push(makeEntity(nextEntityId('spring'), 'HOT_SPRING', pos));
+      }
     }
     for (let i = 0; i < ALTAR_COUNT && pool.length > 0; i++) {
       const pos = pool.shift() as Coord;
@@ -202,11 +217,31 @@ export function generateFloor(floor: number, seed: number): FloorState {
     // 按 (chapter, 章内层号) 查 CHAPTER_MONSTER_RULES 表生成怪物（260613 内容深化 P0）
     generateChapterMonsters(chapter, floorInChapter(floor), pool, nextMonsterId, monsters);
 
-    // M2 AC-15：职业碎片（每层 FRAGMENT_COUNT 个，洗牌后取互不相同的职业 —— 防止单层集中同一职业，V2 节奏调整）
-    const fragmentClasses = rng.shuffle(ADVANCABLE_CLASSES);
-    for (let i = 0; i < FRAGMENT_COUNT && pool.length > 0; i++) {
+    // V3 §3.1 碎片产出：保底 1 + 70% 第 2 个 + 25% 第 3 个，允许同职业重复。
+    // §3.2 偏向：冒险者期三职业等权；进阶后 70% 主职业 / 各 15% 另外两职业。
+    const fragmentCount =
+      1
+      + (rng.next() < FRAGMENT_SECOND_CHANCE ? 1 : 0)
+      + (rng.next() < FRAGMENT_THIRD_CHANCE ? 1 : 0);
+
+    for (let i = 0; i < fragmentCount && pool.length > 0; i++) {
+      const r = rng.next();
+      let fragClass: (typeof ADVANCABLE_CLASSES)[number];
+      if (classId === 'ADVENTURER') {
+        // 等权：0..1/3 → BERSERKER，1/3..2/3 → ARCHER，2/3..1 → ROGUE
+        fragClass = r < 1 / 3 ? ADVANCABLE_CLASSES[0] : r < 2 / 3 ? ADVANCABLE_CLASSES[1] : ADVANCABLE_CLASSES[2];
+      } else {
+        const main = classId as (typeof ADVANCABLE_CLASSES)[number];
+        const others = ADVANCABLE_CLASSES.filter((c) => c !== main);
+        if (r < FRAGMENT_ADVANCED_BIAS) {
+          fragClass = main;
+        } else {
+          // 剩余 30% 均分两个非主职业（各 15%）
+          fragClass = r < FRAGMENT_ADVANCED_BIAS + (1 - FRAGMENT_ADVANCED_BIAS) / 2 ? others[0] : others[1];
+        }
+      }
       const pos = pool.shift() as Coord;
-      entities.push(makeFragment(nextEntityId('frag'), pos, fragmentClasses[i]));
+      entities.push(makeFragment(nextEntityId('frag'), pos, fragClass));
     }
   }
 

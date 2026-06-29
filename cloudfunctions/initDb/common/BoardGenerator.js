@@ -103,6 +103,18 @@ const SHOP_RING_TEMPLATE = [9, 19, 34, 44, 54, 64, 74];
 
 const LEGENDARY_SHOP_INDICES = [34, 54, 74];
 
+/**
+ * @typedef {object} BoardCell
+ * @property {number} index
+ * @property {string} type
+ * @property {number} [initialStock]
+ * @property {number} [stock]
+ * @property {number} [claimCount]
+ * @property {boolean} [depleted]
+ * @property {string} [goldVariant]
+ * @property {string | null} [crate]
+ */
+
 function placeShopIndices() {
   const goldShopIdxs = SHOP_RING_TEMPLATE.filter(
     (i) => !LEGENDARY_SHOP_INDICES.includes(i),
@@ -224,6 +236,7 @@ function generateBoardCells() {
   occupied = occupied.concat(eventIdxs);
 
 
+  /** @type {BoardCell[]} */
   const cells = Array.from({ length: BOARD_SIZE }, (_, index) => ({
     index,
     type: 'NORMAL',

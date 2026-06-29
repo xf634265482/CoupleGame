@@ -165,6 +165,7 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
     let hp = m.hp;
     let bleed = m.bleedRounds ?? 0;
     let burn = m.burnRounds ?? 0;
+    let poison = m.poisonRounds ?? 0;
     if (bleed > 0) {
       hp = Math.max(0, hp - BLEED_DAMAGE);
       totalDamage += BLEED_DAMAGE;
@@ -175,7 +176,11 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
       totalDamage += BURN_TICK_DAMAGE;
       burn -= 1;
     }
-    if (hp === m.hp && bleed === (m.bleedRounds ?? 0) && burn === (m.burnRounds ?? 0)) return m;
+    if (poison > 0) {
+      hp = Math.max(0, hp - (m.poisonDamage ?? 3));
+      poison -= 1;
+    }
+    if (hp === m.hp && bleed === (m.bleedRounds ?? 0) && burn === (m.burnRounds ?? 0) && poison === (m.poisonRounds ?? 0)) return m;
     const dead = hp <= 0;
     return {
       ...m,
@@ -183,6 +188,8 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
       aiState: dead ? ('DEAD' as const) : m.aiState,
       bleedRounds: bleed > 0 ? bleed : undefined,
       burnRounds: burn > 0 ? burn : undefined,
+      poisonRounds: poison > 0 ? poison : undefined,
+      poisonDamage: poison > 0 ? m.poisonDamage : undefined,
     };
   });
   return { monsters: next, totalDamage };

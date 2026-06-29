@@ -42,3 +42,64 @@ describe('PveSave.startRun — 服务端权威种子与体力', () => {
     expect(reservePveRunStart).not.toHaveBeenCalled();
   });
 });
+
+// ── 难度自动推导（resolveCurrentTier，→ AC-P3-6）──────────────────────────
+
+describe('PveSave.startRun — 难度档自动推导', () => {
+  function makeReserve(seed = 1) {
+    return { runSeed: seed, charged: 0, stamina: { stamina: 60, nextRecoveryAt: 0 } };
+  }
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('新用户（pveClearedTiers 为空）→ NORMAL', async () => {
+    getPveSaveByUserId.mockResolvedValue(null);
+    reservePveRunStart.mockResolvedValue(makeReserve());
+
+    const result = await startRun({ id: 'u1', pveClearedTiers: [] });
+    expect(result.difficultyTier).toBe('NORMAL');
+  });
+
+  it('通关 NORMAL 后 → HARD', async () => {
+    getPveSaveByUserId.mockResolvedValue(null);
+    reservePveRunStart.mockResolvedValue(makeReserve());
+
+    const result = await startRun({ id: 'u1', pveClearedTiers: ['NORMAL'] });
+    expect(result.difficultyTier).toBe('HARD');
+  });
+
+  it('通关到 NIGHTMARE → ABYSS', async () => {
+    getPveSaveByUserId.mockResolvedValue(null);
+    reservePveRunStart.mockResolvedValue(makeReserve());
+
+    const result = await startRun({ id: 'u1', pveClearedTiers: ['NORMAL', 'HARD', 'NIGHTMARE'] });
+    expect(result.difficultyTier).toBe('ABYSS');
+  });
+
+  it('全部通关 → 保持 INFERNO（最高档）', async () => {
+    getPveSaveByUserId.mockResolvedValue(null);
+    reservePveRunStart.mockResolvedValue(makeReserve());
+
+    const result = await startRun({
+      id: 'u1',
+      pveClearedTiers: ['NORMAL', 'HARD', 'NIGHTMARE', 'ABYSS', 'INFERNO'],
+    });
+    expect(result.difficultyTier).toBe('INFERNO');
+  });
+
+  it('pveClearedTiers 字段缺失时降级为 NORMAL（老账号兼容 → AC-P3-10）', async () => {
+    getPveSaveByUserId.mockResolvedValue(null);
+    reservePveRunStart.mockResolvedValue(makeReserve());
+
+    const result = await startRun({ id: 'u1' }); // 无 pveClearedTiers
+    expect(result.difficultyTier).toBe('NORMAL');
+  });
+
+  it('续档时以存档内 difficultyTier 为准，不受 pveClearedTiers 影响', async () => {
+    getPveSaveByUserId.mockResolvedValue({ runSeed: 999, difficultyTier: 'NIGHTMARE' });
+
+    const result = await startRun({ id: 'u1', pveClearedTiers: ['NORMAL', 'HARD'] });
+    expect(result.difficultyTier).toBe('NIGHTMARE');
+    expect(result.resume).toBe(true);
+  });
+});

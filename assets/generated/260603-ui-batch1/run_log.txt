@@ -1,8 +1,0 @@
-2026-06-03T18:43:45 OK 01_bg_lobby
-2026-06-03T18:44:35 FAIL 03_bg_board: HTTPSConnectionPool(host='api.meowa.ai', port=443): Max retries exceeded with url: /api/gemini/v1beta/models/gemini-3.1-flash-image-preview:generateContent (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)')))
-2026-06-03T18:44:35 FAIL 06_pawns: {"api_job_id": "a4f15d8c-dbb8-4bb9-b1d2-c690de91e167", "status": "failure", "stage": "failed", "error": "target_count must be between 1 and 2", "progress": {"label": "失败", "percent": 100}, "queue": {"position": 0, "estimated_wait_seconds": 0}, "credit_refund": {"refunded": true, "amount": 20, "reference_id": "a4f15d8c-dbb8-4bb9-b1d2-c690de91e167"}}
-2026-06-03T18:44:35 OK 05_ui_kit
-2026-06-03T18:44:35 OK 02_bg_room
-2026-06-03T18:44:35 OK 04_cells_4x4
-2026-06-03T18:55:04 OK 03_bg_board
-2026-06-03T18:55:04 OK 06_pawns

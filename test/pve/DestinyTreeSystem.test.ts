@@ -9,6 +9,7 @@ import {
   deriveTreeRng,
   EMPTY_TREE_BONUSES,
   getNodeDef,
+  getUnlockBlockReason,
   getTreeBonuses,
   resolveTreeChoice,
   rollEquipChoiceOptions,
@@ -18,7 +19,7 @@ import {
 import {
   TREE_A1_HP_BONUS,
   TREE_A2_HP_BONUS,
-  TREE_A3_DEATH_GOLD_RETENTION,
+  TREE_A3_HP_BONUS,
   TREE_B1_ATTACK_BONUS,
   TREE_B2_AP_DICE_BONUS,
   TREE_B2_AP_CARRY_BONUS,
@@ -26,10 +27,11 @@ import {
   TREE_C1_GOLD_BONUS,
   TREE_C2_CHEST_GOLD_BONUS_PCT,
   TREE_C3_BLACKSMITH_DISCOUNT,
+  TREE_C4_CAMP_SHOP_DISCOUNT_PCT,
   TREE_D1_ANIMA_BONUS,
   TREE_D2_THRESHOLD_MULT,
   TREE_D3_ANIMA_GAIN_PCT,
-  TREE_E1_HP_BONUS,
+  TREE_E1_GOLD_BONUS,
 } from '../../assets/scripts/pve/core/PveConstants';
 import type { PveMeta } from '../../assets/scripts/pve/core/PveTypes';
 import { makeExpeditionState } from './helpers';
@@ -48,7 +50,7 @@ function makeMeta(overrides: Partial<PveMeta> = {}): PveMeta {
 describe('DestinyTreeSystem — 命运碎片成长树', () => {
   describe('getNodeDef', () => {
     it('按 id 返回节点定义；不存在的 id 返回 undefined', () => {
-      expect(getNodeDef('A1')?.name).toBe('坚韧之躯Ⅰ');
+      expect(getNodeDef('A1')?.name).toBe('坚韧之躯');
       expect(getNodeDef('Z9')).toBeUndefined();
     });
   });
@@ -72,6 +74,33 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       expect(canUnlockNode(withA1, 'A2')).toBe(true);
     });
 
+    it('全部 9 层节点均已开放，满足前置与碎片即可解锁', () => {
+      const meta = makeMeta({
+        destinyShards: 999,
+        unlockedTreeNodes: ['A1', 'A2', 'A3'],
+      });
+      expect(canUnlockNode(meta, 'A4')).toBe(true);
+      expect(getUnlockBlockReason(meta, 'A4')).toBeNull();
+    });
+
+    it('不存在的节点 ID 返回 NODE_NOT_FOUND', () => {
+      const meta = makeMeta({ destinyShards: 999, unlockedTreeNodes: [] });
+      expect(getUnlockBlockReason(meta, 'Z1')).toEqual({ code: 'NODE_NOT_FOUND' });
+    });
+
+    it('返回缺失的直属前置节点，供 UI 提示锁定原因', () => {
+      const meta = makeMeta({ destinyShards: 999, unlockedTreeNodes: [] });
+      expect(getUnlockBlockReason(meta, 'B2')).toEqual({
+        code: 'MISSING_PREREQUISITE',
+        prerequisite: expect.objectContaining({ id: 'B1', name: '武者直觉' }),
+      });
+    });
+
+    it('返回节点所需碎片数，供 UI 提示余额不足', () => {
+      const meta = makeMeta({ destinyShards: 20, unlockedTreeNodes: ['B1'] });
+      expect(getUnlockBlockReason(meta, 'B2')).toEqual({ code: 'INSUFFICIENT_SHARDS', required: 25 });
+    });
+
     it('已解锁节点不可重复解锁', () => {
       const meta = makeMeta({ destinyShards: 100, unlockedTreeNodes: ['A1'] });
       expect(canUnlockNode(meta, 'A1')).toBe(false);
@@ -82,6 +111,20 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       const next = unlockNode(meta, 'A1');
       expect(next.destinyShards).toBe(0);
       expect(next.unlockedTreeNodes).toEqual(['A1']);
+    });
+
+    it('B1 已解锁后，B2 正常扣除 25 碎片', () => {
+      const meta = makeMeta({ destinyShards: 435, unlockedTreeNodes: ['B1'] });
+      const next = unlockNode(meta, 'B2');
+      expect(next.destinyShards).toBe(410);
+      expect(next.unlockedTreeNodes).toEqual(['B1', 'B2']);
+    });
+
+    it('C1-C3 已解锁后，C4 商路嗅觉正常扣除 60 碎片', () => {
+      const meta = makeMeta({ destinyShards: 435, unlockedTreeNodes: ['C1', 'C2', 'C3'] });
+      const next = unlockNode(meta, 'C4');
+      expect(next.destinyShards).toBe(375);
+      expect(next.unlockedTreeNodes).toEqual(['C1', 'C2', 'C3', 'C4']);
     });
 
     it('不可解锁时 unlockNode 为 no-op，原样返回 meta', () => {
@@ -101,25 +144,26 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       expect(getTreeBonuses([])).toEqual(EMPTY_TREE_BONUSES);
     });
 
-    it('A 列：A1/A2 maxHp 累加，A3 设置死亡金币保留比例', () => {
+    it('A 列：A1/A2/A3 maxHp 累加', () => {
       const bonuses = getTreeBonuses(['A1', 'A2', 'A3']);
-      expect(bonuses.maxHpBonus).toBe(TREE_A1_HP_BONUS + TREE_A2_HP_BONUS);
-      expect(bonuses.deathGoldRetentionPct).toBe(TREE_A3_DEATH_GOLD_RETENTION);
+      expect(bonuses.maxHpBonus).toBe(TREE_A1_HP_BONUS + TREE_A2_HP_BONUS + TREE_A3_HP_BONUS);
+      expect(bonuses.deathGoldRetentionPct).toBe(0);
     });
 
-    it('B 列：B1 攻击力、B2 骰子上限、B3 碎片加成', () => {
-      const bonuses = getTreeBonuses(['B1', 'B2', 'B3']);
+    it('B 列：B1 攻击力、B2 结转、B3 骰子上限、B4 碎片加成', () => {
+      const bonuses = getTreeBonuses(['B1', 'B2', 'B3', 'B4']);
       expect(bonuses.attackBonus).toBe(TREE_B1_ATTACK_BONUS);
       expect(bonuses.apDiceBonus).toBe(TREE_B2_AP_DICE_BONUS);
       expect(bonuses.apCarryCapBonus).toBe(TREE_B2_AP_CARRY_BONUS);
       expect(bonuses.fragmentBonus).toBe(TREE_B3_FRAGMENT_BONUS);
     });
 
-    it('C 列：C1 开局金币、C2 宝箱金币百分比、C3 铁匠折扣', () => {
-      const bonuses = getTreeBonuses(['C1', 'C2', 'C3']);
+    it('C 列：C1 开局金币、C2 宝箱金币、C3 铁匠折扣、C4 营地折扣', () => {
+      const bonuses = getTreeBonuses(['C1', 'C2', 'C3', 'C4']);
       expect(bonuses.startGoldBonus).toBe(TREE_C1_GOLD_BONUS);
       expect(bonuses.chestGoldBonusPct).toBe(TREE_C2_CHEST_GOLD_BONUS_PCT);
       expect(bonuses.blacksmithDiscount).toBe(TREE_C3_BLACKSMITH_DISCOUNT);
+      expect(bonuses.campShopDiscountPct).toBe(TREE_C4_CAMP_SHOP_DISCOUNT_PCT);
     });
 
     it('D 列：D1 开局灵气、D2 强化阈值系数、D3 灵气获取百分比', () => {
@@ -129,16 +173,17 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
       expect(bonuses.animaGainBonusPct).toBe(TREE_D3_ANIMA_GAIN_PCT);
     });
 
-    it('E 列：E1 maxHp、E2/E3 三选一标记', () => {
+    it('E 列：E1 开局金币，E2/E3 三选一标记', () => {
       const bonuses = getTreeBonuses(['E1', 'E2', 'E3']);
-      expect(bonuses.maxHpBonus).toBe(TREE_E1_HP_BONUS);
+      expect(bonuses.maxHpBonus).toBe(0);
+      expect(bonuses.startGoldBonus).toBe(TREE_E1_GOLD_BONUS);
       expect(bonuses.hasEquipChoice).toBe(true);
       expect(bonuses.hasTraitChoice).toBe(true);
     });
 
-    it('A1 与 E1 同时解锁时 maxHpBonus 累加', () => {
-      const bonuses = getTreeBonuses(['A1', 'E1']);
-      expect(bonuses.maxHpBonus).toBe(TREE_A1_HP_BONUS + TREE_E1_HP_BONUS);
+    it('A1 与 A3 同时解锁时 maxHpBonus 累加', () => {
+      const bonuses = getTreeBonuses(['A1', 'A3']);
+      expect(bonuses.maxHpBonus).toBe(TREE_A1_HP_BONUS + TREE_A3_HP_BONUS);
     });
   });
 
@@ -202,7 +247,7 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
     it('EQUIP：选定项装入对应槽位，并从队列移除', () => {
       const rng = deriveTreeRng(5);
       const options = rollEquipChoiceOptions(rng);
-      const state = makeExpeditionState({});
+      const state = makeExpeditionState({ playerOverrides: { classId: 'BERSERKER' } });
       const withPending = { ...state, pendingTreeChoices: [{ source: 'E2' as const, kind: 'EQUIP' as const, equipOptions: options }] };
 
       const result = resolveTreeChoice(withPending, 1);
@@ -215,7 +260,7 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
     });
 
     it('TRAIT：选定项加入 classTraits，并从队列移除', () => {
-      const state = makeExpeditionState({});
+      const state = makeExpeditionState({ playerOverrides: { classId: 'BERSERKER' } });
       const withPending = {
         ...state,
         pendingTreeChoices: [{ source: 'E3' as const, kind: 'TRAIT' as const, traitOptions: ['life_steal', 'berserk', 'undying'] }],
@@ -230,7 +275,7 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
     });
 
     it('oneShot 词条已拥有时为去重 no-op（仍移出队列）', () => {
-      const state = makeExpeditionState({ playerOverrides: { classTraits: ['undying'] } });
+      const state = makeExpeditionState({ playerOverrides: { classId: 'BERSERKER', classTraits: ['undying'] } });
       const withPending = {
         ...state,
         pendingTreeChoices: [{ source: 'E3' as const, kind: 'TRAIT' as const, traitOptions: ['undying', 'berserk'] }],
@@ -242,14 +287,14 @@ describe('DestinyTreeSystem — 命运碎片成长树', () => {
     });
 
     it('可叠加词条已拥有时仍可再选一层（计入 classTraits）', () => {
-      const state = makeExpeditionState({ playerOverrides: { classTraits: ['life_steal'] } });
+      const state = makeExpeditionState({ playerOverrides: { classId: 'BERSERKER', classTraits: ['iron_skin_stack'] } });
       const withPending = {
         ...state,
-        pendingTreeChoices: [{ source: 'E3' as const, kind: 'TRAIT' as const, traitOptions: ['life_steal', 'berserk'] }],
+        pendingTreeChoices: [{ source: 'E3' as const, kind: 'TRAIT' as const, traitOptions: ['iron_skin_stack', 'berserk'] }],
       };
 
       const result = resolveTreeChoice(withPending, 0);
-      expect(result.state.player.classTraits).toEqual(['life_steal', 'life_steal']);
+      expect(result.state.player.classTraits).toEqual(['iron_skin_stack', 'iron_skin_stack']);
       expect(result.state.pendingTreeChoices).toEqual([]);
     });
 

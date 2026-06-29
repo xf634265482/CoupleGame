@@ -1,4 +1,5 @@
-import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS, openRelicChest, SELL_PRICE } from '../../assets/scripts/pve/core/CampSystem';
+import { applySellEquip, applyShopBuy, CAMP_SHOP_ITEMS, getCampShopItems, openRelicChest, SELL_PRICE } from '../../assets/scripts/pve/core/CampSystem';
+import { EMPTY_TREE_BONUSES } from '../../assets/scripts/pve/core/DestinyTreeSystem';
 import { RELIC_CHEST } from '../../assets/scripts/pve/core/PveConstants';
 import { makeExpeditionState, makeRunPlayer } from './helpers';
 
@@ -28,6 +29,16 @@ describe('CampSystem — 商店配置', () => {
       expect(item.name).toBeTruthy();
       expect(item.desc).toBeTruthy();
     });
+  });
+
+  it('C4 商路嗅觉让展示价格与实际扣款同时降低 10%', () => {
+    const treeBonuses = { ...EMPTY_TREE_BONUSES, campShopDiscountPct: 0.1 };
+    const state = makeState({ hp: 10, maxHp: 20, gold: 27, treeBonuses });
+    expect(getCampShopItems(state.player).find((item) => item.id === 'HEAL_FULL')?.cost).toBe(27);
+
+    const result = applyShopBuy(state, 'HEAL_FULL');
+    expect(result.state.player.gold).toBe(0);
+    expect(result.events[0]).toEqual(expect.objectContaining({ type: 'SHOP_BUY', cost: 27 }));
   });
 });
 

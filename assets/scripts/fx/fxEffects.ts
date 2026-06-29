@@ -39,16 +39,15 @@ export function shake(node: Node, opts: FxOptions = {}): FxHandle {
   );
 }
 
-/** 缩放冲击：从 base×(1+amp) 回弹到 base。channel='scale'。 */
+/** 缩放冲击：从 (1+amp) 回弹到 1，基准固定为 1 避免快速连击累积漂移。channel='scale'。 */
 export function punch(node: Node, opts: FxOptions = {}): FxHandle {
   const amp = magnitude(FX_MAGNITUDE.punch, clampStrength(opts.strength), FX_CONFIG.globalStrength);
-  const s = node.scale;
-  const bx = s.x, by = s.y, bz = s.z;
+  const bz = node.scale.z;
   return drive(
     node, 'scale',
     (t) => {
       const f = lerp(1 + amp, 1, t);
-      node.setScale(bx * f, by * f, bz);
+      node.setScale(f, f, bz);
     },
     {
       duration: resolveDuration(opts.duration, FX_DURATION.punch),
@@ -85,7 +84,7 @@ export function pop(node: Node, opts: FxOptions = {}): FxHandle {
   const dur = resolveDuration(opts.duration, FX_DURATION.pop);
   const scaleH = drive(
     node, 'scale',
-    (t) => node.setScale(bx * t, by * t, bz),
+    (t) => node.setScale(bx * Math.max(0, t), by * Math.max(0, t), bz),
     {
       duration: dur, easing: opts.easing ?? FX_EASE.pop,
       delay: opts.delay, interrupt: opts.interrupt, settleOnStop: true,

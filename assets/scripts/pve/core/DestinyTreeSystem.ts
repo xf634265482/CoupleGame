@@ -2,7 +2,7 @@
 // 用局外货币 destinyShards 解锁节点，效果在 startExpedition 时固化为
 // RunPlayer.treeBonuses 快照（含随存档持久化，云端复算无需读取 PveMeta）。
 //
-// 5 列 × 3 节点（A 生存 / B 战斗 / C 财富 / D 强化 / E 天命），
+// 5 列 × 9 节点（A 守护 / B 征伐 / C 富集 / D 灵脉 / E 天命），
 // 同列内必须按 order 顺序解锁（解锁 A2 前需先解锁 A1）。
 //
 // 纯函数，零框架依赖；E2/E3「三选一」走 ApplyResult + PendingTreeChoice 队列模式，
@@ -14,9 +14,10 @@ import {
   ADVANCABLE_CLASSES,
   DESTINY_TREE_NODES,
   type ClassId,
+  isDestinyTreeNodeLive,
   TREE_A1_HP_BONUS,
   TREE_A2_HP_BONUS,
-  TREE_A3_DEATH_GOLD_RETENTION,
+  TREE_A3_HP_BONUS,
   TREE_B1_ATTACK_BONUS,
   TREE_B2_AP_DICE_BONUS,
   TREE_B2_AP_CARRY_BONUS,
@@ -24,10 +25,11 @@ import {
   TREE_C1_GOLD_BONUS,
   TREE_C2_CHEST_GOLD_BONUS_PCT,
   TREE_C3_BLACKSMITH_DISCOUNT,
+  TREE_C4_CAMP_SHOP_DISCOUNT_PCT,
   TREE_D1_ANIMA_BONUS,
   TREE_D2_THRESHOLD_MULT,
   TREE_D3_ANIMA_GAIN_PCT,
-  TREE_E1_HP_BONUS,
+  TREE_E1_GOLD_BONUS,
   type DestinyTreeNodeDef,
 } from './PveConstants';
 import { createRng, hashSeed, type Rng } from './rng';
@@ -51,11 +53,40 @@ export const EMPTY_TREE_BONUSES: DestinyTreeBonuses = {
   startGoldBonus: 0,
   chestGoldBonusPct: 0,
   blacksmithDiscount: 0,
+  campShopDiscountPct: 0,
   startAnimaBonus: 0,
   strengthenThresholdMult: 1,
   animaGainBonusPct: 0,
   hasEquipChoice: false,
   hasTraitChoice: false,
+  hasLowHpHeal: false,
+  bigDamageMitPct: 0,
+  bossFloorHealPct: 0,
+  hasPostEliteHitMit: false,
+  hasChapterLowHpHeal: false,
+  hasDeathShield: false,
+  firstHitEliteBonusPct: 0,
+  killEliteAttackBonus: 0,
+  normalMonsterDamageBonusPct: 0,
+  executeThresholdBonusPct: 0,
+  killChainBonusPct: 0,
+  eliteEquipRateBonusPct: 0,
+  hasChapterFirstSmithRefund: false,
+  normalMonsterGoldBonusPct: 0,
+  hasChapterFirstSmithBonus: false,
+  hasBossEconomyChoice: false,
+  hasFirstStrengthenReroll: false,
+  hasReduceFullStackTraits: false,
+  strengthenAnimaRefundPct: 0,
+  animaMonsterAnimaBonusPct: 0,
+  hasChapterFirstStrengthenAnimaBonus: false,
+  hasFirstStrengthen4Choice: false,
+  hasEquipChoiceUpgrade: false,
+  hasChoiceReroll: false,
+  hasBossChoiceReward: false,
+  hasBossPreview: false,
+  scrollChoiceBonus: 0,
+  hasAdvancedChoiceReroll: false,
 };
 
 function noop(state: ExpeditionState): ApplyResult {
@@ -67,23 +98,40 @@ export function getNodeDef(nodeId: string): DestinyTreeNodeDef | undefined {
   return DESTINY_TREE_NODES.find((n) => n.id === nodeId);
 }
 
+export type DestinyTreeUnlockBlockReason =
+  | { code: 'NODE_NOT_FOUND' }
+  | { code: 'NOT_LIVE' }
+  | { code: 'ALREADY_UNLOCKED' }
+  | { code: 'INSUFFICIENT_SHARDS'; required: number }
+  | { code: 'MISSING_PREREQUISITE'; prerequisite: DestinyTreeNodeDef };
+
+/** 返回节点当前不可解锁的精确原因；null 表示可以解锁。 */
+export function getUnlockBlockReason(meta: PveMeta, nodeId: string): DestinyTreeUnlockBlockReason | null {
+  const def = getNodeDef(nodeId);
+  if (!def) return { code: 'NODE_NOT_FOUND' };
+  if (!isDestinyTreeNodeLive(def)) return { code: 'NOT_LIVE' };
+
+  const unlocked = meta.unlockedTreeNodes ?? [];
+  if (unlocked.includes(nodeId)) return { code: 'ALREADY_UNLOCKED' };
+
+  if (def.order > 1) {
+    const prerequisite = DESTINY_TREE_NODES.find(
+      (node) => node.column === def.column && node.order === def.order - 1,
+    );
+    if (prerequisite && !unlocked.includes(prerequisite.id)) {
+      return { code: 'MISSING_PREREQUISITE', prerequisite };
+    }
+  }
+  if (meta.destinyShards < def.cost) return { code: 'INSUFFICIENT_SHARDS', required: def.cost };
+  return null;
+}
+
 /**
  * 是否可解锁指定节点：节点存在、未解锁、碎片足够、且（若非该列首节点）
  * 同列前一节点已解锁（同列需按 order 1→2→3 顺序解锁）。
  */
 export function canUnlockNode(meta: PveMeta, nodeId: string): boolean {
-  const def = getNodeDef(nodeId);
-  if (!def) return false;
-
-  const unlocked = meta.unlockedTreeNodes ?? [];
-  if (unlocked.includes(nodeId)) return false;
-  if (meta.destinyShards < def.cost) return false;
-
-  if (def.order > 1) {
-    const prevId = `${def.column}${def.order - 1}`;
-    if (!unlocked.includes(prevId)) return false;
-  }
-  return true;
+  return getUnlockBlockReason(meta, nodeId) === null;
 }
 
 /**
@@ -110,34 +158,65 @@ export function getTreeBonuses(unlockedNodes: readonly string[] | undefined): De
 
   if (set.has('A1')) bonuses.maxHpBonus += TREE_A1_HP_BONUS;
   if (set.has('A2')) bonuses.maxHpBonus += TREE_A2_HP_BONUS;
-  if (set.has('A3')) bonuses.deathGoldRetentionPct = TREE_A3_DEATH_GOLD_RETENTION;
+  if (set.has('A3')) bonuses.maxHpBonus += TREE_A3_HP_BONUS;
+  if (set.has('A4')) bonuses.hasLowHpHeal = true;
+  if (set.has('A5')) bonuses.bigDamageMitPct = 0.2;
+  if (set.has('A6')) bonuses.bossFloorHealPct = 0.2;
+  if (set.has('A7')) bonuses.hasPostEliteHitMit = true;
+  if (set.has('A8')) bonuses.hasChapterLowHpHeal = true;
+  if (set.has('A9')) bonuses.hasDeathShield = true;
 
   if (set.has('B1')) bonuses.attackBonus += TREE_B1_ATTACK_BONUS;
-  if (set.has('B2')) {
-    bonuses.apDiceBonus += TREE_B2_AP_DICE_BONUS;
-    bonuses.apCarryCapBonus += TREE_B2_AP_CARRY_BONUS;
-  }
-  if (set.has('B3')) bonuses.fragmentBonus += TREE_B3_FRAGMENT_BONUS;
+  if (set.has('B2')) bonuses.apCarryCapBonus += TREE_B2_AP_CARRY_BONUS;
+  if (set.has('B3')) bonuses.apDiceBonus += TREE_B2_AP_DICE_BONUS;
+  if (set.has('B4')) bonuses.fragmentBonus += TREE_B3_FRAGMENT_BONUS;
+  if (set.has('B5')) bonuses.firstHitEliteBonusPct = 0.2;
+  if (set.has('B6')) bonuses.killEliteAttackBonus = 2;
+  if (set.has('B7')) bonuses.normalMonsterDamageBonusPct = 0.1;
+  if (set.has('B8')) bonuses.executeThresholdBonusPct = 0.15;
+  if (set.has('B9')) bonuses.killChainBonusPct = 0.5;
 
   if (set.has('C1')) bonuses.startGoldBonus += TREE_C1_GOLD_BONUS;
   if (set.has('C2')) bonuses.chestGoldBonusPct += TREE_C2_CHEST_GOLD_BONUS_PCT;
   if (set.has('C3')) bonuses.blacksmithDiscount += TREE_C3_BLACKSMITH_DISCOUNT;
+  if (set.has('C4')) bonuses.campShopDiscountPct += TREE_C4_CAMP_SHOP_DISCOUNT_PCT;
+  if (set.has('C5')) bonuses.eliteEquipRateBonusPct = 0.05;
+  if (set.has('C6')) bonuses.hasChapterFirstSmithRefund = true;
+  if (set.has('C7')) bonuses.normalMonsterGoldBonusPct = 0.1;
+  if (set.has('C8')) bonuses.hasChapterFirstSmithBonus = true;
+  if (set.has('C9')) bonuses.hasBossEconomyChoice = true;
 
   if (set.has('D1')) bonuses.startAnimaBonus += TREE_D1_ANIMA_BONUS;
   if (set.has('D2')) bonuses.strengthenThresholdMult *= TREE_D2_THRESHOLD_MULT;
   if (set.has('D3')) bonuses.animaGainBonusPct += TREE_D3_ANIMA_GAIN_PCT;
+  if (set.has('D4')) bonuses.hasFirstStrengthenReroll = true;
+  if (set.has('D5')) bonuses.hasReduceFullStackTraits = true;
+  if (set.has('D6')) bonuses.strengthenAnimaRefundPct = 0.1;
+  if (set.has('D7')) bonuses.animaMonsterAnimaBonusPct = 0.15;
+  if (set.has('D8')) bonuses.hasChapterFirstStrengthenAnimaBonus = true;
+  if (set.has('D9')) bonuses.hasFirstStrengthen4Choice = true;
 
-  if (set.has('E1')) bonuses.maxHpBonus += TREE_E1_HP_BONUS;
+  if (set.has('E1')) bonuses.startGoldBonus += TREE_E1_GOLD_BONUS;
   if (set.has('E2')) bonuses.hasEquipChoice = true;
   if (set.has('E3')) bonuses.hasTraitChoice = true;
+  if (set.has('E4')) bonuses.hasEquipChoiceUpgrade = true;
+  if (set.has('E5')) bonuses.hasChoiceReroll = true;
+  if (set.has('E6')) bonuses.hasBossChoiceReward = true;
+  if (set.has('E7')) bonuses.hasBossPreview = true;
+  if (set.has('E8')) bonuses.scrollChoiceBonus = 1;
+  if (set.has('E9')) bonuses.hasAdvancedChoiceReroll = true;
 
   return bonuses;
 }
 
 /** E2 命运馈赠：随机生成 3 件互不相同槽位的 COMMON 装备供三选一。 */
-export function rollEquipChoiceOptions(rng: Rng) {
+export function rollEquipChoiceOptions(
+  rng: Rng,
+  chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+) {
   const slots = rng.shuffle(['WEAPON', 'ARMOR', 'HELMET', 'SHOES', 'TRINKET'] as const).slice(0, 3);
-  return slots.map((slot) => rollEquipment(rng, slot, 'COMMON'));
+  return slots.map((slot) => rollEquipment(rng, slot, 'COMMON', chapter, balanceSnapshot));
 }
 
 /** E3 命运护佑：从职业强化词条池中随机抽取最多 3 个互不相同的候选。 */
@@ -160,7 +239,11 @@ export function buildPendingTreeChoices(
   const events: PveEvent[] = [];
 
   if (bonuses.hasEquipChoice) {
-    choices.push({ source: 'E2', kind: 'EQUIP', equipOptions: rollEquipChoiceOptions(rng) });
+    choices.push({
+      source: 'E2',
+      kind: 'EQUIP',
+      equipOptions: rollEquipChoiceOptions(rng, 1, null),
+    });
     events.push({ type: 'TREE_CHOICE_OFFERED', source: 'E2', kind: 'EQUIP' });
   }
   if (bonuses.hasTraitChoice) {
@@ -215,7 +298,7 @@ export function resolveTreeChoice(state: ExpeditionState, choiceIndex: number): 
 }
 
 /**
- * B3 职业先驱：从可进阶职业（BERSERKER/ARCHER/ROGUE）中随机选一个，碎片数 + fragmentBonus。
+ * B4 职业先驱：从可进阶职业（BERSERKER/ARCHER/ROGUE）中随机选一个，碎片数 + fragmentBonus。
  * fragmentBonus<=0 时 no-op，返回原 classFragments 引用。
  */
 export function applyFragmentBonus(

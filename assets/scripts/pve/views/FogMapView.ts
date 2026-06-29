@@ -1,7 +1,8 @@
-import { Color, EventTouch, Graphics, Label, Mask, Node, Sprite, tween, Tween, UIOpacity, UITransform, Vec3 } from 'cc';
+import { Color, EventTouch, Graphics, Label, Mask, Node, Sprite, SpriteFrame, tween, Tween, UIOpacity, UITransform, Vec3 } from 'cc';
 import { CHAPTER3_ICE_WALL_HP } from '../core/PveConstants';
-import type { Coord, FloorState } from '../core/PveTypes';
-import { getCachedSprite, loadUiSprite, PVE_CHAPTER_BG_KEYS } from '../../ui/UiAssets';
+import type { Coord, FloorState, Monster } from '../core/PveTypes';
+import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
+import { loadChapterBackground } from '../ChapterResourceLoader';
 import { applySpriteInsideFixedBox, ensureArtCover } from '../../ui/UiSprite';
 
 const AOE_HIT_FILL = new Color(255, 140, 0, 110);
@@ -21,6 +22,13 @@ const PLAYER_RING_DANGER_STROKE = new Color(95, 184, 200, 55);
 const NORMAL_MONSTER_ICON_SCALE = 0.68;
 // 玩家源图保留了较多透明边距；0.94 的承载盒对应约 80% 的实际可见身高。
 const PLAYER_ICON_SCALE = 0.82;
+const PLAYER_ICON_SCALE_BY_KEY: Record<string, number> = {
+  PLAYER: PLAYER_ICON_SCALE,
+  // 以冒险者为基准，按素材可视面积做轻量归一化，避免进阶后因轮廓留白/外扩不同显得忽大忽小。
+  PLAYER_BERSERKER: PLAYER_ICON_SCALE * 0.96,
+  PLAYER_ARCHER: PLAYER_ICON_SCALE * 1.02,
+  PLAYER_ROGUE: PLAYER_ICON_SCALE * 0.95,
+};
 const PLAYER_OCCUPANT_KEYS = new Set([
   'PLAYER',
   'PLAYER_BERSERKER',
@@ -53,6 +61,8 @@ type CellRenderContent = {
 };
 
 type CellRenderState = { revealed: boolean; content: string };
+type MonsterIndex = Map<string, FloorState['monsters'][number]>;
+type EntityIndex = Map<string, FloorState['entities'][number]>;
 
 function cellContentKey(content: CellRenderContent): string {
   return [
@@ -63,20 +73,52 @@ function cellContentKey(content: CellRenderContent): string {
   ].join(':');
 }
 
-function cellRenderContent(floor: FloorState, x: number, y: number): CellRenderContent {
+function buildMonsterIndex(floor: FloorState): MonsterIndex {
+  const monsterByPos: MonsterIndex = new Map();
+  for (const monster of floor.monsters) {
+    if (monster.aiState === 'DEAD') continue;
+    // 流沙巨蝎潜地状态：不画在棋盘上（沙坑实体已表达其潜伏位置）
+    if (monster.isBurrowed) continue;
+    monsterByPos.set(`${monster.pos.x},${monster.pos.y}`, monster);
+  }
+  return monsterByPos;
+}
+
+function buildEntityIndex(floor: FloorState): EntityIndex {
+  const entityByPos: EntityIndex = new Map();
+  const entityPriority: Record<string, number> = { PORTAL: 100, EXIT: 90, KEY: 80 };
+  for (const entity of floor.entities) {
+    if (entity.consumed) continue;
+    const key = `${entity.pos.x},${entity.pos.y}`;
+    const current = entityByPos.get(key);
+    if (!current || (entityPriority[entity.type] ?? 0) > (entityPriority[current.type] ?? 0)) {
+      entityByPos.set(key, entity);
+    }
+  }
+  return entityByPos;
+}
+
+function cellRenderContent(
+  floor: FloorState,
+  playerClassId: string | undefined,
+  x: number,
+  y: number,
+  monsterByPos: MonsterIndex,
+  entityByPos: EntityIndex,
+): CellRenderContent {
   let occupantKey = 'EMPTY';
   let occupantMeta = '';
-  const playerClassId = (floor.player as Coord & { classId?: string }).classId;
   if (floor.player.x === x && floor.player.y === y) {
     occupantKey = playerClassId === 'BERSERKER'
       ? 'PLAYER_BERSERKER'
       : playerClassId === 'ARCHER'
         ? 'PLAYER_ARCHER'
         : playerClassId === 'ROGUE'
-          ? 'PLAYER_ROGUE'
+        ? 'PLAYER_ROGUE'
           : 'PLAYER';
   }
-  const monster = floor.monsters.find((m) => m.aiState !== 'DEAD' && m.pos.x === x && m.pos.y === y);
+  const key = `${x},${y}`;
+  const monster = monsterByPos.get(key);
   if (monster) {
     if (monster.bossId === 'FATE_MIRROR') {
       occupantKey = 'MONSTER_FATE_MIRROR';
@@ -94,13 +136,7 @@ function cellRenderContent(floor: FloorState, x: number, y: number): CellRenderC
 
   let entityKey = 'EMPTY';
   let entityHpText = '';
-  const atPos = (e: { consumed?: boolean; pos: { x: number; y: number } }) =>
-    !e.consumed && e.pos.x === x && e.pos.y === y;
-  const entityPriority: Record<string, number> = { PORTAL: 100, EXIT: 90, KEY: 80 };
-  const entitiesHere = floor.entities.filter((e) => atPos(e));
-  const entity = entitiesHere.length > 1
-    ? entitiesHere.reduce((best, e) => (entityPriority[e.type] ?? 0) > (entityPriority[best.type] ?? 0) ? e : best)
-    : entitiesHere[0];
+  const entity = entityByPos.get(key);
   if (entity) {
     entityKey = entity.type === 'SAND_PIT' && entity.remaining !== undefined
       ? 'ENTITY_SAND_PIT_DYNAMIC'
@@ -136,7 +172,10 @@ export class FogMapView {
   private _moveOverlay: Node;
   private _playerFocusOverlay: Node;
   private _targetOverlay: Node;
+  private _tutorialOverlay: Node;
   private _bossIconOverlay: Node;
+  /** 冲锋等技能动画期间锁住 boss 大图标位置，避免 _refreshAll 把它跳到目标格造成鬼影。 */
+  private _bossIconLocked = false;
   private _frozenOverlay: Node;
   private _boardOverlay: Node;
   private _floorPlane: Node;
@@ -198,6 +237,7 @@ export class FogMapView {
     this._hitOverlay = this._createOverlay('AoeHitOverlay');
     this._warningOverlay = this._createOverlay('AoeWarningOverlay');
     this._targetOverlay = this._createOverlay('AttackTargetOverlay');
+    this._tutorialOverlay = this._createOverlay('TutorialOverlay');
     this._frozenOverlay = this._createOverlay('FrozenOverlay');
 
     this._bossIconOverlay = new Node('BossIconOverlay');
@@ -218,29 +258,23 @@ export class FogMapView {
   private async _loadBaseArt(): Promise<void> {
     await Promise.all([
       loadUiSprite('pve/map/tile_fog'),
-      loadUiSprite(PVE_CHAPTER_BG_KEYS[1]),
+      loadUiSprite('pve/backgrounds/bg_pve_ch1'),
       loadUiSprite('pve/map/icon_player'),
       loadUiSprite('pve/map/icon_player_berserker'),
       loadUiSprite('pve/map/icon_player_archer'),
       loadUiSprite('pve/map/icon_player_rogue'),
     ]);
-    // 后续章节背景非阻塞预热；已探索格直接显示连续章节背景，不再加载地砖。
-    for (let ch = 2; ch <= 5; ch++) {
-      void loadUiSprite(PVE_CHAPTER_BG_KEYS[ch as 2 | 3 | 4 | 5]).catch(() => null);
+    // 第2-5章背景已迁出 UiAssets，改由 ChapterResourceLoader 按章节独立 bundle 加载
+    // （ExpeditionController 在 Boss 层 preloadChapter 预热、进章时 gating）。此处不再预热。
+    // 第1章 ch 通用图标预热（仍在主包）；第2-5章已迁出 UiAssets，由 ChapterResourceLoader
+    // 在 _ensureChapterReady 进章 gating 时统一加载并注入 UiAssets 缓存，此处无需预热。
+    for (const t of ['normal', 'elite', 'anima', 'boss']) {
+      void loadUiSprite(`pve/map/icon_monster_ch1_${t}`).catch(() => null);
     }
-    // 章节+类型图标预热（兜底路径）
-    for (let ch = 1; ch <= 5; ch++) {
-      for (const t of ['normal', 'elite', 'anima', 'boss']) {
-        void loadUiSprite(`pve/map/icon_monster_ch${ch}_${t}`).catch(() => null);
-      }
-    }
-    // 各怪物/Boss 变体专属图标预热（美术到位后自动命中缓存，缺图静默忽略）
+    // 第1章怪物变体专属图标预热（仍在主包；其余章节变体在 artMap 里都重定向到 chN_* 通用图标，
+    // 那些 chN_* 已由 ensureChapterAssets 进章时统一加载，故不在此处预热）
     for (const v of [
       'goblin_warrior', 'goblin_archer', 'frost_goblin', 'fire_goblin', 'spirit_rat', 'goblin_chief',
-      'desert_raider', 'sandworm_larva', 'poison_scorpion', 'spirit_beetle', 'quicksand_scorpion',
-      'snow_wolf', 'ice_slime', 'frost_sprite', 'spirit_elf', 'frost_giant',
-      'lava_grunt', 'lava_crab', 'fire_elemental', 'spirit_ember', 'lava_lord',
-      'shadow_assassin', 'fate_watcher', 'void_worm', 'spirit_mirage', 'fate_guardian', 'fate_mirror',
     ]) {
       void loadUiSprite(`pve/map/icon_monster_${v}`).catch(() => null);
     }
@@ -488,10 +522,17 @@ export class FogMapView {
   }
 
   private async _applyChapterBackground(chapter: number): Promise<void> {
-    const key = PVE_CHAPTER_BG_KEYS[chapter as keyof typeof PVE_CHAPTER_BG_KEYS];
-    // 仅加载已登记的章节背景；缺图章节继续由 floor/fog 瓦片兜底。
-    if (!key) return;
-    const sf = getCachedSprite(key) ?? await loadUiSprite(key).catch(() => null);
+    // 章节背景统一经 ChapterResourceLoader 取（第1章主包 / 第2-5章独立分包 bundle）。
+    // 缓存命中时同步返回；正式进章时 ExpeditionController 已先 gating 加载好，此处取缓存不闪。
+    const sf = await loadChapterBackground(chapter).catch(() => null);
+    if (!sf || !this._background.isValid || chapter !== this._chapter) return;
+    ensureArtCover(this._background, 'Art', sf, this._screenW, this._screenH);
+    this._background.active = true;
+    this._background.setSiblingIndex(0);
+  }
+
+  /** ExpeditionController gating 加载完成后主动注入，避免冷缓存时的背景缺失闪烁。 */
+  setChapterBackground(chapter: number, sf: SpriteFrame): void {
     if (!sf || !this._background.isValid || chapter !== this._chapter) return;
     ensureArtCover(this._background, 'Art', sf, this._screenW, this._screenH);
     this._background.active = true;
@@ -774,7 +815,7 @@ export class FogMapView {
       : ELITE_OCCUPANT_KEYS.has(occupantKey)
         ? ELITE_MONSTER_ICON_SCALE
         : PLAYER_OCCUPANT_KEYS.has(occupantKey)
-          ? PLAYER_ICON_SCALE
+          ? (PLAYER_ICON_SCALE_BY_KEY[occupantKey] ?? PLAYER_ICON_SCALE)
           : NORMAL_MONSTER_ICON_SCALE;
     const entityScale = entityKey === 'ENTITY_ICE_WALL'
       ? 0.7
@@ -795,6 +836,7 @@ export class FogMapView {
     );
 
     if (lbl) {
+      lbl.node.active = true;
       const occupantArtKey = artMap[occupantKey];
       const entityArtKey = artMap[entityKey];
       const missingOccupantArt = occupantKey !== 'EMPTY'
@@ -839,7 +881,7 @@ export class FogMapView {
     }
   }
 
-  refresh(floor: FloorState): void {
+  refresh(floor: FloorState, playerClassId?: string): void {
     const newChapter = Math.ceil(floor.floor / 5);
     if (floor.size !== this._size) {
       // 楼层尺寸变化：重建格子，_rebuild 内部已调用 _refreshBackground
@@ -854,20 +896,25 @@ export class FogMapView {
     this._refreshCamera(floor.player);
     this._playerPos = { ...floor.player };
     this._refreshPlayerFocus();
+    const monsterByPos = buildMonsterIndex(floor);
+    const entityByPos = buildEntityIndex(floor);
     for (let y = 0; y < floor.size; y++) {
       for (let x = 0; x < floor.size; x++) {
         const idx = y * floor.size + x;
         const node = this._cells[idx];
         if (!node) continue;
         const revealed = floor.revealed[y]?.[x] ?? false;
-        const content = revealed ? cellContentKey(cellRenderContent(floor, x, y)) : cellContentKey({
+        const content = revealed ? cellContentKey(cellRenderContent(floor, playerClassId, x, y, monsterByPos, entityByPos)) : cellContentKey({
           entityKey: 'EMPTY',
           entityHpText: '',
           occupantKey: 'EMPTY',
           occupantMeta: '',
         });
         const prev = this._rendered[idx];
-        if (prev && prev.revealed === revealed && prev.content === content) continue;
+        const hiddenPlayerOccupant = floor.player.x === x
+          && floor.player.y === y
+          && !this._isOccupantVisible(idx);
+        if (prev && prev.revealed === revealed && prev.content === content && !hiddenPlayerOccupant) continue;
         const animateReveal = Boolean(prev && !prev.revealed && revealed);
         this._rendered[idx] = { revealed, content };
         this._paintCell(node, idx, this._cellSize, revealed, content, animateReveal);
@@ -891,9 +938,13 @@ export class FogMapView {
   }
 
   private _refreshBossIcon(floor: FloorState): void {
+    // 锁定期间控制器全权管理 overlay（位置 / active 都不动），
+    // 必须放在最前面：否则未揭雾的目标格会先被"隐藏分支"截断，导致冲锋到暗格时 overlay 直接消失。
+    if (this._bossIconLocked) return;
     const boss = floor.monsters.find((m) => m.type === 'BOSS' && m.aiState !== 'DEAD');
     const sf = this._bossIconOverlay.getComponent(Sprite);
-    if (!boss || !(floor.revealed[boss.pos.y]?.[boss.pos.x] ?? false) || !sf) {
+    // boss 不存在 / 未揭雾 / 已潜地 → 隐藏大图标 overlay
+    if (!boss || boss.isBurrowed || !(floor.revealed[boss.pos.y]?.[boss.pos.x] ?? false) || !sf) {
       this._bossIconOverlay.active = false;
       return;
     }
@@ -978,6 +1029,16 @@ export class FogMapView {
     return unit.getChildByName('EntityArt') ?? null;
   }
 
+  setOccupantVisible(coord: Coord, visible: boolean): void {
+    const idx = coord.y * this._size + coord.x;
+    const unit = this._unitCells[idx];
+    if (!unit) return;
+    const occupantArt = unit.getChildByName('OccupantArt');
+    const glyph = unit.getChildByName('Glyph');
+    if (occupantArt) occupantArt.active = visible;
+    if (glyph) glyph.active = visible;
+  }
+
   /**
    * 复制某格 OccupantArt 当前画面成一个独立子节点，供死亡退场 fx（float/fade）使用。
    * 调用方需在 fx 结束后自行 destroy 返回节点。
@@ -985,6 +1046,84 @@ export class FogMapView {
    */
   cloneOccupantForFx(coord: Coord): Node | null {
     return this._cloneChildForFx(coord, 'OccupantArt', 'OccupantFxClone');
+  }
+
+  cloneMonsterForFx(monster: Monster): Node | null {
+    const existing = this.cloneOccupantForFx(monster.pos);
+    if (existing) return existing;
+
+    const artMap: Record<string, string> = {
+      FATE_MIRROR: 'pve/map/icon_monster_fate_mirror',
+      GOBLIN_WARRIOR: 'pve/map/icon_monster_goblin_warrior',
+      GOBLIN_ARCHER: 'pve/map/icon_monster_goblin_archer',
+      FROST_GOBLIN: 'pve/map/icon_monster_frost_goblin',
+      FIRE_GOBLIN: 'pve/map/icon_monster_fire_goblin',
+      SPIRIT_RAT: 'pve/map/icon_monster_spirit_rat',
+      GOBLIN_CHIEF: 'pve/map/icon_monster_goblin_chief',
+      DESERT_RAIDER: 'pve/map/icon_monster_ch2_normal',
+      SANDWORM_LARVA: 'pve/map/icon_monster_ch2_normal',
+      POISON_SCORPION: 'pve/map/icon_monster_ch2_elite',
+      SPIRIT_BEETLE: 'pve/map/icon_monster_ch2_anima',
+      QUICKSAND_SCORPION: 'pve/map/icon_monster_ch2_boss',
+      SNOW_WOLF: 'pve/map/icon_monster_ch3_normal',
+      ICE_SLIME: 'pve/map/icon_monster_ch3_normal',
+      FROST_SPRITE: 'pve/map/icon_monster_ch3_elite',
+      SPIRIT_ELF: 'pve/map/icon_monster_ch3_anima',
+      FROST_GIANT: 'pve/map/icon_monster_ch3_boss',
+      LAVA_GRUNT: 'pve/map/icon_monster_ch4_normal',
+      LAVA_CRAB: 'pve/map/icon_monster_ch4_normal',
+      FIRE_ELEMENTAL: 'pve/map/icon_monster_ch4_elite',
+      SPIRIT_EMBER: 'pve/map/icon_monster_ch4_anima',
+      LAVA_LORD: 'pve/map/icon_monster_ch4_boss',
+      SHADOW_ASSASSIN: 'pve/map/icon_monster_ch5_normal',
+      FATE_WATCHER: 'pve/map/icon_monster_ch5_elite',
+      VOID_WORM: 'pve/map/icon_monster_ch5_normal',
+      SPIRIT_MIRAGE: 'pve/map/icon_monster_ch5_anima',
+      FATE_GUARDIAN: 'pve/map/icon_monster_ch5_boss',
+    };
+    const key = monster.bossId ?? monster.variantId ?? monster.type;
+    const artKey = artMap[key];
+    const frame = artKey ? getCachedSprite(artKey) : null;
+    if (!frame) return null;
+
+    const bossKeys = new Set(['GOBLIN_CHIEF', 'QUICKSAND_SCORPION', 'FROST_GIANT', 'LAVA_LORD', 'FATE_GUARDIAN']);
+    const eliteKeys = new Set(['POISON_SCORPION', 'FROST_GOBLIN', 'FIRE_GOBLIN', 'FROST_SPRITE', 'FIRE_ELEMENTAL', 'FATE_WATCHER', 'VOID_WORM']);
+    const scale = bossKeys.has(key)
+      ? BOSS_ICON_SCALE
+      : eliteKeys.has(key)
+        ? ELITE_MONSTER_ICON_SCALE
+        : NORMAL_MONSTER_ICON_SCALE;
+
+    const clone = new Node('MonsterFxClone');
+    clone.setParent(this._content);
+    const ui = clone.addComponent(UITransform);
+    ui.setContentSize(this._cellSize, this._cellSize);
+    const sprite = clone.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    sprite.spriteFrame = frame;
+    clone.addComponent(UIOpacity).opacity = 255;
+    const box = this._cellSize * scale;
+    applySpriteInsideFixedBox(clone, frame, box, box);
+    return clone;
+  }
+
+  cloneBossIconForFx(): Node | null {
+    const src = this._bossIconOverlay;
+    const srcSprite = src.getComponent(Sprite);
+    if (!src.active || !srcSprite?.spriteFrame) return null;
+    const srcUi = src.getComponent(UITransform);
+    const clone = new Node('BossIconFxClone');
+    clone.setParent(this._content);
+    const ui = clone.addComponent(UITransform);
+    if (srcUi) ui.setContentSize(srcUi.contentSize);
+    const sp = clone.addComponent(Sprite);
+    sp.sizeMode = Sprite.SizeMode.CUSTOM;
+    sp.spriteFrame = srcSprite.spriteFrame;
+    sp.color = srcSprite.color.clone();
+    clone.addComponent(UIOpacity);
+    clone.setPosition(src.position);
+    clone.setScale(src.scale);
+    return clone;
   }
 
   /** 同上，但克隆 EntityArt（场景实体：宝箱/温泉/出口/石块/...）。 */
@@ -1022,6 +1161,15 @@ export class FogMapView {
     clone.setPosition(src.position);
     clone.setScale(src.scale);
     return clone;
+  }
+
+  private _isOccupantVisible(idx: number): boolean {
+    const unit = this._unitCells[idx];
+    if (!unit) return false;
+    return Boolean(
+      unit.getChildByName('OccupantArt')?.active
+      || unit.getChildByName('Glyph')?.active,
+    );
   }
 
   showMoveRange(cells: Coord[]): void {
@@ -1101,6 +1249,36 @@ export class FogMapView {
     g.stroke();
   }
 
+  showTutorialFocus(cells: Coord[]): void {
+    const g = this._tutorialOverlay.getComponent(Graphics);
+    if (!g) return;
+    g.clear();
+    if (cells.length === 0) return;
+    const boardW = this._size * this._cellSize;
+    const boardH = this._size * this._cellSize;
+    g.fillColor = new Color(0, 8, 24, 140);
+    g.rect(-boardW / 2, -boardH / 2, boardW, boardH);
+    g.fill();
+    g.strokeColor = new Color(255, 214, 110, 255);
+    g.lineWidth = 4;
+    for (const cell of cells) {
+      const pos = this._cellLocalPos(cell.x, cell.y);
+      const inset = 6;
+      g.roundRect(
+        pos.x - this._cellSize / 2 + inset,
+        pos.y - this._cellSize / 2 + inset,
+        this._cellSize - inset * 2,
+        this._cellSize - inset * 2,
+        12,
+      );
+      g.stroke();
+    }
+  }
+
+  clearTutorialFocus(): void {
+    this._tutorialOverlay.getComponent(Graphics)?.clear();
+  }
+
   moveBossIconTo(cell: Coord): void {
     if (!this._bossIconOverlay.active) return;
     const ui = this._bossIconOverlay.getComponent(UITransform);
@@ -1110,6 +1288,30 @@ export class FogMapView {
       cellPos.y - this._cellSize / 2 + (ui?.height ?? this._cellSize * BOSS_ICON_SCALE) / 2,
       0,
     );
+  }
+
+  /** Boss 大图标节点（供 ExpeditionController 做平滑冲锋 tween）。 */
+  getBossIconNode(): Node {
+    return this._bossIconOverlay;
+  }
+
+  /** 锁定/解锁 boss 大图标位置：锁定时 _refreshAll 不重置 overlay 位置，由控制器自驱 tween。 */
+  setBossIconLocked(locked: boolean): void {
+    this._bossIconLocked = locked;
+  }
+
+  setBossIconVisible(visible: boolean): void {
+    this._bossIconOverlay.active = visible;
+  }
+
+  /** 把 Boss 大图标 sprite 强制设为指定 cell 的当前贴图（供锁定期间手动驱动用，确保贴图已加载）。 */
+  computeBossIconLocalPos(cell: Coord): { x: number; y: number } {
+    const ui = this._bossIconOverlay.getComponent(UITransform);
+    const cellPos = this._cellLocalPos(cell.x, cell.y);
+    return {
+      x: cellPos.x,
+      y: cellPos.y - this._cellSize / 2 + (ui?.height ?? this._cellSize * BOSS_ICON_SCALE) / 2,
+    };
   }
 
   get node(): Node {

@@ -18,6 +18,10 @@ const mockDb = {
   collection:    jest.fn(() => chain),
   command: {
     gt:     (v) => ({ $gt: v }),
+    lt:     (v) => ({ $lt: v }),
+    eq:     (v) => ({ $eq: v }),
+    or:     (arr) => ({ $or: arr }),
+    push:   (v) => ({ $push: v }),
     inc:    (v) => ({ $inc: v }),
     remove: ()  => ({ $remove: true }),
     set:    (v) => ({ $set: v }),

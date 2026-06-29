@@ -26,7 +26,6 @@
 
 import { monsterAttack } from '../CombatSystem';
 import {
-  BASE_ATTACK,
   CLASS_STATS,
   DESTINY_5X5_DMG_MULT,
   DESTINY_5X5_RADIUS,
@@ -48,6 +47,7 @@ import {
   FATE_PROPHECY_INTERVAL,
   FATE_PROPHECY_RADIUS,
 } from '../PveConstants';
+import { getBalancedPlayerAttackBase } from '../PveBalance';
 import { createRng } from '../rng';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent } from '../PveTypes';
 
@@ -290,7 +290,7 @@ export function tryCrossMirrorThreshold(state: ExpeditionState, bossId: string):
 function estimatePlayerBaseAttack(state: ExpeditionState): number {
   const classBonus = CLASS_STATS[state.player.classId]?.attackBonus ?? 0;
   const weaponBonus = state.player.equipment.WEAPON?.baseStat ?? 0;
-  return BASE_ATTACK + classBonus + weaponBonus;
+  return getBalancedPlayerAttackBase(state.balanceSnapshot, state.chapter).damage + classBonus + weaponBonus;
 }
 
 /**

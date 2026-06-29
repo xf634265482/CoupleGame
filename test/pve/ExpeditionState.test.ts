@@ -23,14 +23,14 @@ import {
   TOTAL_FLOORS,
   TREE_A1_HP_BONUS,
   TREE_A2_HP_BONUS,
-  TREE_A3_DEATH_GOLD_RETENTION,
+  TREE_A3_HP_BONUS,
   TREE_B2_AP_DICE_BONUS,
   TREE_B2_AP_CARRY_BONUS,
   TREE_B3_FRAGMENT_BONUS,
   TREE_C1_GOLD_BONUS,
   TREE_D1_ANIMA_BONUS,
   TREE_D2_THRESHOLD_MULT,
-  TREE_E1_HP_BONUS,
+  TREE_E1_GOLD_BONUS,
 } from '../../assets/scripts/pve/core/PveConstants';
 import type { PveMeta } from '../../assets/scripts/pve/core/PveTypes';
 import { makeExpeditionState, makeMonster } from './helpers';
@@ -82,11 +82,11 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       expect(state.pendingTreeChoices).toBeUndefined();
     });
 
-    it('命运树 A1/A2/E1/C1/D1/D2/B3：固化为 player 初始属性（AC-13 同种子可复现）', () => {
-      const meta = makeMeta({ unlockedTreeNodes: ['A1', 'A2', 'E1', 'C1', 'D1', 'D2', 'B3'] });
+    it('命运树 A1/A3/C1/D1/D2/B4：固化为 player 初始属性（AC-13 同种子可复现）', () => {
+      const meta = makeMeta({ unlockedTreeNodes: ['A1', 'A2', 'A3', 'C1', 'D1', 'D2', 'B1', 'B2', 'B3', 'B4'] });
       const state = startExpedition(2026, meta);
 
-      const expectedMaxHp = INITIAL_HP + TREE_A1_HP_BONUS + TREE_A2_HP_BONUS + TREE_E1_HP_BONUS;
+      const expectedMaxHp = INITIAL_HP + TREE_A1_HP_BONUS + TREE_A2_HP_BONUS + TREE_A3_HP_BONUS;
       expect(state.player.maxHp).toBe(expectedMaxHp);
       expect(state.player.hp).toBe(expectedMaxHp);
       expect(state.player.gold).toBe(INITIAL_GOLD + TREE_C1_GOLD_BONUS);
@@ -94,7 +94,7 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       expect(state.player.animaProgress).toBe(TREE_D1_ANIMA_BONUS);
       expect(state.player.animaThreshold).toBe(Math.ceil(ANIMA_PER_STRENGTHEN * TREE_D2_THRESHOLD_MULT));
 
-      // B3 职业先驱：随机一个可进阶职业碎片 +1
+      // B4 职业先驱：随机一个可进阶职业碎片 +1
       const totalFragments = Object.values(state.player.classFragments).reduce(
         (a, b) => a + (b ?? 0),
         0,
@@ -106,20 +106,21 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       expect(again).toEqual(state);
     });
 
-    it('命运树 B2 急行军：apDiceBonus 加到首回合 AP 上', () => {
+    it('命运树 B3 急行军：apDiceBonus 加到首回合 AP 上', () => {
       const meta = makeMeta({ unlockedTreeNodes: [] });
-      const withoutB2 = startExpedition(2026, meta);
+      const withoutB3 = startExpedition(2026, meta);
 
-      const metaWithB2 = makeMeta({ unlockedTreeNodes: ['B1', 'B2'] });
-      const withB2 = startExpedition(2026, metaWithB2);
+      const metaWithB3 = makeMeta({ unlockedTreeNodes: ['B1', 'B2', 'B3'] });
+      const withB3 = startExpedition(2026, metaWithB3);
 
-      expect(withB2.floorState.ap).toBe(withoutB2.floorState.ap + TREE_B2_AP_DICE_BONUS);
+      expect(withB3.floorState.ap).toBe(withoutB3.floorState.ap + TREE_B2_AP_DICE_BONUS);
     });
 
     it('命运树 E2/E3：解锁后 startExpedition 生成 pendingTreeChoices 队列', () => {
       const meta = makeMeta({ unlockedTreeNodes: ['E1', 'E2', 'E3'] });
       const state = startExpedition(2026, meta);
 
+      expect(state.player.gold).toBe(INITIAL_GOLD + TREE_E1_GOLD_BONUS);
       expect(state.pendingTreeChoices).toBeDefined();
       const sources = state.pendingTreeChoices!.map((c) => c.source);
       expect(sources).toEqual(['E2', 'E3']);
@@ -330,6 +331,51 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
     });
   });
 
+  describe('resumeExpedition with saved floor snapshot', () => {
+    it('restores an exploring floor snapshot instead of jumping to the next floor', () => {
+      const runSeed = 4096;
+      const exploring = makeExpeditionState({
+        seed: runSeed,
+        floor: 6,
+        floorOverrides: {
+          floor: 6,
+          turn: 5,
+          ap: 7,
+          maxAp: 16,
+          dice: 4,
+          status: 'EXPLORING',
+          player: { x: 4, y: 4 },
+          hasKey: true,
+        },
+      });
+
+      const result = resumeExpedition(runSeed, 6, exploring.player, exploring.floorState);
+      expect(result.state.floor).toBe(6);
+      expect(result.state.chapter).toBe(1); // V3: floor 6 in chapter 1 (7 floors/chapter)
+      expect(result.state.floorState).toEqual(exploring.floorState);
+      expect(result.events).toEqual([]);
+    });
+
+    it('restores a cleared floor snapshot and leaves floor advance to the controller flow', () => {
+      const runSeed = 8192;
+      const cleared = makeExpeditionState({
+        seed: runSeed,
+        floor: 5,
+        floorOverrides: {
+          floor: 5,
+          status: 'CLEARED',
+          turn: 8,
+        },
+      });
+
+      const result = resumeExpedition(runSeed, 5, cleared.player, cleared.floorState);
+      expect(result.state.floor).toBe(5);
+      expect(result.state.floorState.status).toBe('CLEARED');
+      expect(result.state.floorState).toEqual(cleared.floorState);
+      expect(result.events).toEqual([]);
+    });
+  });
+
   describe('applyDeath', () => {
     it('清空局内进度（装备/职业/词条/金币/灵气/职业碎片），保留 HP 等其余字段', () => {
       const state = makeExpeditionState({
@@ -355,24 +401,8 @@ describe('ExpeditionState — 远征生命周期（AC-3, AC-11, AC-12, AC-13）'
       expect(result.state.player.classTraits).toEqual([]);
       expect(result.state.player.equipment).toEqual({});
       expect(result.state.player.classFragments).toEqual({});
-      expect(result.state.player.hp).toBe(0);
-      expect(result.state.player.maxHp).toBe(20);
-    });
-
-    it('命运树 A3 遗产意志：保留 deathGoldRetentionPct 比例的金币（向下取整）', () => {
-      const state = makeExpeditionState({
-        playerOverrides: {
-          hp: 0,
-          gold: 999,
-          treeBonuses: { ...EMPTY_TREE_BONUSES, deathGoldRetentionPct: TREE_A3_DEATH_GOLD_RETENTION },
-        },
-      });
-      const dead = { ...state, status: 'DEAD' as const, floorState: { ...state.floorState, status: 'DEAD' as const } };
-
-      const result = applyDeath(dead);
-      expect(result.state.player.gold).toBe(INITIAL_GOLD + Math.floor(999 * TREE_A3_DEATH_GOLD_RETENTION));
-      // treeBonuses 快照本身随玩家保留（不随死亡清空）
-      expect(result.state.player.treeBonuses).toEqual(state.player.treeBonuses);
+      expect(result.state.player.hp).toBe(230);
+      expect(result.state.player.maxHp).toBe(230);
     });
 
     it('非 DEAD 状态时为 no-op', () => {

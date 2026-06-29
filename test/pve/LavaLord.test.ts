@@ -50,7 +50,7 @@ function makeBossState(opts: {
   } = opts;
 
   return makeExpeditionState({
-    floor: 20,
+    floor: 28,
     chapter: 4,
     floorOverrides: {
       player: playerPos,
@@ -293,7 +293,7 @@ describe('LavaLord', () => {
     it('applyMove 踩入永久 LAVA_TILE 时立即触发 LAVA_TILE_DAMAGED，地块保留不消失', () => {
       // 玩家在 (1,0)，向左移动踩入 (0,0) 的 LAVA_TILE
       const state = makeExpeditionState({
-        floor: 20,
+        floor: 28,
         chapter: 4,
         floorOverrides: {
           turn: 1,
@@ -322,7 +322,7 @@ describe('LavaLord', () => {
 
     it('endTurn 时玩家站在 LAVA_TILE 上不再额外扣血（伤害已在步入时结算）', () => {
       const state = makeExpeditionState({
-        floor: 20,
+        floor: 28,
         chapter: 4,
         floorOverrides: {
           turn: 1,

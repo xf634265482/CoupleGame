@@ -110,6 +110,7 @@ views/    → 只读 state，只写 Label/Graphics
 ### 改了 PVE core 逻辑
 
 ```bash
+npm run typecheck:game     # 主游戏客户端 TS 类型检查
 npm run test:pve          # 跑 PVE 单元测试
 ```
 
@@ -121,6 +122,8 @@ npm run test:pve          # 跑 PVE 单元测试
 ### 改了云函数
 
 ```bash
+npm run typecheck:game       # 先确保客户端调用面未漂移
+npm run typecheck:cloud      # 再看 cloudfunctions/common 的静态问题
 node scripts/sync-cloud-common.js   # 同步副本（必须）
 cd cloudfunctions/common && npm test  # 跑云函数单测
 ```
@@ -265,6 +268,29 @@ _replayEvents(events) {
 6. **修改 view 层** — 按事件更新渲染
 7. **跑测试** — `npm run test:pve`
 8. **同步文档** — 更新 design.md（如有玩法变更）
+
+### 日常回归最小集合
+
+不确定该跑什么时，默认执行：
+
+```bash
+npm run typecheck:game
+npm run test:pve
+```
+
+如果改了 `cloudfunctions/common/`，再追加：
+
+```bash
+npm run typecheck:cloud
+node scripts/sync-cloud-common.js
+cd cloudfunctions/common && npm test
+```
+
+说明：
+
+- `tsconfig.json` 已收敛为主游戏默认检查入口
+- `tsconfig.game.json` 是等价的显式主游戏入口，`npm run typecheck:game` 使用它
+- 不要再默认跑根工程的历史全量类型噪音入口来判断是否可提交
 
 ---
 

@@ -1,4 +1,7 @@
 # CALL_FLOW.md
+> 2026-06-19 PVE-only 启动链：`GameApp` → `lobby.scene` → `PveLobbyController`
+> ???????`PveLobbyController` ???????????????`_startRun()` / `_showDestinyTreeModal()`??
+> PVP 房间、棋盘、结算场景当前不进入微信构建。
 > 主要调用链速查。理解某个操作的完整执行路径时，从这里找起。
 > 层次标记：`[Controller]` = controller 层（Cocos Component）/ `[Core]` = pve/core 纯函数 / `[View]` = 渲染层 / `[Net]` = 网络层 / `[Cloud]` = 云函数
 
@@ -16,6 +19,7 @@
   - [7. 楼层通关 → 下一层](#7-楼层通关--下一层)
   - [8. 玩家死亡](#8-玩家死亡)
   - [9. 新局开始](#9-新局开始)
+  - [9c. PVE 广告入口](#9c-pve-广告入口)
   - [10. 断线续档](#10-断线续档)
   - [11. 职业进阶 / 觉醒](#11-职业进阶--觉醒)
   - [12. 装备掉落 → 装备上身](#12-装备掉落--装备上身)
@@ -101,6 +105,20 @@
 [View] FogMapView.refresh(state)
 [View] PveHudView.refresh(state)   — AP 减少
 ```
+
+**地图镜头与页面布局保护线（2026-06-22）**：
+
+```text
+[View] FogMapView.refresh(state)
+  ├─ 更新格子、迷雾、玩家与实体内容
+  └─ _refreshCamera(floor.player)
+       ├─ 只计算裁切视口内部的地图内容偏移
+       ├─ 只允许移动 FogMapView._content
+       └─ 禁止移动 FogMapView._root、地图父容器、HUD、战报或底部操作区
+```
+
+玩家位于地图顶部、中部、底部时，主战场窗口在页面上的坐标必须完全一致。
+相关修复规则见 `specs/260608-pve-destiny-expedition/claude-code-handoff-2026-06-22.md`。
 
 ---
 
@@ -271,6 +289,14 @@
   ├─ 清空 floorState（怪物/实体/迷雾）
   └─ 返回 { state, events: [FLOOR_ADVANCE event] }
   │
+  ▼ 跨章时（r.state.chapter > oldChapter）先 gating 资源（§7b），失败回大厅
+[Controller] ExpeditionController._ensureChapterReady(chapter)
+  ├─ isChapterReady? 是 → 直接通过（预加载已命中）
+  ├─ 否 → LoadingOverlay.show + ChapterResourceLoader.loadChapterBackground(chapter)
+  │        ├─ ensureChapterBundle → wx.loadSubpackage('chapter_N') + loadBundle
+  │        └─ bundle.load('bg_pve_chN/spriteFrame', SpriteFrame)（需求#8：仍需 bundle.load）
+  └─ 失败/超时 → toast + SceneLoader.loadLobby()（进度已存档，回大厅可续档重载）
+  │
   ▼
 [Net] PveService.savePveFloor(report) — 存档本层结果
   │
@@ -348,6 +374,55 @@
   │
   ▼
 [View] FogMapView.rebuild() / PveHudView.refresh()
+```
+
+### 9b. PVE 大厅体力与排行榜
+
+```text
+[Lobby] PveLobbyController.onLoad()
+  ├─ loadPveMeta() → 碎片 / 钻石 / 体力 / 最高层 / 下次远征消耗
+  ├─ loadPveSave() → 判断”继续远征”或”新远征”
+  └─ _refreshRank() → loadPveLeaderboard(20)
+       ├─ 缓存 _leaderboardEntries / _myRank
+       └─ 更新 PlayerCard._rankLabel（”全服第 N 名”）
+
+[排行榜弹窗] PveLobbyController._showLeaderboard()
+  ├─ 命中缓存 → 直接 _buildLeaderboardModal(entries, myRank)
+  └─ 未缓存 → loadPveLeaderboard(20) → 缓存 → _buildLeaderboardModal
+       └─ ScrollView（20 条可滚动）+ myRank 副标题 + 前三徽章 + 自身行高亮
+
+[新远征] PveService.startRun()
+  └─ PveSave.startRun()
+      ├─ 已有存档：返回原 runSeed，体力消耗 0
+      └─ 无存档：db.reservePveRunStart()
+          ├─ 按云端时间恢复体力（5 分钟/点，上限 60）
+          ├─ 首次免费，否则扣 20
+          └─ 写入 pvePendingRunSeed，网络重试复用且不重复扣费
+```
+
+### 9c. PVE 广告入口
+
+```text
+[Platform] AdManager.init(config)
+  ├─ 创建 RewardedVideoAd / BannerAd / InterstitialAd
+  ├─ 注册 onLoad / onError / onClose 统一日志
+  └─ preloadAll() 预加载激励视频与插屏
+
+[Lobby] PveLobbyController（后续接入）
+  ├─ showBanner() → 大厅底部展示 Banner
+  ├─ showRewardAd('restore_stamina') → 完整观看后恢复体力
+  └─ showRewardAd('destiny_tree_reset') → 完整观看后触发每日 1 次命运树免费重置
+
+[Expedition] ExpeditionController / PveToastView（后续接入）
+  ├─ showRewardAd('reroll_strengthen_once')
+  │    └─ 完整观看后重抽本局 1 次强化三选一
+  └─ showRewardAd('revive_half_hp_once')
+       └─ 完整观看后原地复活 1 次并恢复 50% maxHp
+
+[Platform] AdManager.showInterstitial(scene)
+  ├─ 检查 _lastInterstitialAt
+  ├─ < 60s → 冷却拦截 + debug log
+  └─ ≥ 60s → 展示插屏并更新时间戳
 ```
 
 ---
@@ -440,34 +515,27 @@
 
 ---
 
-### 13. 命运树解锁
+### 13. ???????
 
-```
-[Controller] DestinyTreeController._tapUnlock(nodeId)
-  │
-  ▼
-[Core] DestinyTreeSystem.canUnlockNode(metaState, nodeId)
-  └─ 校验：父节点已解锁 + 碎片足够
-  │
-  ▼  (客户端预校验通过)
-[Net] PveService.unlockTreeNode(nodeId)
-  │
-  ▼
-[Cloud] PveMeta.unlockTreeNode(uid, nodeId)
-  ├─ 再次校验（权威）
-  ├─ destinyShards -= cost
-  ├─ treeNodes[nodeId].unlocked = true
-  └─ 返回更新后 meta
-  │
-  ▼
-[Controller] 刷新本地 metaState
-  │
-  ▼
-[View] DestinyTreeView.refresh(treeNodes) — 节点变为「已解锁」绿色
+```text
+[Lobby] PveLobbyController._showDestinyTreeModal()
+  ?? loadPveMeta() ???????????? / ????? / ????
+  ?? _applyMetaSnapshot(meta) ?????????????
+  ?? _buildDestinyTreeModal(meta) ????????????
+
+[Unlock] PveLobbyController._onUnlockDestinyTreeNode(nodeId)
+  ?? DestinyTreeSystem.canUnlockNode(meta, nodeId) ?????????
+  ?? PveService.unlockTreeNode(nodeId)
+  ?? [Cloud] PveMeta.unlockTreeNode(uid, nodeId)
+  ?? _rebuildDestinyTreeModal(meta) + _applyMetaSnapshot(meta)
+
+[Reset] PveLobbyController._onResetDestinyTree()
+  ?? PveService.resetTree()
+  ?? [Cloud] PveMeta.resetTreeNodes(uid)
+  ?? _rebuildDestinyTreeModal(meta) + _applyMetaSnapshot(meta)
 ```
 
 ---
-
 ### 14. 营地商店购买
 
 ```

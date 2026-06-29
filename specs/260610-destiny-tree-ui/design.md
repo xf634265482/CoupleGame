@@ -1,6 +1,7 @@
 # 命运树 UI 功能设计
 
-> 关联：`assets/scripts/pve/core/DestinyTreeSystem.ts` / `PveConstants.DESTINY_TREE_NODES`（5 列 × 3 节点账户级永久成长树，见 [[pve-module]]）。
+> 历史 V1 UI 设计。命运树 V2 已扩展为 5 支 × 9 节点，正式规则见 `specs/260628-destiny-tree-v2/design.md`。
+> 关联：`assets/scripts/pve/core/DestinyTreeSystem.ts` / `PveConstants.DESTINY_TREE_NODES`。
 
 ## 背景
 

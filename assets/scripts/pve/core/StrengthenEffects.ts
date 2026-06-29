@@ -6,25 +6,25 @@ import { traitCount } from './AnimaSystem';
 import type { FloorState, Monster, RunPlayer } from './PveTypes';
 
 /** HP ≤ 25% 时攻击 ×2（绝境一击 / 致命狩猎 / 暗影突袭）。 */
-export const LOW_HP_X2_TRAITS = ['last_stand', 'headshot', 'shadow_strike'] as const;
+export const LOW_HP_X2_TRAITS = [] as const;
 /** 进阶：HP ≤ 30% 时攻击 ×1.5（可与 LOW_HP_X2 叠乘）。 */
-export const LOW_HP_X1_5_TRAITS = ['berserker_resolve', 'deadeye', 'survival_instinct'] as const;
+export const LOW_HP_X1_5_TRAITS = [] as const;
 /** 受到怪物攻击后，下次主动攻击 +5 伤害（一次性消耗，floor.vengeanceReady）。 */
-export const VENGEANCE_TRAITS = ['vengeance', 'retreat_shot', 'retribution'] as const;
+export const VENGEANCE_TRAITS = ['vengeance'] as const;
 /** 攻击命中后对相邻 1 格存活敌人造成 50% 溅射伤害。 */
-export const CLEAVE_TRAITS = ['cleave', 'scatter_shot', 'shockwave'] as const;
+export const CLEAVE_TRAITS = ['cleave', 'scatter_shot'] as const;
 /** 受到的怪物伤害（护甲减伤+倍率后）≥5 时再 -2。 */
-export const PAIN_TOLERANCE_TRAITS = ['pain_tolerance', 'steady_aim', 'evasion_training'] as const;
+export const PAIN_TOLERANCE_TRAITS = ['pain_tolerance'] as const;
 /** 攻击 HP ≤ 20% 的目标时 +3 伤害。 */
-export const EXECUTIONER_TRAITS = ['executioner', 'finisher', 'coup_de_grace'] as const;
+export const EXECUTIONER_TRAITS = [] as const;
 /** 可叠加（上限 5）：选中时立即 maxHp/hp +3。 */
 export const IRON_SKIN_STACK_TRAITS = ['iron_skin_stack', 'quiver_stack', 'nimble_stack'] as const;
 /** 可叠加（上限 5）：击杀目标时回复等同已选层数的 HP。 */
-export const BLOODLUST_STACK_TRAITS = ['bloodlust_stack', 'vital_shot_stack', 'bloodletter_stack'] as const;
+export const BLOODLUST_STACK_TRAITS = ['bloodlust_stack'] as const;
 /** 可叠加（上限 5）：攻击力 + 已选层数 × 0.5（向上取整）。 */
-export const RAGE_STRIKE_STACK_TRAITS = ['rage_strike_stack', 'focus_stack', 'flurry_stack'] as const;
+export const RAGE_STRIKE_STACK_TRAITS = [] as const;
 /** 进阶 oneShot：本层 HP 首次 ≤30% maxHp 时 AP +3（每层限一次，floor.finalChargeAvailable）。 */
-export const FINAL_CHARGE_TRAITS = ['final_charge', 'last_arrow', 'desperate_gambit'] as const;
+export const FINAL_CHARGE_TRAITS = ['final_charge'] as const;
 
 function hasAny(traits: readonly string[], list: readonly string[]): boolean {
   return list.some((id) => traits.includes(id));
@@ -47,7 +47,7 @@ export function lowHpAttackMultiplier(traits: readonly string[], player: RunPlay
 
 /** 复仇类词条：floor.vengeanceReady 为 true 且玩家持有对应词条时，本次攻击 +5 伤害。 */
 export function vengeanceBonus(traits: readonly string[], floor: FloorState): number {
-  return hasAny(traits, VENGEANCE_TRAITS) && (floor.vengeanceReady ?? false) ? 5 : 0;
+  return hasAny(traits, VENGEANCE_TRAITS) && (floor.vengeanceReady ?? false) ? 1 : 0;
 }
 
 export function hasVengeanceTrait(traits: readonly string[]): boolean {
@@ -60,7 +60,7 @@ export function hasCleave(traits: readonly string[]): boolean {
 
 /** 怪物造成的伤害（护甲减伤+倍率后）≥5 时返回 2（再减免），否则 0。 */
 export function painToleranceReduction(traits: readonly string[], damage: number): number {
-  return hasAny(traits, PAIN_TOLERANCE_TRAITS) && damage >= 5 ? 2 : 0;
+  return hasAny(traits, PAIN_TOLERANCE_TRAITS) && damage >= 20 ? Math.round(damage * 0.15) : 0;
 }
 
 /** 处决类词条：目标 HP ≤ 20% maxHp 时 +3 伤害。 */
@@ -70,7 +70,7 @@ export function executionerBonus(traits: readonly string[], target: Monster): nu
 
 /** 击杀回复：已选层数（1~5）即为回复 HP 数值。 */
 export function bloodlustStackHeal(traits: readonly string[]): number {
-  return stackTotal(traits, BLOODLUST_STACK_TRAITS);
+  return stackTotal(traits, BLOODLUST_STACK_TRAITS) * 5;
 }
 
 /** 攻击力加成：已选层数 × 0.5（向上取整）。 */

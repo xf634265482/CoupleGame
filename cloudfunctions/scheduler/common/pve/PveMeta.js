@@ -17,13 +17,34 @@ const {
   listPveLeaderboard,
 } = require('../db');
 
+function buildEmptyBalanceSnapshot() {
+  return {
+    globalConfig: {},
+    chapterConfigs: {},
+    unitConfigs: {},
+  };
+}
+
+async function loadBalanceSnapshotSafe() {
+  try {
+    const { loadBalanceSnapshot } = require('./PveBalance');
+    return await loadBalanceSnapshot();
+  } catch (err) {
+    console.error('[PveMeta] failed to load balance snapshot, fallback to empty snapshot:', err);
+    return buildEmptyBalanceSnapshot();
+  }
+}
+
 /**
  * 读取用户 PVE 元进度快照。
  * 若字段不存在（新用户/首次）返回安全默认值。
  */
 async function loadMeta(user) {
   const meta = await getUserPveMeta(user.id);
-  return { meta };
+  return {
+    meta,
+    balanceSnapshot: await loadBalanceSnapshotSafe(),
+  };
 }
 
 /**
@@ -34,6 +55,8 @@ async function loadMeta(user) {
  * @param {string[]} [report.codexEquipment]   - 本次新获得的装备槽位列表
  * @param {string[]} [report.codexRelics]      - 本次新解锁的 Boss 遗物图鉴 id 列表
  * @param {number}   [report.diamond]          - 钻石余额净变化（营地遗物宝箱）；扣减后余额 < 0 时整次更新拒绝
+ * @param {boolean}  [report.tutorialCompleted] - 标记新手教程已完成
+ * @param {boolean}  [report.resetTutorial]     - 将 pveTutorialCompleted 重置为 false
  */
 async function updateMeta(user, report = {}) {
   await updateUserPveMeta(user.id, {
@@ -42,6 +65,8 @@ async function updateMeta(user, report = {}) {
     codexEquipment:  report.codexEquipment  ?? [],
     codexRelics:     report.codexRelics     ?? [],
     diamond:         report.diamond         ?? 0,
+    tutorialCompleted: report.tutorialCompleted === true,
+    resetTutorial: report.resetTutorial === true,
   });
   return { ok: true };
 }

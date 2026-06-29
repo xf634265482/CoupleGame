@@ -8,7 +8,6 @@ const {
   getGame,
   updateGameDoc,
   nowMs,
-  clearBluffPrivateForGame,
   incrementUserDiamond,
 } = require('./db');
 const { requireUser, toPlayerSlot, toRoomVO } = require('./auth');
@@ -387,10 +386,6 @@ async function leaveRoomForUser(user, roomId) {
       quitGame(game, openId);
       const patch = toGamePatch(game);
       await updateGameDoc(doc.gameId, patch, current.version);
-      await clearBluffPrivateForGame(
-        doc.gameId,
-        game.players.map((p) => p.openId),
-      );
       await applySettlementToUsers(game, incrementUserDiamond);
       settledGameId = doc.gameId;
     }

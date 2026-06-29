@@ -56,6 +56,9 @@ export interface Monster {
   bleedRounds?: number;
   /** 灼烧剩余 tick 数（boss_burn_on_hit 装备 trait 触发）：每怪物回合开始扣 BURN_TICK_DAMAGE HP，递减至 0。 */
   burnRounds?: number;
+  /** Rogue poison: damage is stored with the application for deterministic ticks. */
+  poisonRounds?: number;
+  poisonDamage?: number;
   /** 冰霜巨人狂暴冲锋预警方向（bossId=FROST_GIANT）：上一回合预警时记录，本回合沿此方向执行冲锋后清除。 */
   frostChargeDir?: Coord;
   /** 命运守卫行为镜像（bossId=FATE_MIRROR）专属：玩家上一回合行为，下个怪物回合执行后清空。 */
@@ -74,6 +77,9 @@ export interface Monster {
   enrageTurn?: number;
   /** VOID_WORM 双生复活：首次被击杀时以 50% maxHp 原地复活；true 后不再触发。 */
   revivedOnce?: boolean;
+  /** 护甲值（Chapter 2+ 怪物/Boss 专有）：玩家普攻前先扣减此值，最低造成 1 伤害。 */
+  armor?: number;
+  tutorialDrop?: { gold?: number; anima?: number; equip?: EquipItem };
 }
 
 export interface FixedEntity {
@@ -139,6 +145,10 @@ export interface RunPlayer {
   /** 命运碎片成长树效果快照（由 startExpedition 时根据 PveMeta.unlockedTreeNodes 计算并固化，
    *  随存档持久化，保证云端复算时无需重新读取 PveMeta，AC-13）。 */
   treeBonuses?: DestinyTreeBonuses;
+  /** 最近一次强化候选，用于 V2 候选防重复；随存档持久化。 */
+  recentStrengthenOffers?: string[];
+  /** Chapter number in which Berserker's Undying has already triggered. */
+  undyingUsedChapter?: number;
   /** 本场远征拾取的 Boss 遗物列表（死亡清空，不跨远征保留；图鉴解锁记录见 PveMeta.codex.relics）。 */
   relics?: RelicId[];
   /** 遗物图鉴快照（开局时从 PveMeta.codex.relics 复制 + 本场远征首次拾取时同步追加）。
@@ -146,6 +156,8 @@ export interface RunPlayer {
   codexRelics?: RelicId[];
   /** 本场远征持有的命运词条卷轴数量（拾取后可使用，使用时三选一附加 strengthen_* 词条到 classTraits）。 */
   scrolls?: number;
+  /** 背包（槽位已占时装备入包，可手动装备 / 置换）。 */
+  bag?: EquipItem[];
   /** 遗物运行态：CHIEF_ROAR/PERMAFROST_CORE 累计与待触发标记；FATE_ECHO 一次性消耗标记。 */
   relicState?: {
     /** CHIEF_ROAR：上次击杀后下一次普攻 +50%，触发后置 false。 */
@@ -163,6 +175,7 @@ export interface RunPlayer {
 
 /** 命运碎片成长树效果快照（DestinyTreeSystem.getTreeBonuses 的返回类型）。 */
 export interface DestinyTreeBonuses {
+  // Phase 1（已接入游戏逻辑）
   maxHpBonus: number;
   deathGoldRetentionPct: number;
   attackBonus: number;
@@ -172,11 +185,50 @@ export interface DestinyTreeBonuses {
   startGoldBonus: number;
   chestGoldBonusPct: number;
   blacksmithDiscount: number;
+  campShopDiscountPct: number;
   startAnimaBonus: number;
   strengthenThresholdMult: number;
   animaGainBonusPct: number;
   hasEquipChoice: boolean;
   hasTraitChoice: boolean;
+
+  // Phase 2+: 守护线（A4-A9，hooks 待接入）
+  hasLowHpHeal: boolean;            // A4: 止血意志 - 首次低血回复 10% 最大生命
+  bigDamageMitPct: number;          // A5: 险境韧性 - 单次超 25% 最大生命伤害减免比例
+  bossFloorHealPct: number;         // A6: 守护回响 - 每章首次进入 Boss 层回复比例
+  hasPostEliteHitMit: boolean;      // A7: 稳固阵脚 - 被精英/Boss 命中后下次受伤减免
+  hasChapterLowHpHeal: boolean;     // A8: 余生火种 - 每章首次通关时低血额外回复
+  hasDeathShield: boolean;          // A9: 不灭誓约 - 首次致死保留 1HP 并回复 15%
+
+  // Phase 2+: 征伐线（B5-B9，hooks 待接入）
+  firstHitEliteBonusPct: number;   // B5: 破甲手感 - 首击精英/Boss 伤害加成
+  killEliteAttackBonus: number;    // B6: 猎首本能 - 击杀精英后本层攻击力加成
+  normalMonsterDamageBonusPct: number; // B7: 战斗熟稔 - 对普通怪伤害加成
+  executeThresholdBonusPct: number;    // B8: 临门一击 - 攻击低血怪伤害加成
+  killChainBonusPct: number;           // B9: 破阵时刻 - 击杀精英/Boss 后下一击加成
+
+  // Phase 2+: 富集线（C5-C9，hooks 待接入）
+  eliteEquipRateBonusPct: number;       // C5: 装备鉴赏 - 精英装备掉落率加成
+  hasChapterFirstSmithRefund: boolean;  // C6: 锻造余温 - 每章首次强化失败返还 50% 金币
+  normalMonsterGoldBonusPct: number;    // C7: 淘金路线 - 普通怪金币加成
+  hasChapterFirstSmithBonus: boolean;   // C8: 精炼手艺 - 每章首次强化成功额外 +1
+  hasBossEconomyChoice: boolean;        // C9: 命运宝库 - Boss 后三选一经济奖励
+
+  // Phase 2+: 灵脉线（D4-D9，hooks 待接入）
+  hasFirstStrengthenReroll: boolean;          // D4: 专注冥想 - 首次强化可免费重抽
+  hasReduceFullStackTraits: boolean;          // D5: 灵性筛选 - 满层词条在候选中降权
+  strengthenAnimaRefundPct: number;           // D6: 共振余波 - 强化后返还阈值比例灵气
+  animaMonsterAnimaBonusPct: number;          // D7: 灵气牵引 - 灵气怪灵气掉落加成
+  hasChapterFirstStrengthenAnimaBonus: boolean; // D8: 深层悟道 - 每章首次强化后赠灵气
+  hasFirstStrengthen4Choice: boolean;         // D9: 灵脉贯通 - 首次强化改为 4 选 1
+
+  // Phase 3+: 天命线（E4-E9，选择队列扩展待接入）
+  hasEquipChoiceUpgrade: boolean;   // E4: 星盘校准 - 馈赠装备升品为精良
+  hasChoiceReroll: boolean;         // E5: 命运偏转 - 首次命运树三选一可整组重抽
+  hasBossChoiceReward: boolean;     // E6: 星辉馈赠 - 每章 Boss 后构筑三选一
+  hasBossPreview: boolean;          // E7: 预兆感知 - 章节开始时显示 Boss 提示
+  scrollChoiceBonus: number;        // E8: 命轮余辉 - 首次卷轴候选数量加成
+  hasAdvancedChoiceReroll: boolean; // E9: 改命之刻 - 高阶重抽（重抽后品质提升）
 }
 
 /** 命运树「三选一」待选项（E2 装备 / E3 强化词条），由 startExpedition 生成，
@@ -186,6 +238,63 @@ export interface PendingTreeChoice {
   kind: 'EQUIP' | 'TRAIT';
   equipOptions?: EquipItem[];
   traitOptions?: string[];
+}
+
+export interface PveBalancePlayerConfig {
+  initialHp?: number;
+  initialGold?: number;
+  initialAnima?: number;
+  baseAttack?: number;
+  baseAttackRange?: number;
+  apBase?: number;
+  moveCost?: number;
+  attackCost?: number;
+  openChestCost?: number;
+  openExitCost?: number;
+  useIdolCost?: number;
+  useHotSpringCost?: number;
+  useAltarCost?: number;
+}
+
+export interface PveBalanceUnitConfig {
+  hpMultiplier?: number;
+  attackMultiplier?: number;
+  rangeDelta?: number;
+  aggroRadiusDelta?: number;
+  armorDelta?: number;
+}
+
+export interface PveBalanceEquipmentConfig {
+  weaponBaseMultiplier?: number;
+  armorBaseMultiplier?: number;
+  helmetBaseMultiplier?: number;
+  shoesBaseMultiplier?: number;
+  trinketBaseMultiplier?: number;
+}
+
+export interface PveBalanceRelicConfig {
+  chiefRoarDamageMultiplier?: number;
+  quicksandPitCount?: number;
+  quicksandPitDuration?: number;
+  quicksandAttackBonus?: number;
+  permafrostChargeSteps?: number;
+  permafrostFreezeRounds?: number;
+  magmaReflectPercent?: number;
+  fateEchoRevivePercent?: number;
+}
+
+export interface PveBalanceConfig {
+  player?: PveBalancePlayerConfig;
+  monster?: PveBalanceUnitConfig;
+  boss?: PveBalanceUnitConfig;
+  equipment?: PveBalanceEquipmentConfig;
+  relic?: PveBalanceRelicConfig;
+}
+
+export interface PveBalanceSnapshot {
+  globalConfig: PveBalanceConfig;
+  chapterConfigs: Record<string, PveBalanceConfig>;
+  unitConfigs: Record<string, PveBalanceConfig>;
 }
 
 // ── 楼层运行态（每层一份，可序列化存档） ───────────────
@@ -268,6 +377,37 @@ export interface FloorState {
   playerAttackedThisTurn?: boolean;
   /** 命运守卫行为镜像：玩家本回合的累计移动格数（MovementSystem.applyMove 自增，endTurn 重置）。 */
   playerStepsThisTurn?: number;
+  /** V2 general traits: floor/turn-scoped combat state. */
+  generalFirstAttackUsed?: boolean;
+  generalSetbackReady?: boolean;
+  generalTerrainPowerReady?: boolean;
+  generalStoredEdgeReady?: boolean;
+  generalOverhealAnimaThisFloor?: number;
+  generalReserveApReady?: boolean;
+  /** V2 class traits: shared deterministic runtime state. */
+  berserkerShield?: number;
+  berserkerBloodyChainReady?: boolean;
+  berserkerRageStacks?: number;
+  berserkerFinalChargeReady?: boolean;
+  berserkerRetaliationTargetId?: string;
+  archerMarkedMonsterId?: string;
+  archerAttackCount?: number;
+  archerNoMultiShotCount?: number;
+  archerCriticalReloadReady?: boolean;
+  archerHunterRhythmReady?: boolean;
+  rogueAttackCountThisTurn?: number;
+  rogueKillCountThisFloor?: number;
+  rogueEscapeMoveReady?: boolean;
+  rogueHidden?: boolean;
+  rogueChainBackstabReady?: boolean;
+  rogueVanishStrikeReady?: boolean;
+  rogueSmokeUsed?: boolean;
+  tutorialScenarioId?: string;
+  tutorialGuide?: {
+    currentStepId: string;
+    completedStepIds: string[];
+    dismissedStepIds?: string[];
+  };
 }
 
 // ── 远征总状态（存档根对象） ───────────────────────────
@@ -280,6 +420,10 @@ export interface ExpeditionState {
   status: ExpeditionStatus;
   player: RunPlayer;
   floorState: FloorState;
+  balanceSnapshot?: PveBalanceSnapshot | null;
+  /** 难度快照（开局冻结，续档不变，→ AC-P3-9）。缺省视为 NORMAL。 */
+  difficultySnapshot?: import('./PveConstants').DifficultySnapshot | null;
+  isTutorialRun?: boolean;
   /** 命运树「三选一」待选队列（E2/E3 解锁后产生，先进先出，UI 弹窗逐个处理）。 */
   pendingTreeChoices?: PendingTreeChoice[];
 }
@@ -290,7 +434,7 @@ export type PveEvent =
   | { type: 'REVEAL'; cells: Coord[] }
   | { type: 'ATTACK'; attackerId: string; targetId: string; damage: number; targetHp: number }
   | { type: 'KILL'; monsterId: string; monsterType: MonsterType }
-  | { type: 'LOOT'; gold?: number; anima?: number; equip?: EquipItem; fragmentPair?: AdvancableClass[]; source: string }
+  | { type: 'LOOT'; gold?: number; anima?: number; equip?: EquipItem; fragmentPair?: AdvancableClass[]; source: string; bagged?: boolean }
   /** 营地变卖装备（AC-19 装备整理）。 */
   | { type: 'SELL_EQUIP'; slot: EquipSlot; itemName: string; gold: number }
   | { type: 'PICK_KEY'; entityId: string }
@@ -521,4 +665,5 @@ export interface PveMeta {
   codex: PveCodex;
   /** 已解锁的命运树节点 id 列表（如 'A1'/'B2'/'E3'，见 PveConstants.DESTINY_TREE_NODES）。 */
   unlockedTreeNodes: string[];
+  tutorialCompleted?: boolean;
 }

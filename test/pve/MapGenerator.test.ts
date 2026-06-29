@@ -16,8 +16,8 @@ describe('MapGenerator — 楼层生成（AC-1, AC-8, AC-9）', () => {
     expect(floor.revealed[0].length).toBe(8);
   });
 
-  it('Boss 层（第 5 层）尺寸为 10×10，含钥匙×1 与 Boss×1，无出口门/宝箱/普通怪', () => {
-    const floor = generateFloor(5, 999);
+  it('Boss 层（第 7 层）尺寸为 10×10，含钥匙×1 与 Boss×1，无出口门/宝箱/普通怪', () => {
+    const floor = generateFloor(7, 999);
     expect(floor.size).toBe(10);
 
     const keys = floor.entities.filter((e) => e.type === 'KEY');
@@ -49,7 +49,7 @@ describe('MapGenerator — 楼层生成（AC-1, AC-8, AC-9）', () => {
     expect(exits.length).toBe(1);
     expect(chests.length).toBe(1);
     expect(idols.length).toBe(1);
-    expect(springs.length).toBe(1);
+    expect(springs.length).toBe(0); // 温泉仅在每章第 6 层生成（V3：Boss 前一层）
     expect(altars.length).toBe(1);
     expect(normals.length).toBe(3); // 章节1楼层1：哥布林战士×3（变体 GOBLIN_WARRIOR）
   });
@@ -123,8 +123,8 @@ describe('MapGenerator — 章节怪物缩放', () => {
     });
   });
 
-  it('第 2 章（第 6 层）普通层怪物 HP/攻击按 ×1.8 缩放', () => {
-    const floor = generateFloor(6, 100); // floor 6 = chapter 2, normal floor
+  it('第 2 章（第 8 层）普通层怪物 HP/攻击按 ×1.8 缩放', () => {
+    const floor = generateFloor(8, 100); // floor 8 = chapter 2, normal floor
     const { hpMult, attackMult } = chapterScaling(2);
     const normals = floor.monsters.filter((m) => m.type === 'NORMAL');
     expect(normals.length).toBeGreaterThan(0);
@@ -139,8 +139,8 @@ describe('MapGenerator — 章节怪物缩放', () => {
     });
   });
 
-  it('第 5 章（第 25 层）Boss HP/攻击按 bossChapterScaling 缩放', () => {
-    const floor = generateFloor(25, 100); // floor 25 = chapter 5, boss floor
+  it('第 5 章（第 35 层）Boss HP/攻击按 bossChapterScaling 缩放', () => {
+    const floor = generateFloor(35, 100); // floor 35 = chapter 5, boss floor
     const { hpMult, attackMult } = bossChapterScaling(5);
     const boss = floor.monsters.find((m) => m.type === 'BOSS');
     expect(boss).toBeDefined();
@@ -159,8 +159,8 @@ describe('MapGenerator — 章节怪物缩放', () => {
   });
 
   it('MONSTER_BASE 基础值不变（只在生成时应用倍率）', () => {
-    generateFloor(5, 1);
-    generateFloor(25, 1);
+    generateFloor(7, 1);
+    generateFloor(35, 1);
     expect(MONSTER_BASE.NORMAL.hp).toBe(40);
     expect(MONSTER_BASE.ELITE.hp).toBe(80);
     expect(MONSTER_BASE.BOSS.hp).toBe(300);

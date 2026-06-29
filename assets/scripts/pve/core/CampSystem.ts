@@ -6,7 +6,8 @@ import { unequipItem } from './EquipmentSystem';
 import { CHAPTER_BOSS_RELIC, RELIC_CHEST } from './PveConstants';
 import { pickupRelic, playerHasRelic } from './RelicSystem';
 import { createRng } from './rng';
-import type { ApplyResult, EquipQuality, EquipSlot, ExpeditionState, PveEvent, RelicId } from './PveTypes';
+import type { ApplyResult, EquipQuality, EquipSlot, ExpeditionState, PveEvent, RelicId, RunPlayer } from './PveTypes';
+import { payGoldWithTraits } from './strengthen/StrengthenEconomy';
 
 // ── 营地商店物品类型 ───────────────────────────────────
 
@@ -25,6 +26,19 @@ export const CAMP_SHOP_ITEMS: readonly CampShopEntry[] = [
   { id: 'BUFF_MAX_HP', name: '强化体魄', desc: '最大 HP 永久 +40', cost: 60 },
 ] as const;
 
+/** 应用命运树 C4 商路嗅觉后的营地价格；统一供界面展示与购买结算使用。 */
+export function campShopCost(player: RunPlayer, baseCost: number): number {
+  const discountPct = Math.max(0, Math.min(1, player.treeBonuses?.campShopDiscountPct ?? 0));
+  return Math.max(1, Math.ceil(baseCost * (1 - discountPct)));
+}
+
+export function getCampShopItems(player: RunPlayer): CampShopEntry[] {
+  return CAMP_SHOP_ITEMS.map((entry) => ({
+    ...entry,
+    cost: campShopCost(player, entry.cost),
+  }));
+}
+
 // ── 购买逻辑（纯函数） ────────────────────────────────
 
 /**
@@ -40,9 +54,11 @@ export function applyShopBuy(state: ExpeditionState, itemId: CampItemId): ApplyR
   if (!entry) return { state, events: [] };
 
   const { player } = state;
-  if (player.gold < entry.cost) return { state, events: [] };
+  const cost = campShopCost(player, entry.cost);
+  const paidPlayer = payGoldWithTraits(player, cost);
+  if (!paidPlayer) return { state, events: [] };
 
-  let nextPlayer = { ...player, gold: player.gold - entry.cost };
+  let nextPlayer = paidPlayer;
   let effect = '';
 
   switch (itemId) {
@@ -69,7 +85,7 @@ export function applyShopBuy(state: ExpeditionState, itemId: CampItemId): ApplyR
 
   return {
     state: { ...state, player: nextPlayer },
-    events: [{ type: 'SHOP_BUY', itemId, cost: entry.cost, effect }],
+    events: [{ type: 'SHOP_BUY', itemId, cost, effect }],
   };
 }
 
@@ -99,6 +115,31 @@ export function applySellEquip(state: ExpeditionState, slot: EquipSlot): ApplyRe
       player: { ...player, gold: player.gold + gold },
     },
     events: [{ type: 'SELL_EQUIP', slot, itemName: item.name, gold }],
+  };
+}
+
+/**
+ * 变卖背包装备：移除指定 itemId 的背包装备，按 SELL_PRICE 回收金币，产生 SELL_EQUIP 事件。
+ * No-op：背包为空 / 未找到目标物品时返回空事件列表。
+ */
+export function applySellBagEquip(state: ExpeditionState, itemId: string): ApplyResult {
+  const bag = state.player.bag ?? [];
+  const item = bag.find((entry) => entry.id === itemId);
+  if (!item) return { state, events: [] };
+
+  const gold = SELL_PRICE[item.quality];
+  const nextBag = bag.filter((entry) => entry.id !== itemId);
+
+  return {
+    state: {
+      ...state,
+      player: {
+        ...state.player,
+        gold: state.player.gold + gold,
+        bag: nextBag,
+      },
+    },
+    events: [{ type: 'SELL_EQUIP', slot: item.slot, itemName: item.name, gold }],
   };
 }
 
@@ -133,11 +174,12 @@ export function openRelicChest(state: ExpeditionState, currentDiamond: number): 
   const player = state.player;
   const relicId = CHAPTER_BOSS_RELIC[state.chapter] as RelicId | undefined;
   if (!relicId) return { state, events: [], diamondDelta: 0 };
-  if (player.gold < RELIC_CHEST.COST_GOLD) return { state, events: [], diamondDelta: 0 };
+  const paidPlayer = payGoldWithTraits(player, RELIC_CHEST.COST_GOLD);
+  if (!paidPlayer) return { state, events: [], diamondDelta: 0 };
   if (currentDiamond < RELIC_CHEST.COST_DIAMOND) return { state, events: [], diamondDelta: 0 };
 
   // 扣金币（钻石的扣减由 Controller 据 diamondDelta 处理）
-  let nextPlayer = { ...player, gold: player.gold - RELIC_CHEST.COST_GOLD };
+  let nextPlayer = paidPlayer;
   let diamondDelta = -RELIC_CHEST.COST_DIAMOND;
 
   // 掷骰

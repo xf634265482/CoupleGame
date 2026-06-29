@@ -19,6 +19,7 @@ import {
 } from './PveConstants';
 import { createRng } from './rng';
 import type { ApplyResult, EquipSlot, ExpeditionState, PveEvent } from './PveTypes';
+import { payGoldWithTraits } from './strengthen/StrengthenEconomy';
 
 function noop(state: ExpeditionState): ApplyResult {
   return { state, events: [] };
@@ -153,10 +154,8 @@ export function upgradeEquip(state: ExpeditionState, entityId: string, slot: Equ
   // 费用 = BASE × 步进 × (level+1)，品质越高每次强化值越大、费用也越高；命运树 C3 折扣后最低 1g
   const discount = state.player.treeBonuses?.blacksmithDiscount ?? 0;
   const cost = Math.max(1, BLACKSMITH_UPGRADE_COST * upgradeStep * (currentLevel + 1) - discount);
-  if (state.player.gold < cost) return noop(state);
-
-  // 消耗金币
-  const afterGold = { ...state.player, gold: state.player.gold - cost };
+  const afterGold = payGoldWithTraits(state.player, cost);
+  if (!afterGold) return noop(state);
 
   // 失败概率检定（+5 起生效，消耗 rngState 保证 AC-13 确定性）
   const failChance = currentLevel >= BLACKSMITH_FAIL_THRESHOLD
@@ -212,7 +211,8 @@ export function rerollEquipTrait(state: ExpeditionState, entityId: string, slot:
   const item = state.player.equipment[slot];
   if (!item) return noop(state);
   if (!REROLL_QUALITY_MIN.has(item.quality)) return noop(state); // 品质不足，无词条槽
-  if (state.player.gold < BLACKSMITH_REROLL_COST) return noop(state);
+  const paidPlayer = payGoldWithTraits(state.player, BLACKSMITH_REROLL_COST);
+  if (!paidPlayer) return noop(state);
 
   const rng = createRng(floor.rngState);
   const newTrait = rng.pick([...EQUIP_TRAIT_POOL]);
@@ -222,8 +222,7 @@ export function rerollEquipTrait(state: ExpeditionState, entityId: string, slot:
     state: {
       ...state,
       player: {
-        ...state.player,
-        gold: state.player.gold - BLACKSMITH_REROLL_COST,
+        ...paidPlayer,
         equipment: { ...state.player.equipment, [slot]: newItem },
       },
       floorState: { ...floor, rngState: rng.state() },

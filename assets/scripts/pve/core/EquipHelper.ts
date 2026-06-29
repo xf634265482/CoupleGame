@@ -47,3 +47,25 @@ export function equipItem(player: RunPlayer, newItem: EquipItem): RunPlayer {
 
   return { ...player, equipment, maxHp, hp };
 }
+
+/**
+ * 将装备放入背包（槽位已占时调用），不修改已装备的槽位。
+ */
+export function putInBag(player: RunPlayer, item: EquipItem): RunPlayer {
+  return { ...player, bag: [...(player.bag ?? []), item] };
+}
+
+/**
+ * 将背包中的装备装备到对应槽位，当前槽位有装备则移入背包。
+ * itemId 不存在时返回 null（无副作用）。
+ */
+export function equipFromBag(player: RunPlayer, itemId: string): RunPlayer | null {
+  const bag = player.bag ?? [];
+  const idx = bag.findIndex((i) => i.id === itemId);
+  if (idx === -1) return null;
+  const item = bag[idx];
+  const newBag = bag.filter((_, i) => i !== idx);
+  const currentInSlot = player.equipment[item.slot];
+  const finalBag = currentInSlot ? [...newBag, currentInSlot] : newBag;
+  return equipItem({ ...player, bag: finalBag }, item);
+}

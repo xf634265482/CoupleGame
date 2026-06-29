@@ -34,12 +34,18 @@ const TITLE_H = 30;
 /** 判断"是否已滚到底部"的容差像素，浮点误差用。 */
 const SCROLL_EPS = 4;
 
+/** 单层最大保留条目数：超过则丢最早。防止 layout 成本随回合数线性增长。 */
+const MAX_ENTRIES = 200;
+
 /** 战报视图：固定大小面板，内部为可滚动列表，append-only 显示本层全部回合记录。 */
 export class PveMessageLog {
   private _root: Node;
   private _content: Node;
   private _scrollView: ScrollView;
   private _lastTurn = -1;
+  /** 合批 flush 状态：同一帧内多次 push 只触发一次 layout + scroll，消除 N×O(N) 重排。 */
+  private _flushScheduled = false;
+  private _pendingScrollBottom = false;
 
   constructor(parent: Node, x: number, y: number, w: number = 240, h: number = 320) {
     this._root = new Node('PveMessageLog');
@@ -116,12 +122,29 @@ export class PveMessageLog {
     lbl.overflow = Label.Overflow.RESIZE_HEIGHT;
     lbl.enableWrapText = true;
     lbl.string = str;
-    lbl.updateRenderData(true);
+    // 不再调用 lbl.updateRenderData(true)：强制同步渲染对中文字形栅格化开销很大，
+    // 让 Label 在下一帧 render phase 自然刷新即可，玩家肉眼无感。
 
-    // 立即重排，使 ScrollView 的滚动范围马上反映新内容（避免下一帧才生效）
+    // 同层条目超过上限时砍掉最早的，保证 layout 成本不随回合数线性增长。
+    while (this._content.children.length > MAX_ENTRIES) {
+      this._content.children[0].destroy();
+    }
+
+    if (wasAtBottom) this._pendingScrollBottom = true;
+
+    // 合批：同一帧多次 push 只在 microtask 末尾跑一次 updateLayout + scrollToBottom。
+    // 回合结束时 N 个事件依次 push → 原本 N 次 O(N) layout，合批后仅 1 次。
+    if (!this._flushScheduled) {
+      this._flushScheduled = true;
+      setTimeout(() => this._flush(), 0);
+    }
+  }
+
+  private _flush(): void {
+    this._flushScheduled = false;
     this._content.getComponent(Layout)?.updateLayout();
-
-    if (wasAtBottom) {
+    if (this._pendingScrollBottom) {
+      this._pendingScrollBottom = false;
       this._scrollView.scrollToBottom(0);
     }
   }

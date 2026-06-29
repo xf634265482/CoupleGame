@@ -87,29 +87,30 @@ describe('PveValidate', () => {
 
 describe('PveReward — 结算奖励纯服务端计算（design §2.1 / AC-14）', () => {
   describe('isBossFloor / countClearedBossFloors', () => {
-    it('每章第 5 层为 Boss 层', () => {
-      expect(isBossFloor(5)).toBe(true);
-      expect(isBossFloor(10)).toBe(true);
-      expect(isBossFloor(25)).toBe(true);
+    it('每章第 7 层为 Boss 层（V3：FLOORS_PER_CHAPTER=7）', () => {
+      expect(isBossFloor(7)).toBe(true);
+      expect(isBossFloor(14)).toBe(true);
+      expect(isBossFloor(35)).toBe(true);
       expect(isBossFloor(1)).toBe(false);
-      expect(isBossFloor(4)).toBe(false);
+      expect(isBossFloor(6)).toBe(false);
     });
 
     it('已通关层数中的 Boss 层数量按整除章节层数计算', () => {
       expect(countClearedBossFloors(0)).toBe(0);
-      expect(countClearedBossFloors(4)).toBe(0);
-      expect(countClearedBossFloors(5)).toBe(1);
-      expect(countClearedBossFloors(9)).toBe(1);
-      expect(countClearedBossFloors(25)).toBe(5);
+      expect(countClearedBossFloors(6)).toBe(0);
+      expect(countClearedBossFloors(7)).toBe(1);
+      expect(countClearedBossFloors(13)).toBe(1);
+      expect(countClearedBossFloors(35)).toBe(5);
     });
   });
 
   describe('computeSettleReward — 死亡 vs 通关的已通关层数边界', () => {
     it('死亡时只计已通过的层数（finalFloor - 1），不计当前未完成层', () => {
-      const reward = computeSettleReward(6, 'DEAD');
-      expect(reward.floorsCleared).toBe(5);
-      expect(reward.diamond).toBe(5 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR + 1 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR);
-      expect(reward.destinyShards).toBe(5 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR + 1 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR);
+      // 在第 8 层死亡 → 已通关 7 层（含第 7 层 Boss）
+      const reward = computeSettleReward(8, 'DEAD');
+      expect(reward.floorsCleared).toBe(7);
+      expect(reward.diamond).toBe(7 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR + 1 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR);
+      expect(reward.destinyShards).toBe(7 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR + 1 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR);
     });
 
     it('在第 1 层死亡时已通关层数下界为 0，不产生负值', () => {
@@ -120,10 +121,11 @@ describe('PveReward — 结算奖励纯服务端计算（design §2.1 / AC-14）
     });
 
     it('通关时当前层也计入已通关层数', () => {
-      const reward = computeSettleReward(25, 'COMPLETED');
-      expect(reward.floorsCleared).toBe(25);
-      expect(reward.diamond).toBe(25 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR + 5 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR);
-      expect(reward.destinyShards).toBe(25 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR + 5 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR);
+      // 全通 35 层（V3 总层数）→ 5 个 Boss 层（7/14/21/28/35）
+      const reward = computeSettleReward(35, 'COMPLETED');
+      expect(reward.floorsCleared).toBe(35);
+      expect(reward.diamond).toBe(35 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR + 5 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR);
+      expect(reward.destinyShards).toBe(35 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR + 5 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR);
     });
 
     it('奖励完全由层数纯计算得出，与上报的奖励数值无关（服务端权威 → AC-14）', () => {
@@ -166,5 +168,10 @@ describe('PveDestinyTree — canUnlockNode 服务端权威校验（specs/260610-
 
   it('首节点（order 1）碎片足够时可直接解锁，无需前置', () => {
     expect(canUnlockNode(makeMeta(), 'A1')).toBe(true);
+  });
+
+  it('富集 C1-C3 已解锁后，C4 商路嗅觉可解锁', () => {
+    const meta = makeMeta({ destinyShards: 60, unlockedTreeNodes: ['C1', 'C2', 'C3'] });
+    expect(canUnlockNode(meta, 'C4')).toBe(true);
   });
 });

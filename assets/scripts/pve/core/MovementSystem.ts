@@ -10,6 +10,7 @@ import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, CHAPTER4_LAVA_TILE_DAMAGE, FOG
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
 import { relicOnMoveStep } from './RelicSystem';
 import { bossSandImmune } from './BossEquipTraitEffects';
+import { getBalancedActionCost } from './PveBalance';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, PveEvent } from './PveTypes';
 
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
@@ -82,7 +83,7 @@ export function targetOf(from: Coord, dir: Direction): Coord {
 /**
  * 玩家向 dir 方向移动一格：
  * - 校验目标格在地图内、AP 足够、目标格未被存活怪物占据，否则原样返回（no-op，不消耗 AP）。
- * - 成功则更新玩家位置、扣减 AP（swift 词条时为 1，否则 AP_COST.MOVE=2）、揭示新视野，
+ * - 成功则更新玩家位置、扣减 AP（swift 词条时为 1，否则取当前 run 的 MOVE AP 配置）、揭示新视野，
  *   产生 MOVE 事件（及有新揭示格时的 REVEAL 事件）。
  * - backstab 词条：移动成功后将 floorState.backstabAvailable 置 true。
  */
@@ -113,7 +114,8 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   // RARE+(baseStat≥3)：每回合首次移动免费（0 AP）
   const firstMoveFree = shoesBaseStat >= SHOES_FIRST_MOVE_THRESHOLD && !(floor.shoesFirstMoveDone ?? false);
   const shoesReduction = shoesBaseStat;
-  const baseCost = traits.includes('swift') ? 1 : AP_COST.MOVE; // ROGUE 疾步优先
+  const configuredMoveCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'MOVE');
+  const baseCost = traits.includes('swift') ? 1 : configuredMoveCost; // ROGUE 疾步优先
   // 冰霜/AOE 减速：移动AP+1（>0时叠加）
   const slowPenalty = (floor.playerMoveApPenaltyRounds ?? 0) > 0 ? 1 : 0;
   // 第2章 Boss 房沙坑：踩入格是沙坑时移动 AP+CHAPTER2_SAND_PIT_MOVE_PENALTY（首步免费时不收）
@@ -122,9 +124,10 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   );
   // Boss 装备 trait: boss_sand_immune（流沙护腿）→ 沙坑 AP 惩罚归零
   const sandPitPenalty = sandPitEntity && !bossSandImmune(state.player.equipment) ? CHAPTER2_SAND_PIT_MOVE_PENALTY : 0;
+  const escapeReduction = floor.rogueEscapeMoveReady && traits.includes('shockwave') ? 1 : 0;
   const cost = firstMoveFree
     ? 0
-    : Math.max(1, baseCost + slowPenalty + sandPitPenalty - shoesReduction); // SHOES 减免，最低 1 AP
+    : Math.max(0, baseCost + slowPenalty + sandPitPenalty - shoesReduction - escapeReduction);
 
   if (floor.ap < cost) return noop(state);
   if (isBlockedByMonster(floor, to)) return noop(state);
@@ -168,6 +171,8 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
     ...(firstMoveFree ? { shoesFirstMoveDone: true } : {}),
     // 命运守卫行为镜像：累计本回合移动步数（endTurn 时供 recordPlayerActionForMirror 读取）
     playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
+    rogueEscapeMoveReady: false,
+    ...(sandPitEntity || shatteredIce || lavaTile ? { generalTerrainPowerReady: true } : {}),
   };
 
   const events: PveEvent[] = [
@@ -190,7 +195,7 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
 
   // 遗物：永冻之核 — 每移动 3 步标记下次普攻冰冻
   // 滑行整体仅算一步（沿用现有 AP 模型：滑行收 1 次移动费），与玩家直观一致。
-  const relicMove = relicOnMoveStep(state.player);
+  const relicMove = relicOnMoveStep(state.player, state.balanceSnapshot, state.chapter);
   events.push(...relicMove.events);
 
   return {

@@ -13,7 +13,7 @@ export const FX_DURATION = {
   bounce: 0.50,
   pop: 0.35,
   float: 0.80,
-  flash: 0.15,
+  flash: 0.30,
   hit: 0.25,
   flyTo: 0.40,
   jumpTo: 0.30,
@@ -32,10 +32,10 @@ export const FX_DURATION = {
 export const FX_MAGNITUDE = {
   /** shake/cameraShake：最大位移（px）。 */
   shake: 8,
-  cameraShake: 10,
+  cameraShake: 22,
   /** punch：缩放过冲量（+0.20 → 1.20 倍）。 */
   punch: 0.20,
-  cameraPunch: 0.03,
+  cameraPunch: 0.06,
   /** bounce：上跳高度（px）。 */
   bounceRise: 20,
   /** pop：起始放大量（0→1.15→1）。 */
@@ -48,7 +48,7 @@ export const FX_MAGNITUDE = {
   flyToArc: 60,
   jumpToArc: 30,
   /** damageNumber/healNumber：上飘距离（px）。 */
-  numberRise: 50,
+  numberRise: 90,
   /** shake 的抖动周期数。 */
   shakeFreq: 8,
 } as const;

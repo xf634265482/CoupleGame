@@ -11,6 +11,7 @@ import {
 import { topSafeBoundaryY } from '../../platform/wechat/ViewAdapt';
 import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
 import { applySpriteInsideFixedBox } from '../../ui/UiSprite';
+import { playSfx, SFX_IDS } from '../../audio/AudioManager';
 import { playerAttackPower } from '../core/CombatSystem';
 import type { Direction } from '../core/MovementSystem';
 import type { ExpeditionState, Monster } from '../core/PveTypes';
@@ -24,6 +25,7 @@ export type PveHudCallbacks = {
   onQuit?: () => void;
   onShowCharacter?: () => void;
   onUseScroll?: () => void;
+  onOpenBag?: () => void;
 };
 
 const WHITE = new Color(246, 250, 255, 255);
@@ -35,6 +37,12 @@ const PANEL_LIGHT = new Color(16, 57, 98, 245);
 const PANEL_BORDER = new Color(84, 200, 239, 240);
 const HP_COLOR = new Color(230, 82, 100, 255);
 const AP_COLOR = new Color(72, 174, 229, 255);
+const TYPE_BADGE_BLUE_FILL = new Color(20, 72, 120, 228);
+const TYPE_BADGE_BLUE_BORDER = new Color(126, 203, 242, 255);
+const TYPE_BADGE_BLUE_TEXT = new Color(232, 246, 255, 255);
+const TYPE_BADGE_RED_FILL = new Color(110, 28, 28, 230);
+const TYPE_BADGE_RED_BORDER = new Color(255, 196, 92, 255);
+const TYPE_BADGE_RED_TEXT = new Color(255, 236, 188, 255);
 
 const DPAD_SIZE = 84;
 const DPAD_GAP = 6;
@@ -189,22 +197,30 @@ function addButton(
   button.transition = Button.Transition.SCALE;
   button.zoomScale = 0.94;
   button.target = node;
-  node.on(Button.EventType.CLICK, onClick, node);
+  node.on(Button.EventType.CLICK, () => {
+    playSfx(SFX_IDS.UI_CLICK);
+    onClick();
+  }, node);
   return node;
 }
 
 export class PveHudView {
   private _root: Node;
   private _floorLabel: Label;
+  private _bossBadge: Node;
+  private _bossBadgeLabel: Label;
   private _shardsLabel: Label;
   private _goldLabel: Label;
   private _animaLabel: Label;
   private _keyBadge: Node;
-  private _keyLabel: Label;
 
   private _targetPortrait: Node;
   private _targetName: Label;
   private _targetType: Label;
+  private _targetTypeBadge: Node;
+  private _targetTypeBadgeG: Graphics;
+  private _targetTypeBadgeLabel: Label;
+  private _targetAttack: Label;
   private _targetHpG: Graphics;
   private _targetHpLabel: Label;
   private _targetBarW = 190;
@@ -238,20 +254,38 @@ export class PveHudView {
     const resourceW = outerW - gap - targetW;
     const left = -screenW / 2 + 20;
 
-    const runW = 408;
+    const runW = 470;
     const chapterW = 278;
-    const shardW = runW - chapterW - 10;
+    const bossBadgeW = 92;
+    const shardW = runW - chapterW - bossBadgeW - 20;
     const runLeft = left;
     const chapterPanel = addPanel(this._root, 'RunInfo', runLeft + chapterW / 2, runY, chapterW, 48);
+    const bossPanelX = runLeft + chapterW + 10 + bossBadgeW / 2;
+    const bossPanel = new Node('BossBadgePanel');
+    bossPanel.setParent(this._root);
+    bossPanel.layer = Layers.Enum.UI_2D;
+    bossPanel.setPosition(bossPanelX, runY, 0);
+    bossPanel.addComponent(UITransform).setContentSize(bossBadgeW, 48);
+    const bossPanelG = bossPanel.addComponent(Graphics);
+    bossPanelG.fillColor = new Color(110, 28, 28, 230);
+    bossPanelG.roundRect(-bossBadgeW / 2, -24, bossBadgeW, 48, 14);
+    bossPanelG.fill();
+    bossPanelG.strokeColor = new Color(255, 196, 92, 255);
+    bossPanelG.lineWidth = 2;
+    bossPanelG.roundRect(-bossBadgeW / 2 + 1, -23, bossBadgeW - 2, 46, 13);
+    bossPanelG.stroke();
     const shardPanel = addPanel(
       this._root,
       'ShardInfo',
-      runLeft + chapterW + 10 + shardW / 2,
+      runLeft + chapterW + 20 + bossBadgeW + shardW / 2,
       runY,
       shardW,
       48,
     );
     this._floorLabel = addText(chapterPanel, '加载中…', 0, 0, chapterW - 18, 44, 22, WHITE);
+    this._bossBadge = bossPanel;
+    this._bossBadgeLabel = addText(this._bossBadge, '首领回合', 0, 0, bossBadgeW - 10, 36, 18, new Color(255, 236, 188, 255));
+    this._bossBadge.active = false;
     this._shardsLabel = addText(shardPanel, '碎片 0', 0, 0, shardW - 12, 44, 21, CYAN);
 
     const targetPanel = addPanel(
@@ -271,30 +305,61 @@ export class PveHudView {
     this._targetName = addText(
       targetPanel,
       '附近暂无敌人',
-      40,
+      32,
       28,
-      targetW - 130,
+      targetW - 220,
       30,
       24,
       GOLD,
       Label.HorizontalAlign.LEFT,
     );
+    this._targetTypeBadge = new Node('MonsterTypeBadge');
+    this._targetTypeBadge.setParent(targetPanel);
+    this._targetTypeBadge.layer = Layers.Enum.UI_2D;
+    this._targetTypeBadge.setPosition(targetW / 2 - 64, 29, 0);
+    this._targetTypeBadge.addComponent(UITransform).setContentSize(92, 34);
+    this._targetTypeBadgeG = this._targetTypeBadge.addComponent(Graphics);
+    this._targetTypeBadgeLabel = addText(
+      this._targetTypeBadge,
+      '',
+      0,
+      0,
+      76,
+      28,
+      18,
+      TYPE_BADGE_BLUE_TEXT,
+      Label.HorizontalAlign.CENTER,
+      true,
+    );
+    this._targetTypeBadge.active = false;
     this._targetType = addText(
       targetPanel,
       '继续探索迷雾',
-      40,
-      1,
-      targetW - 130,
-      24,
-      19,
+      32,
+      -8,
+      targetW - 220,
+      44,
+      18,
       MUTED,
       Label.HorizontalAlign.LEFT,
       false,
     );
+    this._targetAttack = addText(
+      targetPanel,
+      '',
+      32,
+      -19,
+      targetW - 220,
+      24,
+      18,
+      GOLD,
+      Label.HorizontalAlign.LEFT,
+      true,
+    );
     const targetBar = new Node('MonsterHpBar');
     targetBar.setParent(targetPanel);
     targetBar.layer = Layers.Enum.UI_2D;
-    targetBar.setPosition(40, -31, 0);
+    targetBar.setPosition(40, -38, 0);
     this._targetBarW = targetW - 150;
     targetBar.addComponent(UITransform).setContentSize(this._targetBarW, 22);
     this._targetHpG = targetBar.addComponent(Graphics);
@@ -308,17 +373,31 @@ export class PveHudView {
       resourceW,
       112,
     );
-    // 右侧预留 keyBadge 区，灵气/金币挤到左侧，避免徽章压住 "灵气 xx/100"。
-    const keyBadgeW = 64;
-    const keyBadgeH = 30;
-    const keyReserve = keyBadgeW + 16;
+    // 右侧预留 keyBadge 区（用地图同款钥匙图标缩小显示）。
+    const keyBadgeSize = 48;
+    const keyReserve = keyBadgeSize + 16;
     const labelW = resourceW - keyReserve - 16;
     const labelX = -(keyReserve) / 2;
     this._animaLabel = addText(resourcePanel, '灵气 0 / 100', labelX, 25, labelW, 38, 21, new Color(215, 190, 255, 255));
     this._goldLabel = addText(resourcePanel, '金币 0', labelX, -25, labelW, 38, 22, GOLD);
-    this._keyBadge = addPanel(resourcePanel, 'KeyBadge', resourceW / 2 - keyBadgeW / 2 - 10, 0, keyBadgeW, keyBadgeH);
-    this._keyLabel = addText(this._keyBadge, '钥匙', 0, 0, keyBadgeW - 8, keyBadgeH - 4, 17, GOLD);
+
+    // 钥匙图标节点：用 pve/map/icon_key（地图同款），异步加载后填入 Sprite
+    this._keyBadge = new Node('KeyBadge');
+    this._keyBadge.setParent(resourcePanel);
+    this._keyBadge.layer = Layers.Enum.UI_2D;
+    this._keyBadge.setPosition(resourceW / 2 - keyBadgeSize / 2 - 10, 0, 0);
+    this._keyBadge.addComponent(UITransform).setContentSize(keyBadgeSize, keyBadgeSize);
+    this._keyBadge.addComponent(Sprite);
     this._keyBadge.active = false;
+    const cachedKey = getCachedSprite('pve/map/icon_key');
+    if (cachedKey) {
+      applySpriteInsideFixedBox(this._keyBadge, cachedKey, keyBadgeSize, keyBadgeSize);
+    } else {
+      void loadUiSprite('pve/map/icon_key').then((frame) => {
+        if (!frame || !this._keyBadge.isValid) return;
+        applySpriteInsideFixedBox(this._keyBadge, frame, keyBadgeSize, keyBadgeSize);
+      });
+    }
 
     const infoW = screenW - 40;
     const infoGap = 12;
@@ -350,7 +429,7 @@ export class PveHudView {
     const attackBox = addPanel(playerPanel, 'AttackBox', playerW / 2 - 35, -5, 58, 92);
     addText(attackBox, '攻击', 0, 28, 52, 22, 17, MUTED);
     this._attackLabel = addText(attackBox, '0', 0, 0, 52, 30, 24, GOLD);
-    this._attackRangeLabel = addText(attackBox, '射程 1', 0, -28, 54, 22, 15, MUTED);
+    this._attackRangeLabel = addText(attackBox, '范围 1', 0, -28, 54, 22, 15, MUTED);
     this._statusLabel = addText(playerPanel, '', -12, -47, playerW - 74, 20, 17, GOLD);
 
     this._buildControls(callbacks, screenW, screenH);
@@ -385,6 +464,20 @@ export class PveHudView {
         new Color(29, 67, 102, 170),
         new Color(226, 197, 100, 240),
         () => callbacks.onShowCharacter?.(),
+      );
+    }
+    if (callbacks.onOpenBag) {
+      // 背包按钮：放在"返回"右侧，尺寸与返回/角色按钮保持一致 104×54
+      addButton(
+        this._root,
+        '背包',
+        leftX + 116,
+        controlY + 35,
+        104,
+        54,
+        new Color(40, 70, 45, 170),
+        new Color(120, 210, 130, 240),
+        () => callbacks.onOpenBag?.(),
       );
     }
 
@@ -500,8 +593,10 @@ export class PveHudView {
   private _refreshTarget(state: ExpeditionState): void {
     const target = this._pickVisibleTarget(state);
     if (!target) {
+      this._targetTypeBadge.active = false;
       this._targetName.string = '附近暂无敌人';
       this._targetType.string = '继续探索迷雾';
+      this._targetAttack.string = '';
       this._targetHpLabel.string = '';
       this._targetPortrait.active = false;
       this._drawBar(this._targetHpG, this._targetBarW, 22, 0, HP_COLOR);
@@ -509,7 +604,11 @@ export class PveHudView {
     }
 
     this._targetName.string = monsterName(target);
-    this._targetType.string = `${MONSTER_TYPE_NAMES[target.type] ?? target.type} · 当前目标`;
+    this._targetTypeBadge.active = true;
+    this._targetTypeBadgeLabel.string = `${MONSTER_TYPE_NAMES[target.type] ?? target.type}`;
+    this._drawTypeBadge(target.type);
+    this._targetType.string = `攻击 ${target.attack} · 范围 ${target.range} · 当前目标`;
+    this._targetAttack.string = '';
     this._targetHpLabel.string = `${target.hp} / ${target.maxHp}`;
     this._drawBar(
       this._targetHpG,
@@ -534,14 +633,36 @@ export class PveHudView {
     });
   }
 
+  private _drawTypeBadge(type: Monster['type']): void {
+    const fill = type === 'BOSS' ? TYPE_BADGE_RED_FILL : TYPE_BADGE_BLUE_FILL;
+    const border = type === 'BOSS' ? TYPE_BADGE_RED_BORDER : TYPE_BADGE_BLUE_BORDER;
+    const text = type === 'BOSS' ? TYPE_BADGE_RED_TEXT : TYPE_BADGE_BLUE_TEXT;
+    const width = Math.max(74, this._targetTypeBadgeLabel.string.length * 18 + 28);
+    const height = 34;
+    this._targetTypeBadge.getComponent(UITransform)?.setContentSize(width, height);
+    this._targetTypeBadgeG.clear();
+    this._targetTypeBadgeG.fillColor = fill;
+    this._targetTypeBadgeG.roundRect(-width / 2, -height / 2, width, height, 12);
+    this._targetTypeBadgeG.fill();
+    this._targetTypeBadgeG.strokeColor = border;
+    this._targetTypeBadgeG.lineWidth = 2;
+    this._targetTypeBadgeG.roundRect(-width / 2 + 1, -height / 2 + 1, width - 2, height - 2, 11);
+    this._targetTypeBadgeG.stroke();
+    this._targetTypeBadgeLabel.color = text;
+    this._targetTypeBadgeLabel.isBold = true;
+  }
+
   refresh(state: ExpeditionState): void {
     const { player, floorState, chapter, floor } = state;
+    const bossFloor = floor % 5 === 0;
     this._floorLabel.string = `第${chapter}章 · 第${floor}层 · 回合${floorState.turn}`;
+    this._floorLabel.color = bossFloor ? GOLD : WHITE;
+    this._bossBadge.active = bossFloor;
+    this._bossBadgeLabel.string = bossFloor ? '首领回合' : '';
     this._shardsLabel.string = `碎片 ${this._destinyShards}`;
     this._goldLabel.string = `金币 ${player.gold}`;
     this._animaLabel.string = `灵气 ${player.animaProgress}/${player.animaThreshold ?? 100}`;
     this._keyBadge.active = floorState.hasKey;
-    this._keyLabel.string = '钥匙';
 
     const hpBarW = this._hpG.node.getComponent(UITransform)?.width ?? 160;
     const apBarW = this._apG.node.getComponent(UITransform)?.width ?? 160;
@@ -551,7 +672,7 @@ export class PveHudView {
     this._apLabel.string = `AP ${floorState.ap} / ${floorState.maxAp}`;
     const atk = playerAttackPower(player);
     this._attackLabel.string = `${atk.damage}`;
-    this._attackRangeLabel.string = `射程 ${atk.range}`;
+    this._attackRangeLabel.string = `范围 ${atk.range}`;
 
     const statuses: string[] = [];
     if ((floorState.playerBurnRemaining ?? 0) > 0) statuses.push(`燃烧 ${floorState.playerBurnRemaining}`);

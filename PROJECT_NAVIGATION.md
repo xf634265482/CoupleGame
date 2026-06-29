@@ -1,4 +1,6 @@
 # PROJECT_NAVIGATION.md
+> 2026-06-19 PVE-only 发布入口：`assets/scripts/lobby/PveLobbyController.ts`。
+> 完整 PVP 大厅保存在 `assets/scenes/lobby_pvp.scene`，当前不进入微信构建。
 > 代码导航索引。排查 Bug / 实现新功能时，**先查本文定位入口，再开文件**，避免盲目全局搜索。
 > 更新规则：改动涉及新系统或重命名文件时，同步更新本文。
 
@@ -184,13 +186,13 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 
 ### 07 命运树系统
 
-**职责**：元进度成长树（5列3节点）；解锁条件校验；效果快照注入远征；树重置。
+**职责**：元进度成长树（5 分支 × 9 节点，按已接入效果分阶段开放）；解锁条件校验；效果快照注入远征；树重置。
 
 | 文件 | 说明 |
 |------|------|
 | `assets/scripts/pve/core/DestinyTreeSystem.ts` | **客户端逻辑入口** — `canUnlockNode()` / `unlockNode()` / `getTreeBonuses()` / `buildPendingTreeChoices()` |
-| `assets/scripts/pve/controllers/DestinyTreeController.ts` | **UI 编排** — 拉取元进度 → 渲染 → 解锁请求 → 云端校验 |
-| `assets/scripts/pve/views/DestinyTreeView.ts` | **渲染层** — 5行3列布局、三态着色 |
+| `assets/scripts/pve/controllers/DestinyTreeController.ts` | **???????** ? ????????????????????? `assets/scripts/lobby/PveLobbyController.ts` ?? |
+| `assets/scripts/pve/views/DestinyTreeView.ts` | **渲染层** — 5 分支 × 9 节点布局、三态着色与锁定原因反馈 |
 | `assets/scripts/pve/core/PveConstants.ts` | `DESTINY_TREE_NODES` 各节点解锁成本 |
 | `cloudfunctions/common/pve/PveMeta.js` | **云端权威** — `unlockTreeNode()` / `resetTreeNodes()` |
 
@@ -280,10 +282,30 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 | `assets/scripts/pve/views/PveCharacterPanel.ts` | **角色面板弹窗** — 职业/HP/攻击/装备/词条/碎片/成就/图鉴 |
 | `assets/scripts/pve/views/PveMessageLog.ts` | **战报消息栏** — 按事件类型上色，可滚动 |
 | `assets/scripts/pve/views/PveToastView.ts` | **Toast + 强化 3 选 1 弹窗** |
-| `assets/scripts/pve/views/DestinyTreeView.ts` | **命运树 UI** — 5行3列节点、三态着色 |
+| `assets/scripts/pve/views/DestinyTreeView.ts` | **命运树 UI** — 5 分支 × 9 节点、三态着色与锁定原因反馈 |
 | `assets/scripts/pve/views/pveUiKit.ts` | 按钮/标签工厂工具函数 |
 
 **推荐入口**：HUD 刷新 Bug → `PveHudView.ts` → `refresh(state)`；强化弹窗 → `PveToastView.ts`。
+
+> 2026-06-22 命运远征战场视觉/布局后续修复，先读
+> `specs/260608-pve-destiny-expedition/claude-code-handoff-2026-06-22.md`。
+> 该文档记录 A V4 不可破坏布局、透明棋盘修正、固定视口和方向键验收规则。
+
+---
+
+### 12c 章节资源加载系统
+
+**职责**：按章节加载战场背景，解决主包 4MB 红线 + 真机分包 native 不可读的矛盾。第1章背景在主包；第2-5章背景配成独立 Cocos Asset Bundle（微信分包 `chapter_N`），进章前先确保 bundle 下载注册，再 `bundle.load` 背景 SpriteFrame；失败回大厅。
+
+| 文件 | 说明 |
+|------|------|
+| `assets/scripts/pve/ChapterResourceLoader.ts` | **入口** — `ensureChapterBundle()` / `loadChapterBackground()` / `preloadChapter()` / `isChapterReady()`；`MIGRATED_CHAPTERS` 控制哪些章已切到独立分包（其余走 UiAssets 旧路径兜底） |
+| `assets/scripts/pve/controllers/ExpeditionController.ts` | `_ensureChapterReady()`（切章 gating + loading 遮罩 + 失败回大厅）；`_handleFloorCleared` Boss 层 `preloadChapter(next)` |
+| `assets/scripts/pve/views/FogMapView.ts` | `_applyChapterBackground()` 经 ChapterResourceLoader 取背景；`setChapterBackground()` 注入 |
+| `assets/chapter_backgrounds/chapter_N/` | 各章背景独立 bundle（`.meta` 配 `isBundle`+`compressionType.wechatgame:subpackage`） |
+| `scripts/patch-wechatgame-config.js` | `chapterSubpackageNames()` / `ensureChapterSubpackageStubs()`；在 game.json/settings/application override 注册 chapter 分包 |
+
+> ⚠️ **分阶段铺开**：先只迁 chapter_2 打通真机（`bundle.load` 分包 native 在真机能否读是关键门），验证通过再加 3/4/5 到 `MIGRATED_CHAPTERS` 并建对应 bundle。背景加载策略见 `specs/260608-pve-destiny-expedition/design.md`，真机分包细则见 `.cursor/rules/cocos-wechatgame-subpackage.mdc`。
 
 ---
 
@@ -340,14 +362,16 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 
 | 文件 | 说明 |
 |------|------|
-| `assets/scripts/core/GameApp.ts` | **启动入口** — `onLoad()` 里的完整启动序列 |
+| `assets/scripts/core/GameApp.ts` | **启动入口** — `onLoad()` 里的完整启动序列（含协议检查） |
 | `assets/scripts/core/GameSession.ts` | 当前登录用户信息（uid / openid / 昵称）|
 | `assets/scripts/core/SceneLoader.ts` | 场景切换（封装 `director.loadScene`）|
 | `assets/scripts/core/EventBus.ts` | 框架级全局事件派发（非 PVE 事件数组）|
 | `assets/scripts/core/Constants.ts` | 全局常量（`PERF_TRACE_ENABLED` 等）|
 | `assets/scripts/lobby/LobbyController.ts` | 大厅主控 — 房间列表 / 创建加入 / PVE 入口 |
+| `assets/scripts/platform/PlayerAgreement.ts` | 协议版本存储 — `isAgreementNeeded()` / `saveAgreement()` |
+| `assets/scripts/ui/AgreementScreen.ts` | 玩家须知弹窗 UI — Q版风格，含三份协议文档和勾选框 |
 
-**推荐入口**：启动流程 → `GameApp.ts`；场景跳转 → `SceneLoader.ts`；大厅功能 → `LobbyController.ts`。
+**推荐入口**：启动流程 → `GameApp.ts`；场景跳转 → `SceneLoader.ts`；大厅功能 → `LobbyController.ts`；协议弹窗 → `AgreementScreen.ts`。
 
 ---
 
@@ -386,20 +410,25 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 
 ### 18 音频系统
 
-**职责**：背景音乐播放/停止；微信原生音频适配。
+**职责**：背景音乐播放/停止；SFX 统一播放（白名单/池化/节流/音量持久化）；微信原生音频适配。
 
 | 文件 | 说明 |
 |------|------|
-| `assets/scripts/audio/BgmController.ts` | **入口** — `playMainBgm()` / `stopMainBgm()` / `getBgmController()` |
+| `assets/scripts/audio/BgmController.ts` | **BGM 入口** — `playMainBgm()` / `stopMainBgm()` / `getBgmController()` |
+| `assets/scripts/audio/AudioManager.ts` | **SFX 入口** — `playSfx(id)` / `SFX_IDS` / `setSfxMuted` / `setSfxVolume`；资源走 `resources/audio/sfx/{ui,battle,explore}/` |
 | `assets/scripts/platform/wechat/WxAudio.ts` | 微信原生音频 API 封装 |
 
-**推荐入口**：BGM 播放异常 → `BgmController.ts` → `WxAudio.ts`。
+**推荐入口**：BGM 播放异常 → `BgmController.ts` → `WxAudio.ts`；SFX 不响 → `AudioManager.ts`（先看 `_warned` 控制台、是否 muted、是否被 50ms 节流）。
+
+**SFX 接入点**（v1 最小集，8 个）：
+- `sfx_ui_click` → `PveLobbyController._bindButton`（覆盖大厅全部按钮）
+- `sfx_player_move` / `sfx_attack_hit` / `sfx_damage_pop` / `sfx_reward_get` / `sfx_door_open` / `sfx_boss_appear` / `sfx_run_failed` → `ExpeditionController._playFxFor`（按事件类型分发）
 
 ---
 
 ### 19 微信平台适配
 
-**职责**：微信登录/授权、横竖屏、分享、房间码输入、云初始化。
+**职责**：微信登录/授权、横竖屏、分享、房间码输入、云初始化、小游戏广告封装。
 
 | 文件 | 说明 |
 |------|------|
@@ -409,10 +438,11 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 | `assets/scripts/platform/wechat/WxShare.ts` | 分享 API |
 | `assets/scripts/platform/wechat/WxLandscape.ts` | 横屏适配 |
 | `assets/scripts/platform/wechat/ViewAdapt.ts` | 视口自适应 |
+| `assets/scripts/platform/wechat/AdManager.ts` | **广告入口** — 激励视频 / Banner / 插屏统一封装，包含预加载、冷却、奖励说明、统一错误处理 |
 | `assets/scripts/platform/wechat/WxRoomCodeInput.ts` | 房间码输入组件 |
 | `assets/scripts/platform/wechat/WxGameNameInput.ts` | 游戏昵称输入组件 |
 
-**推荐入口**：登录问题 → `WxAuth.ts`；横屏/视口 Bug → `WxLandscape.ts` / `ViewAdapt.ts`。
+**推荐入口**：登录问题 → `WxAuth.ts`；横屏/视口 Bug → `WxLandscape.ts` / `ViewAdapt.ts`；广告接入/审核问题 → `AdManager.ts`。
 
 ---
 
@@ -427,6 +457,7 @@ cloudfunctions/pve/   ← 云端权威（结算、防作弊）
 | `cloudfunctions/pve/index.js` | **Action 路由入口**（loadSave/startRun/saveFloor/settleRun/loadMeta/updateMeta/unlockTreeNode/resetTreeNodes）|
 | `cloudfunctions/common/pve/PveSave.js` | 存档 CRUD + 结算（奖励按已通关层数独立计算，不信任客户端）|
 | `cloudfunctions/common/pve/PveMeta.js` | 元进度读写（成就/图鉴/命运碎片/树节点）|
+| `cloudfunctions/common/pve/PveStamina.js` | PVE 体力纯逻辑（恢复、上限、新远征扣费） |
 | `cloudfunctions/common/pve/PveValidate.js` | 防作弊校验 |
 | `cloudfunctions/common/pve/PveReward.js` | 按章节完成度计算钻石/碎片奖励 |
 | `cloudfunctions/common/pve/PveDestinyTree.js` | 命运树解锁权威校验 |

@@ -25,9 +25,11 @@
     {
       "id": "map.icon_player",
       "category": "map_entity",
-      "status": "integrated",
+      "status": "selected",
+      "vssStatus": "integrated-pending-device",
+      "styleFamily": "fate-tower-sky-fantasy-v2",
       "promptTemplate": "map_entity",
-      "prompt": "The approved blue-haired young chibi swordsman in blue armor and scarf, preserve his hairstyle, face, costume colors, short silver sword, proportions, and confident neutral pose.",
+      "prompt": "Approved candidate H: face-first brown-haired male chibi adventurer, 1.8-2.0 heads tall with target 1.9, huge readable face, very short torso and limbs, blue tunic, ivory chest shape, restrained soft-gold trim, cyan scarf, brown gloves and boots, holding a broad short silver-blue sword angled downward and outward, no shield, strong deep navy charcoal outline, simplified semi-painterly surfaces.",
       "size": "1024x1024",
       "targetSize": [
         106,
@@ -37,7 +39,10 @@
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_player.png",
-      "notes": "Primary character style anchor; do not regenerate without explicit approval."
+      "approvedPath": "specs/260622-visual-upgrade-v1/selected/gs-player-h-final-1024.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-player-h-v1.md",
+      "score": 95,
+      "notes": "User selected H. Existing Cocos UUID preserved. Pending device composite verification."
     },
     {
       "id": "map.icon_chest",
@@ -54,7 +59,10 @@
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_chest.png",
-      "notes": "Approved object style anchor."
+      "approvedPath": "art_pipeline/selected/fate-v2-gs-chest-key-c-rev1/gs-chest-c-rev1-512.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-chest-key-c-rev1.md",
+      "score": 95,
+      "notes": "User selected C Revision 1. Existing Cocos UUID preserved. Pending device verification."
     },
     {
       "id": "map.icon_key",
@@ -71,14 +79,17 @@
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_key.png",
-      "notes": "Approved object style anchor."
+      "approvedPath": "art_pipeline/selected/fate-v2-gs-chest-key-c-rev1/gs-key-c-rev1-512.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-chest-key-c-rev1.md",
+      "score": 95,
+      "notes": "User selected C Revision 1. Existing Cocos UUID preserved. Pending device verification."
     },
     {
       "id": "map.icon_exit",
       "category": "map_entity",
       "status": "integrated",
       "promptTemplate": "map_entity",
-      "prompt": "Small mossy stone exit arch with pale cyan light in the doorway, clearly readable as the next-floor exit.",
+      "prompt": "Reuse the current cyan stone portal design at the ordinary-exit display size.",
       "size": "1024x1024",
       "targetSize": [
         84,
@@ -88,7 +99,10 @@
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_exit.png",
-      "notes": ""
+      "approvedPath": "art_pipeline/selected/fate-v2-gs-shared-portal-current/gs-shared-portal-exit-84.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-shared-portal.md",
+      "score": 90,
+      "notes": "Final user decision: ordinary exit and boss portal share the current cyan stone arch. Existing exit UUID preserved."
     },
     {
       "id": "map.icon_monster_ch1_normal",
@@ -435,17 +449,20 @@
       "category": "map_entity",
       "status": "integrated",
       "promptTemplate": "map_entity",
-      "prompt": "Small circular next-floor portal, mossy stone ring, pale cyan swirling center.",
+      "prompt": "Keep the current cyan stone arch portal.",
       "size": "1024x1024",
       "targetSize": [
-        84,
-        84
+        128,
+        128
       ],
       "transparent": true,
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_portal.png",
-      "notes": "Existing candidate; review before promotion."
+      "approvedPath": "art_pipeline/selected/fate-v2-gs-shared-portal-current/gs-shared-portal-128.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-shared-portal.md",
+      "score": 90,
+      "notes": "Final user decision: keep this design for both ordinary exit and boss portal."
     },
     {
       "id": "map.icon_blacksmith",
@@ -486,7 +503,7 @@
       "category": "map_entity",
       "status": "integrated",
       "promptTemplate": "map_entity",
-      "prompt": "Small mossy stone hot spring basin with clear cyan water and two simple steam curls.",
+      "prompt": "Round deep-navy and soft-gold healing spring with bright cyan water, one large gold recovery cross, and exactly two short warm-white steam curls.",
       "size": "1024x1024",
       "targetSize": [
         84,
@@ -496,7 +513,10 @@
       "requiresOutline": true,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/map/icon_hot_spring.png",
-      "notes": "Existing candidate; review before promotion."
+      "approvedPath": "art_pipeline/selected/fate-v2-gs-hot-spring-a-rev1/gs-hot-spring-a-rev1-1024.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-hot-spring-a-rev1.md",
+      "score": 92,
+      "notes": "User approved revised warm-white steam version. Added standard 2px #17243A runtime outline. Existing UUID preserved."
     },
     {
       "id": "map.icon_altar",
@@ -771,11 +791,33 @@
       "notes": "Existing candidate."
     },
     {
+      "id": "background.chapter1",
+      "category": "background",
+      "status": "integrated",
+      "vssStatus": "integrated-pending-device",
+      "styleFamily": "fate-tower-sky-fantasy-v2",
+      "promptTemplate": "background",
+      "prompt": "Bright warm airy sky-tower fantasy, Chapter 1 goblin border outpost, floating ruins and destiny crystals, rough wooden palisades, watchtower, supply traces and abstract chevron faction banners around the outer edges, broad quiet low-detail warm sandstone center for a separately rendered continuous battlefield, semi-painterly softly beveled surfaces, soft warm key light from upper-left, faint cool fill from lower-right, no monsters, no UI, no grid, no skulls, no dark oppressive mood.",
+      "size": "941x1672",
+      "targetSize": [
+        720,
+        1280
+      ],
+      "transparent": false,
+      "requiresOutline": false,
+      "variants": 1,
+      "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch1.png",
+      "approvedPath": "specs/260622-visual-upgrade-v1/references/gs-bg-ch1-goblin-outpost-a-revision-1.png",
+      "reviewCard": "specs/260622-visual-upgrade-v1/art-review-gs-bg-ch1-v1.md",
+      "score": 91,
+      "notes": "User-approved Revision 1. Runtime resource preserves the existing Cocos UUID. Pending narrow/standard/long-device composite verification."
+    },
+    {
       "id": "background.chapter2",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
-      "prompt": "Chapter 2 desert ruins expedition environment backdrop, worn ochre stone, windblown sand, broken columns, sparse teal magical details around the outer edges, broad calm sandy center beneath the separately rendered map, preserve the same painted texture and lighting family as Chapter 1. Absolutely no board, grid, square cells, tile lines, framed arena, or central stone rectangle.",
+      "prompt": "Chapter 2 Scorpion Dunes and Desert Raiders. Locked 9:16 chapter layout: the full-width gameplay ground spans y=16.8% to y=77.5%, with no side frame or gaps. Top: blue desert sky, distant ruins, giant sandstone scorpion guardian on one edge and a desert-raider canvas camp with weapon rack, jars and campfire on the other; no flags. Center: low-contrast compacted ochre sand, wind ripples, red sandstone patches, dry cracks, tiny pebbles, sparse thorn tufts and faint scorpion tracks; no board, grid, cells, UI or gameplay objects. Bottom: sandstone curb, desert trail, broken columns, dry shrubs and a partly buried scorpion-carved stone. Preserve the fixed gameplay opening; no crop, stretch or composition-ratio change.",
       "size": "1024x1536",
       "targetSize": [
         720,
@@ -785,15 +827,15 @@
       "requiresOutline": false,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch2.png",
-      "notes": "Next generation order 1.",
-      "lastBatch": "pve-20260618-111509",
-      "selectedVariant": "background.chapter2:1",
-      "approvedPath": "art_pipeline/approved/pve-20260618-111509/backgrounds/bg_pve_ch2.png"
+      "notes": "User-approved 2026-06-23 scorpion guardian + desert-raider camp. Integrated after deterministic layout normalization: gameplay opening y=16.8%–77.5%, full width, runtime UUID preserved.",
+      "lastBatch": "user-approved-20260623",
+      "selectedVariant": "background.chapter2:scorpion-dunes-layout-locked-v1",
+      "approvedPath": "specs/260622-visual-upgrade-v1/candidates/bg_pve_ch2-desert-scions-layout-locked-v1.png"
     },
     {
       "id": "map.tile_floor_ch2",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "map_tile",
       "prompt": "One Chapter 2 desert ruins floor cell, worn ochre sandstone and packed sand, tiny sparse pebble details, warm shadows, matching the approved Chapter 1 tile shape and outline weight.",
       "size": "1024x1024",
@@ -814,9 +856,9 @@
     {
       "id": "background.chapter3",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
-      "prompt": "Chapter 3 frozen tower expedition environment backdrop, blue-gray stone, snow drifts and ice crystals around the outer edges, broad calm frozen center beneath the separately rendered map, pale cyan light, preserve the same painted texture and lighting family as Chapter 1. Absolutely no board, grid, square cells, tile lines, framed arena, or central stone rectangle.",
+      "prompt": "Chapter 3 Frost Giant's Ice Cavern. Locked 9:16 chapter layout: full-width gameplay ground y=16.8%–77.5%, no side frame or gaps. Top: ice cavern, distant frozen fortress arches, Frost Giant stone relief, ice crystals, snow-wolf claw traces and small frost-sprite lights. Center: calm blue-gray frozen stone under thin ice, cyan hairline cracks, snow dust, pale mist, faint wolf tracks and tiny shattered ice; no board, grid, UI or gameplay objects. Bottom: frozen trail, broken columns, rune stone and restrained warm lantern. Preserve the fixed gameplay opening; no crop, stretch or composition-ratio change.",
       "size": "1024x1536",
       "targetSize": [
         720,
@@ -826,15 +868,15 @@
       "requiresOutline": false,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch3.png",
-      "notes": "Next generation order 2.",
-      "lastBatch": "pve-20260618-111509",
-      "selectedVariant": "background.chapter3:1",
-      "approvedPath": "art_pipeline/approved/pve-20260618-111509/backgrounds/bg_pve_ch3.png"
+      "notes": "User-approved 2026-06-24 Frost Giant ice cavern. Integrated after deterministic layout normalization: gameplay opening y=16.8%–77.5%, full width, runtime UUID preserved.",
+      "lastBatch": "user-approved-20260624",
+      "selectedVariant": "background.chapter3:ice-cavern-layout-locked-v1",
+      "approvedPath": "specs/260622-visual-upgrade-v1/candidates/bg_pve_ch3-ice-cavern-layout-locked-v1.png"
     },
     {
       "id": "map.tile_floor_ch3",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "map_tile",
       "prompt": "One Chapter 3 frozen tower floor cell, blue-gray stone beneath thin worn ice, restrained pale cyan cracks and frost at the edges, matching the approved Chapter 1 tile shape and outline weight.",
       "size": "1024x1024",
@@ -855,9 +897,9 @@
     {
       "id": "background.chapter4",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
-      "prompt": "Chapter 4 volcanic abyss expedition background, black stone, controlled orange magma cracks, iron chains, smoke kept away from the gameplay center, same painted rendering family.",
+      "prompt": "Chapter 4 Lava Lord's Volcanic Forge. Locked 9:16 chapter layout: full-width gameplay ground y=16.8%–77.5%, no side frame or gaps. Top: bright ancient forge arches, several ember spirits, distant furnace glow, magma-crab details and restrained chains; no horror walls or flags. Center: calm charcoal basalt, muted burgundy mineral patches, ash, tiny obsidian chips and only a few hairline orange magma fissures; no board, grid, UI or gameplay objects. Bottom: cooled-lava trail, basalt stepping stones, chain links, obsidian rocks and forge lantern, explicitly no stone columns. Preserve the fixed gameplay opening; no crop, stretch or composition-ratio change.",
       "size": "1024x1536",
       "targetSize": [
         720,
@@ -867,15 +909,15 @@
       "requiresOutline": false,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch4.png",
-      "notes": "Next generation order 3.",
-      "lastBatch": "pve-20260618-112635",
-      "selectedVariant": "background.chapter4:1",
-      "approvedPath": "art_pipeline/approved/pve-20260618-112635/backgrounds/bg_pve_ch4.png"
+      "notes": "User-approved 2026-06-24 bright volcanic forge. Integrated after deterministic layout normalization: gameplay opening y=16.8%–77.5%, full width, runtime UUID preserved.",
+      "lastBatch": "user-approved-20260624",
+      "selectedVariant": "background.chapter4:volcanic-forge-layout-locked-v1",
+      "approvedPath": "specs/260622-visual-upgrade-v1/candidates/bg_pve_ch4-volcanic-forge-layout-locked-v1.png"
     },
     {
       "id": "map.tile_floor_ch4",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "map_tile",
       "prompt": "One Chapter 4 volcanic abyss floor cell, dark charcoal volcanic stone with a few thin controlled orange magma cracks near the edges, matching the approved Chapter 1 tile shape and outline weight.",
       "size": "1024x1024",
@@ -896,9 +938,9 @@
     {
       "id": "background.chapter5",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
-      "prompt": "Chapter 5 fate sanctum expedition environment backdrop with continuous charcoal stone ground extending naturally edge to edge, muted violet night sky only near the upper outer edge, sparse pale cyan constellation marks and restrained gold details pushed to the outer perimeter, broad calm uninterrupted central ground beneath the separately rendered square map, avoid a purple-dominated image. Absolutely no treasure chest, key, portal, character, monster, item, interactable object, circular platform, magic circle, altar, ritual ring, arena border, raised stage, board, grid, square cells, tile lines, framed play area, or central stone rectangle.",
+      "prompt": "Chapter 5 Fate Guardian's Starbound Corridor. Locked 9:16 chapter layout: full-width gameplay ground y=16.8%–77.5%, no side frame or gaps. Top: open midnight-blue fantasy star space, luminous nebula clouds, floating mirror fragments, refined glowing constellation symbols and a distant celestial Fate Guardian observatory made of light; no stone hallway or face relief. Center: calm charcoal-blue slate, sparse cyan constellation scratches, muted-gold star points, subtle mirrored glints and faint void-worm trail marks; no board, grid, UI or gameplay objects. Bottom: final-corridor trail with flat mirror shards, low luminous moss, rune stones and blue-gold lantern, explicitly no stone columns. Preserve the fixed gameplay opening; no crop, stretch or composition-ratio change.",
       "size": "1024x1536",
       "targetSize": [
         720,
@@ -908,15 +950,15 @@
       "requiresOutline": false,
       "variants": 1,
       "productionPath": "assets/resources/art/ui/pve/backgrounds/bg_pve_ch5.png",
-      "notes": "Next generation order 4.",
-      "lastBatch": "pve-20260618-113942",
-      "selectedVariant": "background.chapter5:1",
-      "approvedPath": "art_pipeline/approved/pve-20260618-113942/backgrounds/bg_pve_ch5.png"
+      "notes": "User-approved 2026-06-24 starbound fate space. Integrated after deterministic layout normalization: gameplay opening y=16.8%–77.5%, full width, runtime UUID preserved.",
+      "lastBatch": "user-approved-20260624",
+      "selectedVariant": "background.chapter5:starbound-fate-layout-locked-v1",
+      "approvedPath": "specs/260622-visual-upgrade-v1/candidates/bg_pve_ch5-starbound-fate-layout-locked-v1.png"
     },
     {
       "id": "map.tile_floor_ch5",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "map_tile",
       "prompt": "One Chapter 5 fate sanctum floor cell, charcoal-violet stone with sparse pale cyan constellation scratches and tiny muted-gold points, avoid purple dominance, matching the approved Chapter 1 tile shape and outline weight.",
       "size": "1024x1024",
@@ -937,7 +979,7 @@
     {
       "id": "background.camp",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
       "prompt": "Safe expedition camp at night, mossy stone, canvas tent, wooden crates, small warm campfire, blue-haired hero absent, calm central UI space, same Chapter 1 art style.",
       "size": "1024x1536",
@@ -957,7 +999,7 @@
     {
       "id": "background.destiny_tree",
       "category": "background",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "background",
       "prompt": "Ancient destiny tree chamber, enormous dark tree roots growing through mossy stone, cyan constellation lights and restrained muted gold, readable central node area, same painted fantasy style.",
       "size": "1024x1536",
@@ -977,7 +1019,7 @@
     {
       "id": "hud.bar_info",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Wide two-row expedition HUD information bar, dark mossy stone and deep wood, restrained copper fittings. Provide six evenly spaced plain empty dark inset zones for code-rendered icons and numbers. Frame artwork only: every zone must be blank. No character portrait, icon, coin, heart, orb, key, symbol, number, text, or embedded content. 9-slice friendly.",
       "size": "1536x1024",
@@ -997,7 +1039,7 @@
     {
       "id": "hud.bg_dpad",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Compact cross-shaped directional control base, dark mossy stone with worn bevels and a restrained cyan center rune, no arrows and no text.",
       "size": "1024x1024",
@@ -1017,7 +1059,7 @@
     {
       "id": "panel.character",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Large portrait character information panel outer frame only. One broad completely blank dark interior content area with no subdivisions, slots, portrait box, rows, cards, separators, or controls. Mossy stone outer border, deep wood inner trim, worn leather and muted gold fittings. Game code will construct the portrait, exactly five equipment slots, stat rows and trait list on top. No character, portrait, slot, weapon, armor, atom mark, skill emblem, rune, icon, symbol, text, number, item art, or embedded layout. 9-slice friendly outer frame.",
       "size": "1024x1536",
@@ -1037,7 +1079,7 @@
     {
       "id": "panel.equipment_slot",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "One standalone square empty equipment slot frame for the PVE character panel. Mossy gray stone outer edge, deep wood inset, thin muted-gold inner border, plain completely empty dark center. No item, weapon, armor, character, icon, rune, symbol, text, number, highlight, or quality color. Strong dark outer outline. The game will repeat this same slot exactly five times.",
       "size": "1024x1024",
@@ -1058,7 +1100,7 @@
     {
       "id": "camp.panel_main",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Large expedition camp shop panel frame with one blank header plate, three completely empty item-card zones and one blank lower action area. Deep wood, mossy stone, leather and only subtle warm amber edge lighting. Frame and empty containers only. No character, campfire, chest, crate, item, icon, symbol, text, number, or button caption. 9-slice friendly outer frame.",
       "size": "1024x1536",
@@ -1078,7 +1120,7 @@
     {
       "id": "popup.panel_interact",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "General neutral-entity interaction modal frame with one completely empty circular icon socket, one large blank description area and two blank option-row backgrounds. Mossy stone, deep wood and restrained cyan edge details. Frame and empty containers only. No character, portrait, key, item, icon, symbol, text, number, or embedded option content. 9-slice friendly outer frame.",
       "size": "1024x1536",
@@ -1098,7 +1140,7 @@
     {
       "id": "popup.panel_death",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Expedition death results modal frame, dark cracked stone and extinguished cyan rune accents, one large completely blank statistics area and one completely blank wide action-button plate near the bottom. Solemn but not horror. Frame and empty containers only. No skull emblem, character, icon, reward, symbol, letters, words, REVIVE text, numbers, or button caption. 9-slice friendly outer frame.",
       "size": "1024x1536",
@@ -1118,7 +1160,7 @@
     {
       "id": "popup.panel_floor_clear",
       "category": "panel",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "panel",
       "prompt": "Floor-clear reward modal frame, mossy stone and deep wood with warm muted-gold success edge light, one large completely blank reward area, two empty reward-slot frames and one completely blank action-button plate. Celebratory but restrained. Frame and empty containers only. No item, reward, icon, symbol, letters, words, CONTINUE text, numbers, or button caption. 9-slice friendly outer frame.",
       "size": "1024x1536",
@@ -1138,7 +1180,7 @@
     {
       "id": "destiny.node_frame",
       "category": "icon",
-      "status": "processed",
+      "status": "integrated",
       "promptTemplate": "icon",
       "prompt": "One circular empty destiny-tree node frame. Symmetrical mossy carved gray-stone outer ring, continuous dark charcoal outline, thin muted-gold inner rim, and one completely empty plain dark circular center reserved for a code-rendered node icon. No lock, rune, glow symbol, letter, number, character, icon, constellation, emblem, or decorative mark inside the center. This exact frame will be reused for locked, available, and unlocked states; game code applies tint, opacity and glow.",
       "size": "1024x1024",
@@ -1155,6 +1197,632 @@
       "lastBatch": "pve-20260618-124155",
       "selectedVariant": "destiny.node_frame:1",
       "approvedPath": "art_pipeline/approved/pve-20260618-124155/destiny/node_frame.png"
+    },
+    {
+      "id": "map.icon_monster_ch1_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 1 elite goblin, larger build than the normal goblin warrior, cracked iron breastplate, one glowing teal rune brand on the forehead, holding a chipped battle axe, scowling determined expression.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch1_elite.png",
+      "notes": "Represents FrostGoblin and FireGoblin; pick whichever variant reads best at 106px.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch1_elite:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch1_elite.png"
+    },
+    {
+      "id": "map.icon_monster_ch1_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 1 anima spirit rat, translucent ghostly rodent with a cyan glowing core, wispy spirit tail, soft ethereal body, tiny paws, hollow glowing eyes, clearly non-threatening.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch1_anima.png",
+      "notes": "SpiritRat — anima type, flees rather than fights.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch1_anima:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch1_anima.png"
+    },
+    {
+      "id": "map.icon_monster_ch1_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Goblin Chief boss, oversized fat goblin, cracked golden crown, thick dark iron armor with green glowing runes, massive spiked club resting on one shoulder, commanding arrogant sneer, clearly much larger and more dangerous than a normal goblin.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch1_boss.png",
+      "notes": "GoblinChief boss — 224px tile.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch1_boss:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch1_boss.png"
+    },
+    {
+      "id": "map.icon_monster_ch2_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 2 desert raider, lean bandaged humanoid fighter with a worn curved scimitar, sandy wraps over dark leather armor, sun-scarred skin, desert-dweller silhouette clearly distinct from goblin.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch2_normal.png",
+      "notes": "Represents DesertRaider and SandwormLarva; DesertRaider silhouette preferred for readability.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch2_normal:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch2_normal.png"
+    },
+    {
+      "id": "map.icon_monster_ch2_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 2 elite poison scorpion, compact chibi scorpion with dark brown chitinous armor, glowing purple-green venomous tail stinger raised menacingly, beady hostile eyes, clearly dangerous.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch2_elite.png",
+      "notes": "PoisonScorpion — elite desert creature.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch2_elite:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch2_elite.png"
+    },
+    {
+      "id": "map.icon_monster_ch2_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 2 anima spirit beetle, translucent ghostly scarab beetle with a glowing cyan core, sandy golden spirit aura, wispy antenna, small ethereal legs, non-threatening but mysterious.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch2_anima.png",
+      "notes": "SpiritBeetle — leaves sand pits when fleeing.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch2_anima:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch2_anima.png"
+    },
+    {
+      "id": "map.icon_monster_ch2_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Quicksand Scorpion boss, enormous chibi scorpion with cracked stone-like dark brown carapace, sand and dust swirling around its base, twin large claws raised, massive glowing green venomous stinger, imposing and wide silhouette.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch2_boss.png",
+      "notes": "QuicksandScorpion boss — 224px tile.",
+      "lastBatch": "pve-20260619-125113",
+      "selectedVariant": "map.icon_monster_ch2_boss:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-125113/map/icon_monster_ch2_boss.png"
+    },
+    {
+      "id": "map.icon_monster_ch3_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 3 snow wolf, compact chibi wolf with thick white-gray fur, pale blue glowing eyes, ice crystals forming on ears and paws, predatory alert stance, clearly a cold-climate creature.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch3_normal.png",
+      "notes": "Represents SnowWolf and IceSlime; wolf silhouette preferred.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch3_normal:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch3_normal.png"
+    },
+    {
+      "id": "map.icon_monster_ch3_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 3 frost sprite elite, small chibi winged ice fairy, pale blue crystalline body, sharp angular ice-shard wings, cold white hair, frosty aura particles drifting off, menacing despite small size.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch3_elite.png",
+      "notes": "FrostSprite — elite frozen tower creature.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch3_elite:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch3_elite.png"
+    },
+    {
+      "id": "map.icon_monster_ch3_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 3 anima spirit elf, translucent pale blue ghostly elf figure, cyan ice-core glow in the chest, wispy frozen trail behind it, delicate hollow glowing eyes, non-threatening but ethereal.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch3_anima.png",
+      "notes": "SpiritElf — leaves ice tiles when fleeing.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch3_anima:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch3_anima.png"
+    },
+    {
+      "id": "map.icon_monster_ch3_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Frost Giant boss, massive chibi giant with blue-gray stone-like frozen armor, heavy ice pauldrons, thick icy beard, glowing pale cyan rune eye, raising one enormous fist, overwhelming broad silhouette.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch3_boss.png",
+      "notes": "FrostGiant boss — 224px tile.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch3_boss:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch3_boss.png"
+    },
+    {
+      "id": "map.icon_monster_ch4_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 4 lava grunt, squat chibi demon-like creature with dark volcanic stone skin, thin orange-red magma cracks along the body, small curved horns, aggressive hunched posture.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch4_normal.png",
+      "notes": "Represents LavaGrunt and LavaCrab; grunt preferred for readability.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch4_normal:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch4_normal.png"
+    },
+    {
+      "id": "map.icon_monster_ch4_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 4 fire elemental elite, compact chibi humanoid figure composed entirely of swirling magma and flame, bright orange-yellow core with dark stone outer shell, small sharp flame crown, restrained glow.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch4_elite.png",
+      "notes": "FireElemental — elite volcanic creature.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch4_elite:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch4_elite.png"
+    },
+    {
+      "id": "map.icon_monster_ch4_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 4 anima spirit ember, small floating translucent fire wisp orb, orange-red ember glow core, wispy flame tendrils, hollow glowing eyes, non-threatening floating posture.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch4_anima.png",
+      "notes": "SpiritEmber — creates lava tiles on death.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch4_anima:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch4_anima.png"
+    },
+    {
+      "id": "map.icon_monster_ch4_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Lava Lord boss, enormous chibi volcanic demon with massive dark obsidian armor, molten magma flowing through deep cracks in the chest and arms, twin lava horns, one arm raised holding a molten boulder, commanding terrifying silhouette.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch4_boss.png",
+      "notes": "LavaLord boss — 224px tile.",
+      "lastBatch": "pve-20260619-130021",
+      "selectedVariant": "map.icon_monster_ch4_boss:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-130021/map/icon_monster_ch4_boss.png"
+    },
+    {
+      "id": "map.icon_monster_ch5_normal",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 5 shadow assassin, sleek chibi hooded figure in dark violet-black cloak, glowing pale violet dagger in hand, star-like constellation marks faintly visible on the cloak, silent predatory crouch.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch5_normal.png",
+      "notes": "Represents ShadowAssassin and FateWatcher; assassin silhouette preferred.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "map.icon_monster_ch5_normal:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/map/icon_monster_ch5_normal.png"
+    },
+    {
+      "id": "map.icon_monster_ch5_elite",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 5 void worm elite, a dark serpentine creature with a flat void-black body, small pale violet fate rune scales, twin hollow glowing eyes, compact coiled posture, clearly alien and threatening.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch5_elite.png",
+      "notes": "VoidWorm — elite fate sanctum creature.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "map.icon_monster_ch5_elite:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/map/icon_monster_ch5_elite.png"
+    },
+    {
+      "id": "map.icon_monster_ch5_anima",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chapter 5 anima spirit mirage, translucent ghostly figure split between two overlapping silhouettes suggesting a mirage, pale gold and violet glow, faint constellation line pattern inside the body, hollow eyes, ambiguous non-threatening expression.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch5_anima.png",
+      "notes": "SpiritMirage — gives random buff or debuff on death.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "map.icon_monster_ch5_anima:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/map/icon_monster_ch5_anima.png"
+    },
+    {
+      "id": "map.icon_monster_ch5_boss",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Fate Guardian boss, imposing chibi armored guardian with broad dark charcoal-violet plate armor, muted gold constellation trim lines, a large pale cyan fate eye emblem on the chest, holding a massive ceremonial halberd, solemn commanding presence.",
+      "size": "1024x1024",
+      "targetSize": [
+        224,
+        224
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_ch5_boss.png",
+      "notes": "FateGuardian boss — 224px tile.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "map.icon_monster_ch5_boss:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/map/icon_monster_ch5_boss.png"
+    },
+    {
+      "id": "lobby.btn_expedition",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Wide horizontal lobby button for starting an expedition, dark indigo-blue stone with worn bevels, a restrained cyan tower-and-sword emblem centered on the left, muted gold edge trim, 9-slice friendly, no text.",
+      "size": "1536x1024",
+      "targetSize": [
+        480,
+        110
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/lobby/btn_lobby_expedition_9s.png",
+      "notes": "PVE-only lobby button for 命运远征. Key: pve/lobby/btn_lobby_expedition_9s. Replaces lobby/btn_lobby_create_9s after integration.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "lobby.btn_expedition:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/lobby/btn_lobby_expedition_9s.png"
+    },
+    {
+      "id": "lobby.btn_destiny_tree",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Wide horizontal lobby button for the destiny tree, deep dark-wood stone with worn bevels, a restrained muted-gold tree-and-constellation emblem centered on the left, amber edge trim, 9-slice friendly, no text.",
+      "size": "1536x1024",
+      "targetSize": [
+        480,
+        110
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/lobby/btn_lobby_destiny_tree_9s.png",
+      "notes": "PVE-only lobby button for 命运树. Key: pve/lobby/btn_lobby_destiny_tree_9s. Replaces lobby/btn_lobby_join_9s after integration.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "lobby.btn_destiny_tree:1",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/lobby/btn_lobby_destiny_tree_9s.png"
+    },
+    {
+      "id": "hud.btn_dpad_up",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Small square directional button with an upward-pointing cyan arrow carved into dark mossy stone, same bevel weight as bg_dpad, no text, no other symbols.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_dpad_up.png",
+      "notes": "Dpad direction buttons must match bg_dpad stone texture visually.",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "hud.btn_dpad_up:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/hud/btn_dpad_up.png"
+    },
+    {
+      "id": "hud.btn_dpad_down",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Small square directional button with a downward-pointing cyan arrow carved into dark mossy stone, same bevel weight as bg_dpad, no text, no other symbols.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_dpad_down.png",
+      "notes": "",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "hud.btn_dpad_down:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/hud/btn_dpad_down.png"
+    },
+    {
+      "id": "hud.btn_dpad_left",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Small square directional button with a left-pointing cyan arrow carved into dark mossy stone, same bevel weight as bg_dpad, no text, no other symbols.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_dpad_left.png",
+      "notes": "",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "hud.btn_dpad_left:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/hud/btn_dpad_left.png"
+    },
+    {
+      "id": "hud.btn_dpad_right",
+      "category": "panel",
+      "status": "integrated",
+      "promptTemplate": "panel",
+      "prompt": "Small square directional button with a right-pointing cyan arrow carved into dark mossy stone, same bevel weight as bg_dpad, no text, no other symbols.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/hud/btn_dpad_right.png",
+      "notes": "",
+      "lastBatch": "pve-20260619-131015",
+      "selectedVariant": "hud.btn_dpad_right:2",
+      "approvedPath": "art_pipeline/approved/pve-20260619-131015/hud/btn_dpad_right.png"
+    },
+    {
+      "id": "map.icon_monster_goblin_warrior",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi goblin warrior, stocky green-skin goblin soldier, battered iron round shield strapped to left arm, short rusty broadsword raised in right hand, dented iron helmet with a crack, stubborn front-line fighter stance, slightly different look from goblin archer.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_goblin_warrior.png",
+      "notes": "Ch1 NORMAL type, variantId=GOBLIN_WARRIOR. Must look distinct from GOBLIN_ARCHER (no bow, has shield).",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_monster_goblin_archer",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi goblin archer, lean green-skin goblin, small wooden shortbow drawn sideways, quiver of crude arrows on back, leather cap instead of iron helmet, sidelong sneaky aiming posture, clearly different silhouette from warrior (bow not sword).",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_goblin_archer.png",
+      "notes": "Ch1 NORMAL type, variantId=GOBLIN_ARCHER. Bow silhouette is the key differentiator.",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_monster_frost_goblin",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi frost goblin, pale ice-blue skin goblin elite, jagged icicle shards growing from shoulders and knuckles, holding a crude ice shard as a weapon, breath visible as cold mist, frosty glow around eyes, elite fighter aura clearly stronger than a normal goblin.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_frost_goblin.png",
+      "notes": "Ch1 ELITE type, variantId=FROST_GOBLIN. Ice-blue tint distinguishes from fire goblin.",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_monster_fire_goblin",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi fire goblin, orange-red scorched skin goblin elite, small flames flickering along forearms and hair, wielding a charred bone club with ember glow, wild angry eyes reflecting firelight, noticeably bigger and meaner than a normal goblin.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_fire_goblin.png",
+      "notes": "Ch1 ELITE type, variantId=FIRE_GOBLIN. Red-orange flame theme, clearly different from frost goblin.",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_monster_spirit_rat",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi spirit rat, a ghostly semi-transparent rat creature with faint violet-purple aura, slightly levitating, wisps of spirit energy trailing behind, glowing hollow eyes, ethereal and otherworldly, small but unsettling.",
+      "size": "1024x1024",
+      "targetSize": [
+        106,
+        106
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_spirit_rat.png",
+      "notes": "Ch1 ANIMA type, variantId=SPIRIT_RAT. Ghostly / spirit energy visual.",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_monster_goblin_chief",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Chibi goblin chief boss, massive imposing goblin twice the height of a warrior, cracked golden crown sitting crookedly on head, thick dark iron armor with green glowing rune brands, enormous spiked iron club resting on one shoulder, arrogant commanding sneer, bone trophies hanging from belt, unmistakably the strongest Ch1 enemy.",
+      "size": "1024x1024",
+      "targetSize": [
+        200,
+        200
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_monster_goblin_chief.png",
+      "notes": "Ch1 BOSS, bossId=GOBLIN_CHIEF. 200px because boss fills cell at 1.1x scale. Reuse approved ch1_boss pose as style reference.",
+      "lastBatch": "manual-20260619"
+    },
+    {
+      "id": "map.icon_fragment",
+      "category": "map_entity",
+      "status": "integrated",
+      "promptTemplate": "map_entity",
+      "prompt": "Small glowing crystal shard / destiny fragment, translucent violet-blue gem chip with inner light glow, magical energy sparkles around it, floating slightly above ground, compact pickup-item silhouette.",
+      "size": "1024x1024",
+      "targetSize": [
+        84,
+        84
+      ],
+      "transparent": true,
+      "requiresOutline": true,
+      "variants": 2,
+      "productionPath": "assets/resources/art/ui/pve/map/icon_fragment.png",
+      "notes": "ENTITY_FRAGMENT pickup. Currently shows '片' glyph — this art replaces it.",
+      "lastBatch": "manual-20260619"
     }
   ]
 }

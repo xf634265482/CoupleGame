@@ -24,6 +24,11 @@ import {
   rageStrikeStackBonus,
   vengeanceBonus,
 } from './StrengthenEffects';
+import {
+  generalAttackBonusPct,
+  generalFlatAttackBonus,
+  reduceGeneralIncomingDamage,
+} from './strengthen/CommonStrengthenEffects';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
   applyFreezeToMonsters,
@@ -33,6 +38,7 @@ import {
   relicReflectDamage,
   relicTryRevive,
 } from './RelicSystem';
+import { getBalancedPermafrostFreezeRounds } from './PveBalance';
 import {
   bossCritMult,
   bossDamageReducePct,
@@ -44,8 +50,6 @@ import {
   STUN_ROUNDS,
 } from './BossEquipTraitEffects';
 import {
-  BASE_ATTACK,
-  BASE_ATTACK_RANGE,
   CHAPTER3_ICE_WALL_DROP_ANIMA,
   CLASS_STATS,
   FATE_ENRAGE_HP_RATIO,
@@ -58,6 +62,7 @@ import {
   POISON_ROUNDS,
   QUICKSAND_SCORPION_ENRAGE_HP_RATIO,
 } from './PveConstants';
+import { getBalancedActionCost, getBalancedPlayerAttackBase } from './PveBalance';
 import { VARIANT_FIRE_GOBLIN, VARIANT_FROST_GOBLIN } from './Chapter1Monsters';
 import { VARIANT_POISON_SCORPION } from './Chapter2Monsters';
 import { VARIANT_FROST_SPRITE, VARIANT_ICE_SLIME } from './Chapter3Monsters';
@@ -119,7 +124,11 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
     };
   }
 
-  // 硬甲（LAVA_CRAB）：受到物理攻击伤害减半（向下取整）。
+  // 通用护甲（Chapter 2+ 普通/精英/Boss）：先扣减，最低 1 伤害。
+  if (monster.armor && monster.armor > 0 && !state.player.classTraits.includes('pierce')) {
+    damage = Math.max(1, damage - monster.armor);
+  }
+  // 硬甲（LAVA_CRAB）：受到物理攻击伤害减半（向下取整）。在通用护甲之后再叠加。
   if (monster.variantId === VARIANT_LAVA_CRAB) {
     damage = Math.floor(damage / 2);
   }
@@ -226,17 +235,23 @@ function resolveHit(state: ExpeditionState, targetId: string, damage: number, ev
  * 玩家当前攻击力与攻击范围：
  *   基础值 + 职业加成 + 武器基础属性 + 词条（鹰眼 / 射手精通）。
  */
-export function playerAttackPower(player: RunPlayer): { damage: number; range: number } {
+export function playerAttackPower(
+  player: RunPlayer,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  chapter = 1,
+): { damage: number; range: number } {
   const stats = CLASS_STATS[player.classId];
   const weapon = player.equipment.WEAPON;
   const traits = player.classTraits;
+  const base = getBalancedPlayerAttackBase(balanceSnapshot, chapter);
 
-  let rawAttack = BASE_ATTACK + stats.attackBonus + (weapon?.baseStat ?? 0);
-  let range = BASE_ATTACK_RANGE + stats.attackRangeBonus;
+  let rawAttack = base.damage + stats.attackBonus + (weapon?.baseStat ?? 0);
+  let range = base.range + stats.attackRangeBonus;
 
-  rawAttack += traitCount(traits, 'marksman') * 5;          // ARCHER 射手精通（可叠加）
+  rawAttack += traitCount(traits, 'marksman') * 4;
   if (traits.includes('eagle_eye')) range += 1;             // ARCHER 鹰眼
-  rawAttack += traitCount(traits, 'strengthen_attack_up') * 5; // ADVENTURER 强化攻击（可叠加）
+  rawAttack += generalFlatAttackBonus(traits);
+  rawAttack += traitCount(traits, 'bloodletter_stack') * 2;
   if (traits.includes('awakened_power_shot')) rawAttack += 15; // 觉醒·强弓（射手·强击型）
   rawAttack += player.treeBonuses?.attackBonus ?? 0;        // 命运树 B1 武者直觉
   rawAttack += equipTraitAtkBonus(player);                  // 装备词条 equip_atk_up（AC-401，每件 +1，可叠加）
@@ -267,37 +282,81 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return noop(state);
-  if (!canAfford(floor.ap, 'ATTACK')) return noop(state);
+  const attackCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'ATTACK');
+  if (!canAfford(floor.ap, 'ATTACK', { ATTACK: attackCost })) return noop(state);
   // 潜地状态免疫玩家攻击（流沙巨蝎）
   if (monster.isBurrowed) return noop(state);
 
   const traits = state.player.classTraits;
-  let { damage, range } = playerAttackPower(state.player);
-  if (manhattan(floor.player, monster.pos) > range) return noop(state);
+  let { damage, range } = playerAttackPower(state.player, state.balanceSnapshot, state.chapter);
+  const distance = manhattan(floor.player, monster.pos);
+  if (distance > range) return noop(state);
+  // 玩家只能攻击已揭示区域内的怪物，防止远程角色（range≥2）自动锁定未探索迷雾中的敌人。
+  if (!isRevealed(floor.revealed, monster.pos)) return noop(state);
 
   // ── 概率 RNG（所有随机检定共用同一实例，保证 AC-13 确定性）──
   const rng = createRng(floor.rngState);
 
+  const commonPct = generalAttackBonusPct({
+    player: state.player,
+    target: monster,
+    isFirstAttackThisFloor: !(floor.generalFirstAttackUsed ?? false),
+    setbackReady: floor.generalSetbackReady ?? false,
+  }) + (floor.generalTerrainPowerReady && traits.includes('general_terrain_power') ? 0.35 : 0)
+    + (floor.generalStoredEdgeReady && traits.includes('general_stored_edge') ? 0.3 : 0);
+  damage = Math.round(damage * (1 + commonPct));
+
+  if (traits.includes('berserker_resolve')) {
+    const lostTenths = Math.min(7, Math.floor((1 - state.player.hp / state.player.maxHp) * 10));
+    damage = Math.round(damage * (1 + lostTenths * 0.03));
+  }
+  if (state.player.hp <= state.player.maxHp / 2) {
+    damage += traitCount(traits, 'rage_strike_stack') * 4;
+  }
+  if (traits.includes('berserker_rage_boiling')) damage = Math.round(damage * (1 + (floor.berserkerRageStacks ?? 0) * 0.05));
+  if (traits.includes('berserker_tooth_for_tooth') && floor.berserkerRetaliationTargetId === monsterId) damage = Math.round(damage * 1.3);
+  if (traits.includes('last_stand') && distance === 1) damage = Math.round(damage * 1.15);
+  if (traits.includes('executioner') && monster.hp / monster.maxHp <= 0.3) damage = Math.round(damage * 1.15);
+  if (traits.includes('headshot') && distance >= 3) damage = Math.round(damage * 1.2);
+  const firstAttackThisTurn = (floor.rogueAttackCountThisTurn ?? 0) === 0;
+  if (traits.includes('steady_aim') && (floor.playerStepsThisTurn ?? 0) === 0 && firstAttackThisTurn) damage = Math.round(damage * 1.2);
+  if (traits.includes('retreat_shot') && (floor.playerStepsThisTurn ?? 0) > 0 && firstAttackThisTurn) damage = Math.round(damage * 1.1);
+  if (distance >= 2) damage += traitCount(traits, 'focus_stack') * 2;
+  if (traits.includes('deadeye') && floor.archerMarkedMonsterId === monsterId) damage = Math.round(damage * 1.2);
+  if (floor.archerHunterRhythmReady) damage = Math.round(damage * 1.15);
+  const archerAttackCount = (floor.archerAttackCount ?? 0) + 1;
+  if (traits.includes('last_arrow') && archerAttackCount % 3 === 0) damage = Math.round(damage * 1.5);
+  const rogueAttackCount = (floor.rogueAttackCountThisTurn ?? 0) + 1;
+  if (traits.includes('shadow_strike') && rogueAttackCount === 2) damage = Math.round(damage * 1.25);
+  if (traits.includes('survival_instinct')) damage = Math.round(damage * (1 + Math.min(5, floor.rogueKillCountThisFloor ?? 0) * 0.05));
+  if (traits.includes('rogue_blade_dance')) damage = Math.round(damage * (1 + Math.min(5, floor.playerStepsThisTurn ?? 0) * 0.05));
+  if (floor.rogueVanishStrikeReady) damage = Math.round(damage * 1.25);
+  if (traits.includes('evasion_training') && ((monster.poisonRounds ?? 0) > 0 || (monster.bleedRounds ?? 0) > 0 || (monster.burnRounds ?? 0) > 0 || (monster.frozenRounds ?? 0) > 0)) {
+    damage = Math.round(damage * 1.2);
+  }
+
   // ── 伤害词条（确定性叠加，在 RNG 词条前计算）──
   if (state.player.hp <= state.player.maxHp / 2) {
-    damage += traitCount(traits, 'berserk') * 10; // BERSERKER 狂暴（可叠加）
+    if (traits.includes('berserk')) damage = Math.round(damage * 1.2);
   }
   // 背刺(backstab) / 觉醒·影袭(awakened_shadow_strike，每回合可触发2次)
   const hasShadowStrike = traits.includes('awakened_shadow_strike');
   const shadowStrikeCount = floor.shadowStrikeCount ?? 0;
   const backstabActive = (traits.includes('backstab') || hasShadowStrike)
-    && (floor.backstabAvailable ?? false)
+    && ((floor.backstabAvailable ?? false) || (floor.rogueChainBackstabReady ?? false))
     && (!hasShadowStrike || shadowStrikeCount < 2);
   if (backstabActive) {
     // 觉醒·处决(awakened_execute)：背刺伤害提升至 3 倍
-    damage *= traits.includes('awakened_execute') ? 3 : 2;
+    damage *= traits.includes('awakened_execute') ? 3 : 1.5;
   }
   if (monster.aiState !== 'CHASE') {
-    damage += traitCount(traits, 'assassin_heart') * 20; // ROGUE 刺客之心（可叠加）
+    if (traits.includes('assassin_heart')) damage = Math.round(damage * 1.2);
   }
-  damage += executionerBonus(traits, monster); // 处刑者/收割者/致命一击：目标 HP≤20% 时 +3
+  damage += executionerBonus(traits, monster);
   const vengeanceActive = vengeanceBonus(traits, floor) > 0;
-  damage += vengeanceBonus(traits, floor); // 复仇/回马枪/夜枭反击：受击后下次攻击 +5（一次性消耗）
+  if (vengeanceActive) damage = Math.round(damage * 1.25);
+  if (floor.berserkerBloodyChainReady) damage = Math.round(damage * 1.25);
+  if (floor.berserkerFinalChargeReady) damage = Math.round(damage * 1.3);
 
   // 觉醒·狂热(awakened_frenzy)：上次击杀后下一击必定暴击（×3）
   const frenzyTriggered = traits.includes('awakened_frenzy') && (floor.frenzyPending ?? false);
@@ -306,7 +365,12 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   }
 
   // ── 概率词条（消耗 rngState，始终推进以保证 AC-13 确定性；rng 在上方范围检查后创建）──
-  if (traits.includes('crit') && rng.chance(0.10)) {
+  const critChance = traits.includes('crit')
+    ? 0.1 + traitCount(traits, 'quiver_stack') * 0.04
+      + (traits.includes('archer_breath_focus') && distance >= 3 && (floor.playerStepsThisTurn ?? 0) === 0 && firstAttackThisTurn ? 0.25 : 0)
+    : 0;
+  const critTriggered = critChance > 0 && rng.chance(Math.min(1, critChance));
+  if (critTriggered) {
     damage *= 2; // ARCHER 暴击：10% 双倍伤害
   }
 
@@ -340,36 +404,70 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   // ── 玩家 HP 更新（吸血 / 血怒 / 觉醒·狂热回血；静默更新，HUD 在下一帧刷新）──
   let playerHp = state.player.hp;
+  let requestedHeal = 0;
   const lifeStealCount = traitCount(traits, 'life_steal');
   if (lifeStealCount > 0) {
-    playerHp = Math.min(state.player.maxHp, playerHp + lifeStealCount * 10); // BERSERKER 吸血（可叠加）
+    requestedHeal += 8;
   }
   // Boss 装备 trait: on_hit_lifesteal_1（哥布林酋长战斧吸血 +5）
   playerHp = bossLifesteal({ ...state.player, hp: playerHp });
   if (dead) {
     const bloodRageCount = traitCount(traits, 'blood_rage');
     if (bloodRageCount > 0) {
-      playerHp = Math.min(state.player.maxHp, playerHp + bloodRageCount * 20); // BERSERKER 血怒（可叠加）
+      requestedHeal += 15;
     }
     const bloodlustHeal = bloodlustStackHeal(traits);
     if (bloodlustHeal > 0) {
-      playerHp = Math.min(state.player.maxHp, playerHp + bloodlustHeal); // 嗜血本能/续命箭/放血（可叠加×5，+层数 HP）
+      requestedHeal += bloodlustHeal;
     }
     // Boss 装备 trait: boss_kill_heal_8（烈焰指环击杀回血）
     playerHp = bossKillHeal(state.player, playerHp);
   }
   if (frenzyTriggered) {
-    playerHp = Math.min(state.player.maxHp, playerHp + 20); // 觉醒·狂热回血
+    requestedHeal += 20;
   }
+
+  const venomBurst = traits.includes('rogue_venom_burst')
+    && (monster.poisonRounds ?? 0) > 0
+    && monster.hp / monster.maxHp > 0.3
+    && (monster.hp - damage) / monster.maxHp <= 0.3;
+  if (venomBurst) damage += (monster.poisonRounds ?? 0) * (monster.poisonDamage ?? 3);
+  if (state.player.hp / state.player.maxHp <= 0.3 && traits.includes('berserker_death_feast')) requestedHeal = Math.round(requestedHeal * 1.5);
+  const missingHp = Math.max(0, state.player.maxHp - playerHp);
+  const effectiveHeal = Math.min(missingHp, requestedHeal);
+  const overheal = Math.max(0, requestedHeal - effectiveHeal);
+  playerHp += effectiveHeal;
+  const bloodShieldGain = traits.includes('berserker_blood_shield') ? overheal : 0;
 
   // ── floorState 状态位更新（背刺消耗 / 影袭计数 / 狂热标记 / 复仇消耗）──
   let nextFloorState = {
     ...floor,
-    ap: spend(floor.ap, 'ATTACK'),
+    ap: spend(floor.ap, 'ATTACK', { ATTACK: attackCost }),
     rngState: rng.state(),
     ...(vengeanceActive ? { vengeanceReady: false } : {}),
     // 命运守卫行为镜像：玩家本回合至少一次发起攻击（endTurn 时供 recordPlayerActionForMirror 读取）
     playerAttackedThisTurn: true,
+    generalFirstAttackUsed: true,
+    generalSetbackReady: false,
+    generalTerrainPowerReady: false,
+    generalStoredEdgeReady: false,
+    archerAttackCount,
+    archerMarkedMonsterId: traits.includes('deadeye') ? (floor.archerMarkedMonsterId ?? monsterId) : floor.archerMarkedMonsterId,
+    rogueAttackCountThisTurn: rogueAttackCount,
+    rogueEscapeMoveReady: traits.includes('shockwave'),
+    rogueVanishStrikeReady: false,
+    rogueChainBackstabReady: false,
+    berserkerBloodyChainReady: dead && traits.includes('berserker_bloody_chain'),
+    berserkerFinalChargeReady: false,
+    berserkerRetaliationTargetId: undefined,
+    berserkerRageStacks: state.player.hp <= state.player.maxHp / 2 && traits.includes('berserker_rage_boiling')
+      ? Math.min(5, (floor.berserkerRageStacks ?? 0) + 1)
+      : floor.berserkerRageStacks,
+    berserkerShield: (floor.berserkerShield ?? 0) + bloodShieldGain,
+    archerHunterRhythmReady: false,
+    archerCriticalReloadReady: critTriggered && traits.includes('archer_critical_reload'),
+    ...(dead && traits.includes('finisher') && distance >= 3 ? { archerHunterRhythmReady: true } : {}),
+    ...(dead ? { rogueKillCountThisFloor: (floor.rogueKillCountThisFloor ?? 0) + 1 } : {}),
   };
   if (backstabActive) {
     if (hasShadowStrike) {
@@ -397,6 +495,41 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   };
 
   nextState = resolveHit(nextState, monsterId, damage, events);
+  if (venomBurst) {
+    nextState = {
+      ...nextState,
+      floorState: {
+        ...nextState.floorState,
+        monsters: nextState.floorState.monsters.map((m) => m.id === monsterId ? { ...m, poisonRounds: undefined, poisonDamage: undefined } : m),
+      },
+    };
+  }
+
+  if (dead) {
+    let monsters = nextState.floorState.monsters;
+    if (traits.includes('desperate_gambit') && !(floor.rogueSmokeUsed ?? false)) {
+      monsters = monsters.map((m) => m.aiState !== 'DEAD' ? { ...m, aiState: 'IDLE' as const } : m);
+    }
+    if (traits.includes('rogue_poison_spread') && (monster.poisonRounds ?? 0) > 0) {
+      monsters = monsters.map((m) => m.aiState !== 'DEAD' && manhattan(m.pos, monster.pos) === 1
+        ? { ...m, poisonRounds: monster.poisonRounds, poisonDamage: monster.poisonDamage }
+        : m);
+    }
+    const nextMark = traits.includes('archer_mark_transfer') && floor.archerMarkedMonsterId === monsterId
+      ? monsters.find((m) => m.aiState !== 'DEAD')?.id
+      : nextState.floorState.archerMarkedMonsterId;
+    nextState = {
+      ...nextState,
+      floorState: {
+        ...nextState.floorState,
+        monsters,
+        archerMarkedMonsterId: nextMark,
+        rogueHidden: monster.aiState !== 'CHASE' && traits.includes('coup_de_grace'),
+        rogueSmokeUsed: (floor.rogueSmokeUsed ?? false) || traits.includes('desperate_gambit'),
+        rogueChainBackstabReady: backstabActive && traits.includes('rogue_chain_backstab'),
+      },
+    };
+  }
 
   // 遗物：永冻之核 — 命中后若 pending 则冰冻目标（消费 pending）。
   // 注意：若 resolveHit 已致死，则不冰冻（已无意义）。
@@ -404,12 +537,13 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   if (targetStillAlive) {
     const freeze = relicOnHitTarget(nextState.player, monsterId);
     if (freeze.freezeTargetId) {
+      const freezeRounds = getBalancedPermafrostFreezeRounds(nextState.balanceSnapshot, nextState.chapter);
       nextState = {
         ...nextState,
         player: freeze.nextPlayer,
         floorState: {
           ...nextState.floorState,
-          monsters: applyFreezeToMonsters(nextState.floorState.monsters, freeze.freezeTargetId),
+          monsters: applyFreezeToMonsters(nextState.floorState.monsters, freeze.freezeTargetId, freezeRounds),
         },
       };
       events.push(...freeze.events);
@@ -428,11 +562,25 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
         },
       };
     }
+
+    if (traits.includes('retribution')) {
+      const poisonDamage = 3 + traitCount(traits, 'nimble_stack') * 3;
+      nextState = {
+        ...nextState,
+        floorState: {
+          ...nextState.floorState,
+          monsters: nextState.floorState.monsters.map((m) => m.id === monsterId && m.aiState !== 'DEAD'
+            ? { ...m, poisonRounds: 2, poisonDamage }
+            : m),
+        },
+      };
+    }
   }
 
   // ── 横扫/散射/震荡波(cleave 系) + 觉醒·横扫(awakened_cleave)：对目标周围相邻怪物造成50%溅射伤害 ──
   if (traits.includes('awakened_cleave') || hasCleave(traits)) {
-    const splashDamage = Math.max(10, Math.round(damage * 0.5));
+    const splashPct = traits.includes('cleave') ? 0.4 : traits.includes('scatter_shot') ? 0.35 : 0.5;
+    const splashDamage = Math.max(1, Math.round(damage * splashPct));
     const adjacentIds = floor.monsters
       .filter((m) => m.id !== monsterId && m.aiState !== 'DEAD' && manhattan(m.pos, monster.pos) === 1)
       .map((m) => m.id);
@@ -441,18 +589,31 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     }
   }
 
+  if (traits.includes('archer_line_pierce')) {
+    const dx = Math.sign(monster.pos.x - floor.player.x);
+    const dy = Math.sign(monster.pos.y - floor.player.y);
+    if (dx === 0 || dy === 0) {
+      const behind = nextState.floorState.monsters.find((m) => m.id !== monsterId && m.aiState !== 'DEAD'
+        && m.pos.x === monster.pos.x + dx && m.pos.y === monster.pos.y + dy);
+      if (behind) nextState = resolveHit(nextState, behind.id, Math.max(1, Math.round(damage * 0.5)), events);
+    }
+  }
+
   // ── ARCHER 连射(multi_shot, 30%) / 觉醒·连珠(awakened_volley, 60%+30%连锁) ──
   const volley = traits.includes('awakened_volley');
-  const multiShotChance = volley ? 0.60 : (traits.includes('multi_shot') ? 0.30 : 0);
+  const forcedMulti = traits.includes('archer_arrow_rhythm') && (floor.archerNoMultiShotCount ?? 0) >= 2;
+  const multiShotChance = volley ? 0.60 : (traits.includes('multi_shot')
+    ? Math.min(1, 0.30 + traitCount(traits, 'vital_shot_stack') * 0.07 + (floor.archerCriticalReloadReady ? 0.2 : 0))
+    : 0);
   if (multiShotChance > 0) {
     const rng2 = createRng(nextState.floorState.rngState);
-    const fires = rng2.chance(multiShotChance);
-    nextState = { ...nextState, floorState: { ...nextState.floorState, rngState: rng2.state() } };
+    const fires = forcedMulti || rng2.chance(multiShotChance);
+    nextState = { ...nextState, floorState: { ...nextState.floorState, rngState: rng2.state(), archerNoMultiShotCount: fires ? 0 : (floor.archerNoMultiShotCount ?? 0) + 1, archerCriticalReloadReady: false } };
 
     if (fires) {
       const m2 = nextState.floorState.monsters.find((m) => m.id === monsterId);
       if (m2 && m2.aiState !== 'DEAD') {
-        const { damage: dmg2 } = playerAttackPower(nextState.player); // 基础伤害，无词条加乘
+        const { damage: dmg2 } = playerAttackPower(nextState.player, nextState.balanceSnapshot, nextState.chapter);
         nextState = resolveHit(nextState, monsterId, dmg2, events);
 
         // 觉醒·连珠：30% 概率连锁射击范围内另一存活目标
@@ -461,7 +622,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
           const chains = rng3.chance(0.30);
           nextState = { ...nextState, floorState: { ...nextState.floorState, rngState: rng3.state() } };
           if (chains) {
-            const { range: chainRange } = playerAttackPower(nextState.player);
+            const { range: chainRange } = playerAttackPower(nextState.player, nextState.balanceSnapshot, nextState.chapter);
             const chainTarget = nextState.floorState.monsters.find(
               (m) => m.id !== monsterId && m.aiState !== 'DEAD'
                 && manhattan(m.pos, nextState.floorState.player) <= chainRange,
@@ -476,6 +637,19 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   }
 
   nextState = { ...nextState, floorState: consumeFreezeAttack(nextState.floorState, events) };
+
+  if (overheal > 0 && traits.includes('general_overheal_anima')) {
+    const used = nextState.floorState.generalOverhealAnimaThisFloor ?? 0;
+    const anima = Math.max(0, Math.min(20 - used, Math.floor(overheal * 0.5)));
+    if (anima > 0) {
+      const animaResult = addAnima(nextState, anima);
+      nextState = {
+        ...animaResult.state,
+        floorState: { ...animaResult.state.floorState, generalOverhealAnimaThisFloor: used + anima },
+      };
+      events.push(...animaResult.events);
+    }
+  }
 
   return { state: nextState, events };
 }
@@ -503,6 +677,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   if (manhattan(monster.pos, floor.player) > monster.range) return noop(state);
 
   const traits = state.player.classTraits;
+  let incomingRngState = floor.rngState;
 
   // ── 揭示攻击者所在格：迷雾中的怪物主动攻击玩家时，暴露其位置（不暴露其余迷雾）──
   let revealed = floor.revealed;
@@ -516,9 +691,22 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // ── ROGUE 残影：本层首次受击时闪避 ──
   if (traits.includes('afterimage') && (floor.hasAfterimage ?? true)) {
     return {
-      state: { ...state, floorState: { ...floor, revealed, hasAfterimage: false } },
+      state: { ...state, floorState: { ...floor, revealed, hasAfterimage: false, rogueHidden: true, rogueVanishStrikeReady: traits.includes('rogue_vanish_shadow') } },
       events: revealEvents,
     };
+  }
+
+  const dodgeChance = traitCount(traits, 'flurry_stack') * 0.05;
+  if (dodgeChance > 0) {
+    const dodgeRng = createRng(floor.rngState);
+    const dodged = dodgeRng.chance(dodgeChance);
+    incomingRngState = dodgeRng.state();
+    if (dodged) {
+      return {
+        state: { ...state, floorState: { ...floor, rngState: dodgeRng.state(), revealed, rogueHidden: true, rogueVanishStrikeReady: traits.includes('rogue_vanish_shadow') } },
+        events: revealEvents,
+      };
+    }
   }
 
   // ── 装备减伤（ARMOR 槽，AC-17 + equip_def_up 词条，AC-402）──
@@ -532,14 +720,18 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // Boss 装备 trait: 物理减伤 + 站冰面减伤（叠加，上限 90%）
   const bossReducePct = bossDamageReducePct(state.player, floor);
   if (bossReducePct > 0) reducedDamage *= (1 - bossReducePct);
-  const damage = Math.max(10, Math.round(reducedDamage - painToleranceReduction(traits, reducedDamage)));
+  let damage = Math.max(10, Math.round(reducedDamage - painToleranceReduction(traits, reducedDamage)));
+  damage = reduceGeneralIncomingDamage(state.player, damage, floor);
 
-  let hp = Math.max(0, state.player.hp - damage);
+  const shield = floor.berserkerShield ?? 0;
+  const absorbed = Math.min(shield, damage);
+  const hpDamage = damage - absorbed;
+  let hp = Math.max(0, state.player.hp - hpDamage);
   let dead = hp <= 0;
 
   // ── BERSERKER 不屈：本层首次将死时保留 1 HP ──
   let undyingTriggered = false;
-  if (dead && traits.includes('undying') && (floor.undyingAvailable ?? true)) {
+  if (dead && traits.includes('undying') && state.player.undyingUsedChapter !== state.chapter) {
     hp = 1;
     dead = false;
     undyingTriggered = true;
@@ -549,7 +741,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   let nextPlayerAfterRelic = state.player;
   let fateEchoEvent: PveEvent | null = null;
   if (dead) {
-    const revive = relicTryRevive(state.player);
+    const revive = relicTryRevive(state.player, state.balanceSnapshot, state.chapter);
     if (revive.revived) {
       hp = revive.restoredHp;
       dead = false;
@@ -568,7 +760,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   }
 
   // ── 遗物：熔火之心 — 受伤后反弹 30% 给攻击者（即便玩家被击杀也反弹一次）──
-  const reflectDamage = relicReflectDamage(nextPlayerAfterRelic, damage);
+  const reflectDamage = relicReflectDamage(nextPlayerAfterRelic, damage, state.balanceSnapshot, state.chapter);
   let reflectEvent: PveEvent | null = null;
 
   // ── 复仇系(vengeance/retreat_shot/retribution)：受击后下次主动攻击 +5 伤害 ──
@@ -609,7 +801,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
 
   // ── Boss 装备 trait: boss_stun_on_hurt（破旧王冠 10% 受击眩晕攻击者）──
   // 消耗 RNG 一次保证 AC-13 确定性；仅在玩家未死且攻击者未死时生效。
-  let stunRngState = floor.rngState;
+  let stunRngState = incomingRngState;
   if (!dead) {
     const stunRng = createRng(stunRngState);
     if (bossStunOnHurt(state.player, stunRng)) {
@@ -645,7 +837,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
     state: {
       ...state,
       status: dead ? 'DEAD' : state.status,
-      player: { ...nextPlayerAfterRelic, hp },
+      player: { ...nextPlayerAfterRelic, hp, ...(undyingTriggered ? { undyingUsedChapter: state.chapter } : {}) },
       floorState: {
         ...floor,
         rngState: stunRngState,
@@ -655,7 +847,11 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
         ap: finalChargeTriggered ? floor.ap + 3 : floor.ap, // 进阶 oneShot：本层首次 HP≤30% 时 AP+3
         ...(undyingTriggered ? { undyingAvailable: false } : {}),
         ...(vengeanceTriggered ? { vengeanceReady: true } : {}),
+        berserkerShield: Math.max(0, shield - absorbed),
+        ...(hpDamage > state.player.maxHp * 0.2 ? { generalSetbackReady: true } : {}),
+        ...(traits.includes('berserker_tooth_for_tooth') ? { berserkerRetaliationTargetId: monsterId } : {}),
         ...(finalChargeTriggered ? { finalChargeAvailable: false } : {}),
+        ...(finalChargeTriggered ? { berserkerFinalChargeReady: true } : {}),
         ...(isFrost
           ? { playerMoveApPenaltyRounds: (floor.playerMoveApPenaltyRounds ?? 0) + FROST_MOVE_PENALTY_ROUNDS }
           : {}),
@@ -683,10 +879,12 @@ export function attackIceWall(state: ExpeditionState, entityId: string): ApplyRe
   const floor = state.floorState;
   const wall = floor.entities.find((e) => e.id === entityId);
   if (!wall || wall.type !== 'ICE_WALL' || wall.consumed) return noop(state);
-  if (!canAfford(floor.ap, 'ATTACK')) return noop(state);
+  const attackCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'ATTACK');
+  if (!canAfford(floor.ap, 'ATTACK', { ATTACK: attackCost })) return noop(state);
 
-  const { damage, range } = playerAttackPower(state.player);
+  const { damage, range } = playerAttackPower(state.player, state.balanceSnapshot, state.chapter);
   if (manhattan(floor.player, wall.pos) > range) return noop(state);
+  if (!isRevealed(floor.revealed, wall.pos)) return noop(state);
 
   const newHp = Math.max(0, (wall.hp ?? 0) - damage);
   const destroyed = newHp <= 0;
@@ -697,7 +895,7 @@ export function attackIceWall(state: ExpeditionState, entityId: string): ApplyRe
 
   let nextFloor: FloorState = {
     ...floor,
-    ap: spend(floor.ap, 'ATTACK'),
+    ap: spend(floor.ap, 'ATTACK', { ATTACK: attackCost }),
     entities: floor.entities.map((e) =>
       e.id === entityId
         ? { ...e, hp: newHp, consumed: destroyed }

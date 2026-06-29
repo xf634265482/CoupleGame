@@ -3,7 +3,8 @@
 // 仍保持零框架依赖、确定性（同 runSeed + 同操作序列 → 同结果，AC-13），供 Controller 与云端复算调用。
 
 import { rollAp } from './ApSystem';
-import { traitCount } from './AnimaSystem';
+import { addAnima, traitCount } from './AnimaSystem';
+import { traitLayers } from './strengthen/CommonStrengthenEffects';
 import { recordPlayerActionForMirror } from './bosses/FateGuardian';
 import { stepMonsters } from './MonsterAI';
 import { generateFloor } from './MapGenerator';
@@ -23,9 +24,18 @@ import {
   TOTAL_FLOORS,
   chapterOfFloor,
   isBossFloor,
+  makeDifficultySnapshot,
 } from './PveConstants';
+import type { DifficultySnapshot } from './PveConstants';
 import { createRng, hashSeed } from './rng';
 import type { ApplyResult, Coord, DestinyTreeBonuses, ExpeditionState, FixedEntity, FloorState, PendingTreeChoice, PveEvent, PveMeta, RunPlayer } from './PveTypes';
+import { buildFirstTutorialFloor } from '../tutorial/TutorialConfigs';
+import {
+  applyBalanceToFloor,
+  createBalancedInitialPlayer,
+  getBalancedApBase,
+  getBalanceSnapshot,
+} from './PveBalance';
 
 /** 由远征种子派生每层独立种子，保证同一远征内各层布局确定且互不干扰。 */
 function deriveFloorSeed(runSeed: number, floor: number): number {
@@ -33,9 +43,29 @@ function deriveFloorSeed(runSeed: number, floor: number): number {
 }
 
 /**
+ * 将难度档 HP/ATK 倍率应用到楼层内所有怪物（→ AC-P3-9）。
+ * 普通难度（hpMult=1, atkMult=1）直接返回原对象，避免不必要克隆。
+ */
+function applyDifficultyToFloor(
+  floorState: import('./PveTypes').FloorState,
+  diff: DifficultySnapshot,
+): import('./PveTypes').FloorState {
+  if (diff.hpMult === 1 && diff.atkMult === 1) return floorState;
+  return {
+    ...floorState,
+    monsters: floorState.monsters.map((m) => ({
+      ...m,
+      hp:    Math.round(m.hp    * diff.hpMult),
+      maxHp: Math.round(m.maxHp * diff.hpMult),
+      attack: Math.round(m.attack * diff.atkMult),
+    })),
+  };
+}
+
+/**
  * 创建初始玩家：基础属性叠加命运树快照（treeBonuses）：
- *   A1/A2/E1 → maxHp/hp 加成；C1 → 开局金币；D1 → 开局灵气；
- *   D2 → 强化阈值 ×系数；B3 → 随机可进阶职业碎片 +N（消耗 rng）。
+ *   A1/A3 → maxHp/hp 加成；C1 → 开局金币；D1 → 开局灵气；
+ *   D2 → 强化阈值 ×系数；B4 → 随机可进阶职业碎片 +N（消耗 rng）。
  */
 function createInitialPlayer(treeBonuses: DestinyTreeBonuses, rng: ReturnType<typeof createRng>): RunPlayer {
   const maxHp = INITIAL_HP + treeBonuses.maxHpBonus;
@@ -56,14 +86,44 @@ function createInitialPlayer(treeBonuses: DestinyTreeBonuses, rng: ReturnType<ty
   };
 }
 
+function createInitialPlayerWithBalance(
+  treeBonuses: DestinyTreeBonuses,
+  rng: ReturnType<typeof createRng>,
+  chapter: number,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+): RunPlayer {
+  const base = createBalancedInitialPlayer(balanceSnapshot, chapter, treeBonuses);
+  const animaThreshold = Math.ceil(ANIMA_PER_STRENGTHEN * treeBonuses.strengthenThresholdMult);
+
+  return {
+    hp: base.hp,
+    maxHp: base.maxHp,
+    gold: base.gold,
+    anima: base.anima,
+    animaProgress: base.animaProgress,
+    animaThreshold,
+    classId: INITIAL_CLASS,
+    classTraits: [],
+    equipment: {},
+    classFragments: applyFragmentBonus(rng, {}, treeBonuses.fragmentBonus),
+    treeBonuses,
+  };
+}
+
 /**
  * 为新楼层掷出本回合 AP 并写回 floorState（turn 重置为 1）。
  * playerTraits 非空时应用 strengthen_ap_up 加成（每个 +1 AP 上限，可叠加）；
- * apDiceBonus 为命运树 B2「急行军」骰子上限加成（treeBonuses.apDiceBonus）。
+ * apDiceBonus 为命运树 B3「急行军」骰子上限加成（treeBonuses.apDiceBonus）。
  */
-function startFloorTurn(generated: FloorState, playerTraits?: readonly string[], apDiceBonus = 0): FloorState {
+function startFloorTurn(
+  generated: FloorState,
+  chapter: number,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  playerTraits?: readonly string[],
+  apDiceBonus = 0,
+): FloorState {
   const rng = createRng(generated.rngState);
-  const { dice, ap } = rollAp(rng);
+  const { dice, ap } = rollAp(rng, getBalancedApBase(balanceSnapshot, chapter));
   const apBonus = playerTraits ? traitCount(playerTraits, 'strengthen_ap_up') : 0;
   const finalAp = ap + apBonus + apDiceBonus;
   return { ...generated, ap: finalAp, maxAp: finalAp, dice, turn: 1, rngState: rng.state() };
@@ -84,11 +144,18 @@ function collectRevealedCells(revealed: boolean[][]): Coord[] {
  * meta（可选）：玩家局外元进度，命运树效果（meta.unlockedTreeNodes）在此处一次性
  * 计算并固化为 player.treeBonuses；E2/E3 三选一产生的待选项写入 pendingTreeChoices。
  */
-export function startExpedition(runSeed: number, meta?: PveMeta): ExpeditionState {
+export function startExpedition(
+  runSeed: number,
+  meta?: PveMeta,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  difficultyTier?: string,
+): ExpeditionState {
   const floor = 1;
+  const snapshot = getBalanceSnapshot(balanceSnapshot);
+  const difficultySnapshot = makeDifficultySnapshot((difficultyTier as DifficultySnapshot['tier']) ?? 'NORMAL');
   const treeBonuses = getTreeBonuses(meta?.unlockedTreeNodes);
   const treeRng = deriveTreeRng(runSeed);
-  const player = createInitialPlayer(treeBonuses, treeRng);
+  const player = createInitialPlayerWithBalance(treeBonuses, treeRng, chapterOfFloor(floor), snapshot);
   // 遗物图鉴快照：开局从元数据复制到 player.codexRelics，供 Boss 掉落「图鉴已解锁 +10%」判定。
   // 本场拾取新遗物时也会写入此字段，远征结束由 Controller 同步回云端 codex.relics。
   if (meta?.codex?.relics && meta.codex.relics.length > 0) {
@@ -96,7 +163,15 @@ export function startExpedition(runSeed: number, meta?: PveMeta): ExpeditionStat
   }
 
   // 新游戏玩家无词条，传空数组（保持函数签名一致）
-  const floorState = startFloorTurn(generateFloor(floor, deriveFloorSeed(runSeed, floor)), [], treeBonuses.apDiceBonus);
+  const useTutorialFloor = floor === 1 && meta?.tutorialCompleted !== true;
+  const firstFloorBase = useTutorialFloor
+    ? buildFirstTutorialFloor(deriveFloorSeed(runSeed, floor))
+    : generateFloor(floor, deriveFloorSeed(runSeed, floor), player.classId);
+  const firstFloor = applyDifficultyToFloor(
+    applyBalanceToFloor(firstFloorBase, snapshot, chapterOfFloor(floor)),
+    difficultySnapshot,
+  );
+  const floorState = startFloorTurn(firstFloor, chapterOfFloor(floor), snapshot, [], treeBonuses.apDiceBonus);
   const { choices: pendingTreeChoices } = buildPendingTreeChoices(treeRng, treeBonuses, player.classId);
 
   return {
@@ -106,6 +181,9 @@ export function startExpedition(runSeed: number, meta?: PveMeta): ExpeditionStat
     status: 'ACTIVE',
     player,
     floorState,
+    balanceSnapshot: snapshot,
+    difficultySnapshot,
+    ...(useTutorialFloor ? { isTutorialRun: true } : {}),
     ...(pendingTreeChoices.length > 0 ? { pendingTreeChoices } : {}),
   };
 }
@@ -125,6 +203,8 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   // （ATTACK > MOVE > IDLE 优先级互斥；镜像在下个怪物回合按此执行）。
   const attackedThisTurn = !!state.floorState.playerAttackedThisTurn;
   const stepsThisTurn = state.floorState.playerStepsThisTurn ?? 0;
+  const reserveReady = state.player.classTraits.includes('general_reserve_setup') && state.floorState.ap >= 3;
+  const storedEdgeReady = state.player.classTraits.includes('general_stored_edge') && !attackedThisTurn;
   const mirrorRecord = recordPlayerActionForMirror(state, attackedThisTurn, stepsThisTurn);
   events.push(...mirrorRecord.events);
 
@@ -135,7 +215,10 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   }
 
   const rng = createRng(aiResult.state.floorState.rngState);
-  const { dice, ap } = rollAp(rng);
+  const { dice, ap } = rollAp(
+    rng,
+    getBalancedApBase(aiResult.state.balanceSnapshot, aiResult.state.chapter),
+  );
   const apBonus = traitCount(aiResult.state.player.classTraits, 'strengthen_ap_up');
   const treeApBonus = aiResult.state.player.treeBonuses?.apDiceBonus ?? 0;
   const nextTurn = aiResult.state.floorState.turn + 1;
@@ -143,7 +226,7 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   // AP 结转：上回合剩余 AP 按 min(剩余, AP_CARRY_CAP + 命运树B2加成) 加到本回合上限
   const carryCap = AP_CARRY_CAP + (aiResult.state.player.treeBonuses?.apCarryCapBonus ?? 0);
   const carryAp = Math.min(aiResult.state.floorState.ap, carryCap);
-  let finalAp = ap + apBonus + treeApBonus + carryAp;
+  let finalAp = ap + apBonus + treeApBonus + carryAp + (reserveReady ? 1 : 0);
 
   // 命运守卫 E5 命运封锁：上一个 Boss 回合写入 destinyLockNextTurn=true → 本回合 AP 减半（最少 1）
   const destinyLocked = !!aiResult.state.floorState.destinyLockNextTurn;
@@ -270,6 +353,10 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       destinyLockNextTurn: undefined, // 命运封锁本回合已结算（finalAp 已减半），清空
       playerAttackedThisTurn: undefined, // 命运守卫行为镜像：玩家本回合行为状态重置
       playerStepsThisTurn: undefined,
+      generalReserveApReady: undefined,
+      generalStoredEdgeReady: storedEdgeReady || aiResult.state.floorState.generalStoredEdgeReady,
+      rogueAttackCountThisTurn: 0,
+      rogueHidden: undefined,
     },
   };
 
@@ -282,10 +369,48 @@ export function endTurn(state: ExpeditionState): ApplyResult {
  * 与 advanceFloor 规则一致，保证云端可按相同规则复算（AC-13）。
  * 调用方须保证 `completedFloor < TOTAL_FLOORS`（已通关全部楼层应走结算流程，不会留有可续存档）。
  */
-export function resumeExpedition(runSeed: number, completedFloor: number, player: RunPlayer): ApplyResult {
-  const nextFloor = completedFloor + 1;
+export function resumeExpedition(
+  runSeed: number,
+  floor: number,
+  player: RunPlayer,
+  savedFloorState?: FloorState | null,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  difficultySnapshot?: DifficultySnapshot | null,
+): ApplyResult {
+  const snapshot = getBalanceSnapshot(balanceSnapshot);
+  if (savedFloorState) {
+    const allowTutorialState = floor === 1 && !!savedFloorState.tutorialScenarioId;
+    const normalizedFloorState = allowTutorialState
+      ? savedFloorState
+      : {
+        ...savedFloorState,
+        tutorialScenarioId: undefined,
+        tutorialGuide: undefined,
+      };
+    return {
+      state: {
+        runSeed,
+        chapter: chapterOfFloor(floor),
+        floor,
+        status: normalizedFloorState.status === 'DEAD' ? 'DEAD' : 'ACTIVE',
+        player,
+        floorState: normalizedFloorState,
+        balanceSnapshot: snapshot,
+        ...(allowTutorialState ? { isTutorialRun: true } : {}),
+      },
+      events: [],
+    };
+  }
+
+  const nextFloor = floor + 1;
+  const diff = difficultySnapshot ?? makeDifficultySnapshot('NORMAL');
   const floorState = startFloorTurn(
-    generateFloor(nextFloor, deriveFloorSeed(runSeed, nextFloor)),
+    applyDifficultyToFloor(
+      applyBalanceToFloor(generateFloor(nextFloor, deriveFloorSeed(runSeed, nextFloor), player.classId), snapshot, chapterOfFloor(nextFloor)),
+      diff,
+    ),
+    chapterOfFloor(nextFloor),
+    snapshot,
     player.classTraits,
     player.treeBonuses?.apDiceBonus ?? 0,
   );
@@ -302,6 +427,8 @@ export function resumeExpedition(runSeed: number, completedFloor: number, player
       status: 'ACTIVE',
       player,
       floorState,
+      balanceSnapshot: snapshot,
+      difficultySnapshot: diff,
     },
     events,
   };
@@ -318,17 +445,36 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
 
   // 章节 Boss 层通关时记录"已通关最大章节"，供二阶觉醒条件判定使用。
   const clearedChapter = chapterOfFloor(state.floor);
-  const player: RunPlayer = isBossFloor(state.floor) && (state.player.maxChapterCleared ?? 0) < clearedChapter
+  let player: RunPlayer = isBossFloor(state.floor) && (state.player.maxChapterCleared ?? 0) < clearedChapter
     ? { ...state.player, maxChapterCleared: clearedChapter }
     : state.player;
+
+  const recoveryLayers = traitLayers(player.classTraits, 'general_recovery_rhythm');
+  let recoveryOverhealAnima = 0;
+  if (recoveryLayers > 0) {
+    const heal = Math.max(1, Math.round(player.maxHp * recoveryLayers * 0.05));
+    const overheal = Math.max(0, heal - (player.maxHp - player.hp));
+    if (player.classTraits.includes('general_overheal_anima')) recoveryOverhealAnima = Math.min(20, Math.floor(overheal * 0.5));
+    player = { ...player, hp: Math.min(player.maxHp, player.hp + heal) };
+  }
 
   const nextFloor = state.floor + 1;
   if (nextFloor > TOTAL_FLOORS) {
     return { state: { ...state, player, status: 'COMPLETED' }, events: [] };
   }
 
+  const advDiff = state.difficultySnapshot ?? makeDifficultySnapshot('NORMAL');
   const floorState = startFloorTurn(
-    generateFloor(nextFloor, deriveFloorSeed(state.runSeed, nextFloor)),
+    applyDifficultyToFloor(
+      applyBalanceToFloor(
+        generateFloor(nextFloor, deriveFloorSeed(state.runSeed, nextFloor), player.classId),
+        state.balanceSnapshot,
+        chapterOfFloor(nextFloor),
+      ),
+      advDiff,
+    ),
+    chapterOfFloor(nextFloor),
+    state.balanceSnapshot,
     player.classTraits,
     player.treeBonuses?.apDiceBonus ?? 0,
   );
@@ -349,12 +495,22 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
     status: 'ACTIVE',
     player,
     floorState,
+    isTutorialRun: false,
   };
 
   // 遗物：流沙之心 — 进入新房间随机生成 2 格沙坑（消耗本层 rngState 推进，确定性）
   const relicResult = relicOnNewFloor(next);
   next = relicResult.state;
   events.push(...relicResult.events);
+
+  if (recoveryOverhealAnima > 0) {
+    const animaResult = addAnima(next, recoveryOverhealAnima);
+    next = {
+      ...animaResult.state,
+      floorState: { ...animaResult.state.floorState, generalOverhealAnimaThisFloor: recoveryOverhealAnima },
+    };
+    events.push(...animaResult.events);
+  }
 
   return { state: next, events };
 }
@@ -372,18 +528,25 @@ export function applyDeath(state: ExpeditionState): ApplyResult {
   }
 
   const retentionPct = state.player.treeBonuses?.deathGoldRetentionPct ?? 0;
-  const retainedGold = INITIAL_GOLD + Math.floor(state.player.gold * retentionPct);
+  const resetSeedRng = deriveTreeRng(state.runSeed);
+  const basePlayer = createInitialPlayerWithBalance(
+    state.player.treeBonuses ?? getTreeBonuses(undefined),
+    resetSeedRng,
+    1,
+    state.balanceSnapshot,
+  );
+  const retainedGold = basePlayer.gold + Math.floor(state.player.gold * retentionPct);
 
   const player: RunPlayer = {
-    ...state.player,
+    ...basePlayer,
     gold: retainedGold,
-    anima: INITIAL_ANIMA,
-    animaProgress: 0,
-    classId: INITIAL_CLASS,
-    classTraits: [],
-    equipment: {},
-    classFragments: {},
+    codexRelics: state.player.codexRelics ? [...state.player.codexRelics] : undefined,
+    relics: [],
+    scrolls: 0,
+    bag: [],
+    relicState: undefined,
     awakenForm: undefined,
+    maxChapterCleared: undefined,
   };
 
   return {

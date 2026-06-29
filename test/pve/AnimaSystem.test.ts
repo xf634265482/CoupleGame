@@ -79,15 +79,15 @@ describe('AnimaSystem — 灵气强化（AC-7）', () => {
     // strengthen_hp_up 为可叠加数值型词条：重复选择会再次生效（+40 maxHp/hp）
     const second = applyStrengthen(first.state, 'strengthen_hp_up');
     expect(second.state.player.classTraits).toEqual(['strengthen_hp_up', 'strengthen_hp_up']);
-    expect(second.state.player.maxHp).toBe(first.state.player.maxHp + 40);
-    expect(second.state.player.hp).toBe(first.state.player.hp + 40);
+    expect(second.state.player.maxHp).toBe(first.state.player.maxHp + 20);
+    expect(second.state.player.hp).toBe(first.state.player.hp + 20);
 
     const third = applyStrengthen(first.state, 'strengthen_attack_up');
     expect(third.state.player.classTraits).toEqual(['strengthen_hp_up', 'strengthen_attack_up']);
   });
 
   it('applyStrengthen 非数值型（开关型）词条重复选择为 no-op', () => {
-    const state = makeExpeditionState();
+    const state = makeExpeditionState({ playerOverrides: { classId: 'ARCHER' } });
     const first = applyStrengthen(state, 'eagle_eye');
     expect(first.state.player.classTraits).toEqual(['eagle_eye']);
 

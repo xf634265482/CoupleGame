@@ -12,26 +12,26 @@ export const VARIANT_SHADOW_ASSASSIN = 'SHADOW_ASSASSIN';
 export const VARIANT_FATE_WATCHER = 'FATE_WATCHER';
 export const VARIANT_VOID_WORM = 'VOID_WORM';
 
-/** 影子刺客（普通怪）：远程攻击（射程 2，不近战）。 */
+/** 影子刺客（普通怪）：远程攻击（射程 2，不近战）。护甲 30。 */
 export function makeShadowAssassin(id: string, pos: Coord): Monster {
   return {
     id, type: 'NORMAL', variantId: VARIANT_SHADOW_ASSASSIN, pos,
-    hp: 320, maxHp: 320, attack: 80, range: 2, aggroRadius: 4, aiState: 'IDLE',
+    hp: 320, maxHp: 320, attack: 80, range: 2, aggroRadius: 4, aiState: 'IDLE', armor: 30,
   };
 }
 
-/** 命运守望者（普通怪）：高HP高攻基础单位，无特殊行为。 */
+/** 命运守望者（普通怪）：高HP高攻基础单位，无特殊行为。护甲 30。 */
 export function makeFateWatcher(id: string, pos: Coord): Monster {
   return {
     id, type: 'NORMAL', variantId: VARIANT_FATE_WATCHER, pos,
-    hp: 320, maxHp: 320, attack: 80, range: 1, aggroRadius: 3, aiState: 'IDLE',
+    hp: 320, maxHp: 320, attack: 80, range: 1, aggroRadius: 3, aiState: 'IDLE', armor: 30,
   };
 }
 
-/** 虚空虫（精英怪）：冲锋——CHASE 每回合移动 2 格，高伤重压。 */
+/** 虚空虫（精英怪）：冲锋——CHASE 每回合移动 2 格，高伤重压。护甲 50。 */
 export function makeVoidWorm(id: string, pos: Coord): Monster {
   return {
     id, type: 'ELITE', variantId: VARIANT_VOID_WORM, pos,
-    hp: 640, maxHp: 640, attack: 160, range: 1, aggroRadius: 4, aiState: 'IDLE',
+    hp: 640, maxHp: 640, attack: 160, range: 1, aggroRadius: 4, aiState: 'IDLE', armor: 50,
   };
 }

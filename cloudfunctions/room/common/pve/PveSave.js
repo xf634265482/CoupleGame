@@ -5,6 +5,7 @@
  * 客户端对 pve_saves 与 users 的 PVE 字段只读。
  */
 
+const { PVE_DIFFICULTY, PVE_DIFFICULTY_ORDER, PVE_TOTAL_FLOORS } = require('../constants');
 const {
   getPveSaveByUserId,
   putPveSave,
@@ -16,6 +17,16 @@ const {
 const { validateSaveFloorReport, validateSettleReport } = require('./PveValidate');
 const { computeSettleReward } = require('./PveReward');
 
+/**
+ * 根据用户已通关难度列表自动推导当前应挑战的难度档：
+ * 取 DIFFICULTY_ORDER 中第一个尚未通关的档位；若已全通则保持最高档（INFERNO）。
+ * 难度由服务端权威计算，客户端不可指定（→ AC-P3-6）。
+ */
+function resolveCurrentTier(pveClearedTiers = []) {
+  return PVE_DIFFICULTY_ORDER.find((t) => !pveClearedTiers.includes(t))
+    ?? PVE_DIFFICULTY_ORDER[PVE_DIFFICULTY_ORDER.length - 1];
+}
+
 function toSaveVO(save) {
   if (!save) return null;
   return {
@@ -25,6 +36,8 @@ function toSaveVO(save) {
     floor: save.floor,
     player: save.player,
     floorState: save.floorState || null,
+    balanceSnapshot: save.balanceSnapshot || null,
+    difficultyTier: save.difficultyTier || PVE_DIFFICULTY.NORMAL,
     updatedAt: save.updatedAt,
   };
 }
@@ -36,14 +49,25 @@ async function loadActiveSave(user) {
 }
 
 /**
- * 开始一次远征（→ AC-503/504）：runSeed 由服务端生成，客户端不可重试以套取有利地图。
+ * 开始一次远征（→ AC-503/504, AC-P3-6）：runSeed 由服务端生成，客户端不可重试以套取有利地图。
  * 已有活跃存档时返回其 runSeed（resume:true），确保与后续 saveFloor 上报种子一致。
+ * 难度档由服务端根据通关记录自动推导（→ AC-P3-6），客户端不可指定。
+ * @param {object} user - 已通过身份校验的用户对象（包含 pveClearedTiers 字段）
  */
 async function startRun(user) {
   const current = await getPveSaveByUserId(user.id);
   if (current) {
-    return { runSeed: current.runSeed, resume: true, charged: 0 };
+    // 续档：难度档以存档内记录为准（→ AC-P3-9）
+    return {
+      runSeed: current.runSeed,
+      resume: true,
+      charged: 0,
+      difficultyTier: current.difficultyTier || PVE_DIFFICULTY.NORMAL,
+    };
   }
+  // 新局：服务端自动推导当前难度档（通关普通→困难→噩梦→...）
+  const tier = resolveCurrentTier(user.pveClearedTiers ?? []);
+
   const runSeed = Math.floor(Math.random() * 0x7fffffff) || 1;
   const reserved = await reservePveRunStart(user, runSeed);
   return {
@@ -52,6 +76,7 @@ async function startRun(user) {
     charged: reserved.charged,
     stamina: reserved.stamina.stamina,
     staminaNextRecoveryAt: reserved.stamina.nextRecoveryAt,
+    difficultyTier: tier,
   };
 }
 
@@ -63,6 +88,8 @@ async function saveFloorProgress(user, report = {}) {
   const current = await getPveSaveByUserId(user.id);
   validateSaveFloorReport(current, report);
 
+  // 难度档以存档记录为准（若新存档则取 report.difficultyTier，缺省 NORMAL → AC-P3-9）
+  const difficultyTier = current?.difficultyTier || report.difficultyTier || PVE_DIFFICULTY.NORMAL;
   const patch = {
     openId: user._openid,
     runSeed: Number(report.runSeed),
@@ -71,6 +98,8 @@ async function saveFloorProgress(user, report = {}) {
     floor: Number(report.floor),
     player: report.player || null,
     floorState: report.floorState || null,
+    balanceSnapshot: report.balanceSnapshot || null,
+    difficultyTier,
   };
 
   const saved = await putPveSave(user.id, patch, current ? current.version : undefined);
@@ -97,12 +126,19 @@ async function settleExpedition(user, report = {}) {
 
   const finalFloor = Number(report.floor);
   const status = report.status;
-  const rewards = computeSettleReward(finalFloor, status);
+  // 难度档：以存档记录为权威（→ AC-P3-9，防止客户端伪造高难度）
+  const tier = current?.difficultyTier || report.difficultyTier || PVE_DIFFICULTY.NORMAL;
+  const rewards = computeSettleReward(finalFloor, status, tier);
+
+  // 通关第 35 层 → 记录该档通关，供下一档解锁校验（→ AC-P3-6）
+  const isClearRecord = status === 'COMPLETED' && finalFloor === PVE_TOTAL_FLOORS;
 
   await incrementUserPveRewards(user.id, {
     diamond: rewards.diamond,
     destinyShards: rewards.destinyShards,
     highestFloor: finalFloor,
+    tier,
+    isClearRecord,
   });
 
   if (current) {

@@ -1,5 +1,5 @@
 import { callFunction } from './CloudService';
-import type { ExpeditionStatus, FloorState, PveMeta, RunPlayer } from '../pve/core/PveTypes';
+import type { ExpeditionStatus, FloorState, PveBalanceSnapshot, PveMeta, RunPlayer } from '../pve/core/PveTypes';
 
 interface CloudOk {
   ok: boolean;
@@ -15,6 +15,7 @@ export interface PveSaveVO {
   floor: number;
   player: RunPlayer;
   floorState: FloorState | null;
+  balanceSnapshot?: PveBalanceSnapshot | null;
   updatedAt: number;
 }
 
@@ -28,6 +29,7 @@ export interface SaveFloorReport {
   floor: number;
   player: RunPlayer;
   floorState: FloorState;
+  balanceSnapshot?: PveBalanceSnapshot | null;
 }
 
 export interface SaveFloorResponse extends CloudOk {
@@ -101,6 +103,7 @@ export async function settlePveRun(report: SettleRunReport): Promise<SettleRunRe
 
 export interface LoadMetaResponse extends CloudOk {
   meta: PveMeta;
+  balanceSnapshot?: PveBalanceSnapshot | null;
 }
 
 export interface PveLeaderboardEntry {
@@ -129,6 +132,8 @@ export interface UpdateMetaReport {
   diamond?: number;
   /** 本次新解锁的 Boss 遗物图鉴 id 列表（首次拾取时 emit）。 */
   codexRelics?: string[];
+  tutorialCompleted?: boolean;
+  resetTutorial?: boolean;
 }
 
 /** 读取局外元进度（命运碎片余额 + 成就 + 图鉴，→ AC-20）。 */

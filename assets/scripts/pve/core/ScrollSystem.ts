@@ -13,6 +13,8 @@
 import { rollChoices, STRENGTHEN_META, traitCount, strengthenPoolForClass, IMMEDIATE_HP_STACK_TRAITS } from './AnimaSystem';
 import { createRng } from './rng';
 import type { ApplyResult, ExpeditionState, PveEvent, RunPlayer } from './PveTypes';
+import { STRENGTHEN_DEF_BY_ID } from './strengthen/StrengthenCatalog';
+import { generalDynamicMaxHpBonus } from './strengthen/CommonStrengthenEffects';
 
 /** 拾取一张卷轴（Boss 掉落入口调用）：player.scrolls += 1，emit SCROLL_PICKUP。 */
 export function pickupScroll(player: RunPlayer, source: string): { player: RunPlayer; events: PveEvent[] } {
@@ -69,12 +71,15 @@ export function useScroll(state: ExpeditionState): ApplyResult {
  */
 export function claimScrollChoice(state: ExpeditionState, choiceId: string): ApplyResult {
   const meta = STRENGTHEN_META[choiceId];
+  const def = STRENGTHEN_DEF_BY_ID[choiceId];
+  if (!meta || !def || def.classId !== state.player.classId) return { state, events: [] };
   const count = traitCount(state.player.classTraits, choiceId);
   const cap = meta?.stack ?? 1;
   if ((meta?.oneShot && count >= 1) || count >= cap) {
     return { state, events: [] };
   }
 
+  const beforeDynamicHp = generalDynamicMaxHpBonus(state.player.classTraits);
   let newPlayer: RunPlayer = {
     ...state.player,
     classTraits: [...state.player.classTraits, choiceId],
@@ -82,14 +87,17 @@ export function claimScrollChoice(state: ExpeditionState, choiceId: string): App
 
   // 立即生效的 HP 类词条（与 applyStrengthen 保持一致）
   if (choiceId === 'strengthen_hp_up') {
-    const newMaxHp = newPlayer.maxHp + 40;
-    const newHp = Math.min(newPlayer.hp + 40, newMaxHp);
+    const newMaxHp = newPlayer.maxHp + 20;
+    const newHp = Math.min(newPlayer.hp + 20, newMaxHp);
     newPlayer = { ...newPlayer, maxHp: newMaxHp, hp: newHp };
   } else if (IMMEDIATE_HP_STACK_TRAITS.has(choiceId)) {
-    const newMaxHp = newPlayer.maxHp + 3;
-    const newHp = Math.min(newPlayer.hp + 3, newMaxHp);
+    const hpGain = choiceId === 'iron_skin_stack' ? 15 : 0;
+    const newMaxHp = newPlayer.maxHp + hpGain;
+    const newHp = Math.min(newPlayer.hp + hpGain, newMaxHp);
     newPlayer = { ...newPlayer, maxHp: newMaxHp, hp: newHp };
   }
+  const dynamicHpGain = generalDynamicMaxHpBonus(newPlayer.classTraits) - beforeDynamicHp;
+  if (dynamicHpGain > 0) newPlayer = { ...newPlayer, maxHp: newPlayer.maxHp + dynamicHpGain, hp: newPlayer.hp + dynamicHpGain };
 
   return {
     state: { ...state, player: newPlayer },

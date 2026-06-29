@@ -50,7 +50,7 @@ import type {
   PveEvent,
 } from '../PveTypes';
 import { makeGoblinWarrior } from '../Chapter1Monsters';
-import { HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
+import { GOBLIN_CHIEF_SUMMON_CAP, HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
 
 /** HP ≤ 此值时进入狂暴：攻击 +10、移动 +1（MonsterAI 处理额外移动步；2026-06-15 由 200 下调为 170）。 */
 export const GOBLIN_CHIEF_ENRAGE_HP = 170;
@@ -91,9 +91,10 @@ export function isHornTurn(turn: number, enraged: boolean): boolean {
   return turn > 0 && turn % interval === 0;
 }
 
-/** 哥布林酋长本回合最大移动步数：狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）为 2，否则为 1。 */
+/** 哥布林酋长本回合最大移动步数：2026-06-27 起狂暴后不再额外增加移动，始终为 1。 */
 export function goblinChiefMaxMoveSteps(hp: number): number {
-  return hp <= GOBLIN_CHIEF_ENRAGE_HP ? 2 : 1;
+  void hp;
+  return 1;
 }
 
 /**
@@ -278,6 +279,8 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 /**
  * 哥布林酋长增援号角：召唤哥布林战士 ×HORN_WARRIOR_COUNT（非狂暴=1）；
  * 狂暴状态下召唤数提升为 HORN_WARRIOR_ENRAGE_COUNT（=2）。
+ * 为避免久战时怪物数量失控，场上同时存活的号角召唤兵数量被限制在
+ * GOBLIN_CHIEF_SUMMON_CAP 以内；达到上限时本次号角不再继续加怪。
  * 怪物生成在 boss 相邻空格，格子不足时少召唤。
  */
 export function goblinChiefHorn(state: ExpeditionState, bossId: string): ApplyResult {
@@ -289,12 +292,18 @@ export function goblinChiefHorn(state: ExpeditionState, bossId: string): ApplyRe
 
   const enraged = boss.hp <= GOBLIN_CHIEF_ENRAGE_HP;
   const warriorCount = enraged ? HORN_WARRIOR_ENRAGE_COUNT : HORN_WARRIOR_COUNT;
+  const activeSummonedCount = floor.monsters.filter((m) => m.aiState !== 'DEAD' && m.summoned).length;
+  const summonQuota = Math.max(0, GOBLIN_CHIEF_SUMMON_CAP - activeSummonedCount);
+  if (summonQuota <= 0) {
+    return { state, events: [] };
+  }
+  const actualSummonCount = Math.min(warriorCount, summonQuota);
 
-  const freeCells = getAdjacentFreeCells(floor, boss.pos, warriorCount);
+  const freeCells = getAdjacentFreeCells(floor, boss.pos, actualSummonCount);
   const newMonsters: Monster[] = [];
   const events: PveEvent[] = [];
 
-  for (let i = 0; i < warriorCount && i < freeCells.length; i++) {
+  for (let i = 0; i < actualSummonCount && i < freeCells.length; i++) {
     const pos = freeCells[i];
     // summoned: 增援召唤的战士击杀后不掉落（金币/灵气/装备），避免刷增援白嫖收益
     const m = { ...makeGoblinWarrior(`mon_horn_${floor.turn}_w${i}`, pos), summoned: true };
