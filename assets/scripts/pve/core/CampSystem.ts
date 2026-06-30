@@ -4,7 +4,7 @@
 
 import { unequipItem } from './EquipmentSystem';
 import { CHAPTER_BOSS_RELIC, RELIC_CHEST } from './PveConstants';
-import { pickupRelic, playerHasRelic } from './RelicSystem';
+import { activateRelic, deactivateRelic, pickupRelic, playerHasRelic } from './RelicSystem';
 import { createRng } from './rng';
 import type { ApplyResult, EquipQuality, EquipSlot, ExpeditionState, PveEvent, RelicId, RunPlayer } from './PveTypes';
 import { payGoldWithTraits } from './strengthen/StrengthenEconomy';
@@ -146,8 +146,8 @@ export function applySellBagEquip(state: ExpeditionState, itemId: string): Apply
 // ── 遗物宝箱（design Boss设计V1 / 营地遗物宝箱）─────────────────────
 //
 // 营地是 Boss 击败后弹出的全屏 modal，绑定刚通关 Boss 的章节。
-// 宝箱单次开启花费 RELIC_CHEST.COST_GOLD + COST_DIAMOND，10% 概率开出本章 Boss 遗物。
-// 已持有该遗物时改为 30% 资源返还（金币与钻石各退 30%）。
+// 宝箱单次开启花费 RELIC_CHEST.COST_DIAMOND 星尘，10% 概率开出本章 Boss 遗物。
+// 已持有该遗物时改为 30% 星尘返还。
 //
 // 钻石余额由 Controller 在调用本函数前传入（currentDiamond），core 不直接持有钻石；
 // 实际钻石账户增减由 Controller 看 RELIC_CHEST_OPENED 事件后调用云函数完成。
@@ -161,9 +161,9 @@ export interface OpenRelicChestResult {
 
 /**
  * 营地遗物宝箱开启：
- * - 校验：金币 ≥ COST_GOLD、钻石 ≥ COST_DIAMOND、当前章节有对应遗物
+ * - 校验：钻石 ≥ COST_DIAMOND、当前章节有对应遗物
  *   不满足 → no-op（state 原样返回，diamondDelta = 0）
- * - 立即扣 player.gold（COST_GOLD）；钻石由 Controller 据 diamondDelta 处理
+ * - 仅消耗钻石（COST_GOLD=0，无金币代价）；钻石由 Controller 据 diamondDelta 处理
  * - 掷 RELIC_CHEST.SUCCESS_CHANCE 概率：
  *   - 未中 → 仅 emit RELIC_CHEST_OPENED { success: false }，资源不退
  *   - 中了 + 未持有 → 拾取遗物，emit RELIC_CHEST_OPENED { success: true, relicId }
@@ -219,4 +219,28 @@ export function openRelicChest(state: ExpeditionState, currentDiamond: number): 
     ],
     diamondDelta,
   };
+}
+
+// ── 遗物激活槽管理（Phase 5 AC-EQ-8）────────────────────────────────────
+
+/**
+ * 激活遗物：将 relicId 放入玩家激活槽。
+ * 若激活槽已满（RELIC_ACTIVE_SLOTS=3），必须同时提供 replaceId 指定被替换的遗物。
+ * 不产生事件（UI 即时刷新），返回新 state。
+ */
+export function campActivateRelic(
+  state: ExpeditionState,
+  relicId: RelicId,
+  replaceId?: RelicId,
+): ExpeditionState {
+  const nextPlayer = activateRelic(state.player, relicId, replaceId);
+  return nextPlayer === state.player ? state : { ...state, player: nextPlayer };
+}
+
+/**
+ * 停用遗物：将 relicId 从激活槽移出（效果立即消失，仍保留在 ownedRelics）。
+ */
+export function campDeactivateRelic(state: ExpeditionState, relicId: RelicId): ExpeditionState {
+  const nextPlayer = deactivateRelic(state.player, relicId);
+  return nextPlayer === state.player ? state : { ...state, player: nextPlayer };
 }

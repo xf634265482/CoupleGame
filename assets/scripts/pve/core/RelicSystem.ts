@@ -25,6 +25,7 @@ import type {
 } from './PveTypes';
 import type { Rng } from './rng';
 import { createRng } from './rng';
+import { RELIC_ACTIVE_SLOTS } from './PveConstants';
 import {
   getBalancedChiefRoarDamageMultiplier,
   getBalancedFateEchoRevivePercent,
@@ -105,9 +106,9 @@ function patchRelicState(player: RunPlayer, patch: Partial<NonNullable<RunPlayer
 // ── 公共接入函数 ─────────────────────────────────────────
 
 /**
- * 拾取遗物：append 到 player.relics（去重）；首次解锁则同时追加 player.codexRelics（图鉴快照）。
- * 不消耗 RNG。返回新 player + 事件序列（含 RELIC_PICKUP 与首次解锁时的 CODEX_RELIC_UNLOCKED）。
- * 图鉴快照在 Controller 远征结束时同步回 PveMeta.codex.relics 持久化。
+ * 拾取遗物：添加到 ownedRelics（去重）；
+ * 若激活槽未满（relics.length < RELIC_ACTIVE_SLOTS），自动激活（追加到 relics）；
+ * 首次解锁则追加 codexRelics（图鉴快照）。不消耗 RNG。
  */
 export function pickupRelic(
   player: RunPlayer,
@@ -115,8 +116,17 @@ export function pickupRelic(
   source: string,
 ): { player: RunPlayer; events: PveEvent[] } {
   const events: PveEvent[] = [];
-  const owned = player.relics ?? [];
-  const nextRelics = owned.includes(relicId) ? owned : [...owned, relicId];
+
+  // 持有（ownedRelics：收集记录，无上限）
+  const owned = player.ownedRelics ?? [];
+  const nextOwned = owned.includes(relicId) ? owned : [...owned, relicId];
+
+  // 激活（relics：效果判定槽，上限 RELIC_ACTIVE_SLOTS）
+  const active = player.relics ?? [];
+  const nextActive = active.includes(relicId) || active.length >= RELIC_ACTIVE_SLOTS
+    ? active
+    : [...active, relicId];
+
   events.push({ type: 'RELIC_PICKUP', relicId, source });
 
   const codex = player.codexRelics ?? [];
@@ -127,9 +137,40 @@ export function pickupRelic(
   }
 
   return {
-    player: { ...player, relics: nextRelics, codexRelics: nextCodex },
+    player: { ...player, relics: nextActive, ownedRelics: nextOwned, codexRelics: nextCodex },
     events,
   };
+}
+
+/**
+ * 营地遗物槽管理：将 relicId 放入激活槽，同时将被替换的遗物移出（若槽已满则替换 replaceId）。
+ * 若 relicId 不在 ownedRelics 中，no-op。若 replaceId 不在 relics 中且槽已满，no-op。
+ */
+export function activateRelic(
+  player: RunPlayer,
+  relicId: RelicId,
+  replaceId?: RelicId,
+): RunPlayer {
+  const owned = player.ownedRelics ?? [];
+  if (!owned.includes(relicId)) return player;
+  const active = player.relics ?? [];
+  if (active.includes(relicId)) return player; // 已激活
+
+  if (active.length < RELIC_ACTIVE_SLOTS) {
+    return { ...player, relics: [...active, relicId] };
+  }
+  // 槽满：替换指定遗物
+  if (!replaceId || !active.includes(replaceId)) return player;
+  return { ...player, relics: active.map((r) => (r === replaceId ? relicId : r)) };
+}
+
+/**
+ * 营地遗物槽管理：将 relicId 从激活槽移出（仍保留在 ownedRelics）。
+ */
+export function deactivateRelic(player: RunPlayer, relicId: RelicId): RunPlayer {
+  const active = player.relics ?? [];
+  if (!active.includes(relicId)) return player;
+  return { ...player, relics: active.filter((r) => r !== relicId) };
 }
 
 /**

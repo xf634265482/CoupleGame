@@ -125,6 +125,9 @@ export const CHEST_EQUIP_DROP_TABLE = {
 export const DEATH_KEEP = ['achievements', 'codex', 'diamond', 'destinyShards'] as const;
 export const DEATH_CLEAR = ['equipment', 'classId', 'classTraits', 'gold', 'anima'] as const;
 
+/** 同时最多激活的遗物槽数（Phase 5，AC-EQ-8）。 */
+export const RELIC_ACTIVE_SLOTS = 3;
+
 // ── 类型 ───────────────────────────────────────────────
 export type ClassId = keyof typeof CLASS_STATS;
 export type BossId = (typeof CHAPTER_BOSS)[keyof typeof CHAPTER_BOSS];

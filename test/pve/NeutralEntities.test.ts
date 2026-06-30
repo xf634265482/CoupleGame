@@ -7,30 +7,48 @@ import {
   BLACKSMITH_UPGRADE_COST,
   HOT_SPRING_HEAL_RATIO,
   IDOL_MAX_HP_BONUS,
+  IDOL_ATTACK_BONUS,
+  IDOL_ARMOR_BONUS,
   TREE_C3_BLACKSMITH_DISCOUNT,
 } from '../../assets/scripts/pve/core/PveConstants';
 import { makeEntity, makeExpeditionState } from './helpers';
 
 describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
-  describe('useIdol（神像 · 永久 +1 maxHp）', () => {
-    it('玩家站在神像格 + AP ≥ 1 + 未消耗：扣 AP、maxHp 与 hp 同步 +IDOL_MAX_HP_BONUS、emit IDOL_BLESSING', () => {
-      const state = makeExpeditionState({
-        floorOverrides: {
-          player: { x: 3, y: 3 },
-          ap: 5,
-          entities: [makeEntity('idol1', 'IDOL', { x: 3, y: 3 })],
-        },
-        playerOverrides: { hp: 15, maxHp: 20 },
-      });
-
-      const result = useIdol(state, 'idol1');
-      expect(result.state.player.maxHp).toBe(20 + IDOL_MAX_HP_BONUS);
-      expect(result.state.player.hp).toBe(15 + IDOL_MAX_HP_BONUS);
-      expect(result.state.floorState.ap).toBe(4);
-      expect(result.state.floorState.entities.find((e) => e.id === 'idol1')?.consumed).toBe(true);
-      expect(result.events).toEqual([
-        { type: 'IDOL_BLESSING', entityId: 'idol1', maxHpBonus: IDOL_MAX_HP_BONUS },
-      ]);
+  describe('useIdol（神像 · 三选一随机）', () => {
+    it('扣 AP、consumed=true、emit IDOL_BLESSING，多次调用覆盖全部 3 种 effect', () => {
+      // 用不同 rngState 种子遍历，确保 MAX_HP / ATTACK / ARMOR 都能被命中
+      const effects = new Set<string>();
+      for (let seed = 0; seed < 30; seed++) {
+        const state = makeExpeditionState({
+          floorOverrides: {
+            player: { x: 3, y: 3 },
+            ap: 5,
+            entities: [makeEntity('idol1', 'IDOL', { x: 3, y: 3 })],
+            rngState: seed,
+          },
+          playerOverrides: { hp: 15, maxHp: 20 },
+        });
+        const result = useIdol(state, 'idol1');
+        expect(result.state.floorState.ap).toBe(4);
+        expect(result.state.floorState.entities.find((e) => e.id === 'idol1')?.consumed).toBe(true);
+        expect(result.events).toHaveLength(1);
+        const ev = result.events[0];
+        expect(ev.type).toBe('IDOL_BLESSING');
+        if (ev.type === 'IDOL_BLESSING') {
+          effects.add(ev.effect);
+          if (ev.effect === 'MAX_HP') {
+            expect(result.state.player.maxHp).toBe(20 + IDOL_MAX_HP_BONUS);
+            expect(result.state.player.hp).toBe(15 + IDOL_MAX_HP_BONUS);
+          } else if (ev.effect === 'ATTACK') {
+            expect(result.state.player.idolAttackBonus).toBe(IDOL_ATTACK_BONUS);
+          } else {
+            expect(result.state.player.idolArmorBonus).toBe(IDOL_ARMOR_BONUS);
+          }
+        }
+      }
+      expect(effects).toContain('MAX_HP');
+      expect(effects).toContain('ATTACK');
+      expect(effects).toContain('ARMOR');
     });
 
     it('不在神像格 / AP 不足 / 已消耗 时为 no-op', () => {
@@ -63,8 +81,8 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
     });
   });
 
-  describe('useHotSpring（温泉 · 恢复 maxHp 的 40%）', () => {
-    it('玩家受伤后泡温泉：扣 AP、HP 恢复 40% maxHp、emit HOT_SPRING_HEAL', () => {
+  describe('useHotSpring（温泉 · 恢复 maxHp 的 50%）', () => {
+    it('玩家受伤后泡温泉：扣 AP、HP 恢复 50% maxHp、emit HOT_SPRING_HEAL', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 4, y: 4 },
@@ -74,12 +92,12 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
         playerOverrides: { hp: 5, maxHp: 20 },
       });
 
-      // 30% × 20 = 6，hp: 5 → 11，healed = 6（V3：每章 2 个温泉，削减单次回量）
+      // 50% × 20 = 10，hp: 5 → 15，healed = 10
       const result = useHotSpring(state, 's1');
-      expect(result.state.player.hp).toBe(11);
+      expect(result.state.player.hp).toBe(15);
       expect(result.state.floorState.ap).toBe(4);
       const heal = result.events.find((e) => e.type === 'HOT_SPRING_HEAL');
-      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(6);
+      expect(heal && heal.type === 'HOT_SPRING_HEAL' && heal.healed).toBe(10);
       expect(HOT_SPRING_HEAL_RATIO).toBeGreaterThan(0);
     });
 
@@ -297,8 +315,8 @@ describe('NeutralEntities — 中立交互实体（M1 新增）', () => {
       expect(rerollEquipTrait(noGold, 's', 'WEAPON').events).toEqual([]);
     });
 
-    it('COMMON / FINE / RARE 品质装备 洗炼为 no-op（品质不足）', () => {
-      for (const quality of ['COMMON', 'FINE', 'RARE'] as const) {
+    it('COMMON / FINE 品质装备 洗炼为 no-op（品质不足，Phase 5 AC-EQ-9：RARE+ 可洗炼）', () => {
+      for (const quality of ['COMMON', 'FINE'] as const) {
         const state = makeExpeditionState({
           floorOverrides: {
             player: { x: 5, y: 5 },

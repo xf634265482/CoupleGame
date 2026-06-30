@@ -10,6 +10,8 @@ import {
   BLACKSMITH_ENHANCE_STEP,
   BLACKSMITH_FAIL_BASE,
   BLACKSMITH_FAIL_CAP,
+  IDOL_ATTACK_BONUS,
+  IDOL_ARMOR_BONUS,
   BLACKSMITH_FAIL_STEP,
   BLACKSMITH_FAIL_THRESHOLD,
   BLACKSMITH_REROLL_COST,
@@ -26,8 +28,9 @@ function noop(state: ExpeditionState): ApplyResult {
 }
 
 /**
- * 使用神像：玩家站在 IDOL 格 + AP ≥ 1 + 未消耗 → 扣 AP，永久 +IDOL_MAX_HP_BONUS maxHp。
- * 当前 HP 同步上调（避免出现 "HP 20/maxHp 21" 的视觉怪状态）。
+ * 使用神像：玩家站在 IDOL 格 + AP ≥ 1 + 未消耗 → 扣 AP，
+ * 用楼层 RNG 三选一随机：+IDOL_MAX_HP_BONUS maxHp / +IDOL_ATTACK_BONUS 攻击 / +IDOL_ARMOR_BONUS 护甲。
+ * 当前 HP 同步上调（选中 MAX_HP 时），避免出现 "HP 20/maxHp 21" 的视觉怪状态。
  */
 export function useIdol(state: ExpeditionState, entityId: string): ApplyResult {
   const floor = state.floorState;
@@ -36,24 +39,34 @@ export function useIdol(state: ExpeditionState, entityId: string): ApplyResult {
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
   if (!canAfford(floor.ap, 'USE_IDOL')) return noop(state);
 
-  const bonus = IDOL_MAX_HP_BONUS;
-  const events: PveEvent[] = [{ type: 'IDOL_BLESSING', entityId, maxHpBonus: bonus }];
+  const rng = createRng(floor.rngState);
+  const roll = rng.int(0, 2); // 0=MAX_HP, 1=ATTACK, 2=ARMOR
+
+  let nextPlayer = { ...state.player };
+  let event: PveEvent;
+  if (roll === 0) {
+    nextPlayer = { ...nextPlayer, maxHp: nextPlayer.maxHp + IDOL_MAX_HP_BONUS, hp: nextPlayer.hp + IDOL_MAX_HP_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'MAX_HP', maxHpBonus: IDOL_MAX_HP_BONUS };
+  } else if (roll === 1) {
+    nextPlayer = { ...nextPlayer, idolAttackBonus: (nextPlayer.idolAttackBonus ?? 0) + IDOL_ATTACK_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'ATTACK', attackBonus: IDOL_ATTACK_BONUS };
+  } else {
+    nextPlayer = { ...nextPlayer, idolArmorBonus: (nextPlayer.idolArmorBonus ?? 0) + IDOL_ARMOR_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'ARMOR', armorBonus: IDOL_ARMOR_BONUS };
+  }
 
   return {
     state: {
       ...state,
-      player: {
-        ...state.player,
-        maxHp: state.player.maxHp + bonus,
-        hp: state.player.hp + bonus, // 同步把当前 HP 上限抬起来
-      },
+      player: nextPlayer,
       floorState: {
         ...floor,
         ap: spend(floor.ap, 'USE_IDOL'),
+        rngState: rng.state(),
         entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
       },
     },
-    events,
+    events: [event],
   };
 }
 
@@ -191,10 +204,10 @@ export function upgradeEquip(state: ExpeditionState, entityId: string, slot: Equ
 }
 
 /**
- * 词条洗炼最低品质要求：紫色（EPIC）及以上才有词条槽。
- * 低品质装备的词条栏留空，洗炼对其无效。
+ * 词条洗炼最低品质要求：蓝色（RARE）及以上（Phase 5 AC-EQ-9：从 EPIC+ 下放至 RARE+）。
+ * RARE 持有 1 条词条（affixes），EPIC/LEGENDARY 持有 2 条；白/绿无词条槽，洗炼对其无效。
  */
-export const REROLL_QUALITY_MIN = new Set(['EPIC', 'LEGENDARY']);
+export const REROLL_QUALITY_MIN = new Set(['RARE', 'EPIC', 'LEGENDARY']);
 
 /**
  * 铁匠洗炼：为指定槽位装备随机替换一个词条，消耗 BLACKSMITH_REROLL_COST 金币。
