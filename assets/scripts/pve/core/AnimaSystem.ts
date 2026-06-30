@@ -6,10 +6,11 @@
 
 import { createRng } from './rng';
 import { ANIMA_PER_STRENGTHEN, ANIMA_THRESHOLD_MULTIPLIER, STRENGTHEN_CHOICES } from './PveConstants';
-import type { ClassId } from './PveConstants';
+import type { AwakenForm, ClassId } from './PveConstants';
 import type { ApplyResult, ExpeditionState, PveEvent } from './PveTypes';
 import {
   ADVENTURER_STRENGTHEN_DEFS,
+  AWAKEN_STRENGTHEN_DEFS_BY_FORM,
   ARCHER_STRENGTHEN_DEFS,
   BERSERKER_STRENGTHEN_DEFS,
   ROGUE_STRENGTHEN_DEFS,
@@ -20,6 +21,7 @@ import {
   generalAnimaGainPct,
   generalDynamicMaxHpBonus,
 } from './strengthen/CommonStrengthenEffects';
+import { playerHasLegendary } from './LegendarySystem';
 
 /** ADVENTURER 通用强化池（无职业时使用，M1 兼容）。 */
 export const ADVENTURER_STRENGTHEN_POOL = [
@@ -203,8 +205,9 @@ const CLASS_STRENGTHEN_POOL: Partial<Record<ClassId, readonly string[]>> = {
 };
 
 /** 取指定职业的强化词条池（无对应池时回退到 ADVENTURER 通用池），供命运树 E3「命运护佑」复用。 */
-export function strengthenPoolForClass(classId: ClassId): readonly string[] {
-  return CLASS_STRENGTHEN_POOL[classId] ?? ADVENTURER_STRENGTHEN_POOL;
+export function strengthenPoolForClass(classId: ClassId, awakenForm?: AwakenForm): readonly string[] {
+  const base = CLASS_STRENGTHEN_POOL[classId] ?? ADVENTURER_STRENGTHEN_POOL;
+  return awakenForm ? [...base, ...AWAKEN_STRENGTHEN_DEFS_BY_FORM[awakenForm].map((def) => def.id)] : base;
 }
 
 /**
@@ -217,10 +220,18 @@ export function rollChoices(
   pool: readonly string[],
   classTraits: readonly string[],
   recentOffers: readonly string[] = [],
+  guaranteeAwaken = false,
 ): { choices: string[]; nextRngState: number } {
   const catalogPool = pool.map((id) => STRENGTHEN_DEF_BY_ID[id]).filter((def) => !!def);
   if (catalogPool.length > 0) {
-    return rollStrengthenOffers({ rngState, pool: catalogPool, owned: classTraits, recentOffers, count: STRENGTHEN_CHOICES });
+    return rollStrengthenOffers({
+      rngState,
+      pool: catalogPool,
+      owned: classTraits,
+      recentOffers,
+      count: STRENGTHEN_CHOICES,
+      guaranteeAwaken,
+    });
   }
   const baseOrConditionOwned = pool.filter((id) => {
     const meta = STRENGTHEN_META[id];
@@ -266,14 +277,16 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
   // 使用玩家当前阈值（兼容旧存档：undefined → 100）
   const threshold = state.player.animaThreshold ?? ANIMA_PER_STRENGTHEN;
 
-  const pool = CLASS_STRENGTHEN_POOL[state.player.classId] ?? ADVENTURER_STRENGTHEN_POOL;
+  const pool = strengthenPoolForClass(state.player.classId, state.player.awakenForm);
+  let guaranteeAwaken = state.player.awakenFirstOfferPending ?? false;
 
   while (progress >= threshold) {
     progress -= threshold;
-    const rolled = rollChoices(rngState, pool, state.player.classTraits, recentStrengthenOffers);
+    const rolled = rollChoices(rngState, pool, state.player.classTraits, recentStrengthenOffers, guaranteeAwaken);
     rngState = rolled.nextRngState;
     recentStrengthenOffers = rolled.choices;
     events.push({ type: 'ANIMA_STRENGTHEN', choices: rolled.choices });
+    guaranteeAwaken = false;
   }
 
   return {
@@ -284,6 +297,7 @@ export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
         anima: state.player.anima + actualAmount,
         animaProgress: progress,
         ...(events.length > 0 ? { recentStrengthenOffers } : {}),
+        ...(events.length > 0 && state.player.awakenFirstOfferPending ? { awakenFirstOfferPending: false } : {}),
       },
       floorState: { ...state.floorState, rngState },
     },
@@ -301,6 +315,7 @@ export function applyStrengthen(state: ExpeditionState, choiceId: string): Apply
   const meta = STRENGTHEN_META[choiceId];
   const def = STRENGTHEN_DEF_BY_ID[choiceId];
   if (!meta || !def || def.classId !== state.player.classId) return { state, events: [] };
+  if (def.kind === 'awaken' && def.awakenForm !== state.player.awakenForm) return { state, events: [] };
   const count = traitCount(state.player.classTraits, choiceId);
   const cap = meta?.stack ?? 1;
   if ((meta?.oneShot && count >= 1) || count >= cap) {
@@ -332,6 +347,22 @@ export function applyStrengthen(state: ExpeditionState, choiceId: string): Apply
   const dynamicHpGain = generalDynamicMaxHpBonus(newPlayer.classTraits) - beforeDynamicHp;
   if (dynamicHpGain > 0) {
     newPlayer = { ...newPlayer, maxHp: newPlayer.maxHp + dynamicHpGain, hp: newPlayer.hp + dynamicHpGain };
+  }
+
+  // 传奇：智慧轻冠 — 灵气强化时回复30HP
+  if (playerHasLegendary(newPlayer.equipment, 'leg_sage_crown')) {
+    newPlayer = { ...newPlayer, hp: Math.min(newPlayer.maxHp, newPlayer.hp + 30) };
+  }
+  // 传奇：命运护符 — 灵气强化时叠层+1（最多5叠），叠层效果在 CombatSystem 读取
+  if (playerHasLegendary(newPlayer.equipment, 'leg_fate_amulet')) {
+    const prevStacks = newPlayer.legendaryState?.fateAmuletStacks ?? 0;
+    newPlayer = {
+      ...newPlayer,
+      legendaryState: {
+        ...newPlayer.legendaryState,
+        fateAmuletStacks: Math.min(5, prevStacks + 1),
+      },
+    };
   }
 
   return {

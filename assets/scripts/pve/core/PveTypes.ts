@@ -171,8 +171,12 @@ export interface RunPlayer {
   recentStrengthenOffers?: string[];
   /** Chapter number in which Berserker's Undying has already triggered. */
   undyingUsedChapter?: number;
-  /** 本场远征拾取的 Boss 遗物列表（死亡清空，不跨远征保留；图鉴解锁记录见 PveMeta.codex.relics）。 */
+  /** 本场远征拾取的 Boss 遗物列表（死亡清空，不跨远征保留；图鉴解锁记录见 PveMeta.codex.relics）。
+   *  Phase 5 起含义变为「激活槽内遗物」（最多 3 个），ownedRelics 为全部已持有遗物。 */
   relics?: RelicId[];
+  /** Phase 5：本场远征所有已拾取的 Boss 遗物（含未激活的）。relics 只是其中激活的最多 3 个。
+   *  向后兼容：若 ownedRelics 未初始化则视同 relics（旧存档所有已拾 = 全部激活）。 */
+  ownedRelics?: RelicId[];
   /** 遗物图鉴快照（开局时从 PveMeta.codex.relics 复制 + 本场远征首次拾取时同步追加）。
    *  用于 Boss 掉落「图鉴已解锁 +10%」判定。运行结束后由 Controller 同步回云端 codex.relics。 */
   codexRelics?: RelicId[];
@@ -184,6 +188,13 @@ export interface RunPlayer {
   idolAttackBonus?: number;
   /** 神像祝福累计护甲加成（永久，减少怪物伤害，跨层保留）。 */
   idolArmorBonus?: number;
+  /** 传奇装备跨层状态（Phase 3）：Boss 击杀叠层、灵气强化叠层等跨层持续效果。 */
+  legendaryState?: {
+    /** 命运王冠：远征内 Boss 击杀叠层（最多 3 叠，每叠 +10 攻击）。 */
+    fateCrownStacks?: number;
+    /** 命运护符：灵气强化叠层（最多 5 叠，每叠 +5 攻击）。 */
+    fateAmuletStacks?: number;
+  };
   /** 遗物运行态：CHIEF_ROAR/PERMAFROST_CORE 累计与待触发标记；FATE_ECHO 一次性消耗标记。 */
   relicState?: {
     /** CHIEF_ROAR：上次击杀后下一次普攻 +50%，触发后置 false。 */
@@ -451,6 +462,16 @@ export interface FloorState {
   affixPreemptiveUsed?: boolean;
   /** 词条：疾袭本回合移动后待触发（aff_swift_strike；endTurn 重置）。 */
   affixSwiftStrikeReady?: boolean;
+  /** 传奇：命运之刃本层击杀叠层计数（leg_fate_blade；新层自动归零）。 */
+  legFateBladeStacks?: number;
+  /** 传奇：噬魂战斧下次攻击必暴击标记（leg_soul_axe；击杀后置 true，首次攻击消耗）。 */
+  legSoulAxePending?: boolean;
+  /** 传奇：永恒板甲本层首次致死兜底已用（leg_eternal_plate；新层重置）。 */
+  legEternalPlateUsed?: boolean;
+  /** 传奇：疾风幻影甲下次受击伤害减半（leg_phantom_armor；受击 30% 概率置 true，触发后消耗）。 */
+  legPhantomDodgeReady?: boolean;
+  /** 传奇：疾风之靴首步后首击+25%待触发（leg_gale_boots；首步成功后置 true，首次攻击消耗）。 */
+  legGaleBootsAttackReady?: boolean;
   tutorialScenarioId?: string;
   tutorialGuide?: {
     currentStepId: string;
@@ -666,6 +687,8 @@ export type PveEvent =
   | { type: 'RELIC_CHEST_OPENED'; success: boolean; relicId?: RelicId; refunded?: boolean; refundGold?: number; refundDiamond?: number }
   /** 遗物 hook 触发提示（例：永冻之核冰冻、熔火之心反弹），供战报展示。 */
   | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string }
+  /** 传奇装备效果触发提示（Phase 3），供战报展示。 */
+  | { type: 'LEGENDARY_TRIGGERED'; legendaryId: string; detail?: string }
   /** C4 VOID_WORM 双生复活：首次被击杀时原地复活到 50% HP，emit 供战报/UI 展示。 */
   | { type: 'ELITE_REVIVE'; monsterId: string; hp: number }
   /** C3 FIRE_ELEMENTAL 爆裂自爆：死亡时对 2 格内玩家造成等攻击力真实伤害（无视护甲）。 */

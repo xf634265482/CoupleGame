@@ -6,6 +6,7 @@ import {
   shoesStealthReduction,
 } from '../core/EquipmentSystem';
 import { affixDescription } from '../core/AffixSystem';
+import { legendaryDescription } from '../core/LegendarySystem';
 
 const QUALITY_LABEL: Record<string, string> = {
   COMMON: '普通',
@@ -123,6 +124,9 @@ export function formatEquipDetailBody(item: EquipItem): string {
   if (item.trait) {
     lines.push(`词条：${traitName}`);
     lines.push(`效果：${traitDesc}`);
+  }
+  if (item.legendaryId) {
+    lines.push(legendaryDescription(item.legendaryId));
   }
   return lines.join('\n');
 }

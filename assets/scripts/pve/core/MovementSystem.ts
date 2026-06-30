@@ -8,6 +8,7 @@
 import { revealAround } from './FogSystem';
 import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, CHAPTER4_LAVA_TILE_DAMAGE, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
+import { legGaleBootsFirstMoveFree, legShadowBootsMoveCostReduction } from './LegendarySystem';
 import { relicOnMoveStep } from './RelicSystem';
 import { bossSandImmune } from './BossEquipTraitEffects';
 import { getBalancedActionCost } from './PveBalance';
@@ -111,8 +112,9 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const shoes = state.player.equipment.SHOES;
   const shoesBaseStat = shoes?.baseStat ?? 0;
 
-  // RARE+(baseStat≥3)：每回合首次移动免费（0 AP）
-  const firstMoveFree = shoesBaseStat >= SHOES_FIRST_MOVE_THRESHOLD && !(floor.shoesFirstMoveDone ?? false);
+  // RARE+(baseStat≥3)：每回合首次移动免费（0 AP）；传奇：疾风之靴忽略 baseStat 门槛永久生效
+  const firstMoveFree = (shoesBaseStat >= SHOES_FIRST_MOVE_THRESHOLD || legGaleBootsFirstMoveFree(state.player.equipment))
+    && !(floor.shoesFirstMoveDone ?? false);
   // 靴子减耗上限 1 AP/步（防止 FINE baseStat=2 把 AP_COST.MOVE=2 减成 0）
   const shoesReduction = shoesBaseStat > 0 ? 1 : 0;
   const configuredMoveCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'MOVE');
@@ -128,9 +130,11 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const escapeReduction = floor.rogueEscapeMoveReady && traits.includes('shockwave') ? 1 : 0;
   // 基础款优缺点：板甲移动消耗额外 AP+1（AC-EQ-3）
   const platePenalty = state.player.equipment.ARMOR?.implicit === 'armor_plate' ? 1 : 0;
+  // 传奇：影踪战靴 每步移动额外 -1 AP
+  const shadowBootsReduction = legShadowBootsMoveCostReduction(state.player.equipment);
   const cost = firstMoveFree
     ? 0
-    : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - escapeReduction);
+    : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - escapeReduction - shadowBootsReduction);
 
   if (floor.ap < cost) return noop(state);
   if (isBlockedByMonster(floor, to)) return noop(state);
@@ -173,8 +177,11 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
     ...(traits.includes('awakened_shadow_strike') && !(floor.awakenShadowGrantedThisTurn ?? false)
       ? { awakenShadowCharges: 2, awakenShadowGrantedThisTurn: true }
       : {}),
-    // RARE+ 靴子首步免费：本回合首步已用完
+    // RARE+ 靴子首步免费：本回合首步已用完；疾风之靴触发时额外标记首击+25%
     ...(firstMoveFree ? { shoesFirstMoveDone: true } : {}),
+    ...(firstMoveFree && legGaleBootsFirstMoveFree(state.player.equipment)
+      ? { legGaleBootsAttackReady: true }
+      : {}),
     // 命运守卫行为镜像：累计本回合移动步数（endTurn 时供 recordPlayerActionForMirror 读取）
     playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
     rogueEscapeMoveReady: false,

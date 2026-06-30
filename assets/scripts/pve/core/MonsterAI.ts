@@ -28,6 +28,7 @@ const CHARGE_VARIANTS = new Set([VARIANT_SANDWORM_LARVA, VARIANT_SNOW_WOLF, VARI
 import { ANIMA_BEETLE_TRAP_DURATION, ANIMA_ELF_TRAP_DURATION } from './PveConstants';
 import type { FixedEntity } from './PveTypes';
 import { shoesStealthReduction } from './EquipmentSystem';
+import { legSwallowStepsStealthBonus } from './LegendarySystem';
 import {
   fateGuardianAttack,
   fateProphecyStep,
@@ -406,6 +407,7 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   const helmetAggroPenalty = state.player.equipment.HELMET?.implicit === 'helmet_heavy' ? 1 : 0;
   const stealthReduction = (state.player.classTraits.includes('stealth') ? 2 : 0)
     + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0)
+    + legSwallowStepsStealthBonus(state.player.equipment)
     - helmetAggroPenalty;
   // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
   const inAggroRange = !state.floorState.rogueHidden

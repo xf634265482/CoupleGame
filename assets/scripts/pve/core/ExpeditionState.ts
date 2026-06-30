@@ -38,6 +38,7 @@ import {
   getBalanceSnapshot,
 } from './PveBalance';
 import { affixFortifyBonus } from './AffixSystem';
+import { legFateArmorHeal, legFortuneBlessingFloorHeal } from './LegendarySystem';
 
 /** 由远征种子派生每层独立种子，保证同一远征内各层布局确定且互不干扰。 */
 function deriveFloorSeed(runSeed: number, floor: number): number {
@@ -470,6 +471,16 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
   const fortifyHeal = affixFortifyBonus(player.equipment);
   if (fortifyHeal > 0) {
     player = { ...player, hp: Math.min(player.maxHp, player.hp + fortifyHeal) };
+  }
+  // 传奇：命运铠甲 — 每层入场回10%最大HP
+  const fateArmorHeal = legFateArmorHeal(player.equipment, player.maxHp);
+  if (fateArmorHeal > 0) {
+    player = { ...player, hp: Math.min(player.maxHp, player.hp + fateArmorHeal) };
+  }
+  // 传奇：财神赐福 — 每层入场按持有金币回血（每20金=1HP，最多15HP）
+  const fortuneBlessingHeal = legFortuneBlessingFloorHeal(player.equipment, player.gold);
+  if (fortuneBlessingHeal > 0) {
+    player = { ...player, hp: Math.min(player.maxHp, player.hp + fortuneBlessingHeal) };
   }
 
   const nextFloor = state.floor + 1;

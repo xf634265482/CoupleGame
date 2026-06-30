@@ -15,6 +15,15 @@ import { canAfford, spend } from './ApSystem';
 import { equipTraitAtkBonus, equipTraitDefBonus } from './EquipTraitEffects';
 import { affixSharpBonus, affixSturdyBonus, collectAffixes, getAffixValue } from './AffixSystem';
 import {
+  legFateBladeBonus,
+  legFateCrownBonus,
+  legFateAmuletBonus,
+  legIronCrownMultiplier,
+  legSunBowRangeBonus,
+  legSunBowIgnoresArmor,
+  playerHasLegendary,
+} from './LegendarySystem';
+import {
   bloodlustStackHeal,
   executionerBonus,
   hasCleave,
@@ -304,6 +313,18 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   const traits = state.player.classTraits;
   let { damage, range } = playerAttackPower(state.player, state.balanceSnapshot, state.chapter);
+
+  // 传奇：贯日长弓 射程+2（须在距离检查前生效）
+  range += legSunBowRangeBonus(state.player.equipment);
+  // 传奇：命运之刃 本层击杀叠层 +3/层（最多 5 叠）
+  damage += legFateBladeBonus(state.player.equipment, floor.legFateBladeStacks ?? 0);
+  // 传奇：命运王冠 远征内 Boss 击杀叠层 +10/层（最多 3 叠）
+  damage += legFateCrownBonus(state.player.equipment, state.player.legendaryState?.fateCrownStacks ?? 0);
+  // 传奇：命运护符 灵气强化叠层 +5/层（最多 5 叠）
+  damage += legFateAmuletBonus(state.player.equipment, state.player.legendaryState?.fateAmuletStacks ?? 0);
+  // 传奇：盖世铁冠 攻击伤害 +20%
+  damage = Math.round(damage * legIronCrownMultiplier(state.player.equipment));
+
   const distance = manhattan(floor.player, monster.pos);
   if (distance > range) return noop(state);
   // 玩家只能攻击已揭示区域内的怪物，防止远程角色（range≥2）自动锁定未探索迷雾中的敌人。
@@ -422,6 +443,11 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   if (floor.berserkerBloodyChainReady) damage = Math.round(damage * 1.25);
   if (floor.berserkerFinalChargeReady) damage = Math.round(damage * 1.3);
 
+  // 传奇：疾风之靴 首步后首次攻击 +25%
+  if ((floor.legGaleBootsAttackReady ?? false) && firstAttackThisTurn) {
+    damage = Math.round(damage * 1.25);
+  }
+
   // ── 概率词条（消耗 rngState，始终推进以保证 AC-13 确定性；rng 在上方范围检查后创建）──
   const critChance = traits.includes('crit')
     ? 0.1 + traitCount(traits, 'quiver_stack') * 0.04
@@ -430,10 +456,14 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   const forcedSniperCrit = sniperActive
     && traits.includes('awaken_sniper_calibration')
     && (floor.awakenSniperGuaranteedCrit ?? false);
-  const critTriggered = forcedSniperCrit || (critChance > 0 && rng.chance(Math.min(1, critChance)));
+  // 传奇：噬魂战斧 击杀后必暴击（始终消耗 RNG 以保证 AC-13）
+  const legSoulAxeCrit = playerHasLegendary(state.player.equipment, 'leg_soul_axe') && (floor.legSoulAxePending ?? false);
+  const critTriggered = forcedSniperCrit || legSoulAxeCrit || (critChance > 0 && rng.chance(Math.min(1, critChance)));
   if (critTriggered) {
-    damage *= 2; // ARCHER 暴击：10% 双倍伤害
+    damage *= 2; // 暴击：双倍伤害
   }
+  // 传奇：幸运女神眼 20% 连击概率（始终消耗 RNG 保证 AC-13）
+  const legLuckyEyeProc = playerHasLegendary(state.player.equipment, 'leg_lucky_eye') && rng.chance(0.20);
 
   // Boss 装备 trait: boss_crit_15（命运之刃 15% 暴击 ×2，始终消耗 RNG 一次）
   damage *= bossCritMult(state.player.equipment, rng);
@@ -518,6 +548,8 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     }
     // Boss 装备 trait: boss_kill_heal_8（烈焰指环击杀回血）
     playerHp = bossKillHeal(state.player, playerHp);
+    // 传奇：噬魂战斧 击杀回 5HP
+    if (playerHasLegendary(state.player.equipment, 'leg_soul_axe')) requestedHeal += 5;
   }
   if (dead && slayerActive) {
     requestedHeal += traits.includes('awaken_slayer_blood_feast') ? 18 : 10;
@@ -593,6 +625,11 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     ...(_affPreemptive !== undefined && !(floor.affixPreemptiveUsed ?? false)
       ? { affixPreemptiveUsed: true }
       : {}),
+    // 传奇状态更新（Phase 3）
+    ...(dead ? { legFateBladeStacks: Math.min(5, (floor.legFateBladeStacks ?? 0) + 1) } : {}),
+    ...(dead ? { legSoulAxePending: playerHasLegendary(state.player.equipment, 'leg_soul_axe') ? true : floor.legSoulAxePending } : {}),
+    ...(!dead && legSoulAxeCrit ? { legSoulAxePending: false } : {}),
+    ...(firstAttackThisTurn ? { legGaleBootsAttackReady: false } : {}),
   };
   if (backstabActive) {
     if (!shadowChargeActive) {
@@ -616,7 +653,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     floorState: nextFloorState,
   };
 
-  nextState = resolveHit(nextState, monsterId, damage, events, sniperActive);
+  nextState = resolveHit(nextState, monsterId, damage, events, sniperActive || legSunBowIgnoresArmor(state.player.equipment));
   if (breakerActive) {
     events.push({
       type: 'AWAKEN_EFFECT_TRIGGERED',
@@ -819,6 +856,30 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
 
   nextState = { ...nextState, floorState: consumeFreezeAttack(nextState.floorState, events) };
 
+  // 传奇：命运王冠 — Boss 击杀后攻击+10（最多 3 叠）
+  const monsterNowDead = nextState.floorState.monsters.find((m) => m.id === monsterId)?.aiState === 'DEAD';
+  const monsterWasBoss = monster.type === 'BOSS' || !!monster.bossId;
+  if (monsterNowDead && monsterWasBoss && playerHasLegendary(state.player.equipment, 'leg_fate_crown')) {
+    const prevStacks = nextState.player.legendaryState?.fateCrownStacks ?? 0;
+    if (prevStacks < 3) {
+      nextState = {
+        ...nextState,
+        player: {
+          ...nextState.player,
+          legendaryState: { ...(nextState.player.legendaryState ?? {}), fateCrownStacks: prevStacks + 1 },
+        },
+      };
+      events.push({ type: 'LEGENDARY_TRIGGERED', legendaryId: 'leg_fate_crown', detail: `攻击+10（共${prevStacks + 1}层）` });
+    }
+  }
+
+  // 传奇：幸运女神眼 — 20% 连击（额外追加 50% 伤害）
+  if (legLuckyEyeProc) {
+    const extraDamage = Math.max(1, Math.round(damage * 0.5));
+    nextState = resolveHit(nextState, monsterId, extraDamage, events, legSunBowIgnoresArmor(state.player.equipment));
+    events.push({ type: 'LEGENDARY_TRIGGERED', legendaryId: 'leg_lucky_eye', detail: `连击+${extraDamage}` });
+  }
+
   if (overheal > 0 && traits.includes('general_overheal_anima')) {
     const used = nextState.floorState.generalOverhealAnimaThisFloor ?? 0;
     const anima = Math.max(0, Math.min(20 - used, Math.floor(overheal * 0.5)));
@@ -938,6 +999,8 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
   const weakened = (floor.awakenWeakenedMonsterIds ?? []).includes(monsterId);
   let reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult * (weakened ? 0.85 : 1);
+  // 传奇：疾风幻影甲 — 下次受击伤害减半（消耗 legPhantomDodgeReady 标记）
+  if (floor.legPhantomDodgeReady ?? false) reducedDamage *= 0.5;
   // Boss 装备 trait: 物理减伤 + 站冰面减伤（叠加，上限 90%）
   const bossReducePct = bossDamageReducePct(state.player, floor);
   if (bossReducePct > 0) reducedDamage *= (1 - bossReducePct);
@@ -993,6 +1056,15 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
       nextPlayerAfterRelic = shieldRevive.nextPlayer;
     }
   }
+  // ── 传奇：永恒板甲 — 守卫圣盾未触发时再兜底（本层首次，每层仅 1 次）──
+  let legEternalPlateTriggered = false;
+  if (dead && playerHasLegendary(nextPlayerAfterRelic.equipment, 'leg_eternal_plate') && !(floor.legEternalPlateUsed ?? false)) {
+    hp = 1;
+    dead = false;
+    legEternalPlateTriggered = true;
+  }
+
+  // ── 传奇：疾风幻影甲 — 下次受击伤害减半后消耗标记 ──（注：已在 reducedDamage 之前应用了 phantom dodge；此处读取 floor 状态）
 
   // ── 遗物：熔火之心 — 受伤后反弹 30% 给攻击者（即便玩家被击杀也反弹一次）──
   const reflectDamage = relicReflectDamage(nextPlayerAfterRelic, damage, state.balanceSnapshot, state.chapter);
@@ -1046,6 +1118,7 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // ── Boss 装备 trait: boss_stun_on_hurt（破旧王冠 10% 受击眩晕攻击者）──
   // 消耗 RNG 一次保证 AC-13 确定性；仅在玩家未死且攻击者未死时生效。
   let stunRngState = incomingRngState;
+  let legPhantomArmorNextReady = false;
   if (!dead) {
     const stunRng = createRng(stunRngState);
     if (bossStunOnHurt(state.player, stunRng)) {
@@ -1055,6 +1128,8 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
           : m,
       );
     }
+    // 传奇：疾风幻影甲 30% 概率置下次受击减半标记（始终消耗 RNG 保证 AC-13）
+    legPhantomArmorNextReady = playerHasLegendary(nextPlayerAfterRelic.equipment, 'leg_phantom_armor') && stunRng.chance(0.30);
     stunRngState = stunRng.state();
   }
 
@@ -1108,6 +1183,9 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
         ...(isPoison
           ? { playerPoisonRounds: POISON_ROUNDS }
           : {}),
+        // 传奇状态更新
+        legPhantomDodgeReady: legPhantomArmorNextReady ? true : (floor.legPhantomDodgeReady ? false : undefined),
+        ...(legEternalPlateTriggered ? { legEternalPlateUsed: true } : {}),
       },
     },
     events,

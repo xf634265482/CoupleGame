@@ -7,6 +7,7 @@ import type { EquipItem, EquipQuality, EquipSlot, PveBalanceSnapshot, RunPlayer 
 import type { Rng } from './rng';
 import { getBalancedEquipmentBaseStat } from './PveBalance';
 import { rollAffixes } from './AffixSystem';
+import { LEGENDARY_BY_SLOT, getLegendaryIdsByClass } from './LegendarySystem';
 
 // ── 优缺点 implicit 效果 id（AC-EQ-3，CombatSystem/MovementSystem/MonsterAI 识别）──
 /** 斧类武器：攻击消耗额外 AP +1（高伤 / 高代价）。 */
@@ -25,6 +26,8 @@ interface EquipTemplate {
   baseStatMin: number;
   baseStatMax: number;
   implicit?: string;
+  /** LEGENDARY 独特效果 id（与 LEGENDARY_BY_SLOT 顺序对应，由 LegendarySystem 定义）。 */
+  legendaryId?: string;
 }
 
 // ── 基础装备池（AC-EQ-1：每槽 白3/绿3/蓝3/紫5/橙3 = 17 件）────────────────────────────
@@ -57,9 +60,9 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
       { name: '英雄长枪',   baseStatMin: 38, baseStatMax: 48, implicit: IMPLICIT_WEAPON_SPEAR },
     ],
     LEGENDARY: [
-      { name: '命运之刃',   baseStatMin: 72, baseStatMax: 82 },                          // Phase 3 传奇效果待填
-      { name: '噬魂战斧',   baseStatMin: 80, baseStatMax: 90, implicit: IMPLICIT_WEAPON_AXE   }, // Phase 3: 击杀回血+下击必暴击
-      { name: '贯日长弓',   baseStatMin: 64, baseStatMax: 74, implicit: IMPLICIT_WEAPON_SPEAR }, // Phase 3: 穿透一线
+      { name: '命运之刃',   baseStatMin: 72, baseStatMax: 82, legendaryId: 'leg_fate_blade' },
+      { name: '噬魂战斧',   baseStatMin: 80, baseStatMax: 90, implicit: IMPLICIT_WEAPON_AXE,   legendaryId: 'leg_soul_axe'  },
+      { name: '贯日长弓',   baseStatMin: 64, baseStatMax: 74, implicit: IMPLICIT_WEAPON_SPEAR, legendaryId: 'leg_sun_bow'   },
     ],
   },
 
@@ -88,9 +91,9 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
       { name: '疾风轻甲',   baseStatMin: 30, baseStatMax: 38 },
     ],
     LEGENDARY: [
-      { name: '命运铠甲',   baseStatMin: 58, baseStatMax: 68 },
-      { name: '永恒板甲',   baseStatMin: 65, baseStatMax: 75, implicit: IMPLICIT_ARMOR_PLATE  }, // Phase 3 传奇效果
-      { name: '疾风幻影甲', baseStatMin: 50, baseStatMax: 60 },
+      { name: '命运铠甲',   baseStatMin: 58, baseStatMax: 68, legendaryId: 'leg_fate_armor'     },
+      { name: '永恒板甲',   baseStatMin: 65, baseStatMax: 75, implicit: IMPLICIT_ARMOR_PLATE,  legendaryId: 'leg_eternal_plate' },
+      { name: '疾风幻影甲', baseStatMin: 50, baseStatMax: 60, legendaryId: 'leg_phantom_armor'  },
     ],
   },
 
@@ -119,9 +122,9 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
       { name: '疾风面甲',   baseStatMin:  75, baseStatMax:  95 },
     ],
     LEGENDARY: [
-      { name: '命运王冠',   baseStatMin: 130, baseStatMax: 150 },
-      { name: '盖世铁冠',   baseStatMin: 145, baseStatMax: 165, implicit: IMPLICIT_HELMET_HEAVY }, // Phase 3 传奇效果
-      { name: '智慧轻冠',   baseStatMin: 115, baseStatMax: 135 },
+      { name: '命运王冠',   baseStatMin: 130, baseStatMax: 150, legendaryId: 'leg_fate_crown' },
+      { name: '盖世铁冠',   baseStatMin: 145, baseStatMax: 165, implicit: IMPLICIT_HELMET_HEAVY, legendaryId: 'leg_iron_crown' },
+      { name: '智慧轻冠',   baseStatMin: 115, baseStatMax: 135, legendaryId: 'leg_sage_crown'  },
     ],
   },
 
@@ -150,9 +153,9 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
       { name: '疾行套靴',   baseStatMin: 4, baseStatMax: 4 },
     ],
     LEGENDARY: [
-      { name: '疾风之靴',   baseStatMin: 4, baseStatMax: 5 },
-      { name: '飞燕步履',   baseStatMin: 5, baseStatMax: 5 }, // Phase 3 传奇效果
-      { name: '影踪战靴',   baseStatMin: 4, baseStatMax: 5 },
+      { name: '疾风之靴',   baseStatMin: 4, baseStatMax: 5, legendaryId: 'leg_gale_boots'    },
+      { name: '飞燕步履',   baseStatMin: 5, baseStatMax: 5, legendaryId: 'leg_swallow_steps' },
+      { name: '影踪战靴',   baseStatMin: 4, baseStatMax: 5, legendaryId: 'leg_shadow_boots'  },
     ],
   },
 
@@ -181,9 +184,9 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
       { name: '命运碎晶',   baseStatMin: 17, baseStatMax: 24 },
     ],
     LEGENDARY: [
-      { name: '命运护符',   baseStatMin: 27, baseStatMax: 35 },
-      { name: '财神赐福',   baseStatMin: 27, baseStatMax: 35, implicit: IMPLICIT_TRINKET_GOLD }, // Phase 3 传奇效果
-      { name: '幸运女神眼', baseStatMin: 27, baseStatMax: 35 },
+      { name: '命运护符',   baseStatMin: 27, baseStatMax: 35, legendaryId: 'leg_fate_amulet'      },
+      { name: '财神赐福',   baseStatMin: 27, baseStatMax: 35, implicit: IMPLICIT_TRINKET_GOLD, legendaryId: 'leg_fortune_blessing' },
+      { name: '幸运女神眼', baseStatMin: 27, baseStatMax: 35, legendaryId: 'leg_lucky_eye'         },
     ],
   },
 };
@@ -230,9 +233,21 @@ export function rollEquipment(
   quality: EquipQuality,
   chapter = 1,
   balanceSnapshot?: PveBalanceSnapshot | null,
+  /** 可选职业 id：LEGENDARY 品质时偏向该职业的传奇装备（Phase 4 偏向掉落）。 */
+  classId?: string,
 ): EquipItem {
   const templates = EQUIPMENT_POOL[slot][quality];
-  const tpl = rng.pick(templates);
+
+  // LEGENDARY 品质：按职业偏向筛选候选模板，其余品质等概率选取
+  let tpl: EquipTemplate;
+  if (quality === 'LEGENDARY' && classId) {
+    const biasedIds = getLegendaryIdsByClass(slot, classId);
+    const biased = templates.filter((t) => t.legendaryId && biasedIds.includes(t.legendaryId));
+    tpl = rng.pick(biased.length > 0 ? biased : templates);
+  } else {
+    tpl = rng.pick(templates);
+  }
+
   const rolledStat = rng.int(tpl.baseStatMin, tpl.baseStatMax);
   const uid = rng.int(10000, 99999);
 
@@ -251,6 +266,7 @@ export function rollEquipment(
     baseStatMax: scaledMax,
     ...(tpl.implicit ? { implicit: tpl.implicit } : {}),
     ...(affixes.length > 0 ? { affixes } : {}),
+    ...(tpl.legendaryId ? { legendaryId: tpl.legendaryId } : {}),
   };
 }
 
