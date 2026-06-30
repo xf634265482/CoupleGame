@@ -16,6 +16,7 @@ import { VARIANT_FROST_SPRITE } from './Chapter3Monsters';
 import {
   ANIMA_PER_STRENGTHEN,
   AP_CARRY_CAP,
+  AWAKEN_FORMS,
   INITIAL_ANIMA,
   INITIAL_CLASS,
   INITIAL_GOLD,
@@ -36,6 +37,7 @@ import {
   getBalancedApBase,
   getBalanceSnapshot,
 } from './PveBalance';
+import { affixFortifyBonus } from './AffixSystem';
 
 /** 由远征种子派生每层独立种子，保证同一远征内各层布局确定且互不干扰。 */
 function deriveFloorSeed(runSeed: number, floor: number): number {
@@ -349,7 +351,12 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       playerMoveApPenaltyRounds: newMoveApPenaltyRounds > 0 ? newMoveApPenaltyRounds : undefined,
       status: lavaDead ? 'DEAD' : aiResult.state.floorState.status,
       shoesFirstMoveDone: undefined, // 每回合开始时重置靴子首步免费标记
-      shadowStrikeCount: 0, // 觉醒·影袭：每回合开始时重置可用次数
+      awakenShadowCharges: 0,
+      awakenShadowGrantedThisTurn: undefined,
+      awakenBreakerShieldUsed: undefined,
+      awakenSniperDecisiveUsed: undefined,
+      awakenExecutionStealthUsed: undefined,
+      awakenShadowTradeUsed: undefined,
       destinyLockNextTurn: undefined, // 命运封锁本回合已结算（finalAp 已减半），清空
       playerAttackedThisTurn: undefined, // 命运守卫行为镜像：玩家本回合行为状态重置
       playerStepsThisTurn: undefined,
@@ -357,6 +364,7 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       generalStoredEdgeReady: storedEdgeReady || aiResult.state.floorState.generalStoredEdgeReady,
       rogueAttackCountThisTurn: 0,
       rogueHidden: undefined,
+      affixSwiftStrikeReady: undefined, // 词条：疾袭本回合置位，回合结束重置
     },
   };
 
@@ -377,6 +385,7 @@ export function resumeExpedition(
   balanceSnapshot?: ExpeditionState['balanceSnapshot'],
   difficultySnapshot?: DifficultySnapshot | null,
 ): ApplyResult {
+  player = migrateAwakenPlayer(player);
   const snapshot = getBalanceSnapshot(balanceSnapshot);
   if (savedFloorState) {
     const allowTutorialState = floor === 1 && !!savedFloorState.tutorialScenarioId;
@@ -456,6 +465,11 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
     const overheal = Math.max(0, heal - (player.maxHp - player.hp));
     if (player.classTraits.includes('general_overheal_anima')) recoveryOverhealAnima = Math.min(20, Math.floor(overheal * 0.5));
     player = { ...player, hp: Math.min(player.maxHp, player.hp + heal) };
+  }
+  // 词条：强健（aff_fortify）进入新层时回复 value HP（不超过上限）
+  const fortifyHeal = affixFortifyBonus(player.equipment);
+  if (fortifyHeal > 0) {
+    player = { ...player, hp: Math.min(player.maxHp, player.hp + fortifyHeal) };
   }
 
   const nextFloor = state.floor + 1;
@@ -582,5 +596,24 @@ export function serialize(state: ExpeditionState): string {
 
 /** 从存档 JSON 还原 ExpeditionState（与 serialize 互为逆操作）。 */
 export function deserialize(json: string): ExpeditionState {
-  return JSON.parse(json) as ExpeditionState;
+  const state = JSON.parse(json) as ExpeditionState;
+  const player = migrateAwakenPlayer(state.player);
+  return player === state.player ? state : { ...state, player };
+}
+
+/** 将旧版自动判定觉醒存档迁移为 V2；幂等，可由所有续档入口安全调用。 */
+export function migrateAwakenPlayer(player: RunPlayer): RunPlayer {
+  const formId = player.awakenForm;
+  if (!formId || player.awakenVersion === 2) return player;
+  const form = AWAKEN_FORMS[formId];
+  const legacyIndex = player.classTraits.indexOf(form.legacyStatTrait);
+  const classTraits = legacyIndex < 0
+    ? player.classTraits
+    : player.classTraits.filter((_, index) => index !== legacyIndex);
+  return {
+    ...player,
+    classTraits,
+    awakenVersion: 2,
+    awakenFirstOfferPending: true,
+  };
 }

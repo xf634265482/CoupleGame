@@ -6,6 +6,7 @@ import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, 
 import { findAchievement } from '../core/AchievementSystem';
 import { playerAttackPower } from '../core/CombatSystem';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD, SHOES_STEALTH_THRESHOLD, shoesStealthReduction } from '../core/EquipmentSystem';
+import { affixDescription } from '../core/AffixSystem';
 import { AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
 import { getBalancedApBase, getPlayerBalanceConfig } from '../core/PveBalance';
 import { RELIC_DEFS } from '../core/RelicSystem';
@@ -475,15 +476,17 @@ export class PveCharacterPanel {
     const implicitLine = item.implicit
       ? `特性：${PveCharacterPanel._IMPLICIT_CN[item.implicit] ?? item.implicit}`
       : '';
+    const affixLines = (item.affixes ?? []).map((aff) => affixDescription(aff));
     const traitLine  = item.trait
       ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? '特殊词条'}`
-      : '词条：(未洗炼)';
+      : (affixLines.length === 0 ? '词条：(未洗炼)' : '');
 
     this._detailBodyLabel.string = [
       `${slotStr} · ${qualityStr}`,
       `主属性：${effectLine}`,
       ...(implicitLine ? [implicitLine] : []),
-      traitLine,
+      ...affixLines,
+      ...(traitLine ? [traitLine] : []),
     ].join('\n');
 
     this._detailPopup.active = true;

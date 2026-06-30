@@ -5,6 +5,7 @@ import {
   SHOES_STEALTH_THRESHOLD,
   shoesStealthReduction,
 } from '../core/EquipmentSystem';
+import { affixDescription } from '../core/AffixSystem';
 
 const QUALITY_LABEL: Record<string, string> = {
   COMMON: '普通',
@@ -114,9 +115,12 @@ export function formatEquipDetailBody(item: EquipItem): string {
   if (implicitDesc) {
     lines.push(`特性：${implicitDesc}`);
   }
-  if (!item.trait) {
+  if (item.affixes && item.affixes.length > 0) {
+    item.affixes.forEach((aff) => lines.push(affixDescription(aff)));
+  } else if (!item.trait) {
     lines.push('词条：未洗炼');
-  } else {
+  }
+  if (item.trait) {
     lines.push(`词条：${traitName}`);
     lines.push(`效果：${traitDesc}`);
   }

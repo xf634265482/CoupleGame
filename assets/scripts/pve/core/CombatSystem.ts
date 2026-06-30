@@ -13,6 +13,7 @@
 import { addAnima, traitCount } from './AnimaSystem';
 import { canAfford, spend } from './ApSystem';
 import { equipTraitAtkBonus, equipTraitDefBonus } from './EquipTraitEffects';
+import { affixSharpBonus, affixSturdyBonus, collectAffixes, getAffixValue } from './AffixSystem';
 import {
   bloodlustStackHeal,
   executionerBonus,
@@ -51,6 +52,7 @@ import {
 } from './BossEquipTraitEffects';
 import {
   CHAPTER3_ICE_WALL_DROP_ANIMA,
+  BLOCKS_LOS_TYPES,
   CLASS_STATS,
   FATE_ENRAGE_HP_RATIO,
   FATE_MIRROR_BOSS_ID,
@@ -265,6 +267,7 @@ export function playerAttackPower(
   rawAttack += player.treeBonuses?.attackBonus ?? 0;        // 命运树 B1 武者直觉
   rawAttack += player.idolAttackBonus ?? 0;                 // 神像祝福累计攻击加成
   rawAttack += equipTraitAtkBonus(player);                  // 装备词条 equip_atk_up（AC-401，每件 +1，可叠加）
+  rawAttack += affixSharpBonus(player.equipment);           // 词条：锋利（aff_sharp）静态攻击加成
   rawAttack += rageStrikeStackBonus(traits);                // 怒击连击/专注蓄力/连斩（可叠加×5，+层数×0.5）
 
   rawAttack *= lowHpAttackMultiplier(traits, player);       // 绝境一击系(HP≤25%→×2) × 进阶系(HP≤30%→×1.5)
@@ -457,6 +460,39 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     }
   }
 
+  // ── 装备词条：条件触发（AC-EQ-4/5）──
+  const _allAffixes = collectAffixes(state.player.equipment);
+  // 狂热：HP<50% 时攻击 +value%
+  const _affFrenzy = getAffixValue(_allAffixes, 'aff_frenzy');
+  if (_affFrenzy !== undefined && state.player.hp < state.player.maxHp / 2) {
+    damage = Math.round(damage * (1 + _affFrenzy / 100));
+  }
+  // 猎手：对精英/Boss 伤害 +value%
+  const _affHunter = getAffixValue(_allAffixes, 'aff_hunter');
+  if (_affHunter !== undefined && (monster.type === 'ELITE' || monster.type === 'BOSS' || isBoss)) {
+    damage = Math.round(damage * (1 + _affHunter / 100));
+  }
+  // 章节克制：对本章普通怪伤害 +value%
+  const _affBane = getAffixValue(_allAffixes, 'aff_chapter_bane');
+  if (_affBane !== undefined && monster.type === 'NORMAL') {
+    damage = Math.round(damage * (1 + _affBane / 100));
+  }
+  // 连杀：本层累计击杀 × value 攻击加成（封顶 5 叠）
+  const _affKillChain = getAffixValue(_allAffixes, 'aff_kill_chain');
+  if (_affKillChain !== undefined) {
+    damage += Math.min(5, floor.affixKillChainStacks ?? 0) * _affKillChain;
+  }
+  // 疾袭：本回合移动后首击 +value%
+  const _affSwift = getAffixValue(_allAffixes, 'aff_swift_strike');
+  if (_affSwift !== undefined && (floor.affixSwiftStrikeReady ?? false) && firstAttackThisTurn) {
+    damage = Math.round(damage * (1 + _affSwift / 100));
+  }
+  // 先发制人：每层首攻 +value%
+  const _affPreemptive = getAffixValue(_allAffixes, 'aff_preemptive');
+  if (_affPreemptive !== undefined && !(floor.affixPreemptiveUsed ?? false)) {
+    damage = Math.round(damage * (1 + _affPreemptive / 100));
+  }
+
   // ── 造伤 ──
   const targetHp = Math.max(0, monster.hp - damage);
   const dead = targetHp <= 0;
@@ -547,6 +583,16 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
     awakenShadowCharges: shadowChargeActive
       ? Math.max(0, (floor.awakenShadowCharges ?? 0) - 1)
       : floor.awakenShadowCharges,
+    // 词条状态更新（AC-EQ-4/5）
+    ...(dead && _affKillChain !== undefined
+      ? { affixKillChainStacks: Math.min(5, (floor.affixKillChainStacks ?? 0) + 1) }
+      : {}),
+    ...(_affSwift !== undefined && (floor.affixSwiftStrikeReady ?? false) && firstAttackThisTurn
+      ? { affixSwiftStrikeReady: false }
+      : {}),
+    ...(_affPreemptive !== undefined && !(floor.affixPreemptiveUsed ?? false)
+      ? { affixPreemptiveUsed: true }
+      : {}),
   };
   if (backstabActive) {
     if (!shadowChargeActive) {
@@ -883,9 +929,11 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
 
   // ── 装备减伤（ARMOR 槽，AC-17 + equip_def_up 词条，AC-402）──
   // C1: POISON_SCORPION 穿甲攻击 — 完全无视玩家护甲与减伤词条
+  const _mAffixes = collectAffixes(state.player.equipment);
+  const _sturdyBonus = monster.variantId === VARIANT_POISON_SCORPION ? 0 : affixSturdyBonus(state.player.equipment);
   const armorReduction = monster.variantId === VARIANT_POISON_SCORPION
     ? 0
-    : (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player) + (state.player.idolArmorBonus ?? 0);
+    : (state.player.equipment.ARMOR?.baseStat ?? 0) + equipTraitDefBonus(state.player) + (state.player.idolArmorBonus ?? 0) + _sturdyBonus;
   const rawDamage = monster.attack;
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
   const weakened = (floor.awakenWeakenedMonsterIds ?? []).includes(monsterId);
@@ -893,6 +941,19 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
   // Boss 装备 trait: 物理减伤 + 站冰面减伤（叠加，上限 90%）
   const bossReducePct = bossDamageReducePct(state.player, floor);
   if (bossReducePct > 0) reducedDamage *= (1 - bossReducePct);
+  // 词条：磐石（aff_bulwark）HP>80% 时减伤
+  const _affBulwark = getAffixValue(_mAffixes, 'aff_bulwark');
+  if (_affBulwark !== undefined && state.player.hp > state.player.maxHp * 0.8) {
+    reducedDamage = Math.max(0, reducedDamage - _affBulwark);
+  }
+  // 词条：掩体专家（aff_cover_expert）相邻掩体地形时减伤
+  const _affCover = getAffixValue(_mAffixes, 'aff_cover_expert');
+  if (_affCover !== undefined) {
+    const _hasCover = floor.entities.some(
+      (e) => !e.consumed && BLOCKS_LOS_TYPES.has(e.type) && manhattan(e.pos, floor.player) === 1,
+    );
+    if (_hasCover) reducedDamage = Math.max(0, reducedDamage - _affCover);
+  }
   // 最低 1 点伤害（护甲可以大幅减伤，但任何攻击至少造成 1 点）
   let damage = Math.max(1, Math.round(reducedDamage - painToleranceReduction(traits, reducedDamage)));
   damage = reduceGeneralIncomingDamage(state.player, damage, floor);
@@ -969,6 +1030,15 @@ export function monsterAttack(state: ExpeditionState, monsterId: string, damageM
         : m,
     );
     reflectEvent = { type: 'RELIC_TRIGGERED', relicId: 'MAGMA_HEART', detail: `反弹 ${reflectDamage}` };
+  }
+  // 词条：荆棘（aff_thorns）受击反弹（不触发击杀，最低 1 HP；仅玩家未死时触发）
+  const _affThorns = getAffixValue(_mAffixes, 'aff_thorns');
+  if (!dead && _affThorns !== undefined && _affThorns > 0) {
+    nextMonsters = nextMonsters.map((m) =>
+      m.id === monsterId && m.aiState !== 'DEAD'
+        ? { ...m, hp: Math.max(1, m.hp - _affThorns) }
+        : m,
+    );
   }
   if (fateEchoEvent) events.push(fateEchoEvent);
   if (reflectEvent) events.push(reflectEvent);

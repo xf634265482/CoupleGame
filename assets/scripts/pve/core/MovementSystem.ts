@@ -179,6 +179,8 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
     playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
     rogueEscapeMoveReady: false,
     ...(sandPitEntity || shatteredIce || lavaTile ? { generalTerrainPowerReady: true } : {}),
+    // 词条：疾袭（aff_swift_strike）移动后标记，playerAttack 首击时消耗
+    affixSwiftStrikeReady: true,
   };
 
   const events: PveEvent[] = [

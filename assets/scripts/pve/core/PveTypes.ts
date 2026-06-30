@@ -100,6 +100,16 @@ export interface FixedEntity {
 export type EquipSlot = 'WEAPON' | 'HELMET' | 'ARMOR' | 'SHOES' | 'TRINKET';
 export type EquipQuality = 'COMMON' | 'FINE' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
+/** 词条强度档（design §3）：minor=副词缀 / major=主词缀，掉落时随机。 */
+export type AffixTier = 'minor' | 'major';
+
+/** 装备词条实例（Phase 2 AC-EQ-4/5）：id 对应词条池条目，tier 为强度档，value 为该档数值。 */
+export interface EquipAffix {
+  id: string;
+  tier: AffixTier;
+  value: number;
+}
+
 export interface EquipItem {
   id: string;
   slot: EquipSlot;
@@ -110,9 +120,9 @@ export interface EquipItem {
   baseStatMax?: number;
   /** 基础款优缺点效果 id（'weapon_axe'/'weapon_spear'/'armor_plate'/'helmet_heavy' 等，AC-EQ-3）。 */
   implicit?: string;
-  trait?: string; // 随机词条 id（Phase 2 词条系统）
-  /** 词条列表（Phase 2 词条系统占位）。 */
-  affixes?: string[];
+  trait?: string; // 铁匠洗炼词条 id（旧系统，EPIC+ 洗炼用）
+  /** 条件触发词条列表（Phase 2 AC-EQ-4/5：蓝1/紫2/橙2）。 */
+  affixes?: EquipAffix[];
   /** 传奇独特效果 id（Phase 3 传奇系统占位）。 */
   legendaryId?: string;
   /** 已强化次数（0 = 未强化，显示为 +N 后缀）。 */
@@ -435,6 +445,12 @@ export interface FloorState {
   rogueChainBackstabReady?: boolean;
   rogueVanishStrikeReady?: boolean;
   rogueSmokeUsed?: boolean;
+  /** 词条：连杀本层击杀计数（aff_kill_chain 攻击加成；新层自动归零）。 */
+  affixKillChainStacks?: number;
+  /** 词条：先发制人本层首攻已触发（aff_preemptive；新层自动归零）。 */
+  affixPreemptiveUsed?: boolean;
+  /** 词条：疾袭本回合移动后待触发（aff_swift_strike；endTurn 重置）。 */
+  affixSwiftStrikeReady?: boolean;
   tutorialScenarioId?: string;
   tutorialGuide?: {
     currentStepId: string;

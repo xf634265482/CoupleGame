@@ -6,6 +6,7 @@
 import type { EquipItem, EquipQuality, EquipSlot, PveBalanceSnapshot, RunPlayer } from './PveTypes';
 import type { Rng } from './rng';
 import { getBalancedEquipmentBaseStat } from './PveBalance';
+import { rollAffixes } from './AffixSystem';
 
 // ── 优缺点 implicit 效果 id（AC-EQ-3，CombatSystem/MovementSystem/MonsterAI 识别）──
 /** 斧类武器：攻击消耗额外 AP +1（高伤 / 高代价）。 */
@@ -238,6 +239,9 @@ export function rollEquipment(
   const scaledStat = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, slot, rolledStat);
   const scaledMax  = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, slot, tpl.baseStatMax);
 
+  // 蓝1/紫2/橙2 条件触发词条（AC-EQ-4/5）；白绿 rollAffixes 返回 []
+  const affixes = rollAffixes(rng, quality);
+
   return {
     id: `equip_${slot.toLowerCase()}_${quality.toLowerCase()}_${uid}`,
     slot,
@@ -246,6 +250,7 @@ export function rollEquipment(
     baseStat: scaledStat,
     baseStatMax: scaledMax,
     ...(tpl.implicit ? { implicit: tpl.implicit } : {}),
+    ...(affixes.length > 0 ? { affixes } : {}),
   };
 }
 
