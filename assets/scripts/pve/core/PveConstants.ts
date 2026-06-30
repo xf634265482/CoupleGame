@@ -89,10 +89,36 @@ export const NORMAL_MONSTER_DROP = {
   GOLD_ONLY: 0.5,
   ANIMA_ONLY: 0.25,
   GOLD_AND_ANIMA: 0.25,
-  /** 独立额外判定：5% 概率掉落 COMMON 装备（与金币/灵气掉落互相独立）。 */
-  EQUIP_CHANCE: 0.05,
   goldSmall: [5, 12] as const,
   animaSmall: [10, 25] as const,
+} as const;
+
+// ── 装备掉落表（Phase 4，单次掷骰 + 章节封顶，design §5）──────────
+// 每项为 [ch1, ch2, ch3, ch4, ch5] 概率；判定顺序 LEGENDARY→EPIC→RARE→FINE→COMMON；其余=不掉装备。
+// 橙（传奇）从第 3 章起（ch3 开始非零）。
+
+export const NORMAL_MONSTER_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,     0,     0.002, 0.004, 0.006] as const,
+  EPIC:      [0,     0,     0.01,  0.015, 0.02 ] as const,
+  RARE:      [0,     0.02,  0.03,  0.03,  0.03 ] as const,
+  FINE:      [0.03,  0.04,  0.04,  0.04,  0.04 ] as const,
+  COMMON:    [0.06,  0.06,  0.05,  0.04,  0.03 ] as const,
+} as const;
+
+export const ELITE_MONSTER_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,     0,     0.005, 0.01,  0.015] as const,
+  EPIC:      [0,     0,     0.03,  0.04,  0.04 ] as const,
+  RARE:      [0,     0.05,  0.05,  0.05,  0.05 ] as const,
+  FINE:      [0.11,  0.08,  0.06,  0.06,  0.06 ] as const,
+  COMMON:    [0,     0,     0,     0,     0    ] as const,
+} as const;
+
+export const CHEST_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,     0,     0.003, 0.006, 0.006] as const,
+  EPIC:      [0,     0,     0.02,  0.03,  0.03 ] as const,
+  RARE:      [0,     0.03,  0.04,  0.04,  0.04 ] as const,
+  FINE:      [0.04,  0.05,  0.05,  0.05,  0.05 ] as const,
+  COMMON:    [0.08,  0.06,  0.05,  0.04,  0.04 ] as const,
 } as const;
 
 // ── 死亡结算保留/清空（design §2.1） ───────────────────
@@ -236,8 +262,6 @@ export const ELITE_MONSTER_DROP = {
   GOLD_AND_ANIMA: 0.30,
   GOLD_HIGH: 0.25,     // 大量金币（40+30+25=95%）
   FRAGMENT_PAIR: 0.05, // 职业碎片对（40+30+25+5=100%）
-  /** 独立额外判定：15% 概率掉落 FINE 装备（与金币/灵气掉落互相独立）。 */
-  EQUIP_CHANCE: 0.15,
   goldMid: [15, 30] as const,
   goldHigh: [35, 60] as const,
   animaMid: [20, 40] as const,
@@ -462,6 +486,8 @@ export const DESTINY_5X5_DMG_MULT = 1.2;
 // ── 第一章专属机制常量 ─────────────────────────────────────
 /** 第一章 Boss 房随机石块数量。 */
 export const CHAPTER1_BOSS_ROCK_COUNT = 5;
+/** 石块 HP（可破坏，玩家普攻可击碎）。 */
+export const ROCK_HP = 350;
 /** 增援号角每次召唤哥布林战士数（非狂暴）。 */
 export const HORN_WARRIOR_COUNT = 1;
 /** 增援号角每次召唤哥布林战士数（狂暴后）。 */

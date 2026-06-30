@@ -16,13 +16,17 @@ import {
   ANIMA_MONSTER_DROP,
   BOSS_RARE_DROP,
   CHAPTER_BOSS_RELIC,
+  CHEST_EQUIP_DROP_TABLE,
   CLASS_FRAGMENTS_TO_ADVANCE,
   ELITE_MONSTER_DROP,
+  ELITE_MONSTER_EQUIP_DROP_TABLE,
   NORMAL_MONSTER_DROP,
+  NORMAL_MONSTER_EQUIP_DROP_TABLE,
   bossDropScaled,
 } from './PveConstants';
 import type { AdvancableClass, ClassId } from './PveConstants';
 import { pickupRelic } from './RelicSystem';
+import { getLegendaryIdsByClass } from './LegendarySystem';
 import { pickupScroll } from './ScrollSystem';
 import type { EquipQuality, RelicId } from './PveTypes';
 import { createRng } from './rng';
@@ -40,6 +44,36 @@ export interface DropResult {
 const [GOLD_MIN, GOLD_MAX] = NORMAL_MONSTER_DROP.goldSmall;
 const [ANIMA_MIN, ANIMA_MAX] = NORMAL_MONSTER_DROP.animaSmall;
 
+/** 掉落表的宽松结构类型（兼容三张不同数值字面量的表）。 */
+export interface EquipDropTable {
+  LEGENDARY: readonly number[];
+  EPIC:      readonly number[];
+  RARE:      readonly number[];
+  FINE:      readonly number[];
+  COMMON:    readonly number[];
+}
+
+/**
+ * 单次掷骰确定装备品质（或不掉装备）。
+ * 判定顺序 LEGENDARY→EPIC→RARE→FINE→COMMON，其余=null。
+ * 橙从第3章起（表中 ch1/ch2 = 0，天然满足）。
+ */
+export function rollEquipQuality(
+  rng: Rng,
+  table: EquipDropTable,
+  chapter: number,
+): import('./PveTypes').EquipQuality | null {
+  const ci = Math.min(5, Math.max(1, chapter)) - 1; // 0-indexed
+  const roll = rng.next();
+  let cumulative = 0;
+  for (const quality of ['LEGENDARY', 'EPIC', 'RARE', 'FINE', 'COMMON'] as const) {
+    const prob = table[quality][ci] ?? 0;
+    cumulative += prob;
+    if (roll < cumulative) return quality;
+  }
+  return null;
+}
+
 /** 灵气怪掉落：100% 大量灵气（AC-18）。 */
 export function rollAnimaMonsterDrop(rng: Rng): DropResult {
   const [min, max] = ANIMA_MONSTER_DROP.animaLarge;
@@ -48,12 +82,13 @@ export function rollAnimaMonsterDrop(rng: Rng): DropResult {
 
 /**
  * 精英怪基础掉落：40% 金币 / 30% 金币+灵气 / 25% 高额金币 / 5% 进阶碎片对（design §6）。
- * 装备独立独立判定（EQUIP_CHANCE=15%），与基础掉落互相独立，由调用方追加。
+ * 装备单次掷骰由章节封顶表决定品质（Phase 4）。
  */
 export function rollEliteMonsterDrop(
   rng: Rng,
   chapter = 1,
   balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  classId?: string,
 ): DropResult {
   const roll = rng.next();
   let result: DropResult;
@@ -71,21 +106,26 @@ export function rollEliteMonsterDrop(
     const shuffled = rng.shuffle(ADVANCABLE_CLASSES);
     result = { fragmentPair: [shuffled[0], shuffled[1]] };
   }
-  // 独立 15% 概率额外掉落 FINE 装备
-  if (rng.chance(ELITE_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE', chapter, balanceSnapshot) };
+  // 单次掷骰装备品质（互斥，由章节封顶表决定）
+  const equipQuality = rollEquipQuality(rng, ELITE_MONSTER_EQUIP_DROP_TABLE, chapter);
+  if (equipQuality !== null) {
+    result = {
+      ...result,
+      equip: rollEquipment(rng, rollRandomSlot(rng), equipQuality, chapter, balanceSnapshot, classId),
+    };
   }
   return result;
 }
 
 /**
  * 按 50%(金币) / 25%(灵气) / 25%(金币+灵气) 概率掷取一份基础掉落，
- * 再独立判定 3% 额外掉落 COMMON 装备（design §11.3 普通怪极低概率）。
+ * 再单次掷骰判定装备品质（design §5 Phase 4）。
  */
 export function rollNormalMonsterDrop(
   rng: Rng,
   chapter = 1,
   balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  classId?: string,
 ): DropResult {
   const roll = rng.next();
   let result: DropResult;
@@ -96,9 +136,13 @@ export function rollNormalMonsterDrop(
   } else {
     result = { gold: rng.int(GOLD_MIN, GOLD_MAX), anima: rng.int(ANIMA_MIN, ANIMA_MAX) };
   }
-  // 独立 3% 概率额外掉落装备（不影响基础掉落结果）
-  if (rng.chance(NORMAL_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'COMMON', chapter, balanceSnapshot) };
+  // 单次掷骰装备品质（互斥，由章节封顶表决定）
+  const equipQuality = rollEquipQuality(rng, NORMAL_MONSTER_EQUIP_DROP_TABLE, chapter);
+  if (equipQuality !== null) {
+    result = {
+      ...result,
+      equip: rollEquipment(rng, rollRandomSlot(rng), equipQuality, chapter, balanceSnapshot, classId),
+    };
   }
   return result;
 }
@@ -132,9 +176,12 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
   if (!canAfford(floor.ap, 'OPEN_CHEST')) return noop(state);
 
   const rng = createRng(floor.rngState);
-  const drop = rollNormalMonsterDrop(rng, state.chapter, state.balanceSnapshot);
-  // 10% 概率额外掉落 COMMON 品质装备（AC-17）；先算普通掉落以保证 rng 顺序向后兼容
-  const equip = rng.chance(0.10) ? rollEquipment(rng, rollRandomSlot(rng), 'COMMON', state.chapter, state.balanceSnapshot) : undefined;
+  const drop = rollNormalMonsterDrop(rng, state.chapter, state.balanceSnapshot, state.player.classId);
+  // 宝箱独立装备单掷（金币/灵气已保底，装备不保底，design §5 Phase 4）
+  const chestEquipQuality = rollEquipQuality(rng, CHEST_EQUIP_DROP_TABLE, state.chapter);
+  const equip = chestEquipQuality !== null
+    ? rollEquipment(rng, rollRandomSlot(rng), chestEquipQuality, state.chapter, state.balanceSnapshot, state.player.classId)
+    : undefined;
 
   let next: ExpeditionState = {
     ...state,
@@ -184,11 +231,11 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
 function applySimpleDrop(
   state: ExpeditionState,
   monsterId: string,
-  roller: (rng: Rng, chapter: number, balanceSnapshot?: ExpeditionState['balanceSnapshot']) => DropResult,
+  roller: (rng: Rng, chapter: number, balanceSnapshot?: ExpeditionState['balanceSnapshot'], classId?: string) => DropResult,
 ): ApplyResult {
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
-  const drop = roller(rng, state.chapter, state.balanceSnapshot);
+  const drop = roller(rng, state.chapter, state.balanceSnapshot, state.player.classId);
 
   let next: ExpeditionState = {
     ...state,

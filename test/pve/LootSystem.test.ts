@@ -49,19 +49,20 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       expect(both / 2000).toBeLessThan(0.35);
     });
 
-    it('3% 概率额外掉落 COMMON 装备（design §11.3 普通怪极低概率）', () => {
+    it('ch1 总装备掉率约 9%（COMMON 6% + FINE 3%，单次掷骰 Phase 4）', () => {
       const rng = createRng(20260608);
       let equipDrops = 0;
       for (let i = 0; i < 3000; i++) {
-        const drop = rollNormalMonsterDrop(rng);
+        const drop = rollNormalMonsterDrop(rng, 1);
         if (drop.equip) {
-          expect(drop.equip.quality).toBe('COMMON'); // 必须是 COMMON 品质
+          // Phase 4：ch1 只出 COMMON 或 FINE，不出 RARE+
+          expect(['COMMON', 'FINE']).toContain(drop.equip.quality);
           equipDrops++;
         }
       }
-      // 名义 3%，允许统计误差 [1%, 6%]
-      expect(equipDrops / 3000).toBeGreaterThan(0.01);
-      expect(equipDrops / 3000).toBeLessThan(0.06);
+      // 名义 9%，允许统计误差 [5%, 14%]
+      expect(equipDrops / 3000).toBeGreaterThan(0.05);
+      expect(equipDrops / 3000).toBeLessThan(0.14);
     });
 
     it('同种子序列确定可复现', () => {
