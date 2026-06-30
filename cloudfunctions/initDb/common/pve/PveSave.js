@@ -107,7 +107,9 @@ async function saveFloorProgress(user, report = {}) {
 
   // 中途存档也同步"已通关最高层"，用于排行榜与大厅"最高 X 层"显示。
   // 玩家当前所在层为 floor，则已通关层数 = floor - 1（floor=1 时为 0，不入榜）。
-  const clearedFloor = Math.max(0, Math.trunc(patch.floor) - 1);
+  const clearedFloor = patch.floorState?.status === 'CLEARED'
+    ? Math.max(0, Math.trunc(patch.floor))
+    : Math.max(0, Math.trunc(patch.floor) - 1);
   if (clearedFloor > 0) {
     await incrementUserPveRewards(user.id, { highestFloor: clearedFloor });
   }
@@ -128,10 +130,13 @@ async function settleExpedition(user, report = {}) {
   const status = report.status;
   // 难度档：以存档记录为权威（→ AC-P3-9，防止客户端伪造高难度）
   const tier = current?.difficultyTier || report.difficultyTier || PVE_DIFFICULTY.NORMAL;
-  const rewards = computeSettleReward(finalFloor, status, tier);
 
   // 通关第 35 层 → 记录该档通关，供下一档解锁校验（→ AC-P3-6）
   const isClearRecord = status === 'COMPLETED' && finalFloor === PVE_TOTAL_FLOORS;
+  // 首通：该档尚未出现在 pveClearedTiers 中（→ Phase 6 AC-EQ-10）
+  const isFirstClear = isClearRecord && !(user.pveClearedTiers ?? []).includes(tier);
+
+  const rewards = computeSettleReward(finalFloor, status, tier, isFirstClear);
 
   await incrementUserPveRewards(user.id, {
     diamond: rewards.diamond,
@@ -146,7 +151,15 @@ async function settleExpedition(user, report = {}) {
   }
   await clearPendingPveRun(user.id);
 
-  return { rewards };
+  return {
+    rewards: {
+      diamond: rewards.diamond,
+      destinyShards: rewards.destinyShards,
+      floorsCleared: rewards.floorsCleared,
+      completionBonus: rewards.completionBonus,
+      firstClearBonus: rewards.firstClearBonus,
+    },
+  };
 }
 
 module.exports = {

@@ -25,6 +25,26 @@ module.exports = {
     DIAMOND_PER_BOSS_FLOOR: 3,
     SHARD_PER_FLOOR: 1,
     SHARD_PER_BOSS_FLOOR: 2,
+    /** 通关第5章（全35层）额外碎片大礼包（在 shardMult 之前计入基础，Phase 6 AC-EQ-10）。 */
+    COMPLETION_BONUS_SHARD: 50,
+    /** 通关第5章额外钻石奖励。 */
+    COMPLETION_BONUS_DIAMOND: 10,
+    /** 首通该难度档一次性额外碎片奖励（各档独立判定，难度越高越多）。 */
+    FIRST_CLEAR_SHARD_BONUS: {
+      NORMAL:    30,
+      HARD:      50,
+      NIGHTMARE: 80,
+      ABYSS:     120,
+      INFERNO:   180,
+    },
+    /** 首通该难度档一次性额外钻石奖励。 */
+    FIRST_CLEAR_DIAMOND_BONUS: {
+      NORMAL:    5,
+      HARD:      10,
+      NIGHTMARE: 15,
+      ABYSS:     20,
+      INFERNO:   30,
+    },
   },
 
   // ── PVE 难度档（design 260628-progression-pacing-v3 §5，→ AC-P3-6/7/9） ────

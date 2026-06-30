@@ -27,11 +27,12 @@ describe('PveValidate', () => {
 
     it('已有存档时层号必须紧接当前存档推进一层', () => {
       const save = makeSave({ floor: 3 });
+      expect(() => validateSaveFloorReport(save, { runSeed: save.runSeed, floor: 3 })).not.toThrow();
       expect(() => validateSaveFloorReport(save, { runSeed: save.runSeed, floor: 4 })).not.toThrow();
       expect(() => validateSaveFloorReport(save, { runSeed: save.runSeed, floor: 5 })).toThrow(
         expect.objectContaining({ code: 'PVE_FLOOR_DISCONTINUITY' }),
       );
-      expect(() => validateSaveFloorReport(save, { runSeed: save.runSeed, floor: 3 })).toThrow(
+      expect(() => validateSaveFloorReport(save, { runSeed: save.runSeed, floor: 2 })).toThrow(
         expect.objectContaining({ code: 'PVE_FLOOR_DISCONTINUITY' }),
       );
     });
@@ -122,10 +123,20 @@ describe('PveReward — 结算奖励纯服务端计算（design §2.1 / AC-14）
 
     it('通关时当前层也计入已通关层数', () => {
       // 全通 35 层（V3 总层数）→ 5 个 Boss 层（7/14/21/28/35）
+      // Phase 6：全通后额外计入通关大礼包（COMPLETION_BONUS_DIAMOND/SHARD）
       const reward = computeSettleReward(35, 'COMPLETED');
       expect(reward.floorsCleared).toBe(35);
-      expect(reward.diamond).toBe(35 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR + 5 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR);
-      expect(reward.destinyShards).toBe(35 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR + 5 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR);
+      expect(reward.diamond).toBe(
+        35 * PVE_SETTLE_REWARD.DIAMOND_PER_FLOOR +
+        5 * PVE_SETTLE_REWARD.DIAMOND_PER_BOSS_FLOOR +
+        PVE_SETTLE_REWARD.COMPLETION_BONUS_DIAMOND,
+      );
+      expect(reward.destinyShards).toBe(
+        35 * PVE_SETTLE_REWARD.SHARD_PER_FLOOR +
+        5 * PVE_SETTLE_REWARD.SHARD_PER_BOSS_FLOOR +
+        PVE_SETTLE_REWARD.COMPLETION_BONUS_SHARD,
+      );
+      expect(reward.completionBonus).toBe(true);
     });
 
     it('奖励完全由层数纯计算得出，与上报的奖励数值无关（服务端权威 → AC-14）', () => {
