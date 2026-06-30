@@ -402,8 +402,11 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
 
   const dist = manhattan(monster.pos, floor.player);
   // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；EPIC+靴子：额外缩小 2~3（叠加）
+  // 基础款优缺点：重盔 helmet_heavy 使怪物警戒范围 +1（等同于减少潜行收益，AC-EQ-3）
+  const helmetAggroPenalty = state.player.equipment.HELMET?.implicit === 'helmet_heavy' ? 1 : 0;
   const stealthReduction = (state.player.classTraits.includes('stealth') ? 2 : 0)
-    + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0);
+    + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0)
+    - helmetAggroPenalty;
   // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
   const inAggroRange = !state.floorState.rogueHidden
     && dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);

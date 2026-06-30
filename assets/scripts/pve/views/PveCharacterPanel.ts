@@ -15,6 +15,7 @@ import { ensureArtChild } from '../../ui/UiSprite';
 import { STRENGTHEN_LABEL } from './PveToastView';
 import { makeLabel } from './pveUiKit';
 import { Effects } from '../../fx/Effects';
+import { PveDebug } from '../debug/PveDebug';
 
 const TITLE_COLOR  = new Color(255, 226, 138, 255);
 const TEXT_COLOR   = new Color(238, 244, 252, 255);
@@ -83,6 +84,7 @@ export class PveCharacterPanel {
   private _panel!: Node;
   private _content!: Node;
   private _statsLabel:        Label;
+  private _awakenIcon:        Node;
   /** 装备槽位行（可点击，点击弹出 _detailPopup）。 */
   private _equipRowLabels:    Label[]  = [];
   /** 对应每个槽位当前装备的快照，供点击时读取。 */
@@ -189,7 +191,15 @@ export class PveCharacterPanel {
       return lbl;
     };
 
-    this._statsLabel     = place(statsH, TEXT_COLOR);
+    const statsTop = cursorY;
+    this._statsLabel = place(statsH, TEXT_COLOR);
+    this._statsLabel.node.setPosition(-54, this._statsLabel.node.position.y, 0);
+    this._statsLabel.node.getComponent(UITransform)?.setContentSize(SV_W - 132, statsH);
+    this._awakenIcon = new Node('AwakenPortrait');
+    this._awakenIcon.setParent(contentNode);
+    this._awakenIcon.setPosition(SV_W / 2 - 74, statsTop - 70, 0);
+    this._awakenIcon.addComponent(UITransform).setContentSize(104, 104);
+    this._awakenIcon.active = false;
 
     // 装备（标题 + 5 行）单独构建
     this._buildEquipRows(contentNode, cursorY);
@@ -461,7 +471,10 @@ export class PveCharacterPanel {
     gfx.stroke();
 
     // 正文内容
-    const effectLine = this._slotEffectDesc(item.slot, item.baseStat);
+    const effectLine = this._slotEffectDesc(item.slot, item.baseStat, item.baseStatMax);
+    const implicitLine = item.implicit
+      ? `特性：${PveCharacterPanel._IMPLICIT_CN[item.implicit] ?? item.implicit}`
+      : '';
     const traitLine  = item.trait
       ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? '特殊词条'}`
       : '词条：(未洗炼)';
@@ -469,11 +482,21 @@ export class PveCharacterPanel {
     this._detailBodyLabel.string = [
       `${slotStr} · ${qualityStr}`,
       `主属性：${effectLine}`,
+      ...(implicitLine ? [implicitLine] : []),
       traitLine,
     ].join('\n');
 
     this._detailPopup.active = true;
   }
+
+  /** 基础款优缺点中文映射（AC-EQ-3）。 */
+  private static readonly _IMPLICIT_CN: Record<string, string> = {
+    weapon_axe:    '高攻 / 攻击AP+1',
+    weapon_spear:  '攻击范围+1 / 伤略低',
+    armor_plate:   '高防 / 移动AP+1',
+    helmet_heavy:  '高HP / 警戒范围+1',
+    trinket_gold:  '金币获取加成',
+  };
 
   /**
    * 装备词条完整中文映射（通用词条 + Boss 专属词条）。
@@ -503,18 +526,19 @@ export class PveCharacterPanel {
     'boss_revive_50':     '致死时复活（回50%HP，每场1次）',
   };
 
-  /** 按槽位 + baseStat 生成主属性效果描述。 */
-  private _slotEffectDesc(slot: EquipSlot, baseStat: number): string {
+  /** 按槽位 + baseStat（+ 可选上限）生成主属性效果描述。 */
+  private _slotEffectDesc(slot: EquipSlot, baseStat: number, baseStatMax?: number): string {
+    const maxSuffix = baseStatMax !== undefined && baseStatMax !== baseStat ? `/${baseStatMax}` : '';
     switch (slot) {
-      case 'WEAPON':  return `攻击力 +${baseStat}`;
-      case 'HELMET':  return `最大HP +${baseStat}`;
-      case 'ARMOR':   return `每次受伤减伤 ${baseStat} 点`;
-      case 'TRINKET': return `灵气获取量 +${baseStat}%`;
+      case 'WEAPON':  return `攻击力 +${baseStat}${maxSuffix}`;
+      case 'HELMET':  return `最大HP +${baseStat}${maxSuffix}`;
+      case 'ARMOR':   return `减伤 ${baseStat}${maxSuffix} 点`;
+      case 'TRINKET': return `灵气 +${baseStat}${maxSuffix}%`;
       case 'SHOES': {
-        const parts: string[] = [`靴子等级 ${baseStat}`];
-        if (baseStat >= SHOES_REVEAL_BONUS_THRESHOLD) parts.push('移动后视野 +1');
-        if (baseStat >= SHOES_FIRST_MOVE_THRESHOLD)   parts.push('每回合首次移动免费');
-        if (baseStat >= SHOES_STEALTH_THRESHOLD)      parts.push(`怪物仇恨半径 -${shoesStealthReduction(baseStat)}`);
+        const parts: string[] = [`档位 ${baseStat}${maxSuffix}`];
+        if (baseStat >= SHOES_REVEAL_BONUS_THRESHOLD) parts.push('视野+1');
+        if (baseStat >= SHOES_FIRST_MOVE_THRESHOLD)   parts.push('首步免费');
+        if (baseStat >= SHOES_STEALTH_THRESHOLD)      parts.push(`潜行-${shoesStealthReduction(baseStat)}`);
         return parts.join(' · ');
       }
     }
@@ -533,7 +557,8 @@ export class PveCharacterPanel {
   /** 用当前 ExpeditionState（+ 可选局外元进度）刷新所有字段（show 时调用）。 */
   update(state: ExpeditionState, meta?: PveMeta): void {
     const { player, floorState } = state;
-    const cls = CLASS_LABEL[player.classId] ?? player.classId;
+    const awakenDef = player.awakenForm ? AWAKEN_FORMS[player.awakenForm] : undefined;
+    const cls = awakenDef?.name ?? CLASS_LABEL[player.classId] ?? player.classId;
     const balanceConfig = getPlayerBalanceConfig(state.balanceSnapshot, state.chapter);
     const baseHp = balanceConfig.initialHp ?? INITIAL_HP;
     const baseAttack = balanceConfig.baseAttack ?? BASE_ATTACK;
@@ -542,9 +567,13 @@ export class PveCharacterPanel {
     const threshold = player.animaThreshold ?? 100;
 
     // ── 基础属性 ──────────────────────────────────────────────
-    const awakenLine = player.awakenForm
-      ? `🌟 觉醒形态：${AWAKEN_FORMS[player.awakenForm].name}`
-      : null;
+    const awakenLine = awakenDef ? `核心天赋：${awakenDef.coreName}` : null;
+    this._awakenIcon.active = !!awakenDef;
+    if (awakenDef) {
+      void loadUiSprite(awakenDef.iconKey).then((frame) => {
+        if (frame && this._awakenIcon.isValid) ensureArtChild(this._awakenIcon, 'Art', frame, 104, 104);
+      }).catch(() => null);
+    }
 
     // HP/攻击力/AP 数值组成：基础值 + 装备/词条/命运树等加成，方便玩家核对来源
     const hpBonus = player.maxHp - baseHp;
@@ -594,6 +623,11 @@ export class PveCharacterPanel {
     const traits = player.classTraits;
     const traitNames = traits.map((id) => STRENGTHEN_LABEL[id]?.title ?? id);
     const traitLine = `词条：${traitNames.length === 0 ? '(无)' : traitNames.join('、')}`;
+    const awakenState: string[] = [];
+    if (floorState.frenzyPending) awakenState.push(`杀意待发${(floorState.awakenSlayerIntentStacks ?? 0) > 0 ? `·${floorState.awakenSlayerIntentStacks}层` : ''}`);
+    if ((floorState.awakenShadowCharges ?? 0) > 0) awakenState.push(`影袭×${floorState.awakenShadowCharges}`);
+    if (floorState.awakenSniperGuaranteedCrit) awakenState.push('强弓必暴');
+    const awakenStateLine = awakenState.length > 0 ? `觉醒状态：${awakenState.join('、')}` : '';
     const relics = player.relics ?? [];
     this._currentRelics = relics;
     const relicLine = relics.length > 0
@@ -601,7 +635,7 @@ export class PveCharacterPanel {
       : '🏺 遗物：(无)';
     const scrolls = player.scrolls ?? 0;
     const scrollLine = scrolls > 0 ? `📜 命运卷轴：×${scrolls}` : '';
-    this._traitsLabel.string = [traitLine, relicLine, ...(scrollLine ? [scrollLine] : [])].join('\n');
+    this._traitsLabel.string = [traitLine, awakenStateLine, relicLine, ...(scrollLine ? [scrollLine] : [])].filter(Boolean).join('\n');
 
     // ── 职业碎片 ──────────────────────────────────────────────
     const fragEntries = Object.entries(player.classFragments)
@@ -671,6 +705,14 @@ export class PveCharacterPanel {
   }
 
   destroy(): void {
-    this._root.destroy();
+    PveDebug.mark('CharPanel.destroy.begin');
+    try {
+      if (this._root && this._root.isValid) this._root.destroy();
+      else PveDebug.mark('CharPanel.destroy.rootInvalid');
+      PveDebug.mark('CharPanel.destroy.end');
+    } catch (err) {
+      PveDebug.dump('CharPanel.destroy throw');
+      throw err;
+    }
   }
 }

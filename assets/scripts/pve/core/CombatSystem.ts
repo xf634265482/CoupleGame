@@ -255,6 +255,9 @@ export function playerAttackPower(
   let rawAttack = base.damage + stats.attackBonus + (weapon?.baseStat ?? 0);
   let range = base.range + stats.attackRangeBonus;
 
+  // 基础款优缺点：矛/弓类武器攻击范围 +1（AC-EQ-3）
+  if (weapon?.implicit === 'weapon_spear') range += 1;
+
   rawAttack += traitCount(traits, 'marksman') * 4;
   if (traits.includes('eagle_eye')) range += 1;             // ARCHER 鹰眼
   rawAttack += generalFlatAttackBonus(traits);
@@ -289,7 +292,9 @@ export function playerAttack(state: ExpeditionState, monsterId: string): ApplyRe
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return noop(state);
-  const attackCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'ATTACK');
+  // 基础款优缺点：斧类武器攻击消耗额外 AP+1（AC-EQ-3）
+  const axePenalty = state.player.equipment.WEAPON?.implicit === 'weapon_axe' ? 1 : 0;
+  const attackCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'ATTACK') + axePenalty;
   if (!canAfford(floor.ap, 'ATTACK', { ATTACK: attackCost })) return noop(state);
   // 潜地状态免疫玩家攻击（流沙巨蝎）
   if (monster.isBurrowed) return noop(state);
@@ -1086,4 +1091,44 @@ export function attackIceWall(state: ExpeditionState, entityId: string): ApplyRe
   }
 
   return { state: next, events };
+}
+
+/**
+ * 攻击石块（普通层地形 / 第1章 Boss 房 ROCK，HP=350 可被玩家击碎）：
+ * - 校验：实体存在且未消耗、在攻击范围内、AP 足够，否则 no-op。
+ * - 扣 AP（ATTACK 消耗）；用 playerAttackPower 扣减石块 HP；HP ≤ 0 时 consumed=true，emit ROCK_DESTROYED。
+ */
+export function attackRock(state: ExpeditionState, entityId: string): ApplyResult {
+  const floor = state.floorState;
+  const rock = floor.entities.find((e) => e.id === entityId);
+  if (!rock || rock.type !== 'ROCK' || rock.consumed) return noop(state);
+  const attackCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'ATTACK');
+  if (!canAfford(floor.ap, 'ATTACK', { ATTACK: attackCost })) return noop(state);
+
+  const { damage, range } = playerAttackPower(state.player, state.balanceSnapshot, state.chapter);
+  if (manhattan(floor.player, rock.pos) > range) return noop(state);
+  if (!isRevealed(floor.revealed, rock.pos)) return noop(state);
+
+  const newHp = Math.max(0, (rock.hp ?? 0) - damage);
+  const destroyed = newHp <= 0;
+
+  const events: PveEvent[] = [
+    { type: 'ATTACK', attackerId: 'PLAYER', targetId: entityId, damage, targetHp: newHp },
+  ];
+
+  const nextFloor: FloorState = {
+    ...floor,
+    ap: spend(floor.ap, 'ATTACK', { ATTACK: attackCost }),
+    entities: floor.entities.map((e) =>
+      e.id === entityId
+        ? { ...e, hp: newHp, consumed: destroyed }
+        : e,
+    ),
+  };
+
+  if (destroyed) {
+    events.push({ type: 'ROCK_DESTROYED', entityId });
+  }
+
+  return { state: { ...state, floorState: nextFloor }, events };
 }

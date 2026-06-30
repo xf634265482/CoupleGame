@@ -106,7 +106,15 @@ export interface EquipItem {
   quality: EquipQuality;
   name: string;
   baseStat: number;
-  trait?: string; // 随机词条 id
+  /** 该件装备的 baseStat 区间上限（掉落时 roll，UI 展示「当前值/上限」，AC-EQ-2）。 */
+  baseStatMax?: number;
+  /** 基础款优缺点效果 id（'weapon_axe'/'weapon_spear'/'armor_plate'/'helmet_heavy' 等，AC-EQ-3）。 */
+  implicit?: string;
+  trait?: string; // 随机词条 id（Phase 2 词条系统）
+  /** 词条列表（Phase 2 词条系统占位）。 */
+  affixes?: string[];
+  /** 传奇独特效果 id（Phase 3 传奇系统占位）。 */
+  legendaryId?: string;
   /** 已强化次数（0 = 未强化，显示为 +N 后缀）。 */
   enhanceLevel?: number;
 }
