@@ -20,3 +20,23 @@
 - 新增云端模块与 `cloudfunctions/pve/index.js` 通过 `node --check`。
 - 全量 `typecheck:game` 仍被工作区既有缺失 `assets/scripts/types/GameTypes` 阻塞。
 - 全量 `typecheck:cloud` 仍被既有 `incrementUserPveRewards` JSDoc 缺少 `classId/awakenForm` 阻塞。
+
+## 2026-07-12 任务 2：楼层挑战生命周期
+
+状态：完成。
+
+已完成：
+
+- 新增 `pve_challenges` 集合常量和 ACTIVE/CLEAR/DEAD/WITHDRAW 状态机。
+- 开始挑战时冻结楼层、模式、seed、职业、装备、8 槽命痕和追踪目标。
+- 相同配置的重复开始请求返回同一 challengeId；不同配置在已有 ACTIVE 挑战时拒绝。
+- 支持读取活跃挑战；丢失或终态挑战会修复用户档案中的陈旧指针。
+- CLEAR 才更新最高通关层、解锁下一层、合并可选目标和最佳回合；DEAD/WITHDRAW 只结束当前挑战。
+- 相同 challengeId 重复结算返回已存终态与空奖励快照，不重复增加 clearCount。
+- 新增装备实例归属、命痕等级归属和三级升格完成校验。
+- 正式奖励仍为空对象，留给计划任务 9 接入。
+
+验证：
+
+- 云端定向测试：5 suites / 21 tests 通过。
+- 覆盖启动重试、不同配置冲突、活跃恢复、CLEAR 推进、DEAD/WITHDRAW、装备/命痕归属和重复结算。

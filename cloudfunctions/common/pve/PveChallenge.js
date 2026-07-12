@@ -1,0 +1,147 @@
+const { COLLECTIONS } = require('../constants');
+const { getDb, getUserById } = require('../db');
+const { normalizeProfile } = require('./PveProfile');
+const {
+  validateStartFloorChallengeRequest,
+  validateSettleFloorChallengeRequest,
+} = require('./PveChallengeValidate');
+const {
+  buildChallenge,
+  requestMatchesChallenge,
+  validateLoadoutOwnership,
+  applyChallengeStart,
+  applyChallengeSettlement,
+} = require('./PveChallengeState');
+
+function dataOf(result) {
+  return result?.data ?? null;
+}
+
+async function getChallengeById(challengeId) {
+  try {
+    const result = await getDb().collection(COLLECTIONS.PVE_CHALLENGES).doc(challengeId).get();
+    return dataOf(result);
+  } catch (_err) {
+    return null;
+  }
+}
+
+async function loadActiveFloorChallenge(user) {
+  const latest = await getUserById(user.id);
+  if (!latest) {
+    const err = new Error('USER_NOT_FOUND');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  const profile = normalizeProfile(latest.pveProfile);
+  if (!profile.activeChallengeId) return { challenge: null };
+  const challenge = await getChallengeById(profile.activeChallengeId);
+  if (!challenge || challenge.userId !== user.id || challenge.status !== 'ACTIVE') {
+    await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
+      data: {
+        pveProfile: { ...profile, activeChallengeId: null, updatedAt: Date.now() },
+      },
+    });
+    return { challenge: null };
+  }
+  return { challenge };
+}
+
+async function startFloorChallenge(user, rawRequest = {}) {
+  const db = getDb();
+  return db.runTransaction(async (transaction) => {
+    const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
+    const userResult = await userRef.get();
+    const userDoc = dataOf(userResult);
+    if (!userDoc) {
+      const err = new Error('USER_NOT_FOUND');
+      err.code = 'USER_NOT_FOUND';
+      throw err;
+    }
+
+    const now = Date.now();
+    const profile = normalizeProfile(userDoc.pveProfile, now);
+    const request = validateStartFloorChallengeRequest(profile, rawRequest);
+    validateLoadoutOwnership(profile, request);
+
+    if (profile.activeChallengeId) {
+      const activeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(profile.activeChallengeId);
+      let active = null;
+      try {
+        active = dataOf(await activeRef.get());
+      } catch (_err) {
+        active = null;
+      }
+      if (active?.status === 'ACTIVE') {
+        if (requestMatchesChallenge(request, active)) {
+          return { challenge: active, resume: true };
+        }
+        const err = new Error('已有不同配置的进行中挑战');
+        err.code = 'PVE_CHALLENGE_ALREADY_ACTIVE';
+        throw err;
+      }
+    }
+
+    const challenge = buildChallenge(user.id, request, now);
+    const nextProfile = applyChallengeStart(profile, challenge, now);
+    await transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(challenge.challengeId).set({
+      data: challenge,
+    });
+    await userRef.update({ data: { pveProfile: nextProfile } });
+    return { challenge, resume: false };
+  });
+}
+
+async function settleFloorChallenge(user, rawRequest = {}) {
+  const request = validateSettleFloorChallengeRequest(rawRequest);
+  const db = getDb();
+  return db.runTransaction(async (transaction) => {
+    const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
+    const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
+    const [userResult, challengeResult] = await Promise.all([userRef.get(), challengeRef.get()]);
+    const userDoc = dataOf(userResult);
+    const challenge = dataOf(challengeResult);
+    if (!userDoc) {
+      const err = new Error('USER_NOT_FOUND');
+      err.code = 'USER_NOT_FOUND';
+      throw err;
+    }
+    if (!challenge) {
+      const err = new Error('PVE_CHALLENGE_NOT_FOUND');
+      err.code = 'PVE_CHALLENGE_NOT_FOUND';
+      throw err;
+    }
+    if (challenge.userId !== user.id) {
+      const err = new Error('挑战不属于当前用户');
+      err.code = 'PVE_CHALLENGE_FORBIDDEN';
+      throw err;
+    }
+
+    const profile = normalizeProfile(userDoc.pveProfile);
+    if (challenge.status !== 'ACTIVE') {
+      return {
+        challenge,
+        profile,
+        rewards: challenge.rewards ?? {},
+        idempotent: true,
+      };
+    }
+    if (profile.activeChallengeId !== challenge.challengeId) {
+      const err = new Error('活跃挑战指针不一致');
+      err.code = 'PVE_ACTIVE_CHALLENGE_MISMATCH';
+      throw err;
+    }
+
+    const settled = applyChallengeSettlement(profile, challenge, request, Date.now());
+    await challengeRef.update({ data: settled.challenge });
+    await userRef.update({ data: { pveProfile: settled.profile } });
+    return { ...settled, idempotent: false };
+  });
+}
+
+module.exports = {
+  getChallengeById,
+  loadActiveFloorChallenge,
+  startFloorChallenge,
+  settleFloorChallenge,
+};

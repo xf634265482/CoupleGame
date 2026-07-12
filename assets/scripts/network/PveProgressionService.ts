@@ -25,6 +25,7 @@ export interface LoadPveProfileResponse extends CloudOk {
 
 export interface StartFloorChallengeResponse extends CloudOk {
   challenge: FloorChallengeSnapshot;
+  resume: boolean;
 }
 
 export interface LoadActiveFloorChallengeResponse extends CloudOk {
@@ -35,6 +36,7 @@ export interface SettleFloorChallengeResponse extends CloudOk {
   challenge: FloorChallengeSnapshot;
   profile: PveProfile;
   rewards?: Record<string, unknown>;
+  idempotent: boolean;
 }
 
 export async function loadPveProfile(): Promise<LoadPveProfileResponse> {

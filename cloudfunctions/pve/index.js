@@ -4,6 +4,11 @@ const { getUserByOpenId } = require('./common/db');
 const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
 const { loadProfile } = require('./common/pve/PveProgression');
 const {
+  loadActiveFloorChallenge,
+  startFloorChallenge,
+  settleFloorChallenge,
+} = require('./common/pve/PveChallenge');
+const {
   loadMeta,
   updateMeta,
   unlockTreeNode,
@@ -27,6 +32,21 @@ exports.main = async (event = {}) => {
     if (action === 'loadProfile') {
       const { profile } = await loadProfile(user);
       return { ok: true, profile };
+    }
+
+    if (action === 'startFloorChallenge') {
+      const result = await startFloorChallenge(user, event.request || {});
+      return { ok: true, ...result };
+    }
+
+    if (action === 'loadActiveFloorChallenge') {
+      const { challenge } = await loadActiveFloorChallenge(user);
+      return { ok: true, challenge };
+    }
+
+    if (action === 'settleFloorChallenge') {
+      const result = await settleFloorChallenge(user, event.request || {});
+      return { ok: true, ...result };
     }
 
     if (action === 'loadSave') {
