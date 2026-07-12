@@ -44,6 +44,11 @@ export interface FloorProfessionRuntimeState {
   rangerPendingAttackMultiplier: number;
   rangerPendingArmorPenetration: number;
   spiritBurstActive: boolean;
+  spiritBurstExpiresAtTurn: number | null;
+  archerBurstMoveGuard: boolean;
+  archerBurstCoverPierce: boolean;
+  rangerBurstActionsLeft: number;
+  rangerBurstRepeatUsed: boolean;
 }
 
 export interface FrozenChallengeConfig {
@@ -103,6 +108,11 @@ export function createFreshProfessionState(): FloorProfessionRuntimeState {
     rangerPendingAttackMultiplier: 1,
     rangerPendingArmorPenetration: 0,
     spiritBurstActive: false,
+    spiritBurstExpiresAtTurn: null,
+    archerBurstMoveGuard: false,
+    archerBurstCoverPierce: false,
+    rangerBurstActionsLeft: 0,
+    rangerBurstRepeatUsed: false,
   };
 }
 

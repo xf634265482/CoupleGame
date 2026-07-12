@@ -59,6 +59,14 @@ export function clearFloorRuntime<TBattleState>(
   return {
     ...state,
     status: 'CLEAR',
+    resources: {
+      ...state.resources,
+      spirit: 0,
+      shield: 0,
+      statuses: [],
+      temporaryEffects: [],
+    },
+    profession: createFreshProfessionState(),
     completedOptionalObjectiveIds: [...new Set(completedOptionalObjectiveIds)],
     updatedAt: now,
   };
