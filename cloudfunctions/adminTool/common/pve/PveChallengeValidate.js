@@ -87,6 +87,14 @@ function validateStartFloorChallengeRequest(profile, request) {
   if (request.mode === 'HUNT' && trackedMinghenId === null) {
     fail('PVE_HUNT_TARGET_REQUIRED', '定向狩猎必须指定命痕');
   }
+  if (request.mode === 'HUNT' && (profile.tracking?.state !== 'HUNT'
+    || profile.tracking.floor !== floor || profile.tracking.minghenId !== trackedMinghenId)) {
+    fail('PVE_TRACKING_MISMATCH', '定向狩猎与当前追踪状态不一致');
+  }
+  if (request.mode === 'TRIAL' && (profile.tracking?.state !== 'TRIAL_READY'
+    || profile.tracking.floor !== floor || profile.tracking.minghenId !== trackedMinghenId)) {
+    fail('PVE_TRIAL_NOT_READY', '命痕升格试炼尚未就绪');
+  }
 
   return {
     floor,
@@ -114,11 +122,35 @@ function validateSettleFloorChallengeRequest(request) {
     || completedOptionalObjectiveIds.some((id) => typeof id !== 'string' || !id)) {
     fail('PVE_INVALID_OPTIONAL_OBJECTIVES', '可选目标列表不合法');
   }
+  const professionHighlightCount = request.professionHighlightCount ?? 0;
+  if (!Number.isInteger(professionHighlightCount) || professionHighlightCount < 0 || professionHighlightCount > 3) {
+    fail('PVE_INVALID_HIGHLIGHT_COUNT', '职业高光次数不合法');
+  }
+  for (const key of ['selectedMinghenId', 'selectedEquipmentDefinitionId']) {
+    if (request[key] != null && (typeof request[key] !== 'string' || !request[key])) {
+      fail('PVE_INVALID_REWARD_SELECTION', `${key} 不合法`);
+    }
+  }
+  let trialEvidence;
+  if (request.trialEvidence != null) {
+    if (!isPlainObject(request.trialEvidence)) fail('PVE_INVALID_TRIAL_EVIDENCE', '试炼摘要必须为对象');
+    trialEvidence = {};
+    for (const [key, value] of Object.entries(request.trialEvidence)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9]{0,40}$/.test(key) || !Number.isInteger(value) || value < 0 || value > 9999) fail('PVE_INVALID_TRIAL_EVIDENCE', '试炼摘要字段不合法');
+      trialEvidence[key] = value;
+    }
+  }
   return {
     challengeId: request.challengeId,
     status: request.status,
     clearTurns,
     completedOptionalObjectiveIds: [...new Set(completedOptionalObjectiveIds)],
+    ...(request.professionHighlightCount == null ? {} : { professionHighlightCount }),
+    ...(request.selectedMinghenId == null ? {} : { selectedMinghenId: request.selectedMinghenId }),
+    ...(request.selectedEquipmentDefinitionId == null ? {} : { selectedEquipmentDefinitionId: request.selectedEquipmentDefinitionId }),
+    ...(request.huntBonusAchieved == null ? {} : { huntBonusAchieved: request.huntBonusAchieved === true }),
+    ...(request.trialCompleted == null ? {} : { trialCompleted: request.trialCompleted === true }),
+    ...(trialEvidence === undefined ? {} : { trialEvidence }),
   };
 }
 

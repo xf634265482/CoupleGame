@@ -1,4 +1,6 @@
 const { generateId } = require('../id');
+const { calculateRewards, applyMastery, unlockProfessions } = require('./PveRewardV2');
+const { settleMinghen } = require('./PveMinghen');
 
 function stableLoadoutEntries(entries) {
   return [...entries].sort((a, b) => a.id.localeCompare(b.id));
@@ -90,6 +92,12 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       status: result.status,
       ...(result.clearTurns === undefined ? {} : { clearTurns: result.clearTurns }),
       completedOptionalObjectiveIds: result.completedOptionalObjectiveIds,
+      professionHighlightCount: result.professionHighlightCount,
+      selectedMinghenId: result.selectedMinghenId,
+      selectedEquipmentDefinitionId: result.selectedEquipmentDefinitionId,
+      huntBonusAchieved: result.huntBonusAchieved,
+      trialCompleted: result.trialCompleted,
+      trialEvidence: result.trialEvidence,
     },
     rewards: {},
     updatedAt: now,
@@ -113,6 +121,13 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
     completedOptionalObjectiveIds: [],
     graduatedMinghenIds: [],
   };
+  const rewards = calculateRewards(profile, challenge, result, previous);
+  const minghen = settleMinghen(profile, challenge, result, previous);
+  if (rewards.equipment && profile.equipmentInventory.length >= 60) {
+    const err = new Error('装备背包已满，请先出售装备');
+    err.code = 'PVE_EQUIPMENT_INVENTORY_FULL';
+    throw err;
+  }
   const firstClearedAt = previous.firstClearedAt ?? now;
   const bestClearTurns = result.clearTurns === undefined
     ? previous.bestClearTurns
@@ -127,6 +142,7 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       ...previous.completedOptionalObjectiveIds,
       ...result.completedOptionalObjectiveIds,
     ])],
+    graduatedMinghenIds: minghen.graduated,
     ...(bestClearTurns === undefined ? {} : { bestClearTurns }),
   };
 
@@ -144,8 +160,22 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       ...profile.floorRecords,
       [key]: record,
     },
+    gold: profile.gold + rewards.gold,
+    minghenDust: minghen.dust,
+    minghenCollection: minghen.collection,
+    tracking: minghen.tracking,
+    equipmentInventory: rewards.equipment
+      ? [...profile.equipmentInventory, rewards.equipment]
+      : profile.equipmentInventory,
+    professions: unlockProfessions(
+      applyMastery(profile, challenge.config.professionId, rewards.masteryXp),
+      challenge.floor,
+      rewards.firstClear,
+    ),
   };
-  return { challenge: settledChallenge, profile: nextProfile, rewards: {} };
+  const rewardSnapshot = { ...rewards, minghenId: minghen.grantedId, minghenDust: minghen.dust - profile.minghenDust };
+  settledChallenge.rewards = rewardSnapshot;
+  return { challenge: settledChallenge, profile: nextProfile, rewards: rewardSnapshot };
 }
 
 module.exports = {

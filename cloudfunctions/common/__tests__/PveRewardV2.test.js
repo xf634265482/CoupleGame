@@ -1,0 +1,10 @@
+const { createDefaultProfile }=require('../pve/PveProfile');
+const { calculateRewards,applyMastery,unlockProfessions,createEquipmentReward }=require('../pve/PveRewardV2');
+function challenge(overrides={}){return{challengeId:'c1',floor:1,mode:'PROGRESSION',seed:1,config:{professionId:'WARRIOR'},...overrides};}
+function previous(overrides={}){return{clearCount:0,completedOptionalObjectiveIds:[],graduatedMinghenIds:[],...overrides};}
+describe('PveRewardV2',()=>{
+ test('first progression rewards dominate replay and optional gold is first-time only',()=>{const p=createDefaultProfile(1);const first=calculateRewards(p,challenge(),{completedOptionalObjectiveIds:['F1_FULL_SEARCH'],professionHighlightCount:2},previous());expect(first).toMatchObject({gold:30,masteryXp:170,firstClear:true});const replay=calculateRewards({...p,highestUnlockedFloor:8},challenge({mode:'HUNT'}),{completedOptionalObjectiveIds:['F1_FULL_SEARCH']},previous({firstClearedAt:1,completedOptionalObjectiveIds:['F1_FULL_SEARCH']}));expect(replay.gold).toBe(7);expect(replay.masteryXp).toBe(2);});
+ test('fixed equipment reward validates floor pool and has no random affix',()=>{expect(createEquipmentReward(challenge(),'W01')).toEqual({instanceId:'c1_W01',definitionId:'W01',quality:'COMMON',enhanceLevel:0,locked:false});expect(()=>createEquipmentReward(challenge(),'W05')).toThrow('装备不属于当前楼层奖励池');});
+ test('mastery unlocks techniques without stat fields and floor unlocks professions',()=>{const p=createDefaultProfile(1);const professions=applyMastery(p,'WARRIOR',900);expect(professions.WARRIOR).toMatchObject({xp:900,level:5,unlockedTechniqueIds:['ARMOR_BREAK','KNOCKBACK']});expect(professions.WARRIOR.attack).toBeUndefined();expect(unlockProfessions(professions,2,true).ARCHER).toMatchObject({unlocked:true,xp:150,level:2});});
+ test('rejects unknown or cross-floor optional ids before XP calculation',()=>{expect(()=>calculateRewards(createDefaultProfile(1),challenge(),{completedOptionalObjectiveIds:['F7_STONE_WEAPON']},previous())).toThrow('可选目标不属于当前楼层');});
+});

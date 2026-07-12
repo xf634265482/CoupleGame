@@ -103,7 +103,7 @@ describe('PveChallenge service', () => {
       challengeId: started.challenge.challengeId,
       status: 'CLEAR',
       clearTurns: 9,
-      completedOptionalObjectiveIds: ['f1_a'],
+      completedOptionalObjectiveIds: ['F1_FULL_SEARCH'],
     };
     const first = await settleFloorChallenge(user, request);
     const retry = await settleFloorChallenge(user, request);
@@ -112,6 +112,20 @@ describe('PveChallenge service', () => {
     expect(retry.challenge.status).toBe('CLEAR');
     expect(mockStores.users.get('doc1').pveProfile.highestUnlockedFloor).toBe(2);
     expect(mockStores.users.get('doc1').pveProfile.floorRecords['1'].clearCount).toBe(1);
+    expect(first.rewards).toMatchObject({ gold: 30, firstClear: true });
+    expect(retry.rewards).toEqual(first.rewards);
+  });
+
+  test('atomically grants selected fixed equipment and Minghen only once', async () => {
+    const user = { _id: 'doc1', id: 'u1' };
+    const started = await startFloorChallenge(user, startRequest());
+    const request = { challengeId: started.challenge.challengeId, status: 'CLEAR', clearTurns: 8, completedOptionalObjectiveIds: [], selectedMinghenId: 'M05', selectedEquipmentDefinitionId: 'W01', professionHighlightCount: 2 };
+    const first = await settleFloorChallenge(user, request);
+    const retry = await settleFloorChallenge(user, request);
+    expect(first.profile.minghenCollection.M05).toMatchObject({ copies: 1, level: 1 });
+    expect(first.profile.equipmentInventory).toHaveLength(1);
+    expect(first.profile.professions.WARRIOR.xp).toBe(150);
+    expect(retry.profile.equipmentInventory).toHaveLength(1);
   });
 
   test('saves runtime idempotently and rejects turn rollback', async () => {

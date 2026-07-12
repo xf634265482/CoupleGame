@@ -5,6 +5,7 @@ import type {
   SaveFloorChallengeRuntimeRequest,
   SettleFloorChallengeRequest,
   StartFloorChallengeRequest,
+  StartMinghenTrackingRequest,
 } from '../pve/core/PveProgressionTypes';
 
 interface CloudOk {
@@ -62,6 +63,10 @@ export async function startFloorChallenge(
     }),
     'PVE_START_FLOOR_CHALLENGE_FAILED',
   );
+}
+
+export async function startMinghenTracking(request: StartMinghenTrackingRequest): Promise<LoadPveProfileResponse> {
+  return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'startMinghenTracking', request }), 'PVE_START_MINGHEN_TRACKING_FAILED');
 }
 
 export async function loadActiveFloorChallenge(): Promise<LoadActiveFloorChallengeResponse> {

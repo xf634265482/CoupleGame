@@ -131,7 +131,15 @@ export interface SettleFloorChallengeRequest {
   status: Exclude<FloorChallengeStatus, 'ACTIVE'>;
   clearTurns?: number;
   completedOptionalObjectiveIds?: string[];
+  professionHighlightCount?: number;
+  selectedMinghenId?: string;
+  selectedEquipmentDefinitionId?: string;
+  huntBonusAchieved?: boolean;
+  trialCompleted?: boolean;
+  trialEvidence?: Record<string, number>;
 }
+
+export interface StartMinghenTrackingRequest { floor: number; minghenId: string; }
 
 export interface SaveFloorChallengeRuntimeRequest {
   challengeId: string;

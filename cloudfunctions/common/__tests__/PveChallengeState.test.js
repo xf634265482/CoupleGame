@@ -73,7 +73,7 @@ describe('PveChallengeState', () => {
     const settled = applyChallengeSettlement(active, challenge, {
       status: 'CLEAR',
       clearTurns: 12,
-      completedOptionalObjectiveIds: ['f1_a'],
+      completedOptionalObjectiveIds: ['F1_FULL_SEARCH'],
     }, 200);
     expect(settled.profile.highestClearedFloor).toBe(1);
     expect(settled.profile.highestUnlockedFloor).toBe(2);
@@ -81,7 +81,7 @@ describe('PveChallengeState', () => {
     expect(settled.profile.floorRecords['1']).toMatchObject({
       clearCount: 1,
       bestClearTurns: 12,
-      completedOptionalObjectiveIds: ['f1_a'],
+      completedOptionalObjectiveIds: ['F1_FULL_SEARCH'],
     });
   });
 
