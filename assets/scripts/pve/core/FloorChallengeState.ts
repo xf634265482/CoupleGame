@@ -38,8 +38,11 @@ export interface FloorChallengePlayerBaseline {
 export interface FloorProfessionRuntimeState {
   warriorChargeLevel: number;
   archerAimLevel: number;
+  archerMovedThisTurn: boolean;
   rangerCombo: number;
   rangerLastAction: 'MOVE' | 'ATTACK' | null;
+  rangerPendingAttackMultiplier: number;
+  rangerPendingArmorPenetration: number;
   spiritBurstActive: boolean;
 }
 
@@ -94,8 +97,11 @@ export function createFreshProfessionState(): FloorProfessionRuntimeState {
   return {
     warriorChargeLevel: 0,
     archerAimLevel: 0,
+    archerMovedThisTurn: false,
     rangerCombo: 0,
     rangerLastAction: null,
+    rangerPendingAttackMultiplier: 1,
+    rangerPendingArmorPenetration: 0,
     spiritBurstActive: false,
   };
 }

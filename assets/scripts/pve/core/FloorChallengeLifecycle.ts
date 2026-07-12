@@ -163,5 +163,11 @@ export function resumeFloorRuntime<TBattleState>(
   if (JSON.stringify(state.config) !== JSON.stringify(freezeChallengeConfig(snapshot))) {
     return fail('FLOOR_RUNTIME_CONFIG_MISMATCH');
   }
-  return state;
+  return {
+    ...state,
+    profession: {
+      ...createFreshProfessionState(),
+      ...state.profession,
+    },
+  };
 }
