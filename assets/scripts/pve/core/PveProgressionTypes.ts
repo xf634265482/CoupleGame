@@ -10,6 +10,8 @@ export const FLOOR_CHALLENGE_STATUSES = ['ACTIVE', 'CLEAR', 'DEAD', 'WITHDRAW'] 
 export type FloorChallengeStatus = (typeof FLOOR_CHALLENGE_STATUSES)[number];
 
 export type MinghenLevel = 1 | 2 | 3;
+export const PVE_EQUIPMENT_SLOTS = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'] as const;
+export type EquipSlot = (typeof PVE_EQUIPMENT_SLOTS)[number];
 
 export interface MinghenCollectionEntry {
   id: string;
