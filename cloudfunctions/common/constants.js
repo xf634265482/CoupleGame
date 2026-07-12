@@ -6,6 +6,7 @@ module.exports = {
   COLLECTIONS: {
     USERS: 'users',
     PVE_SAVES: 'pve_saves',
+    PVE_CHALLENGES: 'pve_challenges',
     PVE_BALANCE_CONFIGS: 'pve_balance_configs',
     ADMIN_ACCOUNTS: 'admin_accounts',
     ADMIN_SESSIONS: 'admin_sessions',

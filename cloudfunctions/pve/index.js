@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
 const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
+const { loadProfile } = require('./common/pve/PveProgression');
 const {
   loadMeta,
   updateMeta,
@@ -22,6 +23,11 @@ exports.main = async (event = {}) => {
 
     const user = await requireUser(openId, getUserByOpenId);
     const { action } = event;
+
+    if (action === 'loadProfile') {
+      const { profile } = await loadProfile(user);
+      return { ok: true, profile };
+    }
 
     if (action === 'loadSave') {
       const { save } = await loadActiveSave(user);
