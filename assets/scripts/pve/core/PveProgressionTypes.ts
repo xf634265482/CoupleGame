@@ -104,6 +104,9 @@ export interface FloorChallengeSnapshot {
   startedAt: number;
   updatedAt: number;
   result?: FloorChallengeResultSnapshot;
+  runtimeSave?: string;
+  runtimeTurn?: number;
+  runtimeSavedAt?: number;
 }
 
 export interface FloorChallengeResultSnapshot {
@@ -126,4 +129,9 @@ export interface SettleFloorChallengeRequest {
   status: Exclude<FloorChallengeStatus, 'ACTIVE'>;
   clearTurns?: number;
   completedOptionalObjectiveIds?: string[];
+}
+
+export interface SaveFloorChallengeRuntimeRequest {
+  challengeId: string;
+  serializedRuntime: string;
 }

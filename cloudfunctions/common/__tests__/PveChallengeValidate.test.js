@@ -3,6 +3,7 @@ const {
   validateMinghenLoadout,
   validateStartFloorChallengeRequest,
   validateSettleFloorChallengeRequest,
+  validateSaveFloorChallengeRuntimeRequest,
 } = require('../pve/PveChallengeValidate');
 
 function baseRequest(overrides = {}) {
@@ -63,5 +64,18 @@ describe('PveChallengeValidate', () => {
       clearTurns: 8,
       completedOptionalObjectiveIds: ['o1', 'o2'],
     });
+  });
+
+  test('validates active serialized runtime saves', () => {
+    const serializedRuntime = JSON.stringify({
+      version: 1,
+      runtime: { version: 1, status: 'ACTIVE', turn: 3 },
+    });
+    const result = validateSaveFloorChallengeRuntimeRequest({ challengeId: 'c1', serializedRuntime });
+    expect(result.turn).toBe(3);
+    expect(() => validateSaveFloorChallengeRuntimeRequest({
+      challengeId: 'c1',
+      serializedRuntime: '{bad',
+    })).toThrow('不是合法 JSON');
   });
 });

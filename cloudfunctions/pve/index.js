@@ -5,6 +5,7 @@ const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = requir
 const { loadProfile } = require('./common/pve/PveProgression');
 const {
   loadActiveFloorChallenge,
+  saveFloorChallengeRuntime,
   startFloorChallenge,
   settleFloorChallenge,
 } = require('./common/pve/PveChallenge');
@@ -42,6 +43,11 @@ exports.main = async (event = {}) => {
     if (action === 'loadActiveFloorChallenge') {
       const { challenge } = await loadActiveFloorChallenge(user);
       return { ok: true, challenge };
+    }
+
+    if (action === 'saveFloorChallengeRuntime') {
+      const result = await saveFloorChallengeRuntime(user, event.request || {});
+      return { ok: true, ...result };
     }
 
     if (action === 'settleFloorChallenge') {

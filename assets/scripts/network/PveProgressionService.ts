@@ -2,6 +2,7 @@ import { callFunction } from './CloudService';
 import type {
   FloorChallengeSnapshot,
   PveProfile,
+  SaveFloorChallengeRuntimeRequest,
   SettleFloorChallengeRequest,
   StartFloorChallengeRequest,
 } from '../pve/core/PveProgressionTypes';
@@ -30,6 +31,11 @@ export interface StartFloorChallengeResponse extends CloudOk {
 
 export interface LoadActiveFloorChallengeResponse extends CloudOk {
   challenge: FloorChallengeSnapshot | null;
+}
+
+export interface SaveFloorChallengeRuntimeResponse extends CloudOk {
+  challenge: FloorChallengeSnapshot;
+  idempotent: boolean;
 }
 
 export interface SettleFloorChallengeResponse extends CloudOk {
@@ -62,6 +68,18 @@ export async function loadActiveFloorChallenge(): Promise<LoadActiveFloorChallen
   return ensureOk(
     await callFunction<LoadActiveFloorChallengeResponse>('pve', { action: 'loadActiveFloorChallenge' }),
     'PVE_LOAD_ACTIVE_FLOOR_CHALLENGE_FAILED',
+  );
+}
+
+export async function saveFloorChallengeRuntime(
+  request: SaveFloorChallengeRuntimeRequest,
+): Promise<SaveFloorChallengeRuntimeResponse> {
+  return ensureOk(
+    await callFunction<SaveFloorChallengeRuntimeResponse>('pve', {
+      action: 'saveFloorChallengeRuntime',
+      request,
+    }),
+    'PVE_SAVE_FLOOR_RUNTIME_FAILED',
   );
 }
 

@@ -40,3 +40,23 @@
 
 - 云端定向测试：5 suites / 21 tests 通过。
 - 覆盖启动重试、不同配置冲突、活跃恢复、CLEAR 推进、DEAD/WITHDRAW、装备/命痕归属和重复结算。
+
+## 2026-07-12 任务 3：客户端单层运行态
+
+状态：完成。
+
+已完成：
+
+- 新增独立 `FloorChallengeState` 与 `FloorChallengeLifecycle`，不直接改写旧 `ExpeditionState`。
+- 开始楼层时统一恢复 HP/AP，清空灵气、护盾、异常、临时效果和职业回合态。
+- 支持 CLEAR/DEAD/WITHDRAW 终态和云端结算请求生成。
+- 支持续档序列化；恢复时严格匹配 challengeId、floor、seed 和冻结配置。
+- 新增 `saveFloorChallengeRuntime` 云端 action，活跃挑战加载时一并返回运行态。
+- 运行态存档重复请求幂等；低 turn 存档不能覆盖高 turn 存档。
+- 单个运行态 JSON 上限 900000 字符，拒绝非法 JSON、错误版本和非 ACTIVE 状态。
+
+验证：
+
+- 客户端定向测试：1 suite / 8 tests 通过。
+- 云端挑战相关定向测试：5 suites / 23 tests 通过。
+- 新客户端生命周期与网络模块独立 TypeScript 编译通过。

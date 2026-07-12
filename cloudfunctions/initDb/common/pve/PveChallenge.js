@@ -4,6 +4,7 @@ const { normalizeProfile } = require('./PveProfile');
 const {
   validateStartFloorChallengeRequest,
   validateSettleFloorChallengeRequest,
+  validateSaveFloorChallengeRuntimeRequest,
 } = require('./PveChallengeValidate');
 const {
   buildChallenge,
@@ -139,9 +140,60 @@ async function settleFloorChallenge(user, rawRequest = {}) {
   });
 }
 
+async function saveFloorChallengeRuntime(user, rawRequest = {}) {
+  const request = validateSaveFloorChallengeRuntimeRequest(rawRequest);
+  const db = getDb();
+  return db.runTransaction(async (transaction) => {
+    const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
+    const challenge = dataOf(await challengeRef.get());
+    if (!challenge) {
+      const err = new Error('PVE_CHALLENGE_NOT_FOUND');
+      err.code = 'PVE_CHALLENGE_NOT_FOUND';
+      throw err;
+    }
+    if (challenge.userId !== user.id) {
+      const err = new Error('挑战不属于当前用户');
+      err.code = 'PVE_CHALLENGE_FORBIDDEN';
+      throw err;
+    }
+    if (challenge.status !== 'ACTIVE') {
+      const err = new Error('只能保存进行中的挑战');
+      err.code = 'PVE_CHALLENGE_NOT_ACTIVE';
+      throw err;
+    }
+    if (request.runtime.challengeId !== challenge.challengeId
+      || request.runtime.floor !== challenge.floor
+      || request.runtime.seed !== challenge.seed
+      || JSON.stringify(request.runtime.config) !== JSON.stringify(challenge.config)) {
+      const err = new Error('运行态与云端挑战快照不一致');
+      err.code = 'PVE_RUNTIME_SNAPSHOT_MISMATCH';
+      throw err;
+    }
+    if (Number.isInteger(challenge.runtimeTurn) && request.turn < challenge.runtimeTurn) {
+      const err = new Error('旧回合存档不能覆盖新回合');
+      err.code = 'PVE_RUNTIME_TURN_ROLLBACK';
+      throw err;
+    }
+    if (challenge.runtimeSave === request.serializedRuntime) {
+      return { challenge, idempotent: true };
+    }
+    const now = Date.now();
+    const next = {
+      ...challenge,
+      runtimeSave: request.serializedRuntime,
+      runtimeTurn: request.turn,
+      runtimeSavedAt: now,
+      updatedAt: now,
+    };
+    await challengeRef.update({ data: next });
+    return { challenge: next, idempotent: false };
+  });
+}
+
 module.exports = {
   getChallengeById,
   loadActiveFloorChallenge,
   startFloorChallenge,
+  saveFloorChallengeRuntime,
   settleFloorChallenge,
 };

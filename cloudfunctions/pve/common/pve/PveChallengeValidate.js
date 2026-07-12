@@ -122,6 +122,36 @@ function validateSettleFloorChallengeRequest(request) {
   };
 }
 
+function validateSaveFloorChallengeRuntimeRequest(request) {
+  if (!isPlainObject(request) || typeof request.challengeId !== 'string' || !request.challengeId) {
+    fail('PVE_INVALID_CHALLENGE_ID', 'challengeId 不合法');
+  }
+  if (typeof request.serializedRuntime !== 'string'
+    || request.serializedRuntime.length < 2
+    || request.serializedRuntime.length > 900000) {
+    fail('PVE_INVALID_RUNTIME_SAVE', '楼层运行态存档大小不合法');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(request.serializedRuntime);
+  } catch (_err) {
+    fail('PVE_INVALID_RUNTIME_SAVE', '楼层运行态存档不是合法 JSON');
+  }
+  const runtime = parsed?.runtime;
+  if (parsed?.version !== 1 || runtime?.version !== 1 || runtime?.status !== 'ACTIVE') {
+    fail('PVE_INVALID_RUNTIME_SAVE', '楼层运行态版本或状态不合法');
+  }
+  if (!Number.isInteger(runtime.turn) || runtime.turn < 1) {
+    fail('PVE_INVALID_RUNTIME_TURN', '楼层运行态回合不合法');
+  }
+  return {
+    challengeId: request.challengeId,
+    serializedRuntime: request.serializedRuntime,
+    runtime,
+    turn: runtime.turn,
+  };
+}
+
 module.exports = {
   CHALLENGE_MODES,
   CHALLENGE_RESULT_STATUSES,
@@ -132,4 +162,5 @@ module.exports = {
   validateEquipmentLoadout,
   validateStartFloorChallengeRequest,
   validateSettleFloorChallengeRequest,
+  validateSaveFloorChallengeRuntimeRequest,
 };

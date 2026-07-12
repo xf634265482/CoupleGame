@@ -47,6 +47,7 @@ const { createDefaultProfile } = require('../pve/PveProfile');
 const {
   startFloorChallenge,
   loadActiveFloorChallenge,
+  saveFloorChallengeRuntime,
   settleFloorChallenge,
 } = require('../pve/PveChallenge');
 
@@ -111,5 +112,37 @@ describe('PveChallenge service', () => {
     expect(retry.challenge.status).toBe('CLEAR');
     expect(mockStores.users.get('doc1').pveProfile.highestUnlockedFloor).toBe(2);
     expect(mockStores.users.get('doc1').pveProfile.floorRecords['1'].clearCount).toBe(1);
+  });
+
+  test('saves runtime idempotently and rejects turn rollback', async () => {
+    const user = { _id: 'doc1', id: 'u1' };
+    const started = await startFloorChallenge(user, startRequest());
+    const runtime = {
+      version: 1,
+      challengeId: started.challenge.challengeId,
+      floor: started.challenge.floor,
+      seed: started.challenge.seed,
+      status: 'ACTIVE',
+      config: started.challenge.config,
+      turn: 4,
+    };
+    const request = {
+      challengeId: started.challenge.challengeId,
+      serializedRuntime: JSON.stringify({ version: 1, runtime }),
+    };
+    const first = await saveFloorChallengeRuntime(user, request);
+    const retry = await saveFloorChallengeRuntime(user, request);
+    expect(first.idempotent).toBe(false);
+    expect(retry.idempotent).toBe(true);
+    expect((await loadActiveFloorChallenge(user)).challenge.runtimeTurn).toBe(4);
+
+    const older = {
+      ...runtime,
+      turn: 3,
+    };
+    await expect(saveFloorChallengeRuntime(user, {
+      challengeId: started.challenge.challengeId,
+      serializedRuntime: JSON.stringify({ version: 1, runtime: older }),
+    })).rejects.toMatchObject({ code: 'PVE_RUNTIME_TURN_ROLLBACK' });
   });
 });
