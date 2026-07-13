@@ -12,6 +12,14 @@
 - 云端营地配置权威入口：`cloudfunctions/common/pve/PveProgression.js`
 
 ---
+## 2026-07 第一章纵向切片入口
+
+- 七层内容目录：`assets/scripts/pve/core/chapter1/Chapter1FloorCatalog.ts`
+- 确定性生成：`assets/scripts/pve/core/chapter1/Chapter1FloorGenerator.ts`
+- 单层运行适配：`assets/scripts/pve/core/chapter1/Chapter1Runtime.ts`
+- 第 6/7 层机制状态机：`assets/scripts/pve/core/chapter1/Chapter1Encounters.ts`
+
+---
 
 ## 目录
 

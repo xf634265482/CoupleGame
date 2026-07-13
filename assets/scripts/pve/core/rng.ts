@@ -55,15 +55,15 @@ export function createRng(seed: number): Rng {
     if (arr.length === 0) {
       throw new Error('rng.pick: empty array');
     }
-    return arr[int(0, arr.length - 1)];
+    return arr[int(0, arr.length - 1)]!;
   };
 
   const shuffle = <T>(arr: readonly T[]): T[] => {
     const out = arr.slice();
     for (let i = out.length - 1; i > 0; i--) {
       const j = int(0, i);
-      const tmp = out[i];
-      out[i] = out[j];
+      const tmp = out[i]!;
+      out[i] = out[j]!;
       out[j] = tmp;
     }
     return out;
