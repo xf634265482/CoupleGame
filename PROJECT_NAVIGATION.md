@@ -22,6 +22,13 @@
 ---
 
 ## 目录
+## 2026-07 新逐层流程入口
+
+- 流程编排：`assets/scripts/pve/core/PersistentFloorFlow.ts`
+- Cocos 流程入口：`assets/scripts/pve/controllers/PersistentFloorFlowController.ts`
+
+---
+
 
 - [架构总览](#架构总览)
 - [PVE 模块](#pve-模块)

@@ -288,3 +288,27 @@
 
 - Controller 将移动、攻击、怪物回合等现有表现层事件适配为新章节语义事件。
 - FogMapView/HUD 消费新生成地图和目标命令；旧远征生成器保留到任务 12 一次性下线。
+
+## 2026-07-13 任务 12A：新逐层主流程协调器
+
+状态：完成；等待 12B 场景适配后原子切换大厅入口。
+
+已完成：
+
+- 新增 `PersistentFloorFlow`，统一编排新档案、活跃挑战、开始楼层、断线恢复、运行态保存、单层结算、继续下一层和返回营地。
+- 开始挑战直接使用 `highestUnlockedFloor`、营地职业、固定装备和 8 槽命痕配置；不读取体力、旧 runSeed、命运树或旧远征存档。
+- 活跃挑战优先恢复云端 `runtimeSave`，不会重复创建挑战或重复扣除任何资源。
+- 每回合保存使用新 `saveFloorChallengeRuntime`；终态使用新幂等 `settleFloorChallenge`。
+- 单层结算后才能继续下一层或返回营地；未结算活跃挑战禁止直接丢弃。
+- 继续下一层保留营地冻结配置，但 HP/AP/灵气/异常按新楼层运行态重新初始化。
+- 新增 Cocos `PersistentFloorFlowController` 作为后续场景表现适配器的唯一流程入口，并统一 `_busy` 防并发。
+
+验证：
+
+- 新流程、第一章和单层生命周期：3 suites / 28 tests 通过。
+- 新流程模块在 `strict + noUncheckedIndexedAccess` 下独立 TypeScript 编译通过。
+
+12B 原子切换门槛：
+
+- 新场景适配器接管地图渲染、HUD、输入和目标命令后，才将大厅“远征”按钮切到 `PersistentFloorFlow`。
+- 切换同一提交内停止旧 `ExpeditionController` bootstrap，避免新旧存档与结算双写。
