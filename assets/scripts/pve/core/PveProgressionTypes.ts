@@ -140,6 +140,7 @@ export interface SettleFloorChallengeRequest {
 }
 
 export interface StartMinghenTrackingRequest { floor: number; minghenId: string; }
+export interface UpdateCampConfigurationRequest { selectedProfessionId?: PveProfessionId; minghenLoadout?: MinghenLoadoutEntry[]; equipmentLoadout?: PveEquipmentLoadout; }
 
 export interface SaveFloorChallengeRuntimeRequest {
   challengeId: string;

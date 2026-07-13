@@ -39,6 +39,7 @@ import {
 } from '../ui/UiAssets';
 import { ensureArtChild, ensureArtStretch } from '../ui/UiSprite';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
+import { CampController } from '../pve/controllers/CampController';
 import {
   applyUiLayerTree,
   bindWindowResize,
@@ -296,13 +297,13 @@ export class PveLobbyController extends Component {
     );
     this._makeNavButton(
       dock,
-      '命运树',
+      '营地',
       'pve/lobby/icon_nav_destiny_tree',
       navStep * 1.5,
       -4,
       navButtonW,
       navButtonH,
-      () => void this._showDestinyTreeModal(),
+      () => this._showCampModal(),
     );
     this._expeditionCostLabel = this._makeLabel(dock, 'ExpeditionCost', -76, 15, 320, 22);
     this._expeditionCostLabel.color = new Color(255, 226, 130, 255);
@@ -425,6 +426,11 @@ export class PveLobbyController extends Component {
     } finally {
       this._busy = false;
     }
+  }
+
+  private _showCampModal(): void {
+    const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
+    controller.open(this.node);
   }
 
   private _buildLeaderboardModal(entries: PveLeaderboardEntry[], myRank: number | null): void {

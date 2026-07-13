@@ -2,6 +2,9 @@ const { COLLECTIONS } = require('../constants');
 const { getDb, getUserById, serverDate } = require('../db');
 const { PROFILE_VERSION, normalizeProfile } = require('./PveProfile');
 const { beginTracking } = require('./PveMinghen');
+const { PROFESSION_IDS } = require('./PveProfile');
+const { validateMinghenLoadout, validateEquipmentLoadout } = require('./PveChallengeValidate');
+const { validateLoadoutOwnership } = require('./PveChallengeState');
 
 async function loadProfile(user) {
   const latest = await getUserById(user.id);
@@ -41,7 +44,23 @@ async function startMinghenTracking(user, request = {}) {
   return { profile: next };
 }
 
+async function updateCampConfiguration(user, request = {}) {
+  const latest = await getUserById(user.id);
+  if (!latest) { const err = new Error('USER_NOT_FOUND'); err.code = 'USER_NOT_FOUND'; throw err; }
+  const profile = normalizeProfile(latest.pveProfile);
+  if (profile.activeChallengeId) { const err = new Error('挑战中不能调整营地配置'); err.code = 'PVE_CAMP_CONFIG_LOCKED'; throw err; }
+  const professionId = request.selectedProfessionId ?? profile.selectedProfessionId;
+  if (!PROFESSION_IDS.includes(professionId) || profile.professions[professionId]?.unlocked !== true) { const err = new Error('职业尚未解锁'); err.code = 'PVE_PROFESSION_LOCKED'; throw err; }
+  const minghenLoadout = request.minghenLoadout == null ? profile.minghenLoadout : validateMinghenLoadout(request.minghenLoadout);
+  const equipmentLoadout = request.equipmentLoadout == null ? profile.equipmentLoadout : validateEquipmentLoadout(request.equipmentLoadout);
+  validateLoadoutOwnership(profile, { minghenLoadout, equipmentLoadout });
+  const next = { ...profile, selectedProfessionId: professionId, minghenLoadout, equipmentLoadout, updatedAt: Date.now() };
+  await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({ data: { pveProfile: next } });
+  return { profile: next };
+}
+
 module.exports = {
   loadProfile,
   startMinghenTracking,
+  updateCampConfiguration,
 };

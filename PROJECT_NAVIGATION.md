@@ -4,6 +4,14 @@
 > 更新规则：改动涉及新系统或重命名文件时，同步更新本文。
 
 ---
+## 2026-07 新营地入口
+
+- 新营地控制器：`assets/scripts/pve/controllers/CampController.ts`
+- 新营地四区域视图：`assets/scripts/pve/views/CampView.ts`
+- 营地档案/配置网络入口：`assets/scripts/network/PveProgressionService.ts`
+- 云端营地配置权威入口：`cloudfunctions/common/pve/PveProgression.js`
+
+---
 
 ## 目录
 

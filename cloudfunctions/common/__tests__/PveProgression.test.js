@@ -10,7 +10,7 @@ jest.mock('../db', () => ({
 }));
 
 const { PROFILE_VERSION, createDefaultProfile } = require('../pve/PveProfile');
-const { loadProfile } = require('../pve/PveProgression');
+const { loadProfile, updateCampConfiguration } = require('../pve/PveProgression');
 
 describe('PveProgression', () => {
   beforeEach(() => {
@@ -38,5 +38,16 @@ describe('PveProgression', () => {
   test('rejects a missing user', async () => {
     mockGetUserById.mockResolvedValue(null);
     await expect(loadProfile({ id: 'missing' })).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+
+  test('updates an unlocked camp profession and rejects changes during a challenge', async () => {
+    const profile = createDefaultProfile(100);
+    profile.professions.ARCHER = { ...profile.professions.ARCHER, unlocked: true, xp: 150, level: 2 };
+    mockGetUserById.mockResolvedValue({ _id: 'doc3', id: 'u3', pveProfile: profile });
+    const result = await updateCampConfiguration({ id: 'u3' }, { selectedProfessionId: 'ARCHER' });
+    expect(result.profile.selectedProfessionId).toBe('ARCHER');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    mockGetUserById.mockResolvedValue({ _id: 'doc3', id: 'u3', pveProfile: { ...profile, activeChallengeId: 'c1' } });
+    await expect(updateCampConfiguration({ id: 'u3' }, { selectedProfessionId: 'WARRIOR' })).rejects.toMatchObject({ code: 'PVE_CAMP_CONFIG_LOCKED' });
   });
 });

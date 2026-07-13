@@ -6,6 +6,7 @@ import type {
   SettleFloorChallengeRequest,
   StartFloorChallengeRequest,
   StartMinghenTrackingRequest,
+  UpdateCampConfigurationRequest,
 } from '../pve/core/PveProgressionTypes';
 
 interface CloudOk {
@@ -67,6 +68,10 @@ export async function startFloorChallenge(
 
 export async function startMinghenTracking(request: StartMinghenTrackingRequest): Promise<LoadPveProfileResponse> {
   return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'startMinghenTracking', request }), 'PVE_START_MINGHEN_TRACKING_FAILED');
+}
+
+export async function updateCampConfiguration(request: UpdateCampConfigurationRequest): Promise<LoadPveProfileResponse> {
+  return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'updateCampConfiguration', request }), 'PVE_UPDATE_CAMP_CONFIGURATION_FAILED');
 }
 
 export async function loadActiveFloorChallenge(): Promise<LoadActiveFloorChallengeResponse> {

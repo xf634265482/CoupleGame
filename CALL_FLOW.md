@@ -1,4 +1,21 @@
 # CALL_FLOW.md
+
+## 2026-07 新营地入口
+
+```text
+[Lobby] PveLobbyController 底部“营地”
+  → CampController.open()
+  → PveProgressionService.loadPveProfile()
+  → [Cloud] PveProgression.loadProfile()
+  → CampView：命痕台 / 装备台 / 远征情报 / 角色区
+
+[角色/构筑配置]
+  CampView action
+  → CampController._saveConfig()
+  → PveProgressionService.updateCampConfiguration()
+  → [Cloud] PveProgression.updateCampConfiguration()
+  → 校验解锁、归属与活跃挑战锁定后写回 PveProfile
+```
 > 2026-06-29 PVP 棋盘对战已彻底移除。启动链：`GameApp` → `lobby.scene` → `PveLobbyController` → `_startRun()` / `_showDestinyTreeModal()`
 > 主要调用链速查。理解某个操作的完整执行路径时，从这里找起。
 > 层次标记：`[Controller]` = controller 层（Cocos Component）/ `[Core]` = pve/core 纯函数 / `[View]` = 渲染层 / `[Net]` = 网络层 / `[Cloud]` = 云函数
