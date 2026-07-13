@@ -23,7 +23,7 @@ export function previewArcherAttack(input: { aimLevel: number; masteryLevel: num
   if (technique === 'SUPPRESSING' && input.aimLevel < 2) return { valid: false as const, reason: 'AIM_NOT_ENOUGH' as const };
   const apCost = input.weaponApCost + (technique === 'WEAK_POINT' ? 1 : 0);
   if (apCost > input.availableAp) return { valid: false as const, reason: 'AP_NOT_ENOUGH' as const };
-  const aimDamage = [0, 0.1, 0.2, 0.3][Math.max(0, Math.min(3, input.aimLevel))];
+  const aimDamage = [0, 0.1, 0.2, 0.3][Math.max(0, Math.min(3, input.aimLevel))] ?? 0;
   return {
     valid: true as const, apCost,
     damageMultiplier: 1 + aimDamage + (technique === 'WEAK_POINT' ? 0.35 : 0) - (technique === 'PIERCING' ? 0.1 : 0) - (technique === 'SUPPRESSING' ? 0.2 : 0),

@@ -38,7 +38,7 @@ export function previewWarriorAttack(input: {
   if (input.masteryLevel < TECHNIQUE_LEVEL[technique]) return { ...base, valid: false, reason: 'TECHNIQUE_LOCKED', damageMultiplier: 1 };
   if (technique !== 'HEAVY' && input.extraChargeAp < 2) return { ...base, valid: false, reason: 'CHARGE_NOT_ENOUGH', damageMultiplier: 1 };
 
-  let bonus = CHARGE_BONUS[input.extraChargeAp];
+  let bonus = CHARGE_BONUS[input.extraChargeAp] ?? 0;
   let armorPenetration = 0;
   let knockback = input.weaponKnockback ?? 0;
   let sweepMultiplier = 0;
