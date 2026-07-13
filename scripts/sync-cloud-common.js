@@ -35,6 +35,7 @@ const COPY_SUBDIR_FILES = [
   'pve/PveChallenge.js',
   'pve/PveRewardV2.js',
   'pve/PveMinghen.js',
+  'pve/PveCamp.js',
   'admin/AdminAuth.js',
   'admin/AdminConstants.js',
   'admin/AdminSeed.js',

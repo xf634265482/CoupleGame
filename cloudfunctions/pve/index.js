@@ -2,7 +2,7 @@ const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
 const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
-const { loadProfile, startMinghenTracking, updateCampConfiguration } = require('./common/pve/PveProgression');
+const { loadProfile, manageCamp, startMinghenTracking, updateCampConfiguration } = require('./common/pve/PveProgression');
 const {
   loadActiveFloorChallenge,
   saveFloorChallengeRuntime,
@@ -42,6 +42,11 @@ exports.main = async (event = {}) => {
 
     if (action === 'updateCampConfiguration') {
       const result = await updateCampConfiguration(user, event.request || {});
+      return { ok: true, ...result };
+    }
+
+    if (action === 'manageCamp') {
+      const result = await manageCamp(user, event.request || {});
       return { ok: true, ...result };
     }
 

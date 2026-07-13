@@ -74,6 +74,14 @@ export async function updateCampConfiguration(request: UpdateCampConfigurationRe
   return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'updateCampConfiguration', request }), 'PVE_UPDATE_CAMP_CONFIGURATION_FAILED');
 }
 
+export type ManageCampRequest =
+  | { type: 'EQUIPMENT'; action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL'; instanceId: string }
+  | { type: 'SAVE_MINGHEN_PRESET'; id?: string; name: string };
+
+export async function manageCamp(request: ManageCampRequest): Promise<LoadPveProfileResponse> {
+  return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'manageCamp', request }), 'PVE_MANAGE_CAMP_FAILED');
+}
+
 export async function loadActiveFloorChallenge(): Promise<LoadActiveFloorChallengeResponse> {
   return ensureOk(
     await callFunction<LoadActiveFloorChallengeResponse>('pve', { action: 'loadActiveFloorChallenge' }),

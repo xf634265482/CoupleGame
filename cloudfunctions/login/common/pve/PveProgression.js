@@ -5,6 +5,7 @@ const { beginTracking } = require('./PveMinghen');
 const { PROFESSION_IDS } = require('./PveProfile');
 const { validateMinghenLoadout, validateEquipmentLoadout } = require('./PveChallengeValidate');
 const { validateLoadoutOwnership } = require('./PveChallengeState');
+const { manageEquipment, saveMinghenPreset } = require('./PveCamp');
 
 async function loadProfile(user) {
   const latest = await getUserById(user.id);
@@ -59,8 +60,22 @@ async function updateCampConfiguration(user, request = {}) {
   return { profile: next };
 }
 
+async function manageCamp(user, request = {}) {
+  const latest = await getUserById(user.id);
+  if (!latest) { const err = new Error('USER_NOT_FOUND'); err.code = 'USER_NOT_FOUND'; throw err; }
+  const profile = normalizeProfile(latest.pveProfile);
+  let next;
+  if (request.type === 'EQUIPMENT') next = manageEquipment(profile, request);
+  else if (request.type === 'SAVE_MINGHEN_PRESET') next = saveMinghenPreset(profile, request);
+  else { const err = new Error('未知营地操作'); err.code = 'PVE_INVALID_CAMP_ACTION'; throw err; }
+  next = { ...next, updatedAt: Date.now() };
+  await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({ data: { pveProfile: next } });
+  return { profile: next };
+}
+
 module.exports = {
   loadProfile,
   startMinghenTracking,
   updateCampConfiguration,
+  manageCamp,
 };
