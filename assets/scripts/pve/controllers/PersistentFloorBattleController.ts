@@ -1,0 +1,27 @@
+import { _decorator, Component } from 'cc';
+import { SceneLoader } from '../../core/SceneLoader';
+import { applyUiLayerTree, refreshScreenAdapt } from '../../platform/wechat/ViewAdapt';
+import { lockPortrait } from '../../platform/wechat/WxLandscape';
+import { loadActiveFloorChallenge, loadPveProfile, saveFloorChallengeRuntime, settleFloorChallenge, startFloorChallenge } from '../../network/PveProgressionService';
+import { PersistentFloorFlow } from '../core/PersistentFloorFlow';
+import { attackPersistentTarget, endPersistentPlayerTurn, interactPersistentFloor, movePersistentPlayer, type BattleDirection } from '../core/PersistentFloorBattle';
+import { activateSpiritBurst } from '../core/SpiritBurstSystem';
+import { PersistentFloorBattleView } from '../views/PersistentFloorBattleView';
+const{ccclass}=_decorator;
+@ccclass('PersistentFloorBattleController')
+export class PersistentFloorBattleController extends Component{
+ private readonly _flow=new PersistentFloorFlow({loadProfile:loadPveProfile,loadActive:loadActiveFloorChallenge,start:startFloorChallenge,save:saveFloorChallengeRuntime,settle:settleFloorChallenge});private _view:PersistentFloorBattleView|null=null;private _busy=false;private _charge=0;private _settled=false;
+ onLoad():void{lockPortrait();refreshScreenAdapt(this.node);this.scheduleOnce(()=>refreshScreenAdapt(this.node),0);applyUiLayerTree(this.node,this.node.layer);this._view=new PersistentFloorBattleView(this.node,{onMove:d=>void this._act(()=>movePersistentPlayer(this._runtime(),d)),onCell:(x,y)=>void this._cell(x,y),onAttack:()=>void this._attackNearest(),onInteract:()=>void this._act(()=>interactPersistentFloor(this._runtime())),onEndTurn:()=>void this._act(()=>endPersistentPlayerTurn(this._runtime())),onSpirit:()=>void this._spirit(),onCharge:()=>this._cycleCharge(),onSettle:()=>void this._settle(),onContinue:()=>void this._continue(),onCamp:()=>void SceneLoader.loadLobby()});void this._bootstrap();}
+ private _runtime(){const runtime=this._flow.state?.runtime;if(!runtime)throw new Error('战斗尚未准备完成');return runtime;}
+ private async _bootstrap():Promise<void>{if(this._busy)return;this._busy=true;try{await this._flow.bootstrap();this._refresh();}catch(err:unknown){this._view?.showError(`楼层加载失败：${err instanceof Error?err.message:String(err)}`);}finally{this._busy=false;}}
+ private async _act(action:()=>ReturnType<PersistentFloorBattleController['_runtime']>):Promise<void>{if(this._busy||!this._flow.state||this._runtime().status!=='ACTIVE')return;this._busy=true;try{const before=this._runtime(),after=action();if(after!==before){this._flow.updateRuntime(after);this._refresh();await this._flow.save();}}catch(err:unknown){this._view?.showError(err instanceof Error?err.message:String(err));}finally{this._busy=false;}}
+ private async _cell(x:number,y:number):Promise<void>{const state=this._flow.state;if(!state)return;const monster=state.runtime.battleState.combat.monsters.find(m=>m.alive&&m.pos.x===x&&m.pos.y===y);if(monster){await this._act(()=>attackPersistentTarget(this._runtime(),monster.id,this._masteryLevel(),this._charge));return;}const p=state.runtime.battleState.combat.playerPos,dx=x-p.x,dy=y-p.y;if(Math.abs(dx)+Math.abs(dy)!==1)return;const dir:BattleDirection=dx===1?'RIGHT':dx===-1?'LEFT':dy===1?'DOWN':'UP';await this._act(()=>movePersistentPlayer(this._runtime(),dir));}
+ private async _attackNearest():Promise<void>{const state=this._flow.state;if(!state)return;const p=state.runtime.battleState.combat.playerPos;const targets=state.runtime.battleState.combat.monsters.filter(x=>x.alive).sort((a,b)=>(Math.abs(a.pos.x-p.x)+Math.abs(a.pos.y-p.y))-(Math.abs(b.pos.x-p.x)+Math.abs(b.pos.y-p.y)));for(const target of targets){const before=this._runtime(),after=attackPersistentTarget(before,target.id,this._masteryLevel(),this._charge);if(after!==before){await this._act(()=>after);return;}}this._view?.showError('当前没有射程内目标');}
+ private async _spirit():Promise<void>{await this._act(()=>activateSpiritBurst(this._runtime()));}
+ private _cycleCharge():void{if(this._flow.state?.runtime.config.professionId!=='WARRIOR')return;this._charge=(this._charge+1)%4;this._refresh();}
+ private _masteryLevel():number{const state=this._flow.state;return state?state.profile.professions[state.runtime.config.professionId].level:1;}
+ private async _settle():Promise<void>{if(this._busy||!this._flow.state||this._settled)return;this._busy=true;try{const state=this._flow.state;const clear=state.runtime.status==='CLEAR';await this._flow.settle(clear&&state.challenge.mode==='PROGRESSION'?{selectedMinghenId:state.runtime.battleState.map.minghenIds[0],selectedEquipmentDefinitionId:state.runtime.battleState.map.equipmentIds[0]}:{});this._settled=true;this._refresh();}catch(err:unknown){this._view?.showError(`结算失败：${err instanceof Error?err.message:String(err)}`);}finally{this._busy=false;}}
+ private async _continue():Promise<void>{if(this._busy||!this._settled)return;this._busy=true;try{await this._flow.continueNextFloor();this._settled=false;this._charge=0;this._refresh();await this._flow.save();}catch(err:unknown){if(err instanceof Error&&err.message==='CHAPTER_ONE_COMPLETE'){await SceneLoader.loadLobby();return;}this._view?.showError(err instanceof Error?err.message:String(err));}finally{this._busy=false;}}
+ private _refresh():void{if(this._view&&this._flow.state)this._view.refresh(this._flow.state.runtime,this._charge,this._settled);}
+ protected onDestroy():void{this._view?.destroy();this._view=null;}
+}
