@@ -43,3 +43,9 @@
 3. 第一章第三层清空敌人后交互祭坛，祭坛消失并立即出现通关选择弹窗；恢复旧存档也能完成对账。
 4. 战士满灵气释放爆发后直接普通攻击，按 1 级蓄力获得对应效果；手动蓄力仍可选择更高等级。
 5. PVE 测试、云函数测试、类型检查、GM 构建和云端共享源码同步全部通过。
+
+## Cocos Creator 3.8.8 构建兼容性补充
+
+- `PersistentExpeditionRuntime.ts` 不得在 `for...of` 的可迭代表达式中直接组合 TypeScript 联合类型断言与空值合并，例如 `(value as string[] | undefined) ?? []`。Creator 3.8.8 自带 Babel 会在 `plugin-transform-for-of` 阶段错误地产生 Flow `GenericTypeAnnotation`，导致 `buildScriptCommand` 在 28% 失败。
+- 祭坛召唤物对账先通过 `Array.isArray(objective.data.summonIds)` 归一化为明确的 `string[]` 局部变量，再进入 `for...of`；只改变编译表达形式，不改变目标完成规则。
+- 验收必须包含 TypeScript 类型检查、祭坛目标回归测试，以及 Creator 的 `wechatgame` 实际构建；仅通过 `tsc` 不足以证明 Creator 内置 Babel 能转换该语法。
