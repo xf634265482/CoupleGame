@@ -52,7 +52,7 @@ export function buildFirstTutorialFloor(seed: number): FloorState {
       {
         id: 'tutorial_mon_b',
         type: 'NORMAL',
-        pos: { x: 4, y: 2 },
+        pos: { x: 3, y: 2 },
         hp: 18,
         maxHp: 18,
         attack: 0,
@@ -105,6 +105,13 @@ export const FIRST_TUTORIAL_STEPS: TutorialStepConfig[] = [
     completeOnKillMonsterId: 'tutorial_mon_a',
   },
   {
+    id: 'approach_b',
+    message: '怪物已清除，靠近下一只怪物。',
+    allowedAction: 'TAP_CELL',
+    allowedCells: [{ x: 2, y: 2 }],
+    completeOnPlayerPos: { x: 2, y: 2 },
+  },
+  {
     id: 'burst',
     message: '灵气已满！点「灵气爆发」开启破阵。',
     allowedAction: 'SPIRIT_BURST',
@@ -121,7 +128,7 @@ export const FIRST_TUTORIAL_STEPS: TutorialStepConfig[] = [
     id: 'burst_kill',
     message: '用破阵蓄力击杀第二只怪物。',
     allowedAction: 'TAP_CELL',
-    allowedCells: [{ x: 4, y: 2 }],
+    allowedCells: [{ x: 3, y: 2 }],
     completeOnKillMonsterId: 'tutorial_mon_b',
   },
   {

@@ -1,5 +1,5 @@
 import { TutorialGuideManager } from '../../assets/scripts/pve/tutorial/TutorialGuideManager';
-import { buildFirstTutorialFloor } from '../../assets/scripts/pve/tutorial/TutorialConfigs';
+import { buildFirstTutorialFloor, FIRST_TUTORIAL_STEPS } from '../../assets/scripts/pve/tutorial/TutorialConfigs';
 import type { ExpeditionState } from '../../assets/scripts/pve/core/PveTypes';
 
 function makeState(stepId: string): ExpeditionState {
@@ -67,4 +67,68 @@ test('attack step advances on direct player attack only', () => {
   expect(mgr.advanceIfNeeded(state, [collision])).toBe(false);
   expect(mgr.advanceIfNeeded(state, [direct])).toBe(true);
   expect(state.floorState.tutorialGuide?.currentStepId).toBe('charge');
+});
+
+test('walks the full scripted sequence from move through portal without deadlock', () => {
+  const mgr = new TutorialGuideManager();
+  const state = makeState('move');
+  mgr.bind(state);
+  const expectStep = (id: string) => expect(state.floorState.tutorialGuide?.currentStepId).toBe(id);
+
+  expectStep('move');
+  state.floorState.player = { x: 1, y: 2 };
+  expect(mgr.advanceIfNeeded(state, [])).toBe(true);
+  mgr.bind(state);
+
+  expectStep('basic_attack');
+  const attackA = {
+    type: 'ATTACK' as const, attackerId: 'PLAYER', targetId: 'tutorial_mon_a',
+    damage: 3, targetHp: 19, cause: 'DIRECT' as const,
+  };
+  expect(mgr.advanceIfNeeded(state, [attackA])).toBe(true);
+  mgr.bind(state);
+
+  expectStep('charge');
+  expect(mgr.advanceIfNeeded(state, [], { selectedChargeAp: 1 })).toBe(true);
+  mgr.bind(state);
+
+  expectStep('charge_kill');
+  const killA = { type: 'KILL' as const, monsterId: 'tutorial_mon_a', monsterType: 'NORMAL' as const };
+  expect(mgr.advanceIfNeeded(state, [killA])).toBe(true);
+  mgr.bind(state);
+
+  // Player did not move while attacking mon_a, so an explicit approach step
+  // is required to walk adjacent to mon_b before burst teaching resumes.
+  expectStep('approach_b');
+  state.floorState.player = { x: 2, y: 2 };
+  expect(mgr.advanceIfNeeded(state, [])).toBe(true);
+  mgr.bind(state);
+
+  expectStep('burst');
+  expect(mgr.advanceIfNeeded(state, [], { spiritBurstActive: true })).toBe(true);
+  mgr.bind(state);
+
+  expectStep('burst_charge');
+  expect(mgr.advanceIfNeeded(state, [], { selectedChargeAp: 1 })).toBe(true);
+  mgr.bind(state);
+
+  expectStep('burst_kill');
+  const monB = state.floorState.monsters.find((m) => m.id === 'tutorial_mon_b')!;
+  const dist = Math.abs(monB.pos.x - state.floorState.player.x) + Math.abs(monB.pos.y - state.floorState.player.y);
+  expect(dist).toBeLessThanOrEqual(1); // proves the reachability fix: B is adjacent, not a deadlock
+  const killB = { type: 'KILL' as const, monsterId: 'tutorial_mon_b', monsterType: 'NORMAL' as const };
+  expect(mgr.advanceIfNeeded(state, [killB])).toBe(true);
+  mgr.bind(state);
+
+  expectStep('key');
+  state.floorState.player = { x: 5, y: 2 };
+  const pickKey = { type: 'PICK_KEY' as const, entityId: 'tutorial_key_0' };
+  expect(mgr.advanceIfNeeded(state, [pickKey])).toBe(true);
+  mgr.bind(state);
+
+  expectStep('portal');
+  const cleared = { type: 'FLOOR_CLEARED' as const, floor: 1 };
+  expect(mgr.advanceIfNeeded(state, [cleared])).toBe(true);
+
+  expect(state.floorState.tutorialGuide?.completedStepIds).toEqual(FIRST_TUTORIAL_STEPS.map((s) => s.id));
 });
