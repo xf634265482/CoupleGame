@@ -44,7 +44,7 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/lobby/icon_chip_stamina': 'ca8b3db2-9f83-4686-bf48-68c0ac4c2ea5@f9941',
   'pve/lobby/icon_nav_relic': '0e57749f-e803-4056-8671-6d85a1772da9@f9941',
   'pve/lobby/icon_nav_expedition': '22a5cfbd-2a04-47db-b57b-5bbc03ce767b@f9941',
-  'pve/lobby/icon_nav_destiny_tree': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
+  'pve/lobby/icon_nav_camp': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
   'pve/lobby/icon_nav_leaderboard': '2fbbe305-2f22-451b-9180-f50af9d94437@f9941',
   'pve/icons/icon_block': 'c3ba5bc7-6418-4c9f-9132-7a00cbe97d65@f9941',
   'pve/icons/icon_boss_warn': '47c4ca2c-3b72-443c-9a19-e42c7932467e@f9941',
