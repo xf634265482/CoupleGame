@@ -3,6 +3,7 @@ import {
   PVE_CAMP_WARM_KEYS,
 } from '../../assets/scripts/ui/UiAssets';
 
+// preloadPveLobbyUi must not await ensureResourcesBundle — first-paint keys are main-pack critical native.
 describe('lobby load keys', () => {
   it('blocks only first-paint lobby assets', () => {
     expect(PVE_LOBBY_ESSENTIAL_KEYS).toContain('backgrounds/bg_lobby');

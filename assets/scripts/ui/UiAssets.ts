@@ -903,8 +903,8 @@ export function cacheUiSprite(key: string, sf: SpriteFrame): SpriteFrame {
   return sf;
 }
 
+/** First-paint lobby keys are main-package critical native; do not gate on resources subpackage. */
 export async function preloadPveLobbyUi(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
   await preloadKeys([...PVE_LOBBY_ESSENTIAL_KEYS], { parallel: true });
 }
 

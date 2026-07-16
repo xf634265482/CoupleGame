@@ -322,15 +322,15 @@ export class PveLobbyController extends Component {
     try {
       LoadingOverlay.update({
         text: '正在加载大厅资源…',
-        hint: '正在加载大厅图标',
-        progress: 0.18,
+        hint: '正在加载大厅背景与图标',
+        progress: 0.62,
       });
       await this._preloadLobbyArtUntilReady();
 
       LoadingOverlay.update({
         text: '正在绘制大厅…',
         hint: '正在应用大厅背景与导航图标',
-        progress: 0.78,
+        progress: 0.85,
       });
       await applyScreenBackground(this.node, 'lobby');
 
