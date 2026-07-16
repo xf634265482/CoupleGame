@@ -413,7 +413,10 @@ export class PveLobbyController extends Component {
     if (this._warmPromise) return;
     this._warmPromise = (async () => {
       const bundle = await ensureResourcesBundle();
-      if (bundle) void playMainBgm(bundle);
+      if (!bundle) {
+        throw new Error('resources bundle not ready');
+      }
+      void playMainBgm(bundle);
       await preloadPveCampUi();
       try {
         const res = await loadPveProfile();
@@ -422,6 +425,7 @@ export class PveLobbyController extends Component {
         console.warn('[PveLobby] camp profile warm failed', err);
       }
     })().catch((err: unknown) => {
+      this._warmPromise = null;
       console.warn('[PveLobby] background warm failed', err);
     });
   }
@@ -443,6 +447,7 @@ export class PveLobbyController extends Component {
       if (!isResourcesBundleReady()) {
         LoadingOverlay.hide();
         this._setStatus('资源加载失败，请检查网络后重试');
+        this._warmPromise = null;
         return false;
       }
       LoadingOverlay.hide();

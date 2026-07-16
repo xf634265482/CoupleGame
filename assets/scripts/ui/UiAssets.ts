@@ -499,6 +499,11 @@ export function ensureResourcesBundle(): Promise<AssetManager.Bundle | null> {
   return resourcesReady;
 }
 
+function clearResourcesReadyOnFailure(bundle: AssetManager.Bundle | null): AssetManager.Bundle | null {
+  if (!bundle) resourcesReady = null;
+  return bundle;
+}
+
 function loadResourcesBundleOnce(): Promise<AssetManager.Bundle | null> {
   patchWechatSubpackageImageDownloader();
 
@@ -526,7 +531,7 @@ function loadResourcesBundleOnce(): Promise<AssetManager.Bundle | null> {
     });
 
   if (!isWechatRuntime()) {
-    return loadByName();
+    return loadByName().then(clearResourcesReadyOnFailure);
   }
 
   console.log('[UiAssets] loading resources subpackage…', usesWechatNativeFs() ? 'real-device' : 'devtools');
@@ -538,7 +543,9 @@ function loadResourcesBundleOnce(): Promise<AssetManager.Bundle | null> {
       }
       return probeWechatResourcesAssets(bundle).then(() => bundle);
     })
+    .then(clearResourcesReadyOnFailure)
     .catch((err) => {
+      resourcesReady = null;
       console.error('[UiAssets] wx.loadSubpackage resources failed', err);
       return null;
     });
