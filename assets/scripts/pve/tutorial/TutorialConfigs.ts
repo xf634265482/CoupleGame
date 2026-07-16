@@ -28,9 +28,22 @@ export function buildFirstTutorialFloor(seed: number): FloorState {
     revealed,
     monsters: [
       {
-        id: 'tutorial_mon_0',
+        id: 'tutorial_mon_a',
         type: 'NORMAL',
         pos: { x: 2, y: 2 },
+        hp: 8,
+        maxHp: 8,
+        attack: 3,
+        range: 1,
+        aggroRadius: 3,
+        aiState: 'IDLE',
+        variantId: 'GOBLIN_WARRIOR',
+        tutorialDrop: { gold: 8, anima: 20 },
+      },
+      {
+        id: 'tutorial_mon_b',
+        type: 'NORMAL',
+        pos: { x: 4, y: 2 },
         hp: 8,
         maxHp: 8,
         attack: 3,
@@ -93,7 +106,7 @@ export const FIRST_TUTORIAL_STEPS: TutorialStepConfig[] = [
   },
   {
     id: 'burst',
-    message: '灵气已满！点「灵气爆发」开启破阵。\n（实战中命中/击杀会攒灵气）',
+    message: '灵气已满！点「灵气爆发」开启破阵。',
     allowedAction: 'SPIRIT_BURST',
     onEnterFillSpirit: true,
     completeOnSpiritBurst: true,

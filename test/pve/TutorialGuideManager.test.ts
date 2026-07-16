@@ -55,3 +55,16 @@ test('kill step requires matching monsterId', () => {
   expect(mgr.advanceIfNeeded(state, [{ type: 'KILL', monsterId: 'wrong', monsterType: 'NORMAL' }])).toBe(false);
   expect(mgr.advanceIfNeeded(state, [{ type: 'KILL', monsterId: 'tutorial_mon_a', monsterType: 'NORMAL' }])).toBe(true);
 });
+
+test('attack step advances on direct player attack only', () => {
+  const mgr = new TutorialGuideManager();
+  const state = makeState('basic_attack');
+  mgr.bind(state);
+  const wrongTarget = { type: 'ATTACK' as const, attackerId: 'PLAYER', targetId: 'tutorial_mon_b', damage: 3, targetHp: 5 };
+  const collision = { type: 'ATTACK' as const, attackerId: 'PLAYER', targetId: 'tutorial_mon_a', damage: 3, targetHp: 5, cause: 'COLLISION' as const };
+  const direct = { type: 'ATTACK' as const, attackerId: 'PLAYER', targetId: 'tutorial_mon_a', damage: 3, targetHp: 5, cause: 'DIRECT' as const };
+  expect(mgr.advanceIfNeeded(state, [wrongTarget])).toBe(false);
+  expect(mgr.advanceIfNeeded(state, [collision])).toBe(false);
+  expect(mgr.advanceIfNeeded(state, [direct])).toBe(true);
+  expect(state.floorState.tutorialGuide?.currentStepId).toBe('charge');
+});
