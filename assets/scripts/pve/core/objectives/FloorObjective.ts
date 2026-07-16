@@ -1,10 +1,11 @@
-export type ObjectiveKind='KEY_EXPLORE'|'ELITE_HUNT'|'WAVE_SURVIVAL'|'CHASE'|'BREAKTHROUGH'|'PURGE'|'BOSS';
+export type ObjectiveKind='KEY_EXPLORE'|'ELITE_HUNT'|'WAVE_SURVIVAL'|'CHASE'|'BREAKTHROUGH'|'PURGE'|'BOSS'|'TIMED_ESCAPE';
 export type ObjectiveStatus='ACTIVE'|'COMPLETE'|'FAILED';
 export type ObjectiveEvent=
  |{type:'PLAYER_DIED'}|{type:'WITHDRAW'}|{type:'KEY_ACQUIRED';keyId:string}|{type:'EXIT_INTERACTED';apPaid:number}
  |{type:'ENTITY_KILLED';entityId:string;tags?:string[]}|{type:'TARGET_ESCAPED';entityId:string}
  |{type:'WAVE_SPAWNED';wave:number;entityIds:string[]}|{type:'PLAYER_TURN_ENDED'}
- |{type:'ALTAR_DESTROYED';altarId:string}|{type:'SUMMONED';entityId:string;sourceId:string};
+ |{type:'ALTAR_DESTROYED';altarId:string}|{type:'SUMMONED';entityId:string;sourceId:string}
+ |{type:'GUNPOWDER_ACTIVATED';entityId:string}|{type:'BLAST_DETONATED';entityId:string};
 export type ObjectiveCommand={type:'UNLOCK_EXIT'}|{type:'WARN_WAVE';wave:number}|{type:'SPAWN_WAVE';wave:number}|{type:'OBJECTIVE_COMPLETE'}|{type:'OBJECTIVE_FAILED';reason:string};
 export interface FloorObjectiveState{version:1;floor:number;kind:ObjectiveKind;status:ObjectiveStatus;progress:number;target:number;data:Record<string,unknown>}
 export interface ObjectiveApplyResult{state:FloorObjectiveState;commands:ObjectiveCommand[]}
