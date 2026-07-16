@@ -15,6 +15,7 @@ import {
 } from '../ui/UiAssets';
 import { AudioManager } from '../audio/AudioManager';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
+import { PveDebug } from '../pve/debug/PveDebug';
 
 const { ccclass, property } = _decorator;
 
@@ -25,6 +26,17 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isWechatDevtoolsLike(): boolean {
+  if (typeof wx === 'undefined') {
+    return false;
+  }
+  try {
+    return wx.getSystemInfoSync?.().platform === 'devtools';
+  } catch {
+    return false;
+  }
+}
+
 @ccclass('GameApp')
 export class GameApp extends Component {
   @property(Label)
@@ -33,10 +45,10 @@ export class GameApp extends Component {
   private _startupOverlayVisible = false;
 
   async onLoad() {
+    PveDebug.install();
     if (PERF_TRACE_ENABLED) PerfMarks.mark('app_start');
     try { dynamicAtlasManager.enabled = false; } catch {}
     lockPortrait();
-    // 同步设一次设计分辨率，避免后续读 visibleDesignSize 拿到引擎默认值
     applyPortraitResolution();
     this.scheduleOnce(() => { refreshScreenAdapt(this.node); LoadingOverlay.recompute(); }, 0);
     this.scheduleOnce(() => { refreshScreenAdapt(this.node); LoadingOverlay.recompute(); }, 0.15);
@@ -66,39 +78,53 @@ export class GameApp extends Component {
     this._showStartupOverlay();
 
     try {
-      this._setStartupStage('正在登录并加载大厅资源…', 0.55, '远征之路正在缓缓展开');
-      const [user, bundle] = await Promise.all([login(), ensureResourcesBundle()]);
+      this._setStartupStage('正在登录…', 0.55, '远征之路正在缓缓展开');
+      const lobbyBundleReady = ensureResourcesBundle();
+      const user = await login();
       if (PERF_TRACE_ENABLED) {
         PerfMarks.mark('login_done');
-        PerfMarks.mark('resources_bundle_done');
-      }
-      if (!bundle) {
-        this._setStartupStage('资源加载失败，请清缓存后重试', 0.55, '远征暂时未能展开');
-        return;
       }
       AudioManager.preload();
 
       this._setStartupStage(`欢迎回来，${user.nickname}`, 0.72, '你的命运轨迹已经重新接续');
       console.log('[GameApp] login ok', user);
 
-      const lobbyUiSoftTimeoutMs = 1500;
-      this._setStartupStage('正在准备大厅界面…', 0.8, '正在点亮远征大厅的轮廓');
-      const lobbyUiReady = preloadPveLobbyUi();
-      await Promise.race([
-        lobbyUiReady,
-        new Promise<void>((resolve) => setTimeout(resolve, lobbyUiSoftTimeoutMs)),
-      ]);
-      if (PERF_TRACE_ENABLED) PerfMarks.mark('preload_lobby_ui_done');
-
-      console.log(
-        '[GameApp] lobby bg',
-        getCachedSprite('backgrounds/bg_lobby') ? 'ready' : 'pending (will hydrate)',
-      );
+      if (isWechatDevtoolsLike()) {
+        const bundle = await lobbyBundleReady;
+        if (!bundle) {
+          this._setStartupStage('资源加载失败，请清缓存后重试', 0.55, '远征暂时未能展开');
+          return;
+        }
+        if (PERF_TRACE_ENABLED) {
+          PerfMarks.mark('resources_bundle_done');
+        }
+        await preloadPveLobbyUi();
+        if (PERF_TRACE_ENABLED) PerfMarks.mark('preload_lobby_ui_done');
+      }
 
       await this._completeStartupOverlay('正在进入大厅…');
       SceneLoader.loadLobby();
       if (PERF_TRACE_ENABLED) PerfMarks.mark('lobby_scene_loaded');
-      void lobbyUiReady;
+
+      if (!isWechatDevtoolsLike()) {
+        void lobbyBundleReady.then((bundle) => {
+          if (!bundle) {
+            console.warn('[GameApp] resources bundle hydrate failed after lobby entry');
+            return;
+          }
+          if (PERF_TRACE_ENABLED) {
+            PerfMarks.mark('resources_bundle_done');
+          }
+          return preloadPveLobbyUi().then(() => {
+            if (PERF_TRACE_ENABLED) PerfMarks.mark('preload_lobby_ui_done');
+            console.log(
+              '[GameApp] lobby bg',
+              getCachedSprite('backgrounds/bg_lobby') ? 'ready' : 'pending (will hydrate)',
+            );
+          });
+        });
+      }
+
       if (PERF_TRACE_ENABLED) setTimeout(() => PerfMarks.dump(), 0);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -124,7 +150,8 @@ export class GameApp extends Component {
   }
 
   private async _completeStartupOverlay(text: string): Promise<void> {
-    this._setStartupStage(text, 1, '通往大厅的路已经显现');
+    // 场景切换会销毁本 Canvas 上的 overlay；停在高水位，交给大厅续跑
+    this._setStartupStage(text, 0.92, '通往大厅的路已经显现');
     await delay(OVERLAY_COMPLETE_DELAY_MS);
     this._hideStartupOverlay();
   }

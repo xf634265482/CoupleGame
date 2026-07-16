@@ -24,16 +24,17 @@ import { login } from '../platform/wechat/WxAuth';
 import {
   loadPveLeaderboard,
   loadPveMeta,
-  loadPveSave,
-  resetTree,
   updatePveMeta,
   type PveLeaderboardEntry,
-  unlockTreeNode,
 } from '../network/PveService';
-import { playMainBgm, stopMainBgm } from '../audio/BgmController';
+import {
+  loadActiveFloorChallenge,
+  loadPveProfile,
+  type LoadActiveFloorChallengeResponse,
+} from '../network/PveProgressionService';
+import { stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
-  ensureResourcesBundle,
   getCachedSprite,
   preloadPveLobbyUi,
 } from '../ui/UiAssets';
@@ -48,15 +49,12 @@ import {
 } from '../platform/wechat/ViewAdapt';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
 import {
-  DESTINY_TREE_NODES,
   PVE_STAMINA_MAX,
   PVE_STAMINA_RECOVERY_MS,
-  PVE_STAMINA_RUN_COST,
-  TREE_RESET_DIAMOND_COST,
 } from '../pve/core/PveConstants';
-import { canUnlockNode, getUnlockBlockReason } from '../pve/core/DestinyTreeSystem';
 import { RELIC_DEFS } from '../pve/core/RelicSystem';
 import type { PveMeta, RelicId } from '../pve/core/PveTypes';
+import type { PveProfile } from '../pve/core/PveProgressionTypes';
 
 const { ccclass } = _decorator;
 
@@ -79,12 +77,9 @@ interface WxProfileApi {
 const LOGO_W = 560;
 const LOGO_H = 208;
 const NAV_Y_OFFSET = 112;
-type LobbyAssetIconKind = 'shards' | 'diamond' | 'stamina';
-
 @ccclass('PveLobbyController')
 export class PveLobbyController extends Component {
   private _logo: Node | null = null;
-  private _shardsLabel: Label | null = null;
   private _diamondLabel: Label | null = null;
   private _staminaLabel: Label | null = null;
   private _staminaTimerLabel: Label | null = null;
@@ -100,10 +95,9 @@ export class PveLobbyController extends Component {
   private _expeditionCostLabel: Label | null = null;
   private _statusLabel: Label | null = null;
   private _leaderboardModal: Node | null = null;
-  private _destinyTreeModal: Node | null = null;
+  private _floorSelectModal: Node | null = null;
   private _relicCatalogModal: Node | null = null;
   private _leaderboardEntries: PveLeaderboardEntry[] | null = null;
-  private _destinyTreeMeta: PveMeta | null = null;
   private _metaCodexRelics: RelicId[] = [];
   private _myRank: number | null = null;
   private _unbindResize: (() => void) | null = null;
@@ -112,21 +106,34 @@ export class PveLobbyController extends Component {
   private _stamina = PVE_STAMINA_MAX;
   private _staminaMax = PVE_STAMINA_MAX;
   private _staminaNextRecoveryAt: number | null = null;
-  private _nextRunCost = PVE_STAMINA_RUN_COST;
-  private _hasActiveSave = false;
+  private _hasActiveChallenge = false;
   private _busy = false;
+  private _lobbyReady = false;
 
   onLoad(): void {
     lockPortrait();
     this.node.getChildByName('RoomRoot')?.destroy();
     this.node.getChildByName('PveLobbyRoot')?.destroy();
     refreshScreenAdapt(this.node);
+    this._lobbyReady = false;
+    LoadingOverlay.show(this.node, '正在加载大厅资源…', {
+      mode: 'startup',
+      title: '塔塔远征团',
+      subtitle: '正在进入大厅',
+      hint: '正在加载大厅素材',
+      progress: 0.55,
+      hideOnTimeout: false,
+      timeoutMs: 0,
+    });
     this._buildUi();
+    const lobbyRoot = this.node.getChildByName('PveLobbyRoot');
+    if (lobbyRoot) lobbyRoot.active = false;
     applyUiLayerTree(this.node, this.node.layer);
 
     const relayout = () => {
       refreshScreenAdapt(this.node);
-      void applyScreenBackground(this.node, 'lobby');
+      LoadingOverlay.recompute();
+      if (this._lobbyReady) void applyScreenBackground(this.node, 'lobby');
     };
     this.scheduleOnce(relayout, 0);
     this.scheduleOnce(relayout, 0.12);
@@ -229,12 +236,13 @@ export class PveLobbyController extends Component {
 
     const assetStrip = new Node('TopAssetStrip');
     assetStrip.setParent(root);
-    assetStrip.setPosition(150, y + 2, 0);
-    assetStrip.addComponent(UITransform).setContentSize(390, 82);
+    assetStrip.setPosition(214, y + 2, 0);
+    assetStrip.addComponent(UITransform).setContentSize(270, 82);
 
-    this._shardsLabel = this._makeTopAssetBadge(assetStrip, 'Shards', -130, 0, 'pve/map/icon_fragment', 114, 50, 44, 23);
-    this._diamondLabel = this._makeTopAssetBadge(assetStrip, 'Diamond', 0, 0, 'pve/lobby/icon_chip_stardust', 114, 50, 44, 23);
-    this._staminaLabel = this._makeTopAssetBadge(assetStrip, 'StaminaChip', 130, 0, 'pve/lobby/icon_chip_stamina', 118, 50, 42, 23);
+    this._diamondLabel = this._makeTopAssetBadge(assetStrip, 'Diamond', -66, 0, 'pve/lobby/icon_chip_stardust', 114, 50, 44, 23);
+    this._staminaLabel = this._makeTopAssetBadge(assetStrip, 'StaminaChip', 66, 0, 'pve/lobby/icon_chip_stamina', 118, 50, 42, 23);
+    if (this._diamondLabel) this._diamondLabel.string = '0';
+    if (this._staminaLabel) this._staminaLabel.string = `${this._stamina}/${this._staminaMax}`;
     const staminaChip = assetStrip.getChildByName('StaminaChip');
     if (staminaChip) {
       this._staminaTimerLabel = this._makeLabel(staminaChip, 'StaminaTimer', -16, 17, 96, 22);
@@ -298,7 +306,7 @@ export class PveLobbyController extends Component {
     this._makeNavButton(
       dock,
       '营地',
-      'pve/lobby/icon_nav_destiny_tree',
+      'pve/lobby/icon_nav_camp',
       navStep * 1.5,
       -4,
       navButtonW,
@@ -307,46 +315,110 @@ export class PveLobbyController extends Component {
     );
     this._expeditionCostLabel = this._makeLabel(dock, 'ExpeditionCost', -76, 15, 320, 22);
     this._expeditionCostLabel.color = new Color(255, 226, 130, 255);
-    this._expeditionCostLabel.string = `新远征 · 消耗 ${PVE_STAMINA_RUN_COST} 体力`;
+    this._expeditionCostLabel.string = '选择楼层';
   }
 
   private async _loadArt(): Promise<void> {
-    const bundle = await ensureResourcesBundle();
-    if (!bundle) {
-      this._setStatus('资源包加载失败，请清缓存后重试');
-      return;
-    }
-    void playMainBgm(bundle);
-    await preloadPveLobbyUi();
-    await applyScreenBackground(this.node, 'lobby');
+    try {
+      LoadingOverlay.update({
+        text: '正在加载大厅资源…',
+        hint: '正在加载大厅图标',
+        progress: 0.18,
+      });
+      await this._preloadLobbyArtUntilReady();
 
-    const logo = getCachedSprite('pve/lobby/logo_destiny_tower');
-    if (logo && this._logo?.isValid) {
-      ensureArtChild(this._logo, 'LogoArt', logo, LOGO_W, LOGO_H);
+      LoadingOverlay.update({
+        text: '正在绘制大厅…',
+        hint: '正在应用大厅背景与导航图标',
+        progress: 0.78,
+      });
+      await applyScreenBackground(this.node, 'lobby');
+
+      const logo = getCachedSprite('pve/lobby/logo_destiny_tower');
+      if (logo && this._logo?.isValid) {
+        ensureArtChild(this._logo, 'LogoArt', logo, LOGO_W, LOGO_H);
+      }
+      for (const [iconNode, key] of this._navIconKeys) {
+        const frame = getCachedSprite(key);
+        if (!frame || !iconNode.isValid) continue;
+        const size = key === 'pve/lobby/icon_nav_expedition' ? 82 : 76;
+        ensureArtChild(iconNode, 'IconArt', frame, size, size);
+      }
+      this._applyTopAssetBadgeIcons();
+      this._applyButtonArt(this.node);
+      const missing = this._getMissingLobbyArtKeys();
+      if (missing.length > 0) {
+        const message = `大厅资源缺失：${missing.join('、')}`;
+        console.error('[PveLobby] lobby art missing after preload', missing);
+        this._setStatus(message);
+        LoadingOverlay.update({
+          text: message,
+          hint: '请重新构建并确认大厅关键资源已进入主包或 resources 分包',
+          progress: 1,
+        });
+        return;
+      }
+      const lobbyRoot = this.node.getChildByName('PveLobbyRoot');
+      this._lobbyReady = true;
+      if (lobbyRoot) lobbyRoot.active = true;
+      applyUiLayerTree(this.node, this.node.layer);
+      LoadingOverlay.update({
+        text: '大厅准备完成',
+        hint: '即将进入大厅',
+        progress: 1,
+      });
+      LoadingOverlay.hide();
+    } catch (err: unknown) {
+      const message = `大厅资源加载失败：${err instanceof Error ? err.message : String(err)}`;
+      console.error('[PveLobby] lobby art load failed', err);
+      this._setStatus(message);
+      LoadingOverlay.update({
+        text: message,
+        hint: '请检查构建资源与 resources 分包配置',
+        progress: 1,
+      });
     }
-    for (const [iconNode, key] of this._navIconKeys) {
-      const frame = getCachedSprite(key);
-      if (!frame || !iconNode.isValid) continue;
-      const size = key === 'pve/lobby/icon_nav_expedition' ? 82 : 76;
-      ensureArtChild(iconNode, 'IconArt', frame, size, size);
+  }
+
+  private async _preloadLobbyArtUntilReady(): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await preloadPveLobbyUi();
+      if (this._getMissingLobbyArtKeys().length === 0) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 120 * attempt));
     }
-    this._applyTopAssetBadgeIcons();
-    this._applyButtonArt(this.node);
+  }
+
+  private _getMissingLobbyArtKeys(): string[] {
+    const keys = [
+      'backgrounds/bg_lobby',
+      'pve/lobby/logo_destiny_tower',
+      'pve/lobby/icon_chip_stardust',
+      'pve/lobby/icon_chip_stamina',
+      ...Array.from(this._navIconKeys.values()),
+    ];
+    const missing: string[] = [];
+    for (const key of keys) {
+      if (!getCachedSprite(key) && !missing.includes(key)) missing.push(key);
+    }
+    return missing;
   }
 
   private async _refreshLobbyData(): Promise<void> {
     try {
-      const [metaRes, saveRes] = await Promise.all([loadPveMeta(), loadPveSave()]);
+      const [metaRes, profileRes, activeRes] = await Promise.all([
+        loadPveMeta(),
+        loadPveProfile(),
+        loadActiveFloorChallenge(),
+      ]);
       const { meta } = metaRes;
-      this._hasActiveSave = Boolean(saveRes.save) || meta.hasPendingRun === true;
-      this._nextRunCost = this._hasActiveSave ? 0 : (meta.nextRunCost ?? PVE_STAMINA_RUN_COST);
+      this._hasActiveChallenge = Boolean(activeRes.challenge ?? profileRes.profile.activeChallengeId);
       this._applyMetaSnapshot(meta);
+      this._metaFloor = Math.max(this._metaFloor, profileRes.profile.highestClearedFloor ?? 0);
+      this._updateMetaLine();
       if (this._expeditionCostLabel) {
-        this._expeditionCostLabel.string = this._hasActiveSave
-          ? '继续远征 · 不消耗体力'
-          : this._nextRunCost === 0
-            ? '首次远征免费'
-            : `新远征 · 消耗 ${this._nextRunCost} 体力`;
+        this._expeditionCostLabel.string = this._hasActiveChallenge
+          ? `继续挑战 · 第 ${activeRes.challenge?.floor ?? profileRes.profile.highestUnlockedFloor} 层`
+          : `挑战第 ${profileRes.profile.highestUnlockedFloor} 层`;
       }
     } catch (err: unknown) {
       this._setStatus(`大厅数据加载失败：${err instanceof Error ? err.message : String(err)}`);
@@ -355,14 +427,140 @@ export class PveLobbyController extends Component {
 
   private async _enterExpedition(): Promise<void> {
     if (this._busy) return;
-    if (!this._hasActiveSave && this._stamina < this._nextRunCost) {
-      this._setStatus(`体力不足，新远征需要 ${this._nextRunCost} 点体力`);
-      return;
+    this._busy = true;
+    this._setStatus('正在读取可挑战楼层…');
+    try {
+      const [profileRes, activeRes] = await Promise.all([
+        loadPveProfile(),
+        loadActiveFloorChallenge(),
+      ]);
+      this._buildFloorSelectModal(profileRes.profile, activeRes);
+      this._setStatus('');
+    } catch (err: unknown) {
+      this._setStatus(`远征入口加载失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._busy = false;
     }
-    this._gotoScene(
-      this._hasActiveSave ? '继续远征…' : '开启新远征…',
-      () => SceneLoader.loadPveExpedition(),
+  }
+
+  private _buildFloorSelectModal(
+    profile: PveProfile,
+    activeRes: LoadActiveFloorChallengeResponse,
+  ): void {
+    if (this._floorSelectModal?.isValid) this._closeFloorSelectModal();
+    const { h } = visibleDesignSize();
+    const overlay = new Node('FloorSelectModal');
+    overlay.setParent(this.node);
+    overlay.addComponent(UITransform).setContentSize(720, h);
+    this._drawRect(overlay, 720, h, new Color(0, 8, 24, 132));
+    this._floorSelectModal = overlay;
+    overlay.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      if (event.target === overlay) this._closeFloorSelectModal();
+    });
+
+    const panel = new Node('Panel');
+    panel.setParent(overlay);
+    panel.setPosition(0, 8, 0);
+    panel.addComponent(UITransform).setContentSize(620, 650);
+    this._drawRoundedRect(
+      panel,
+      620,
+      650,
+      28,
+      new Color(12, 42, 86, 214),
+      new Color(255, 205, 85, 240),
     );
+    panel.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      event.propagationStopped = true;
+    });
+
+    const title = this._makeLabel(panel, 'Title', 270, 34, 520, 52);
+    title.string = '选择远征楼层';
+    title.color = new Color(255, 226, 130, 255);
+    title.isBold = true;
+
+    const activeFloor = activeRes.challenge?.floor ?? null;
+    const subtitle = this._makeLabel(panel, 'Subtitle', 220, 22, 540, 42);
+    subtitle.string = activeFloor
+      ? `当前有第 ${activeFloor} 层挑战进度；选择其他楼层会放弃该进度`
+      : `已解锁到第 ${profile.highestUnlockedFloor} 层`;
+    subtitle.color = new Color(190, 225, 255, 226);
+
+    const maxFloor = Math.max(1, Math.min(7, profile.highestUnlockedFloor || 1));
+    const cols = 4;
+    const btnW = 126;
+    const btnH = 78;
+    const gapX = 22;
+    const gapY = 22;
+    const startX = -((cols - 1) * (btnW + gapX)) / 2;
+    const startY = 130;
+    for (let floor = 1; floor <= 7; floor++) {
+      const col = (floor - 1) % cols;
+      const row = Math.floor((floor - 1) / cols);
+      const x = startX + col * (btnW + gapX);
+      const y = startY - row * (btnH + gapY);
+      const unlocked = floor <= maxFloor;
+      const label = activeFloor === floor
+        ? `继续\n第${floor}层`
+        : unlocked
+          ? `挑战\n第${floor}层`
+          : `未解锁\n第${floor}层`;
+      this._makeFloorButton(panel, label, x, y, btnW, btnH, unlocked, () => {
+        this._selectPveFloor(floor);
+      });
+    }
+
+    const tip = this._makeLabel(panel, 'Tip', -142, 20, 540, 72);
+    tip.string = '当前远征以第一章 1-7 层逐层挑战为准；楼层进度由云端挑战档案保存。';
+    tip.color = new Color(210, 235, 255, 218);
+
+    this._makeTransparentButton(panel, '取消', 0, -260, 180, 58, () => this._closeFloorSelectModal());
+    applyUiLayerTree(overlay, this.node.layer);
+  }
+
+  private _makeFloorButton(
+    parent: Node,
+    text: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    enabled: boolean,
+    onClick: () => void,
+  ): void {
+    const node = new Node(`Floor_${text.replace(/\s+/g, '_')}`);
+    node.setParent(parent);
+    node.setPosition(x, y, 0);
+    node.addComponent(UITransform).setContentSize(width, height);
+    this._drawRoundedRect(
+      node,
+      width,
+      height,
+      16,
+      enabled ? new Color(20, 82, 150, 220) : new Color(42, 52, 70, 148),
+      enabled ? new Color(255, 218, 110, 240) : new Color(120, 140, 160, 150),
+    );
+    const label = this._makeLabel(node, 'Label', 0, 24, width - 12, height - 8);
+    label.string = text;
+    label.isBold = true;
+    label.color = enabled ? new Color(245, 250, 255, 255) : new Color(170, 180, 190, 190);
+    if (enabled) {
+      node.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+        event.propagationStopped = true;
+      });
+      this._bindButton(node, onClick);
+    }
+  }
+
+  private _selectPveFloor(floor: number): void {
+    GameSession.pendingPveFloor = floor;
+    this._closeFloorSelectModal();
+    this._gotoScene(`进入第 ${floor} 层…`, () => SceneLoader.loadPveExpedition());
+  }
+
+  private _closeFloorSelectModal(): void {
+    this._floorSelectModal?.destroy();
+    this._floorSelectModal = null;
   }
 
   private async _refreshRank(): Promise<void> {
@@ -408,21 +606,6 @@ export class PveLobbyController extends Component {
       this._buildLeaderboardModal(this._leaderboardEntries, this._myRank);
     } catch (err: unknown) {
       this._setStatus(`排行榜加载失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      this._busy = false;
-    }
-  }
-
-  private async _showDestinyTreeModal(): Promise<void> {
-    if (this._destinyTreeModal?.isValid) return;
-    if (this._busy) return;
-    this._busy = true;
-    try {
-      const { meta } = await loadPveMeta();
-      this._applyMetaSnapshot(meta);
-      this._buildDestinyTreeModal(meta);
-    } catch (err: unknown) {
-      this._setStatus(`命运树加载失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       this._busy = false;
     }
@@ -712,251 +895,6 @@ export class PveLobbyController extends Component {
     applyUiLayerTree(overlay, this.node.layer);
   }
 
-  private _buildDestinyTreeModal(meta: PveMeta): void {
-    const { h } = visibleDesignSize();
-    const overlay = new Node('DestinyTreeModal');
-    overlay.setParent(this.node);
-    overlay.addComponent(UITransform).setContentSize(720, h);
-    this._drawRect(overlay, 720, h, new Color(0, 8, 24, 185));
-    this._destinyTreeModal = overlay;
-    overlay.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-      if (event.target === overlay) this._closeDestinyTreeModal();
-    });
-
-    const PANEL_W = 668;
-    const PANEL_H = 1160;
-    const panel = new Node('Panel');
-    panel.setParent(overlay);
-    panel.setPosition(0, -18, 0);
-    panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
-    this._drawRoundedRect(
-      panel,
-      PANEL_W,
-      PANEL_H,
-      28,
-      new Color(12, 42, 86, 170),
-      new Color(255, 205, 85, 240),
-    );
-    panel.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-      event.propagationStopped = true;
-    });
-
-    const title = this._makeLabel(panel, 'Title', 0, 34, 520, 48);
-    title.node.setPosition(0, 492, 0);
-    title.string = '命运树';
-    title.color = new Color(255, 220, 105, 255);
-    title.isBold = true;
-    title.horizontalAlign = Label.HorizontalAlign.CENTER;
-
-    const shards = this._makeLabel(panel, 'Shards', 0, 25, 250, 38);
-    shards.node.setPosition(182, 450, 0);
-    shards.string = `命运碎片 ${meta.destinyShards}`;
-    shards.color = new Color(170, 215, 255, 225);
-    shards.isBold = true;
-    shards.horizontalAlign = Label.HorizontalAlign.RIGHT;
-
-    const contentFrame = new Node('TreeContentFrame');
-    contentFrame.setParent(panel);
-    contentFrame.setPosition(0, -6, 0);
-    contentFrame.addComponent(UITransform).setContentSize(616, 818);
-    this._drawRoundedRect(
-      contentFrame,
-      616,
-      818,
-      24,
-      new Color(9, 32, 68, 88),
-      new Color(112, 178, 230, 66),
-    );
-
-    const rows = ['A', 'B', 'C', 'D', 'E'] as const;
-    const rowLabels: Record<typeof rows[number], string> = {
-      A: '生存',
-      B: '战斗',
-      C: '财富',
-      D: '强化',
-      E: '天命',
-    };
-    const unlockedSet = new Set(meta.unlockedTreeNodes ?? []);
-    const startY = 304;
-    const rowStep = 156;
-    const labelX = -238;
-    const rowScrollX = 96;
-    const rowScrollW = 430;
-    const rowScrollH = 126;
-    const cardGap = 18;
-    const cardWidth = 210;
-
-    rows.forEach((rowKey, rowIndex) => {
-      const rowY = startY - rowIndex * rowStep;
-      const rowLabel = this._makeLabel(contentFrame, `Row_${rowKey}`, 0, 28, 124, 44);
-      rowLabel.node.setPosition(labelX, rowY, 0);
-      rowLabel.string = rowLabels[rowKey];
-      rowLabel.color = new Color(210, 230, 248, 220);
-      rowLabel.isBold = true;
-
-      const rowDefs = DESTINY_TREE_NODES.filter((def) => def.column === rowKey);
-      const rowScrollNode = new Node(`RowScroll_${rowKey}`);
-      rowScrollNode.setParent(contentFrame);
-      rowScrollNode.setPosition(rowScrollX, rowY, 0);
-      rowScrollNode.addComponent(UITransform).setContentSize(rowScrollW, rowScrollH);
-
-      const rowScroll = rowScrollNode.addComponent(ScrollView);
-      rowScroll.horizontal = true;
-      rowScroll.vertical = false;
-      rowScroll.inertia = true;
-      rowScroll.elastic = false;
-      rowScroll.brake = 0.72;
-
-      const rowViewNode = new Node('View');
-      rowViewNode.setParent(rowScrollNode);
-      rowViewNode.addComponent(UITransform).setContentSize(rowScrollW, rowScrollH);
-      rowViewNode.addComponent(Mask);
-
-      const contentWidth = Math.max(rowScrollW, rowDefs.length * cardWidth + Math.max(0, rowDefs.length - 1) * cardGap + 24);
-      const rowContentNode = new Node('Content');
-      rowContentNode.setParent(rowViewNode);
-      rowContentNode.addComponent(UITransform).setContentSize(contentWidth, rowScrollH);
-      rowContentNode.setPosition(-(contentWidth - rowScrollW) / 2, 0, 0);
-      rowScroll.content = rowContentNode;
-      rowScroll.scrollToLeft(0);
-
-      rowDefs.forEach((def, colIndex) => {
-        const x = -contentWidth / 2 + 12 + cardWidth / 2 + colIndex * (cardWidth + cardGap);
-        this._makeDestinyTreeNodeCard(rowContentNode, meta, unlockedSet, def.id, x, 0);
-      });
-    });
-
-    const tip = this._makeLabel(panel, 'Tip', 0, 18, 580, 40);
-    tip.node.setPosition(0, -476, 0);
-    tip.string = `重置命运树消耗 ${TREE_RESET_DIAMOND_COST} 星尘，返还已投入的命运碎片`;
-    tip.color = new Color(182, 216, 246, 190);
-
-    this._makeTransparentButton(panel, '重置命运树', -126, -526, 228, 60, () => {
-      void this._onResetDestinyTree();
-    });
-    this._makeTransparentButton(panel, '关闭', 126, -526, 188, 60, () => this._closeDestinyTreeModal());
-
-    applyUiLayerTree(overlay, this.node.layer);
-  }
-
-  private _makeDestinyTreeNodeCard(
-    parent: Node,
-    meta: PveMeta,
-    unlockedSet: Set<string>,
-    nodeId: string,
-    x: number,
-    y: number,
-  ): void {
-    const def = DESTINY_TREE_NODES.find((item) => item.id === nodeId);
-    if (!def) return;
-    const isUnlocked = unlockedSet.has(def.id);
-    const isUnlockable = !isUnlocked && canUnlockNode(meta, def.id);
-    const width = 210;
-    const height = 122;
-    const node = new Node(`Node_${def.id}`);
-    node.setParent(parent);
-    node.setPosition(x, y, 0);
-    node.addComponent(UITransform).setContentSize(width, height);
-
-    const fill = isUnlocked
-      ? new Color(106, 82, 26, 150)
-      : isUnlockable
-        ? new Color(28, 100, 182, 148)
-        : new Color(44, 64, 95, 138);
-    const stroke = isUnlocked
-      ? new Color(255, 216, 118, 240)
-      : isUnlockable
-        ? new Color(126, 208, 255, 238)
-        : new Color(98, 130, 164, 210);
-    this._drawRoundedRect(node, width, height, 16, fill, stroke);
-
-    const name = this._makeLabel(node, 'Name', 24, 20, 188, 28);
-    name.string = def.name;
-    name.color = isUnlocked ? new Color(255, 230, 150, 255) : new Color(232, 242, 252, 255);
-    name.isBold = true;
-
-    const desc = this._makeLabel(node, 'Desc', -2, 17, 188, 52);
-    desc.string = def.desc;
-    desc.color = isUnlockable
-      ? new Color(214, 234, 250, 230)
-      : new Color(188, 206, 224, 215);
-
-    const cost = this._makeLabel(node, 'Cost', -36, 16, 176, 24);
-    cost.string = isUnlocked ? '已解锁' : `${def.cost} 碎片`;
-    cost.color = isUnlocked
-      ? new Color(255, 220, 120, 255)
-      : isUnlockable
-        ? new Color(255, 232, 148, 255)
-        : new Color(164, 188, 210, 220);
-    cost.isBold = true;
-
-    this._bindButton(node, () => {
-      if (isUnlocked) return;
-      const reason = getUnlockBlockReason(meta, def.id);
-      if (!reason) {
-        void this._onUnlockDestinyTreeNode(def.id);
-        return;
-      }
-
-      const tip = this._destinyTreeModal
-        ?.getChildByName('Panel')
-        ?.getChildByName('Tip')
-        ?.getComponent(Label);
-      if (!tip) return;
-      if (reason.code === 'MISSING_PREREQUISITE') {
-        tip.string = `请先解锁「${reason.prerequisite.name}」`;
-      } else if (reason.code === 'INSUFFICIENT_SHARDS') {
-        tip.string = `命运碎片不足，需要 ${reason.required} 片`;
-      } else if (reason.code === 'NOT_LIVE') {
-        tip.string = '该节点尚未开放';
-      }
-    });
-  }
-
-  private async _onUnlockDestinyTreeNode(nodeId: string): Promise<void> {
-    if (this._busy) return;
-    this._busy = true;
-    try {
-      const { meta } = await unlockTreeNode(nodeId);
-      this._applyMetaSnapshot(meta);
-      this._rebuildDestinyTreeModal(meta);
-    } catch (err: unknown) {
-      this._setStatus(`解锁失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      this._busy = false;
-    }
-  }
-
-  private async _onResetDestinyTree(): Promise<void> {
-    if (this._busy || !this._destinyTreeMeta) return;
-    if ((this._destinyTreeMeta.unlockedTreeNodes?.length ?? 0) === 0) {
-      this._setStatus('命运树尚未解锁任何节点');
-      return;
-    }
-    this._busy = true;
-    try {
-      const { meta } = await resetTree();
-      this._applyMetaSnapshot(meta);
-      this._rebuildDestinyTreeModal(meta);
-    } catch (err: unknown) {
-      this._setStatus(`重置失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      this._busy = false;
-    }
-  }
-
-  private _rebuildDestinyTreeModal(meta: PveMeta): void {
-    const parent = this._destinyTreeModal?.parent;
-    this._closeDestinyTreeModal();
-    if (!parent?.isValid) return;
-    this._buildDestinyTreeModal(meta);
-  }
-
-  private _closeDestinyTreeModal(): void {
-    this._destinyTreeModal?.destroy();
-    this._destinyTreeModal = null;
-  }
-
   private _showProfileMenu(): void {
     if (this._profileBusy || this._profileModal) return;
     const { h } = visibleDesignSize();
@@ -1008,7 +946,6 @@ export class PveLobbyController extends Component {
     this._makeTransparentButton(panel, '重新进行新手教学', 0, -140, 420, 64, () => {
       void updatePveMeta({ resetTutorial: true }).then(() => {
         this._setStatus('已重置教学。下次开启新远征时会进入教学层');
-        if (this._destinyTreeMeta) this._destinyTreeMeta.tutorialCompleted = false;
         this._closeProfileMenu();
       }).catch((err) => {
         this._setStatus(`重置失败：${this._formatErr(err)}`);
@@ -1302,147 +1239,25 @@ export class PveLobbyController extends Component {
   }
 
   private _applyTopAssetBadgeIcons(): void {
-    const strip = this.node.getChildByName('PveLobbyRoot')?.getChildByName('TopAssetStrip');
+    const root = this.node.getChildByName('PveLobbyRoot');
+    if (!root) return;
+    const strip = root.getChildByName('TopAssetStrip');
     if (!strip) return;
     const iconMap: Record<string, { key: string; size: number }> = {
-      Shards: { key: 'pve/map/icon_fragment', size: 44 },
       Diamond: { key: 'pve/lobby/icon_chip_stardust', size: 44 },
       StaminaChip: { key: 'pve/lobby/icon_chip_stamina', size: 42 },
     };
     for (const [name, config] of Object.entries(iconMap)) {
       const chip = strip.getChildByName(name);
-      const iconNode = chip?.getChildByName('ResourceIcon');
+      if (!chip) continue;
+      const iconPlate = chip.getChildByName('IconPlate');
+      if (!iconPlate) continue;
+      const iconNode = iconPlate.getChildByName('ResourceIcon');
       const frame = getCachedSprite(config.key);
-      if (!chip || !iconNode || !frame) continue;
+      if (!iconNode || !frame) continue;
       iconNode.removeAllChildren();
       ensureArtChild(iconNode, 'IconArt', frame, config.size, config.size);
     }
-  }
-
-  private _drawLobbyAssetIcon(node: Node, kind: LobbyAssetIconKind): void {
-    switch (kind) {
-      case 'shards':
-        this._drawCrystalIcon(node, {
-          core: new Color(126, 88, 255, 255),
-          edge: new Color(239, 221, 255, 255),
-          accent: new Color(84, 53, 188, 255),
-          glow: new Color(185, 132, 255, 58),
-          mirrored: true,
-        });
-        return;
-      case 'diamond':
-        this._drawCrystalIcon(node, {
-          core: new Color(70, 204, 255, 255),
-          edge: new Color(220, 248, 255, 255),
-          accent: new Color(25, 113, 224, 255),
-          glow: new Color(102, 220, 255, 50),
-          mirrored: false,
-        });
-        return;
-      case 'stamina':
-        this._drawStaminaIcon(node);
-        return;
-    }
-  }
-
-  private _drawCrystalIcon(
-    node: Node,
-    palette: {
-      core: Color;
-      edge: Color;
-      accent: Color;
-      glow: Color;
-      mirrored: boolean;
-    },
-  ): void {
-    const glow = new Node('Glow');
-    glow.setParent(node);
-    glow.setPosition(0, 0, 0);
-    glow.addComponent(UITransform).setContentSize(54, 54);
-    this._drawCircle(glow, 20, palette.glow);
-
-    const shardOffsets = palette.mirrored
-      ? [{ x: -11, y: -1, scale: 0.88 }, { x: 9, y: 3, scale: 0.74 }]
-      : [{ x: -9, y: -2, scale: 0.72 }, { x: 10, y: 2, scale: 0.9 }];
-    shardOffsets.forEach((offset, index) => {
-      const shard = new Node(`Shard_${index}`);
-      shard.setParent(node);
-      shard.setPosition(offset.x, offset.y, 0);
-      shard.addComponent(UITransform).setContentSize(26, 30);
-      const graphics = shard.addComponent(Graphics);
-      const scale = offset.scale;
-      const halfW = 10 * scale;
-      const tipY = 12 * scale;
-      const shoulderY = 2 * scale;
-      const bottomY = -12 * scale;
-      graphics.fillColor = palette.core;
-      graphics.moveTo(0, tipY);
-      graphics.lineTo(halfW, shoulderY);
-      graphics.lineTo(6 * scale, bottomY);
-      graphics.lineTo(0, -15 * scale);
-      graphics.lineTo(-6 * scale, bottomY);
-      graphics.lineTo(-halfW, shoulderY);
-      graphics.close();
-      graphics.fill();
-      graphics.strokeColor = palette.edge;
-      graphics.lineWidth = 1.6;
-      graphics.stroke();
-
-      const facet = new Node('Facet');
-      facet.setParent(shard);
-      facet.setPosition(-2 * scale, -1 * scale, 0);
-      facet.addComponent(UITransform).setContentSize(12, 18);
-      const facetG = facet.addComponent(Graphics);
-      facetG.fillColor = palette.accent;
-      facetG.moveTo(0, 7 * scale);
-      facetG.lineTo(4 * scale, 1 * scale);
-      facetG.lineTo(1 * scale, -8 * scale);
-      facetG.lineTo(-4 * scale, 1 * scale);
-      facetG.close();
-      facetG.fill();
-    });
-
-    const sparkle = new Node('Sparkle');
-    sparkle.setParent(node);
-    sparkle.setPosition(9, 15, 0);
-    sparkle.addComponent(UITransform).setContentSize(14, 14);
-    const sparkleG = sparkle.addComponent(Graphics);
-    sparkleG.fillColor = new Color(255, 255, 255, 200);
-    sparkleG.circle(0, 0, 2.2);
-    sparkleG.fill();
-  }
-
-  private _drawStaminaIcon(node: Node): void {
-    const glow = new Node('Glow');
-    glow.setParent(node);
-    glow.setPosition(0, 0, 0);
-    glow.addComponent(UITransform).setContentSize(54, 54);
-    this._drawCircle(glow, 20, new Color(255, 213, 93, 54));
-
-    const badge = new Node('Badge');
-    badge.setParent(node);
-    badge.setPosition(0, 0, 0);
-    badge.addComponent(UITransform).setContentSize(40, 40);
-    this._drawCircle(badge, 16, new Color(255, 232, 122, 255), new Color(255, 248, 220, 235), 1.6);
-
-    const bolt = new Node('Bolt');
-    bolt.setParent(node);
-    bolt.setPosition(0, 1, 0);
-    bolt.addComponent(UITransform).setContentSize(26, 30);
-    const graphics = bolt.addComponent(Graphics);
-    graphics.fillColor = new Color(255, 177, 34, 255);
-    graphics.moveTo(-1, 12);
-    graphics.lineTo(8, 12);
-    graphics.lineTo(2, 2);
-    graphics.lineTo(9, 2);
-    graphics.lineTo(-6, -13);
-    graphics.lineTo(-1, -3);
-    graphics.lineTo(-8, -3);
-    graphics.close();
-    graphics.fill();
-    graphics.strokeColor = new Color(255, 248, 220, 215);
-    graphics.lineWidth = 1.4;
-    graphics.stroke();
   }
 
   private _makeNavButton(
@@ -1636,12 +1451,10 @@ export class PveLobbyController extends Component {
   }
 
   private _applyMetaSnapshot(meta: PveMeta): void {
-    this._destinyTreeMeta = meta;
     this._metaCodexRelics = meta.codex.relics ?? [];
     this._stamina = meta.stamina ?? this._stamina;
     this._staminaMax = meta.staminaMax ?? this._staminaMax;
     this._staminaNextRecoveryAt = meta.staminaNextRecoveryAt ?? null;
-    if (this._shardsLabel) this._shardsLabel.string = String(meta.destinyShards);
     if (this._diamondLabel) this._diamondLabel.string = String(meta.diamond);
     this._metaFloor = meta.highestFloor ?? 0;
     this._updateMetaLine();
