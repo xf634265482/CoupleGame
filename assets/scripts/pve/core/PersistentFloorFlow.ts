@@ -64,6 +64,7 @@ export class PersistentFloorFlow {
 
   async bootstrap(
     selectedFloor?: number,
+    options?: { tutorialCompleted?: boolean },
   ): Promise<PersistentFloorFlowState> {
     this._settlementInFlight = null;
     this._settledResult = null;
@@ -86,7 +87,9 @@ export class PersistentFloorFlow {
     }
     const runtime = challenge.runtimeSave
       ? resumeOrRebuildPersistentRuntime(challenge, challenge.runtimeSave, profile)
-      : createPersistentFloorRuntime(challenge, profile);
+      : createPersistentFloorRuntime(challenge, profile, {
+        tutorialCompleted: options?.tutorialCompleted,
+      });
     this._state = { profile, challenge, runtime, resumed };
     return this._state;
   }
@@ -168,7 +171,10 @@ export class PersistentFloorFlow {
       throw new Error('ALL_READY_FLOORS_COMPLETE');
     }
     const started = await this._api.start(progressionRequest(this._state.profile));
-    const runtime = createPersistentFloorRuntime(started.challenge, this._state.profile);
+    // 次层永不重放教学：即便结算跳回第一层（异常路径），也不重新注入引导脚本。
+    const runtime = createPersistentFloorRuntime(started.challenge, this._state.profile, {
+      tutorialCompleted: true,
+    });
     this._state = {
       profile: this._state.profile,
       challenge: started.challenge,

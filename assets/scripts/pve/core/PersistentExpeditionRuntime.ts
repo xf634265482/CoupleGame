@@ -19,6 +19,7 @@ import { getChapter2Objective } from './chapter2/Chapter2Objectives';
 import { dissolveHuntPressure } from './chapter2/HuntPressure';
 import { CHAPTER1_FLOOR3_BLOCKER_IDS } from './chapter1/Chapter1FloorCatalog';
 import { generateChapter1Floor } from './chapter1/Chapter1FloorGenerator';
+import { createTutorialExpeditionState, shouldUseTutorialFloor } from '../tutorial/TutorialFloorFactory';
 import { spawnObjectivePortal } from './FloorRules';
 import { commitProfessionMove, endProfessionTurn } from './professions/ProfessionActionSystem';
 import { gainSpirit } from './SpiritBurstSystem';
@@ -86,19 +87,34 @@ export function syncRuntimeFromExpedition(
   };
 }
 
+export interface PersistentFloorRuntimeOptions {
+  /** 玩家已完成第一层新手引导时传 true；缺省（含未知/false）视为需要注入脚本化教学层。 */
+  tutorialCompleted?: boolean;
+}
+
 export function createPersistentFloorRuntime(
   snapshot: FloorChallengeSnapshot,
   profile: PveProfile,
+  options?: PersistentFloorRuntimeOptions,
   now = Date.now(),
 ): PersistentExpeditionRuntime {
   if (!isFloorContentReady(snapshot.floor)) throw new Error('FLOOR_CONTENT_NOT_READY');
   const chapterId = chapterIdForFloor(snapshot.floor);
   if (chapterId === 1) {
-    let expedition = createChapter1ExpeditionState(snapshot, profile);
-    const map = generateChapter1Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
+    const useTutorial = shouldUseTutorialFloor(snapshot.floor, options?.tutorialCompleted);
+    let expedition = useTutorial
+      ? createTutorialExpeditionState(snapshot, profile)
+      : createChapter1ExpeditionState(snapshot, profile);
+    // 新手教学层固定用战士出战，不受玩家当前选定职业影响，保证引导脚本可预测。
+    const effectiveSnapshot: FloorChallengeSnapshot = useTutorial
+      ? { ...snapshot, config: { ...snapshot.config, professionId: 'WARRIOR' } }
+      : snapshot;
+    const map = useTutorial
+      ? null
+      : generateChapter1Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
     const profession = createFreshProfessionState();
     let objective = getChapter1Objective(snapshot.floor).create();
-    if (snapshot.floor === 6) {
+    if (!useTutorial && snapshot.floor === 6) {
       const waveIds = expedition.floorState.monsters
         .filter((monster) => monster.id.startsWith('wave1_'))
         .map((monster) => monster.id);
@@ -114,7 +130,7 @@ export function createPersistentFloorRuntime(
         entityIds: waveIds,
       }).state;
     }
-    const runtime = startFloorRuntime(snapshot, {
+    const runtime = startFloorRuntime(effectiveSnapshot, {
       maxHp: expedition.player.maxHp,
       maxAp: expedition.floorState.maxAp,
     }, {
@@ -124,9 +140,9 @@ export function createPersistentFloorRuntime(
       profession,
       minghenMemory: createMinghenTriggerMemory(),
       rewardCatalog: {
-        minghenIds: [...map.minghenIds],
-        equipmentIds: [...map.equipmentIds],
-        optionalObjectiveIds: [...map.optionalObjectiveIds],
+        minghenIds: map ? [...map.minghenIds] : [],
+        equipmentIds: map ? [...map.equipmentIds] : [],
+        optionalObjectiveIds: map ? [...map.optionalObjectiveIds] : [],
       },
     }, now);
     return syncRuntimeFromExpedition(runtime, expedition, now);
@@ -181,19 +197,28 @@ export function resumeOrRebuildPersistentRuntime(
   profile: PveProfile,
   now = Date.now(),
 ): PersistentExpeditionRuntime {
-  let parsed: { version?: unknown; runtime?: { version?: unknown } };
+  let parsed: {
+    version?: unknown;
+    runtime?: { version?: unknown; battleState?: { expedition?: { isTutorialRun?: boolean } } };
+  };
   try {
     parsed = JSON.parse(serialized) as typeof parsed;
   } catch (_err) {
     throw new Error('INVALID_FLOOR_RUNTIME_SAVE');
   }
   if (parsed.version === 1 && parsed.runtime?.version === 1) {
-    return createPersistentFloorRuntime(snapshot, profile, now);
+    return createPersistentFloorRuntime(snapshot, profile, undefined, now);
   }
   if (parsed.version !== FLOOR_RUNTIME_VERSION || parsed.runtime?.version !== FLOOR_RUNTIME_VERSION) {
     throw new Error('FLOOR_RUNTIME_VERSION_MISMATCH');
   }
-  return resumePersistentRuntimeV2(snapshot, serialized);
+  // 教学层保存时用「战士出战」的 effectiveSnapshot 冻结了 config；恢复时必须用同一套
+  // effectiveSnapshot 重新冻结比对，否则玩家实际选定职业（非战士）会导致误判配置不匹配。
+  const isTutorialRun = Boolean(parsed.runtime?.battleState?.expedition?.isTutorialRun);
+  const effectiveSnapshot: FloorChallengeSnapshot = isTutorialRun
+    ? { ...snapshot, config: { ...snapshot.config, professionId: 'WARRIOR' } }
+    : snapshot;
+  return resumePersistentRuntimeV2(effectiveSnapshot, serialized);
 }
 
 export function initialPersistentPresentationEvents(runtime: PersistentExpeditionRuntime): PveEvent[] {
