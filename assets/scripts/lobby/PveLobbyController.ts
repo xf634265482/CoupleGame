@@ -692,7 +692,7 @@ export class PveLobbyController extends Component {
       const ok = await this._ensureWarmReady('正在加载营地资源…');
       if (!ok) return;
       const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
-      controller.open(this.node);
+      controller.open(this.node, undefined, this._warmedProfile);
     } finally {
       this._busy = false;
     }

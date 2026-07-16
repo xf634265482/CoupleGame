@@ -8,8 +8,20 @@ const {ccclass}= _decorator;
 @ccclass('CampController')
 export class CampController extends Component{
  private _view:CampView|null=null;private _profile:PveProfile|null=null;private _busy=false;
- open(parent:Node,onClose?:()=>void):void{if(this._view?.node.isValid)return;this._view=new CampView(parent,{onClose:()=>{this.close();onClose?.();},onRefresh:()=>void this.refresh(),onSelectProfession:(id)=>void this._selectProfession(id),onToggleMinghen:(id)=>void this._toggleMinghen(id),onTrackMinghen:(id)=>void this._trackMinghen(id),onSavePreset:()=>void this._savePreset(),onToggleEquipment:(id)=>void this._toggleEquipment(id),onManageEquipment:(action,id)=>void this._manageEquipment(action,id)});this._view.showLoading();void this.refresh();}
- async refresh():Promise<void>{if(this._busy||!this._view)return;this._busy=true;try{const{profile}=await loadPveProfile();this._profile=profile;if(this._view?.node.isValid)this._view.setProfile(profile);}catch(err:unknown){if(this._view?.node.isValid)this._view.showError(err instanceof Error?err.message:String(err));}finally{this._busy=false;}}
+ open(parent:Node,onClose?:()=>void,initialProfile?:PveProfile|null):void{
+  if(this._view?.node.isValid){void this.refresh(true);return;}
+  this._view=new CampView(parent,{onClose:()=>{this.close();onClose?.();},onSelectProfession:(id)=>void this._selectProfession(id),onToggleMinghen:(id)=>void this._toggleMinghen(id),onTrackMinghen:(id)=>void this._trackMinghen(id),onSavePreset:()=>void this._savePreset(),onToggleEquipment:(id)=>void this._toggleEquipment(id),onManageEquipment:(action,id)=>void this._manageEquipment(action,id)});
+  if(initialProfile){
+    this._profile=initialProfile;
+    this._view.setProfile(initialProfile);
+    // 大厅预热档案已可展示；后台静默刷新，避免再闪「正在整理营地档案」
+    void this.refresh(false);
+    return;
+  }
+  this._view.showLoading();
+  void this.refresh(true);
+ }
+ async refresh(force=false):Promise<void>{if((this._busy&&!force)||!this._view)return;this._busy=true;try{const{profile}=await loadPveProfile();this._profile=profile;if(this._view?.node.isValid)this._view.setProfile(profile);}catch(err:unknown){if(this._view?.node.isValid)this._view.showError(err instanceof Error?err.message:String(err));}finally{this._busy=false;}}
  close():void{this._view?.destroy();this._view=null;}
  private async _selectProfession(selectedProfessionId:'WARRIOR'|'ARCHER'|'RANGER'):Promise<void>{await this._saveConfig({selectedProfessionId});}
  private async _saveConfig(request:UpdateCampConfigurationRequest):Promise<void>{if(this._busy||!this._view)return;this._busy=true;try{const{profile}=await updateCampConfiguration(request);this._profile=profile;if(this._view?.node.isValid)this._view.setProfile(profile);}catch(err:unknown){if(this._view?.node.isValid)this._view.showError(err instanceof Error?err.message:String(err));}finally{this._busy=false;}}
