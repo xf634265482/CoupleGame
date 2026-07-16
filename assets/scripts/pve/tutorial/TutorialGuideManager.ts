@@ -1,6 +1,6 @@
 import type { Coord, ExpeditionState, PveEvent } from '../core/PveTypes';
 import { FIRST_TUTORIAL_SCENARIO_ID, FIRST_TUTORIAL_STEPS } from './TutorialConfigs';
-import type { TutorialStepAction, TutorialStepConfig } from './TutorialTypes';
+import type { TutorialAdvanceContext, TutorialStepAction, TutorialStepConfig } from './TutorialTypes';
 
 function coordEquals(a: Coord | undefined, b: Coord | undefined): boolean {
   return !!a && !!b && a.x === b.x && a.y === b.y;
@@ -47,23 +47,53 @@ export class TutorialGuideManager {
     return !includesCoord(this._currentStep.allowedCells, coord);
   }
 
-  advanceIfNeeded(state: ExpeditionState, events: PveEvent[]): boolean {
+  advanceIfNeeded(state: ExpeditionState, events: PveEvent[], ctx: TutorialAdvanceContext = {}): boolean {
     const guide = state.floorState.tutorialGuide;
     if (!this._currentStep || !guide) return false;
 
-    const matchedByPos = coordEquals(this._currentStep.completeOnPlayerPos, state.floorState.player);
-    const matchedByEvent = this._currentStep.completeOnEventTypes?.some((type) => events.some((event) => event.type === type)) ?? false;
-    if (!matchedByPos && !matchedByEvent) return false;
+    const step = this._currentStep;
+    const matchedByPos = coordEquals(step.completeOnPlayerPos, state.floorState.player);
+    const matchedByEvent = step.completeOnEventTypes?.some((type) =>
+      events.some((event) => event.type === type),
+    ) ?? false;
+    const matchedByCharge = step.completeOnChargeAp !== undefined
+      && ctx.selectedChargeAp === step.completeOnChargeAp;
+    const matchedByBurst = !!step.completeOnSpiritBurst && ctx.spiritBurstActive === true;
+    const matchedByKill = !!step.completeOnKillMonsterId
+      && events.some((event) => event.type === 'KILL' && event.monsterId === step.completeOnKillMonsterId);
+    const matchedByAttack = !!step.completeOnAttackTargetId
+      && events.some((event) =>
+        event.type === 'ATTACK'
+        && event.attackerId === 'PLAYER'
+        && event.targetId === step.completeOnAttackTargetId
+        && (event.cause === undefined || event.cause === 'DIRECT'),
+      );
 
-    const currentIndex = this._steps.findIndex((step) => step.id === this._currentStep?.id);
-    const completedStepIds = Array.from(new Set([...(guide.completedStepIds ?? []), this._currentStep.id]));
+    if (!matchedByPos && !matchedByEvent && !matchedByCharge && !matchedByBurst && !matchedByKill && !matchedByAttack) {
+      return false;
+    }
+
+    const currentIndex = this._steps.findIndex((s) => s.id === step.id);
+    const completedStepIds = Array.from(new Set([...(guide.completedStepIds ?? []), step.id]));
     const nextStep = currentIndex >= 0 ? this._steps[currentIndex + 1] : null;
     state.floorState.tutorialGuide = {
       ...guide,
       completedStepIds,
-      currentStepId: nextStep?.id ?? this._currentStep.id,
+      currentStepId: nextStep?.id ?? step.id,
     };
     this._currentStep = nextStep ?? null;
     return true;
+  }
+
+  shouldHighlightCharge(): boolean {
+    return this._currentStep?.allowedAction === 'CHARGE';
+  }
+
+  shouldHighlightSpiritBurst(): boolean {
+    return this._currentStep?.allowedAction === 'SPIRIT_BURST';
+  }
+
+  currentStep(): TutorialStepConfig | null {
+    return this._currentStep;
   }
 }
