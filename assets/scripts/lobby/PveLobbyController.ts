@@ -32,10 +32,13 @@ import {
   loadPveProfile,
   type LoadActiveFloorChallengeResponse,
 } from '../network/PveProgressionService';
-import { stopMainBgm } from '../audio/BgmController';
+import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
+  ensureResourcesBundle,
   getCachedSprite,
+  isResourcesBundleReady,
+  preloadPveCampUi,
   preloadPveLobbyUi,
 } from '../ui/UiAssets';
 import { ensureArtChild, ensureArtStretch } from '../ui/UiSprite';
@@ -109,6 +112,8 @@ export class PveLobbyController extends Component {
   private _hasActiveChallenge = false;
   private _busy = false;
   private _lobbyReady = false;
+  private _warmPromise: Promise<void> | null = null;
+  private _warmedProfile: PveProfile | null = null;
 
   onLoad(): void {
     lockPortrait();
@@ -311,7 +316,7 @@ export class PveLobbyController extends Component {
       -4,
       navButtonW,
       navButtonH,
-      () => this._showCampModal(),
+      () => void this._showCampModal(),
     );
     this._expeditionCostLabel = this._makeLabel(dock, 'ExpeditionCost', -76, 15, 320, 22);
     this._expeditionCostLabel.color = new Color(255, 226, 130, 255);
@@ -368,6 +373,7 @@ export class PveLobbyController extends Component {
         progress: 1,
       });
       LoadingOverlay.hide();
+      void this._warmLobbyBackground();
     } catch (err: unknown) {
       const message = `大厅资源加载失败：${err instanceof Error ? err.message : String(err)}`;
       console.error('[PveLobby] lobby art load failed', err);
@@ -401,6 +407,61 @@ export class PveLobbyController extends Component {
       if (!getCachedSprite(key) && !missing.includes(key)) missing.push(key);
     }
     return missing;
+  }
+
+  private _warmLobbyBackground(): void {
+    if (this._warmPromise) return;
+    this._warmPromise = (async () => {
+      const bundle = await ensureResourcesBundle();
+      if (bundle) void playMainBgm(bundle);
+      await preloadPveCampUi();
+      try {
+        const res = await loadPveProfile();
+        this._warmedProfile = res.profile;
+      } catch (err: unknown) {
+        console.warn('[PveLobby] camp profile warm failed', err);
+      }
+    })().catch((err: unknown) => {
+      console.warn('[PveLobby] background warm failed', err);
+    });
+  }
+
+  private async _ensureWarmReady(text: string): Promise<boolean> {
+    if (!this._warmPromise) {
+      this._warmLobbyBackground();
+    }
+    if (this._warmPromise) {
+      LoadingOverlay.show(this.node, text, {
+        mode: 'default',
+        hint: '请稍候',
+        progress: 0.35,
+        hideOnTimeout: false,
+        timeoutMs: 30000,
+        onTimeout: () => LoadingOverlay.update({ text: '加载较慢，仍在继续…' }),
+      });
+      await this._warmPromise;
+      if (!isResourcesBundleReady()) {
+        LoadingOverlay.hide();
+        this._setStatus('资源加载失败，请检查网络后重试');
+        return false;
+      }
+      LoadingOverlay.hide();
+    } else if (!isResourcesBundleReady()) {
+      LoadingOverlay.show(this.node, text, {
+        hideOnTimeout: false,
+        timeoutMs: 30000,
+        onTimeout: () => LoadingOverlay.update({ text: '加载较慢，仍在继续…' }),
+      });
+      const bundle = await ensureResourcesBundle();
+      if (!bundle) {
+        LoadingOverlay.hide();
+        this._setStatus('资源加载失败，请检查网络后重试');
+        return false;
+      }
+      await preloadPveCampUi();
+      LoadingOverlay.hide();
+    }
+    return true;
   }
 
   private async _refreshLobbyData(): Promise<void> {
@@ -506,7 +567,7 @@ export class PveLobbyController extends Component {
           ? `挑战\n第${floor}层`
           : `未解锁\n第${floor}层`;
       this._makeFloorButton(panel, label, x, y, btnW, btnH, unlocked, () => {
-        this._selectPveFloor(floor);
+        void this._confirmFloorAndEnter(floor);
       });
     }
 
@@ -552,10 +613,18 @@ export class PveLobbyController extends Component {
     }
   }
 
-  private _selectPveFloor(floor: number): void {
-    GameSession.pendingPveFloor = floor;
-    this._closeFloorSelectModal();
-    this._gotoScene(`进入第 ${floor} 层…`, () => SceneLoader.loadPveExpedition());
+  private async _confirmFloorAndEnter(floor: number): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const ok = await this._ensureWarmReady('正在进入远征…');
+      if (!ok) return;
+      GameSession.pendingPveFloor = floor;
+      this._closeFloorSelectModal();
+      this._gotoScene(`进入第 ${floor} 层…`, () => SceneLoader.loadPveExpedition());
+    } finally {
+      this._busy = false;
+    }
   }
 
   private _closeFloorSelectModal(): void {
@@ -611,9 +680,17 @@ export class PveLobbyController extends Component {
     }
   }
 
-  private _showCampModal(): void {
-    const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
-    controller.open(this.node);
+  private async _showCampModal(): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const ok = await this._ensureWarmReady('正在加载营地资源…');
+      if (!ok) return;
+      const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
+      controller.open(this.node);
+    } finally {
+      this._busy = false;
+    }
   }
 
   private _buildLeaderboardModal(entries: PveLeaderboardEntry[], myRank: number | null): void {

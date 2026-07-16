@@ -14,7 +14,7 @@ GameApp.onLoad()
   -> lobby.scene / PveLobbyController
        -> 读条从 0.55 续跑；preloadPveLobbyUi 只拉主包大厅 critical native
        -> 首屏绘制后 hide overlay
-       -> resources 预热 / 营地资源 / BGM 在进厅后后台进行（Task 3）
+       -> 后台 ensureResourcesBundle + preloadPveCampUi + loadPveProfile + playMainBgm
 ```
 
 ---
@@ -23,6 +23,7 @@ GameApp.onLoad()
 
 ```text
 [Lobby] PveLobbyController 点击“营地”
+  -> _ensureWarmReady（现有 LoadingOverlay 短等预热完成）
   -> CampController.open()
   -> PveProgressionService.loadPveProfile()
   -> [Cloud] cloudfunctions/pve/index.js action=loadProfile
@@ -47,9 +48,10 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
 
 ```text
 [Lobby] PveLobbyController 点击“远征”
-  -> 加载 PveProfile
+  -> 加载 PveProfile（选层弹窗，不挡分包）
   -> 展示可挑战楼层 / 可继续挑战
   -> 用户选择楼层
+  -> _ensureWarmReady（现有 LoadingOverlay 短等）
   -> GameSession.pendingPveFloor = selectedFloor
   -> SceneLoader.loadPveExpedition()
   -> pve_expedition.scene / ExpeditionController.onLoad()
