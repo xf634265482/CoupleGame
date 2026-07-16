@@ -10,6 +10,15 @@ const FIRST_SCENARIO: TutorialScenarioConfig = {
 
 export const FIRST_TUTORIAL_SCENARIO_ID = FIRST_SCENARIO.id;
 
+function buildCorridorRocks(size: number): FloorState['entities'] {
+  const rocks: FloorState['entities'] = [];
+  for (let x = 0; x < size; x += 1) {
+    rocks.push({ id: `tutorial_rock_${x}_1`, type: 'ROCK', pos: { x, y: 1 }, consumed: false });
+    rocks.push({ id: `tutorial_rock_${x}_3`, type: 'ROCK', pos: { x, y: 3 }, consumed: false });
+  }
+  return rocks;
+}
+
 export function buildFirstTutorialFloor(seed: number): FloorState {
   const size = FIRST_SCENARIO.size;
   const revealed = Array.from({ length: size }, () => Array.from({ length: size }, () => true));
@@ -20,10 +29,10 @@ export function buildFirstTutorialFloor(seed: number): FloorState {
     seed,
     rngState: seed,
     player: { ...FIRST_SCENARIO.player },
-    ap: 0,
-    maxAp: 0,
-    dice: 0,
-    turn: 0,
+    ap: 14,
+    maxAp: 14,
+    dice: 6,
+    turn: 1,
     hasKey: false,
     revealed,
     monsters: [
@@ -31,41 +40,32 @@ export function buildFirstTutorialFloor(seed: number): FloorState {
         id: 'tutorial_mon_a',
         type: 'NORMAL',
         pos: { x: 2, y: 2 },
-        hp: 8,
-        maxHp: 8,
-        attack: 3,
+        hp: 22,
+        maxHp: 22,
+        attack: 0,
         range: 1,
-        aggroRadius: 3,
+        aggroRadius: 0,
         aiState: 'IDLE',
         variantId: 'GOBLIN_WARRIOR',
-        tutorialDrop: { gold: 8, anima: 20 },
+        tutorialDrop: { gold: 0, anima: 0 },
       },
       {
         id: 'tutorial_mon_b',
         type: 'NORMAL',
         pos: { x: 4, y: 2 },
-        hp: 8,
-        maxHp: 8,
-        attack: 3,
+        hp: 18,
+        maxHp: 18,
+        attack: 0,
         range: 1,
-        aggroRadius: 3,
+        aggroRadius: 0,
         aiState: 'IDLE',
         variantId: 'GOBLIN_WARRIOR',
-        tutorialDrop: { gold: 8, anima: 20 },
+        tutorialDrop: { gold: 8, anima: 0 },
       },
     ],
     entities: [
-      { id: 'tutorial_rock_0', type: 'ROCK', pos: { x: 0, y: 1 }, consumed: false },
-      { id: 'tutorial_rock_1', type: 'ROCK', pos: { x: 0, y: 3 }, consumed: false },
-      { id: 'tutorial_rock_2', type: 'ROCK', pos: { x: 1, y: 1 }, consumed: false },
-      { id: 'tutorial_rock_3', type: 'ROCK', pos: { x: 1, y: 3 }, consumed: false },
-      { id: 'tutorial_rock_4', type: 'ROCK', pos: { x: 2, y: 1 }, consumed: false },
-      { id: 'tutorial_rock_5', type: 'ROCK', pos: { x: 2, y: 3 }, consumed: false },
-      { id: 'tutorial_rock_6', type: 'ROCK', pos: { x: 3, y: 1 }, consumed: false },
-      { id: 'tutorial_rock_7', type: 'ROCK', pos: { x: 3, y: 3 }, consumed: false },
-      { id: 'tutorial_rock_8', type: 'ROCK', pos: { x: 4, y: 1 }, consumed: false },
-      { id: 'tutorial_rock_9', type: 'ROCK', pos: { x: 4, y: 3 }, consumed: false },
-      { id: 'tutorial_key_0', type: 'KEY', pos: { x: 3, y: 2 }, consumed: false },
+      ...buildCorridorRocks(size),
+      { id: 'tutorial_key_0', type: 'KEY', pos: { x: 5, y: 2 }, consumed: false },
     ],
     status: 'EXPLORING',
     tutorialScenarioId: FIRST_SCENARIO.id,
