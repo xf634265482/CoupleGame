@@ -10,6 +10,6 @@ module.exports = {
     '^cc$': '<rootDir>/test/__mocks__/cc.ts',
   },
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.jest.json', diagnostics: false }],
+    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }],
   },
 };
