@@ -5,7 +5,11 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/test'],
   testMatch: ['**/*.test.ts'],
+  moduleNameMapper: {
+    '^cc/env$': '<rootDir>/test/__mocks__/cc-env.ts',
+    '^cc$': '<rootDir>/test/__mocks__/cc.ts',
+  },
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }],
+    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.jest.json', diagnostics: false }],
   },
 };

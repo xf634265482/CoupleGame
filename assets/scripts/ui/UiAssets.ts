@@ -1,4 +1,4 @@
-import {
+﻿import {
   assetManager,
   AssetManager,
   ImageAsset,
@@ -21,7 +21,7 @@ import {
 /** art/ui 下首批资源的 SpriteFrame UUID（备用：resources / main 失败时） */
 export const UI_SPRITE_UUID: Record<string, string> = {
   'backgrounds/bg_lobby': '61d7272b-0616-4fd0-b218-e6379344531e@f9941',
-  'pve/backgrounds/bg_destiny_tree': 'b84fda9d-7263-47fc-a4f3-04c6050f6c72@f9941',
+  'pve/backgrounds/bg_pve_lobby': 'b84fda9d-7263-47fc-a4f3-04c6050f6c72@f9941',
   'pve/backgrounds/bg_pve_camp': '93eabd9b-34de-480d-ba17-b8ce8f4690ad@f9941',
   'pve/backgrounds/bg_pve_ch1': '41cfbfa8-79b3-4c15-8e9b-24539c23cd1d@f9941',
   'pve/backgrounds/bg_pve_ch2': '94de010e-c1e9-437b-87db-57b460a2756b@f9941',
@@ -34,31 +34,17 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/class/icon_class_archer': 'be5c49d3-acf7-46cb-a5a9-3b2cfe1e6498@f9941',
   'pve/class/icon_class_berserker': '3e25de32-0135-40fd-8051-35334f423b14@f9941',
   'pve/class/icon_class_rogue': '47f2a9f0-4bb1-4e9d-8639-6067c6454148@f9941',
-  'pve/destiny/node_frame': 'db81866d-7d58-4103-aaf0-ceb0ecef0311@f9941',
-  'pve/hud/bar_pve_info_9s': '2ad83a84-63f1-4ca1-a1ff-88322d24be6d@f9941',
-  'pve/hud/bg_dpad': 'e9214c11-1db7-4dec-a06d-4d9290a63dae@f9941',
-  'pve/hud/btn_pve_interact': '0affe775-4482-49b2-91ac-a591b7fa8606@f9941',
   'pve/lobby/logo_destiny_tower': '4f0fa81a-aed1-44c8-a308-868ccd52189b@f9941',
   'pve/lobby/icon_chip_diamond': '0291cd6d-d83a-404e-9c19-27e740a81156@f9941',
   'pve/lobby/icon_chip_stardust': '0e5dd488-3382-4590-9c91-78fcc7bc356a@f9941',
   'pve/lobby/icon_chip_stamina': 'ca8b3db2-9f83-4686-bf48-68c0ac4c2ea5@f9941',
   'pve/lobby/icon_nav_relic': '0e57749f-e803-4056-8671-6d85a1772da9@f9941',
   'pve/lobby/icon_nav_expedition': '22a5cfbd-2a04-47db-b57b-5bbc03ce767b@f9941',
-  'pve/lobby/icon_nav_destiny_tree': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
+  'pve/lobby/icon_nav_camp': 'cf43bc2d-5af3-4d04-9504-221e91fedb85@f9941',
   'pve/lobby/icon_nav_leaderboard': '2fbbe305-2f22-451b-9180-f50af9d94437@f9941',
   'pve/icons/icon_block': 'c3ba5bc7-6418-4c9f-9132-7a00cbe97d65@f9941',
   'pve/icons/icon_boss_warn': '47c4ca2c-3b72-443c-9a19-e42c7932467e@f9941',
   'pve/icons/icon_crit': '4d1fb0cb-c865-477d-9f9c-5d7216ada90f@f9941',
-  'pve/icons/icon_hud_anima': '14f1c72e-fd33-436a-9eb3-7c0e041c5a9e@f9941',
-  'pve/icons/icon_hud_ap': 'f853553b-2106-4934-949c-16e20e9da708@f9941',
-  'pve/icons/icon_hud_attack': '7c5237b7-b939-4ff5-80e5-d399221a2a01@f9941',
-  'pve/icons/icon_hud_dice': 'f4ec4196-8dcf-4c66-9bb2-c43f279cf609@f9941',
-  'pve/icons/icon_hud_diamond': '7f3b6d21-8c42-4c0a-a136-8e57d13e7a91@f9941',
-  'pve/icons/icon_hud_gold': '59a3bef4-2c1c-43e7-9872-351d4d0bb543@f9941',
-  'pve/icons/icon_hud_hp': '3c1851c1-6cee-4b06-98b7-8ceca889a3e2@f9941',
-  'pve/icons/icon_hud_key': '97f6c5d6-0fad-4fc5-8808-6e0425f1ec69@f9941',
-  'pve/icons/icon_hud_scroll': '53e5e4a6-1b02-4217-a1b5-0f566dfbf7e4@f9941',
-  'pve/icons/icon_hud_shards': 'ad25e353-6aeb-4af4-ad99-070f5d402c0a@f9941',
   'pve/icons/icon_relic_default': 'e211a403-54d2-4af1-b3d8-4ea3a8ae37d3@f9941',
   'pve/icons/icon_scroll': '555df907-227f-4941-a388-5720152b9a20@f9941',
   'pve/icons/icon_status_burn': '63a4e701-56be-49b7-a900-773b7079547b@f9941',
@@ -83,6 +69,7 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/icon_monster_ch1_normal': '83a5fda4-9dc8-4754-8d70-6ccb0ffe5c0b@f9941',
   'pve/map/icon_monster_ch1_elite': 'a5361819-031b-4b77-a572-646bfc3c9edc@f9941',
   'pve/map/icon_monster_ch1_anima': 'acb754d0-d795-43a7-b846-79e1bc8b70f4@f9941',
+  'pve/map/icon_monster_ch1_goblin_sentinel': '4606ff59-b466-4616-884c-e3468bb6f8af@f9941',
   // ch2 怪物图标已迁入 chapter_2 分包（assets/chapter_backgrounds/chapter_2/map/），不再走 UiAssets。
   // ch3 怪物图标已迁入 chapter_3 分包（assets/chapter_backgrounds/chapter_3/map/），不再走 UiAssets。
   // ch4 怪物图标已迁入 chapter_4 分包，不再走 UiAssets。
@@ -94,6 +81,8 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/icon_player_archer': '60b71ffd-a93b-49a3-8aed-d05d11817b09@f9941',
   'pve/map/icon_player_rogue': '03e14bae-3952-4aab-a903-c42110a386fa@f9941',
   'pve/map/icon_portal': 'b6e018c4-5a3a-4384-ba92-394bd03c574d@f9941',
+  'pve/map/icon_gunpowder_barrel': 'bbfb6872-6e3a-4e1b-bbee-3877fb711a6b@f9941',
+  'pve/map/icon_blast_target': '1bb480f4-5810-446e-bd41-27c9ce891c59@f9941',
   'pve/map/mark_attack_range': '19c2ac62-f809-4b87-a26b-7b2a8f2b567b@f9941',
   'pve/map/mark_move_range': '7cd41b51-8d59-4da8-b245-b2d2c86c9ba2@f9941',
   'pve/map/tile_floor_ch1': '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6@f9941',
@@ -127,10 +116,13 @@ export const PVE_MAP_KEYS = [
   'pve/map/icon_player_archer',
   'pve/map/icon_player_rogue',
   'pve/map/icon_portal',
+  'pve/map/icon_gunpowder_barrel',
+  'pve/map/icon_blast_target',
   'pve/map/icon_monster_normal',
   'pve/map/icon_monster_ch1_normal',
   'pve/map/icon_monster_ch1_elite',
   'pve/map/icon_monster_ch1_anima',
+  'pve/map/icon_monster_ch1_goblin_sentinel',
   'pve/map/icon_monster_goblin_warrior',
   'pve/map/icon_monster_goblin_archer',
   'pve/map/icon_monster_frost_goblin',
@@ -156,19 +148,9 @@ export const PVE_MAP_KEYS = [
   // terrain_lava → chapter_4 分包。均由 ChapterResourceLoader 加载并回写 UiAssets 缓存。
 ] as const;
 
-export const PVE_HUD_KEYS = [
-  'pve/icons/icon_hud_hp',
-  'pve/icons/icon_hud_ap',
-  'pve/icons/icon_hud_attack',
-  'pve/icons/icon_hud_gold',
-  'pve/icons/icon_hud_anima',
-  'pve/icons/icon_hud_key',
-  'pve/icons/icon_hud_dice',
-  'pve/icons/icon_hud_diamond',
-  'pve/icons/icon_hud_shards',
-  'pve/icons/icon_hud_scroll',
-  'pve/hud/btn_pve_interact',
-] as const;
+// 当前战斗 HUD 使用代码绘制，不再预加载旧版 icon_hud_* / btn_pve_interact。
+// 那批图片源文件已不在项目中，保留 key 会在真机反复触发 readFile/load failed。
+export const PVE_HUD_KEYS = [] as const;
 
 /** 战斗状态/战报/遗物图标 */
 export const PVE_STATUS_KEYS = [
@@ -209,15 +191,14 @@ export const PVE_CHAPTER_BG_KEYS = {
 export const PVE_BG_KEYS = [
   ...Object.values(PVE_CHAPTER_BG_KEYS),
   'pve/backgrounds/bg_pve_camp',
-  'pve/backgrounds/bg_destiny_tree',
+  'pve/backgrounds/bg_pve_lobby',
 ] as const;
 
-/** 面板/弹窗/营地/命运树底框，与弹窗一起预加载 */
+/** 面板/弹窗/营地底框，与弹窗一起预加载 */
 export const PVE_PANEL_KEYS = [
   'pve/panel/panel_char_bg_9s',
   'pve/panel/slot_equip_empty',
   'pve/camp/panel_camp_main_9s',
-  'pve/destiny/node_frame',
 ] as const;
 
 export const PVE_UI_KEYS = [
@@ -230,17 +211,20 @@ export const PVE_UI_KEYS = [
 ] as const;
 
 /** PVE-only 大厅最小图集；不触发输入框、匹配按钮、房间或棋盘资源加载。 */
-const PVE_LOBBY_ESSENTIAL_KEYS = [
+export const PVE_LOBBY_ESSENTIAL_KEYS = [
   'backgrounds/bg_lobby',
-  'pve/backgrounds/bg_pve_loading_expedition',
   'pve/lobby/logo_destiny_tower',
-  'pve/map/icon_fragment',
   'pve/lobby/icon_chip_stardust',
   'pve/lobby/icon_chip_stamina',
   'pve/lobby/icon_nav_relic',
   'pve/lobby/icon_nav_expedition',
-  'pve/lobby/icon_nav_destiny_tree',
+  'pve/lobby/icon_nav_camp',
   'pve/lobby/icon_nav_leaderboard',
+] as const;
+
+export const PVE_CAMP_WARM_KEYS = [
+  'pve/backgrounds/bg_pve_camp',
+  'pve/camp/panel_camp_main_9s',
 ] as const;
 
 /** Cocos 编译后 [...new Set(...)] 可能变成 Set 对象本身，禁止用于预加载列表 */
@@ -294,7 +278,7 @@ const WECHAT_SUBPACKAGE_ONLY_KEYS = new Set([
   'pve/backgrounds/bg_pve_ch4',
   'pve/backgrounds/bg_pve_ch5',
   'pve/backgrounds/bg_pve_camp',
-  'pve/backgrounds/bg_destiny_tree',
+  'pve/backgrounds/bg_pve_lobby',
 ]);
 
 function isPveCriticalNative(key: string): boolean {
@@ -308,9 +292,7 @@ function isPveCriticalNative(key: string): boolean {
   return key === 'pve/backgrounds/bg_pve_ch1'
     || key === 'pve/backgrounds/bg_pve_loading_expedition'
     || key.startsWith('pve/map/')
-    || key.startsWith('pve/hud/')
-    || key.startsWith('pve/lobby/')
-    || key.startsWith('pve/icons/icon_hud_');
+    || key.startsWith('pve/lobby/');
 }
 
 function usesSubpackageOnlyNative(key: string): boolean {
@@ -901,8 +883,18 @@ export function cacheUiSprite(key: string, sf: SpriteFrame): SpriteFrame {
 }
 
 export async function preloadPveLobbyUi(): Promise<void> {
-  if (!(await ensureResourcesBundle())) return;
   await preloadKeys([...PVE_LOBBY_ESSENTIAL_KEYS], { parallel: true });
+}
+
+export async function preloadPveCampUi(): Promise<void> {
+  await preloadKeys([...PVE_CAMP_WARM_KEYS], { parallel: true });
+}
+
+export function isResourcesBundleReady(): boolean {
+  const existing = assetManager.bundles.get('resources');
+  if (!existing) return false;
+  if (!isWechatRuntime()) return true;
+  return isWechatResourcesBundleReady(existing);
 }
 
 export async function preloadPveUi(): Promise<void> {
