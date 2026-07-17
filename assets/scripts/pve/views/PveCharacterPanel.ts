@@ -5,8 +5,7 @@ import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, 
 import { playerArmorPower, playerAttackPower, playerWeaponArmorPenetration } from '../core/CombatSystem';
 import { PLAYER_ARMOR_MAX_REDUCTION_RATIO } from '../core/PveConstants';
 import { getBalancedApBase } from '../core/PveBalance';
-import { RELIC_DEFS } from '../core/RelicSystem';
-import type { EquipItem, EquipSlot, ExpeditionState, RelicId } from '../core/PveTypes';
+import type { EquipItem, EquipSlot, ExpeditionState } from '../core/PveTypes';
 import { loadUiSprite } from '../../ui/UiAssets';
 import { ensureArtChild } from '../../ui/UiSprite';
 import { makeLabel } from './pveUiKit';
@@ -88,9 +87,6 @@ export class PveCharacterPanel {
   private _detailBodyLabel:   Label | null = null;
   private _detailGfx:         Graphics | null = null;
   private _traitsLabel:       Label;
-  private _currentRelics:     RelicId[] = [];
-  private _relicPopup:        Node | null = null;
-  private _relicPopupLabel:   Label | null = null;
   private _visible = false;
 
   constructor(parent: Node, screenW: number, screenH: number, onClose?: () => void) {
@@ -194,13 +190,7 @@ export class PveCharacterPanel {
 
     this._traitsLabel    = place(traitsH, DIM_COLOR);
     // 遗物行可点击——轻触整个词条区域弹出遗物详情
-    this._traitsLabel.node.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
-      e.propagationStopped = true;
-      if (this._currentRelics.length > 0) this._showRelicDetail();
-    });
-
     this._buildDetailPopup(panel);
-    this._buildRelicPopup(panel);
 
     // 关闭按钮（底部固定）— 与 HUD「结束回合」同款 Graphics 圆角按钮，不加 sprite 叠层
     this._buildCloseButton(panel, () => { this.hide(); onClose?.(); });
@@ -352,80 +342,6 @@ export class PveCharacterPanel {
     this._detailTitleLabel = titleLbl;
     this._detailBodyLabel  = bodyLbl;
     this._detailGfx        = gfx;
-  }
-
-  /** 构建遗物详情浮层（默认隐藏，_showRelicDetail 时填充并显示）。 */
-  private _buildRelicPopup(panel: Node): void {
-    const POP_W = 480;
-    const POP_H = 420;
-
-    const popup = new Node('RelicDetailPopup');
-    popup.setParent(panel);
-    popup.setPosition(0, -20, 0);
-    popup.setSiblingIndex(9999);
-    popup.addComponent(UITransform).setContentSize(POP_W, POP_H);
-    popup.active = false;
-
-    const gfx = popup.addComponent(Graphics);
-    gfx.fillColor = POPUP_BG;
-    gfx.roundRect(-POP_W / 2, -POP_H / 2, POP_W, POP_H, 14);
-    gfx.fill();
-    gfx.strokeColor = new Color(200, 170, 255, 240); // 遗物专属紫边框
-    gfx.lineWidth = 2;
-    gfx.roundRect(-POP_W / 2 + 1, -POP_H / 2 + 1, POP_W - 2, POP_H - 2, 13);
-    gfx.stroke();
-
-    const titleLbl = makeLabel(popup, 0, POP_H / 2 - 28, POP_W - 24, 32, 22, new Color(220, 190, 255, 255), Label.HorizontalAlign.CENTER);
-    titleLbl.isBold = true;
-    titleLbl.string = '🏺 遗物详情';
-
-    const bodyLbl = makeLabel(popup, 0, POP_H / 2 - 80, POP_W - 36, 290, 19, TEXT_COLOR, Label.HorizontalAlign.LEFT);
-    bodyLbl.verticalAlign = Label.VerticalAlign.TOP;
-    bodyLbl.lineHeight = 28;
-    bodyLbl.isBold = true;
-    bodyLbl.overflow = Label.Overflow.CLAMP;
-
-    const closeBtnNode = new Node('Btn_RelicClose');
-    closeBtnNode.setParent(popup);
-    closeBtnNode.setPosition(0, -POP_H / 2 + 32, 0);
-    closeBtnNode.addComponent(UITransform).setContentSize(140, 44);
-    const cbg = closeBtnNode.addComponent(Graphics);
-    cbg.fillColor = CLOSE_BTN_FILL;
-    cbg.roundRect(-70, -22, 140, 44, 10);
-    cbg.fill();
-    cbg.strokeColor = CLOSE_BTN_BORDER;
-    cbg.lineWidth = 2;
-    cbg.roundRect(-69, -21, 138, 42, 9);
-    cbg.stroke();
-    const cbLbl = makeLabel(closeBtnNode, 0, 0, 140, 44, 20, new Color(255, 255, 255, 255), Label.HorizontalAlign.CENTER);
-    cbLbl.string = '关闭';
-    cbLbl.isBold = true;
-    closeBtnNode.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
-      e.propagationStopped = true;
-      popup.active = false;
-    });
-    popup.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
-      e.propagationStopped = true;
-      popup.active = false;
-    });
-
-    this._relicPopup      = popup;
-    this._relicPopupLabel = bodyLbl;
-  }
-
-  /** 显示当前所有遗物的详情浮层。 */
-  private _showRelicDetail(): void {
-    if (!this._relicPopup || !this._relicPopupLabel) return;
-    const lines: string[] = [];
-    this._currentRelics.forEach((id, idx) => {
-      const def = RELIC_DEFS[id];
-      if (!def) return;
-      if (idx > 0) lines.push('');
-      lines.push(`【${def.name}】`);
-      lines.push(def.description);
-    });
-    this._relicPopupLabel.string = lines.join('\n');
-    this._relicPopup.active = true;
   }
 
   /** 显示指定装备的详情浮层。 */
@@ -581,12 +497,7 @@ export class PveCharacterPanel {
     });
 
     // ── 遗物（旧词条已退役，不再展示）────────────────────────
-    const relics = player.relics ?? [];
-    this._currentRelics = relics;
-    const relicLine = relics.length > 0
-      ? `🏺 遗物：${relics.map((r) => RELIC_DEFS[r]?.name ?? r).join('、')}  ▸点击查看`
-      : '🏺 遗物：(无)';
-    this._traitsLabel.string = relicLine;
+    this._traitsLabel.string = '';
   }
 
   show(state: ExpeditionState): void {

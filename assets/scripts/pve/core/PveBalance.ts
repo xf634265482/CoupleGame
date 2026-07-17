@@ -1,6 +1,5 @@
 import { AP_BASE, AP_COST, BASE_ATTACK, BASE_ATTACK_RANGE, INITIAL_ANIMA, INITIAL_GOLD, INITIAL_HP } from './PveConstants';
 import type {
-  DestinyTreeBonuses,
   EquipSlot,
   ExpeditionState,
   FloorState,
@@ -30,7 +29,6 @@ function mergeConfig(base: PveBalanceConfig | undefined, patch: PveBalanceConfig
     monster: mergeSection(base?.monster, patch?.monster),
     boss: mergeSection(base?.boss, patch?.boss),
     equipment: mergeSection(base?.equipment, patch?.equipment),
-    relic: mergeSection(base?.relic, patch?.relic),
   };
 }
 
@@ -79,24 +77,14 @@ export function getEquipmentBalanceConfig(
   return mergeConfig(safe.globalConfig, chapterConfig).equipment || {};
 }
 
-export function getRelicBalanceConfig(
-  snapshot: PveBalanceSnapshot | null | undefined,
-  chapter: number,
-): NonNullable<PveBalanceConfig['relic']> {
-  const safe = getBalanceSnapshot(snapshot);
-  const chapterConfig = safe.chapterConfigs[buildChapterKey(chapter)] || getEmptyConfig();
-  return mergeConfig(safe.globalConfig, chapterConfig).relic || {};
-}
-
 export function createBalancedInitialPlayer(
   snapshot: PveBalanceSnapshot | null | undefined,
   chapter: number,
-  treeBonuses: DestinyTreeBonuses,
 ): Pick<RunPlayer, 'hp' | 'maxHp' | 'gold' | 'anima' | 'animaProgress'> {
   const config = getPlayerBalanceConfig(snapshot, chapter);
-  const maxHp = (config.initialHp ?? INITIAL_HP) + treeBonuses.maxHpBonus;
-  const startGold = (config.initialGold ?? INITIAL_GOLD) + treeBonuses.startGoldBonus;
-  const startAnima = (config.initialAnima ?? INITIAL_ANIMA) + treeBonuses.startAnimaBonus;
+  const maxHp = config.initialHp ?? INITIAL_HP;
+  const startGold = config.initialGold ?? INITIAL_GOLD;
+  const startAnima = config.initialAnima ?? INITIAL_ANIMA;
   return {
     hp: maxHp,
     maxHp,
@@ -161,38 +149,6 @@ export function getBalancedEquipmentBaseStat(
   const config = getEquipmentBalanceConfig(snapshot, chapter);
   const multiplier = config[EQUIPMENT_FIELD_BY_SLOT[slot]] ?? 1;
   return Math.max(0, Math.round(baseStat * multiplier));
-}
-
-export function getBalancedChiefRoarDamageMultiplier(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return getRelicBalanceConfig(snapshot, chapter).chiefRoarDamageMultiplier ?? 1.5;
-}
-
-export function getBalancedQuicksandPitCount(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(0, Math.round(getRelicBalanceConfig(snapshot, chapter).quicksandPitCount ?? 2));
-}
-
-export function getBalancedQuicksandPitDuration(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(1, Math.round(getRelicBalanceConfig(snapshot, chapter).quicksandPitDuration ?? 6));
-}
-
-export function getBalancedQuicksandAttackBonus(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(0, Math.round(getRelicBalanceConfig(snapshot, chapter).quicksandAttackBonus ?? 10));
-}
-
-export function getBalancedPermafrostChargeSteps(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(1, Math.round(getRelicBalanceConfig(snapshot, chapter).permafrostChargeSteps ?? 3));
-}
-
-export function getBalancedPermafrostFreezeRounds(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(0, Math.round(getRelicBalanceConfig(snapshot, chapter).permafrostFreezeRounds ?? 1));
-}
-
-export function getBalancedMagmaReflectPercent(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(0, getRelicBalanceConfig(snapshot, chapter).magmaReflectPercent ?? 0.3);
-}
-
-export function getBalancedFateEchoRevivePercent(snapshot: PveBalanceSnapshot | null | undefined, chapter: number): number {
-  return Math.max(0, getRelicBalanceConfig(snapshot, chapter).fateEchoRevivePercent ?? 0.3);
 }
 
 function applyMonsterConfig(monster: Monster, config: NonNullable<PveBalanceConfig['monster'] | PveBalanceConfig['boss']>): Monster {

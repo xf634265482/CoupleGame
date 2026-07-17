@@ -12,7 +12,6 @@ const PVE_BALANCE_UNIT_TYPES = {
   MONSTER: 'monster',
   BOSS: 'boss',
   EQUIPMENT: 'equipment',
-  RELIC: 'relic',
 };
 
 const PVE_BALANCE_FIELD_RULES = {
@@ -52,21 +51,11 @@ const PVE_BALANCE_FIELD_RULES = {
     shoesBaseMultiplier: { type: 'number', min: 0, max: 100 },
     trinketBaseMultiplier: { type: 'number', min: 0, max: 100 },
   },
-  relic: {
-    chiefRoarDamageMultiplier: { type: 'number', min: 0, max: 100 },
-    quicksandPitCount: { type: 'integer', min: 0, max: 99 },
-    quicksandPitDuration: { type: 'integer', min: 1, max: 999 },
-    quicksandAttackBonus: { type: 'integer', min: 0, max: 999999 },
-    permafrostChargeSteps: { type: 'integer', min: 1, max: 999 },
-    permafrostFreezeRounds: { type: 'integer', min: 0, max: 999 },
-    magmaReflectPercent: { type: 'number', min: 0, max: 100 },
-    fateEchoRevivePercent: { type: 'number', min: 0, max: 100 },
-  },
 };
 
 const DEFAULT_BALANCE_CONFIG = {
   player: {
-    initialHp: 230,
+    initialHp: 280,
     initialGold: 0,
     initialAnima: 0,
     baseAttack: 10,
@@ -100,16 +89,6 @@ const DEFAULT_BALANCE_CONFIG = {
     helmetBaseMultiplier: 1,
     shoesBaseMultiplier: 1,
     trinketBaseMultiplier: 1,
-  },
-  relic: {
-    chiefRoarDamageMultiplier: 1.5,
-    quicksandPitCount: 2,
-    quicksandPitDuration: 6,
-    quicksandAttackBonus: 10,
-    permafrostChargeSteps: 3,
-    permafrostFreezeRounds: 1,
-    magmaReflectPercent: 0.3,
-    fateEchoRevivePercent: 0.3,
   },
 };
 
@@ -151,6 +130,35 @@ const UNIT_SCOPE_OPTIONS = [
   { id: 'monster:SPIRIT_MIRAGE', unitType: 'monster', label: '怪物 / 灵幻像' },
 ];
 
+const UNIT_SCOPE_CHAPTER_MAP = {
+  'boss:GOBLIN_CHIEF': 'chapter_1',
+  'monster:GOBLIN_WARRIOR': 'chapter_1',
+  'monster:GOBLIN_ARCHER': 'chapter_1',
+  'monster:FROST_GOBLIN': 'chapter_1',
+  'monster:FIRE_GOBLIN': 'chapter_1',
+  'monster:SPIRIT_RAT': 'chapter_1',
+  'boss:QUICKSAND_SCORPION': 'chapter_2',
+  'monster:DESERT_RAIDER': 'chapter_2',
+  'monster:SANDWORM_LARVA': 'chapter_2',
+  'monster:POISON_SCORPION': 'chapter_2',
+  'monster:SPIRIT_BEETLE': 'chapter_2',
+  'boss:FROST_GIANT': 'chapter_3',
+  'monster:SNOW_WOLF': 'chapter_3',
+  'monster:ICE_SLIME': 'chapter_3',
+  'monster:FROST_SPRITE': 'chapter_3',
+  'monster:SPIRIT_ELF': 'chapter_3',
+  'boss:LAVA_LORD': 'chapter_4',
+  'monster:LAVA_GRUNT': 'chapter_4',
+  'monster:LAVA_CRAB': 'chapter_4',
+  'monster:FIRE_ELEMENTAL': 'chapter_4',
+  'monster:SPIRIT_EMBER': 'chapter_4',
+  'boss:FATE_GUARDIAN': 'chapter_5',
+  'monster:SHADOW_ASSASSIN': 'chapter_5',
+  'monster:FATE_WATCHER': 'chapter_5',
+  'monster:VOID_WORM': 'chapter_5',
+  'monster:SPIRIT_MIRAGE': 'chapter_5',
+};
+
 function deepClone(value) {
   return value ? JSON.parse(JSON.stringify(value)) : value;
 }
@@ -167,6 +175,23 @@ function mergeBalanceConfig(base, patch) {
     for (const fieldKey of Object.keys(rules)) {
       if (patchSection[fieldKey] === undefined) continue;
       next[sectionKey][fieldKey] = patchSection[fieldKey];
+    }
+  }
+  return next;
+}
+
+function removeEmptySections(config) {
+  if (!config || typeof config !== 'object') return {};
+  const next = {};
+  for (const [sectionKey, sectionValue] of Object.entries(config)) {
+    if (!sectionValue || typeof sectionValue !== 'object') continue;
+    const cleanedSection = {};
+    for (const [fieldKey, fieldValue] of Object.entries(sectionValue)) {
+      if (fieldValue === undefined) continue;
+      cleanedSection[fieldKey] = fieldValue;
+    }
+    if (Object.keys(cleanedSection).length > 0) {
+      next[sectionKey] = cleanedSection;
     }
   }
   return next;
@@ -281,6 +306,36 @@ function buildBalanceCatalog() {
   };
 }
 
+function buildBalanceConfigsMap(configs) {
+  const map = new Map();
+  for (const config of configs || []) {
+    map.set(config.id, config);
+  }
+  return map;
+}
+
+function resolveEffectiveBalanceConfigFromMap(configMap, scopeType, scopeId) {
+  const normalizedScopeType = normalizeScopeType(scopeType);
+  const normalizedScopeId = normalizeScopeId(normalizedScopeType, scopeId);
+  let resolved = getDefaultBalanceConfig();
+  resolved = mergeBalanceConfig(resolved, configMap.get('global:default')?.config || null);
+
+  if (normalizedScopeType === PVE_BALANCE_SCOPE_TYPES.CHAPTER) {
+    resolved = mergeBalanceConfig(resolved, configMap.get(buildBalanceConfigId(normalizedScopeType, normalizedScopeId))?.config || null);
+    return resolved;
+  }
+
+  if (normalizedScopeType === PVE_BALANCE_SCOPE_TYPES.UNIT) {
+    const chapterScopeId = UNIT_SCOPE_CHAPTER_MAP[normalizedScopeId];
+    if (chapterScopeId) {
+      resolved = mergeBalanceConfig(resolved, configMap.get(buildBalanceConfigId(PVE_BALANCE_SCOPE_TYPES.CHAPTER, chapterScopeId))?.config || null);
+    }
+    resolved = mergeBalanceConfig(resolved, configMap.get(buildBalanceConfigId(normalizedScopeType, normalizedScopeId))?.config || null);
+  }
+
+  return resolved;
+}
+
 function getDefaultBalanceConfig() {
   return deepClone(DEFAULT_BALANCE_CONFIG);
 }
@@ -323,6 +378,25 @@ async function getBalanceConfig(scopeType, scopeId) {
     .limit(1)
     .get();
   return data[0] || null;
+}
+
+async function getBalanceConfigDetail(scopeType, scopeId) {
+  const normalizedScopeType = normalizeScopeType(scopeType);
+  const normalizedScopeId = normalizeScopeId(normalizedScopeType, scopeId);
+  const configs = await listBalanceConfigs();
+  const configMap = buildBalanceConfigsMap(configs);
+  const configDoc = configMap.get(buildBalanceConfigId(normalizedScopeType, normalizedScopeId)) || null;
+  return {
+    scopeType: normalizedScopeType,
+    scopeId: normalizedScopeId,
+    configDoc,
+    overrideConfig: deepClone(configDoc?.config || {}),
+    effectiveConfig: resolveEffectiveBalanceConfigFromMap(configMap, normalizedScopeType, normalizedScopeId),
+    codeDefaultConfig: getDefaultBalanceConfig(),
+    configs,
+    catalog: buildBalanceCatalog(),
+    unitScopeChapterMap: deepClone(UNIT_SCOPE_CHAPTER_MAP),
+  };
 }
 
 async function saveBalanceConfig({ scopeType, scopeId, config, account }) {
@@ -382,6 +456,107 @@ async function resetBalanceConfig(scopeType, scopeId) {
   };
 }
 
+async function removeBalanceFieldOverride({ scopeType, scopeId, section, field, account }) {
+  const normalizedScopeType = normalizeScopeType(scopeType);
+  const normalizedScopeId = normalizeScopeId(normalizedScopeType, scopeId);
+  const sectionKey = String(section || '').trim();
+  const fieldKey = String(field || '').trim();
+  if (!PVE_BALANCE_FIELD_RULES[sectionKey]?.[fieldKey]) {
+    const err = new Error(`PVE_BALANCE_FIELD_NOT_ALLOWED:${sectionKey}.${fieldKey}`);
+    err.code = 'PVE_BALANCE_FIELD_NOT_ALLOWED';
+    throw err;
+  }
+
+  const existing = await getBalanceConfig(normalizedScopeType, normalizedScopeId);
+  if (!existing || !existing._id) {
+    return {
+      before: null,
+      after: null,
+      removed: false,
+    };
+  }
+
+  const nextConfig = deepClone(existing.config || {});
+  if (!nextConfig[sectionKey] || nextConfig[sectionKey][fieldKey] === undefined) {
+    return {
+      before: toBalanceConfigView(existing),
+      after: toBalanceConfigView(existing),
+      removed: false,
+    };
+  }
+
+  delete nextConfig[sectionKey][fieldKey];
+  const cleanedConfig = removeEmptySections(nextConfig);
+  if (Object.keys(cleanedConfig).length === 0) {
+    return resetBalanceConfig(normalizedScopeType, normalizedScopeId);
+  }
+
+  await getDb().collection(COLLECTIONS.PVE_BALANCE_CONFIGS).doc(existing._id).update({
+    data: {
+      config: cleanedConfig,
+      updatedBy: account.id,
+      updatedByName: account.displayName || account.username,
+      updatedAt: serverDate(),
+    },
+  });
+  const updated = await getBalanceConfig(normalizedScopeType, normalizedScopeId);
+  return {
+    before: toBalanceConfigView(existing),
+    after: toBalanceConfigView(updated),
+    removed: true,
+  };
+}
+
+async function removeBalanceSectionOverride({ scopeType, scopeId, section, account }) {
+  const normalizedScopeType = normalizeScopeType(scopeType);
+  const normalizedScopeId = normalizeScopeId(normalizedScopeType, scopeId);
+  const sectionKey = String(section || '').trim();
+  if (!PVE_BALANCE_FIELD_RULES[sectionKey]) {
+    const err = new Error(`PVE_BALANCE_SECTION_NOT_ALLOWED:${sectionKey}`);
+    err.code = 'PVE_BALANCE_SECTION_NOT_ALLOWED';
+    throw err;
+  }
+
+  const existing = await getBalanceConfig(normalizedScopeType, normalizedScopeId);
+  if (!existing || !existing._id) {
+    return {
+      before: null,
+      after: null,
+      removed: false,
+    };
+  }
+
+  const nextConfig = deepClone(existing.config || {});
+  if (nextConfig[sectionKey] === undefined) {
+    return {
+      before: toBalanceConfigView(existing),
+      after: toBalanceConfigView(existing),
+      removed: false,
+    };
+  }
+
+  delete nextConfig[sectionKey];
+  const cleanedConfig = removeEmptySections(nextConfig);
+  if (Object.keys(cleanedConfig).length === 0) {
+    return resetBalanceConfig(normalizedScopeType, normalizedScopeId);
+  }
+
+  await getDb().collection(COLLECTIONS.PVE_BALANCE_CONFIGS).doc(existing._id).update({
+    data: {
+      config: cleanedConfig,
+      updatedBy: account.id,
+      updatedByName: account.displayName || account.username,
+      updatedAt: serverDate(),
+    },
+  });
+  const updated = await getBalanceConfig(normalizedScopeType, normalizedScopeId);
+  return {
+    before: toBalanceConfigView(existing),
+    after: toBalanceConfigView(updated),
+    removed: true,
+  };
+}
+
 async function loadBalanceSnapshot() {
   const { data } = await getDb()
     .collection(COLLECTIONS.PVE_BALANCE_CONFIGS)
@@ -414,14 +589,20 @@ module.exports = {
   PVE_BALANCE_FIELD_RULES,
   getDefaultBalanceConfig,
   buildBalanceCatalog,
+  buildBalanceConfigsMap,
   toBalanceConfigView,
   listBalanceConfigs,
   getBalanceConfig,
+  getBalanceConfigDetail,
   saveBalanceConfig,
   resetBalanceConfig,
+  removeBalanceFieldOverride,
+  removeBalanceSectionOverride,
   loadBalanceSnapshot,
   normalizeBalanceConfig,
   normalizeScopeType,
   normalizeScopeId,
   mergeBalanceConfig,
+  resolveEffectiveBalanceConfigFromMap,
+  UNIT_SCOPE_CHAPTER_MAP,
 };

@@ -56,8 +56,7 @@ import {
   PVE_STAMINA_MAX,
   PVE_STAMINA_RECOVERY_MS,
 } from '../pve/core/PveConstants';
-import { RELIC_DEFS } from '../pve/core/RelicSystem';
-import type { PveMeta, RelicId } from '../pve/core/PveTypes';
+import type { PveMeta } from '../pve/core/PveTypes';
 import type { PveProfile } from '../pve/core/PveProgressionTypes';
 import { CHAPTER_SIZE, chapterFloorOf, chapterIdForFloor, MAX_READY_FLOOR } from '../pve/core/chapterRouting';
 
@@ -101,9 +100,7 @@ export class PveLobbyController extends Component {
   private _statusLabel: Label | null = null;
   private _leaderboardModal: Node | null = null;
   private _floorSelectModal: Node | null = null;
-  private _relicCatalogModal: Node | null = null;
   private _leaderboardEntries: PveLeaderboardEntry[] | null = null;
-  private _metaCodexRelics: RelicId[] = [];
   private _myRank: number | null = null;
   private _unbindResize: (() => void) | null = null;
   private _buttonSpriteKeys = new Map<Node, string>();
@@ -289,16 +286,6 @@ export class PveLobbyController extends Component {
       navButtonW,
       navButtonH,
       () => void this._showLeaderboard(),
-    );
-    this._makeNavButton(
-      dock,
-      '遗物',
-      'pve/lobby/icon_nav_relic',
-      -navStep * 0.5,
-      -4,
-      navButtonW,
-      navButtonH,
-      () => this._showRelicCatalog(),
     );
     this._makeNavButton(
       dock,
@@ -953,135 +940,6 @@ export class PveLobbyController extends Component {
     this._leaderboardModal = null;
   }
 
-  private _showRelicCatalog(): void {
-    if (this._relicCatalogModal?.isValid) return;
-    this._buildRelicCatalogModal(this._metaCodexRelics);
-  }
-
-  private _closeRelicCatalog(): void {
-    this._relicCatalogModal?.destroy();
-    this._relicCatalogModal = null;
-  }
-
-  private _buildRelicCatalogModal(unlockedRelics: RelicId[]): void {
-    const { h } = visibleDesignSize();
-    const overlay = new Node('RelicCatalogModal');
-    overlay.setParent(this.node);
-    overlay.addComponent(UITransform).setContentSize(720, h);
-    this._drawRect(overlay, 720, h, new Color(0, 8, 24, 185));
-    overlay.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-      if (event.target === overlay) this._closeRelicCatalog();
-    });
-    this._relicCatalogModal = overlay;
-
-    const PANEL_W = 600;
-    const PANEL_H = 840;
-    const panel = new Node('Panel');
-    panel.setParent(overlay);
-    panel.setPosition(0, -10, 0);
-    panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
-    this._drawRoundedRect(panel, PANEL_W, PANEL_H, 28,
-      new Color(12, 42, 86, 170),
-      new Color(200, 170, 255, 240),
-    );
-    panel.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-      event.propagationStopped = true;
-    });
-
-    const title = this._makeLabel(panel, 'Title', 360, 30, 520, 48);
-    title.string = '🏺 遗物图鉴';
-    title.color = new Color(220, 190, 255, 255);
-    title.isBold = true;
-
-    // ── 遗物行（共 5 个，固定顺序）──
-    const ALL_RELICS: RelicId[] = ['CHIEF_ROAR', 'QUICKSAND_HEART', 'PERMAFROST_CORE', 'MAGMA_HEART', 'FATE_ECHO'];
-    const ROW_W = PANEL_W - 40;
-    const ROW_H = 80;
-    const ROW_GAP = 12;
-    const ROW_STEP = ROW_H + ROW_GAP;
-    const rowStartY = 258; // 第一行中心 Y
-
-    // 遗物详情浮层（单例，按行复用）
-    const detailPop = new Node('RelicDetailPop');
-    detailPop.setParent(panel);
-    detailPop.setPosition(0, -100, 0);
-    detailPop.setSiblingIndex(9999);
-    detailPop.addComponent(UITransform).setContentSize(ROW_W, 120);
-    detailPop.active = false;
-    this._drawRoundedRect(detailPop, ROW_W, 120, 14,
-      new Color(30, 20, 60, 230),
-      new Color(200, 170, 255, 220),
-    );
-    const detailTitleLbl = this._makeLabel(detailPop, 'DTitle', 30, 21, ROW_W - 20, 36);
-    detailTitleLbl.color = new Color(220, 190, 255, 255);
-    detailTitleLbl.isBold = true;
-    const detailDescLbl = this._makeLabel(detailPop, 'DDesc', -22, 18, ROW_W - 30, 36);
-    detailDescLbl.color = new Color(200, 220, 250, 220);
-    detailPop.on(Node.EventType.TOUCH_END, (e: EventTouch) => {
-      e.propagationStopped = true;
-      detailPop.active = false;
-    });
-
-    ALL_RELICS.forEach((id, idx) => {
-      const unlocked = unlockedRelics.includes(id);
-      const def = RELIC_DEFS[id];
-      const rowY = rowStartY - idx * ROW_STEP;
-
-      const rowNode = new Node(`RelicRow_${id}`);
-      rowNode.setParent(panel);
-      rowNode.setPosition(0, rowY, 0);
-      rowNode.addComponent(UITransform).setContentSize(ROW_W, ROW_H);
-      this._drawRoundedRect(rowNode, ROW_W, ROW_H, 12,
-        unlocked ? new Color(50, 35, 100, 200) : new Color(20, 25, 55, 180),
-        unlocked ? new Color(160, 120, 240, 200) : new Color(60, 70, 110, 140),
-      );
-
-      const nameLbl = this._makeLabel(rowNode, 'Name', 14, 22, ROW_W - 20, 34);
-      nameLbl.string = unlocked ? def.name : '？？？';
-      nameLbl.color = unlocked ? new Color(220, 190, 255, 255) : new Color(90, 100, 130, 180);
-      nameLbl.isBold = true;
-
-      const hintLbl = this._makeLabel(rowNode, 'Hint', -18, 17, ROW_W - 20, 28);
-      hintLbl.string = unlocked ? '点击查看效果 ▸' : '（尚未获得）';
-      hintLbl.color = unlocked ? new Color(150, 130, 210, 200) : new Color(70, 80, 110, 160);
-
-      if (unlocked) {
-        this._bindButton(rowNode, () => {
-          detailTitleLbl.string = `【${def.name}】`;
-          detailDescLbl.string = def.description;
-          detailPop.active = true;
-          // 把 detailPop 定位到该行附近（向下偏移，避免遮住行本身）
-          const popY = rowY > -80 ? rowY - ROW_H - 10 : rowY + ROW_H + 10;
-          detailPop.setPosition(0, popY - 50, 0);
-        });
-      }
-    });
-
-    // ── 底部说明（按 specs/game-design/Boss设计V1.md §8.3-8.4 修正）──
-    // 旧版"持续生效/自动携带"是错误描述：遗物是单局 buff，远征结束清空。
-    // 图鉴点亮后下一次该章 Boss 掉率从 20% → 30%，并非"自动携带"。
-    const tipLbl = this._makeLabel(panel, 'Tip', -238, 17, PANEL_W - 40, 90);
-    tipLbl.string = '遗物仅在本场远征生效，远征结束清空\n图鉴点亮后，对应 Boss 再次掉落概率 +10%';
-    tipLbl.color = new Color(160, 180, 220, 200);
-    tipLbl.overflow = Label.Overflow.NONE;
-
-    // ── 关闭按钮 ──
-    const closeNode = new Node('Btn_Close');
-    closeNode.setParent(panel);
-    closeNode.setPosition(0, -362, 0);
-    closeNode.addComponent(UITransform).setContentSize(180, 60);
-    this._drawRoundedRect(closeNode, 180, 60, 14,
-      new Color(52, 73, 95, 170),
-      new Color(255, 214, 110, 240),
-    );
-    const closeLabel = this._makeLabel(closeNode, 'Label', 0, 28, 168, 52);
-    closeLabel.string = '关闭';
-    closeLabel.isBold = true;
-    this._bindButton(closeNode, () => this._closeRelicCatalog());
-
-    applyUiLayerTree(overlay, this.node.layer);
-  }
-
   private _showProfileMenu(): void {
     if (this._profileBusy || this._profileModal) return;
     const { h } = visibleDesignSize();
@@ -1638,7 +1496,6 @@ export class PveLobbyController extends Component {
   }
 
   private _applyMetaSnapshot(meta: PveMeta): void {
-    this._metaCodexRelics = meta.codex.relics ?? [];
     // 顶部货币芯片展示档案星尘（profile.gold），不再用 meta.diamond
     this._metaFloor = meta.highestFloor ?? 0;
     this._updateMetaLine();

@@ -113,8 +113,6 @@ function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): Ru
     classTraits: [],
     equipment,
     bag: [],
-    relics: [],
-    ownedRelics: [],
     campMaxHpBuys: 0,
   };
 }

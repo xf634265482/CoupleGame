@@ -8,13 +8,18 @@
 import { revealAround } from './FogSystem';
 import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, CHAPTER4_LAVA_TILE_DAMAGE, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
 import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
+import { fixedHelmetFogBonus, fixedShoesMoveCostReduction } from './equipment/EquipmentProgression';
 import { legGaleBootsFirstMoveFree, legShadowBootsMoveCostReduction } from './LegendarySystem';
-import { relicOnMoveStep } from './RelicSystem';
 import { bossSandImmune } from './BossEquipTraitEffects';
 import { getBalancedActionCost } from './PveBalance';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, PveEvent } from './PveTypes';
 
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+
+export type ApplyMoveOptions = {
+  /** 职业收招免费步：不耗 AP，其它阻挡/地形规则不变。 */
+  freeAp?: boolean;
+};
 
 const DIRECTION_DELTA: Record<Direction, Coord> = {
   UP: { x: 0, y: -1 },
@@ -88,7 +93,7 @@ export function targetOf(from: Coord, dir: Direction): Coord {
  *   产生 MOVE 事件（及有新揭示格时的 REVEAL 事件）。
  * - backstab 词条：移动成功后将 floorState.backstabAvailable 置 true。
  */
-export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
+export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeMove?: boolean }): ApplyResult {
   const floor = state.floorState;
   const from = floor.player;
 
@@ -111,12 +116,13 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const traits = state.player.classTraits;
   const shoes = state.player.equipment.SHOES;
   const shoesBaseStat = shoes?.baseStat ?? 0;
+  const fixedShoesReduction = fixedShoesMoveCostReduction(shoes);
 
   // RARE+(baseStat≥3)：每回合首次移动免费（0 AP）；传奇：疾风之靴忽略 baseStat 门槛永久生效
   const firstMoveFree = (shoesBaseStat >= SHOES_FIRST_MOVE_THRESHOLD || legGaleBootsFirstMoveFree(state.player.equipment))
     && !(floor.shoesFirstMoveDone ?? false);
-  // 靴子减耗上限 1 AP/步（防止 FINE baseStat=2 把 AP_COST.MOVE=2 减成 0）
-  const shoesReduction = shoesBaseStat > 0 ? 1 : 0;
+  // 靴子减耗：固定鞋履读 moveCostReduction；旧随机鞋 baseStat>0 时 -1 AP/步
+  const shoesReduction = Math.max(fixedShoesReduction, shoesBaseStat > 0 ? 1 : 0);
   const configuredMoveCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'MOVE');
   const baseCost = traits.includes('swift') ? 1 : configuredMoveCost; // ROGUE 疾步优先
   // 冰霜/AOE 减速：移动AP+1（>0时叠加）
@@ -132,17 +138,21 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
   const platePenalty = state.player.equipment.ARMOR?.implicit === 'armor_plate' ? 1 : 0;
   // 传奇：影踪战靴 每步移动额外 -1 AP
   const shadowBootsReduction = legShadowBootsMoveCostReduction(state.player.equipment);
-  const cost = firstMoveFree
+  const cost = opts?.freeMove
     ? 0
-    : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - escapeReduction - shadowBootsReduction);
+    : firstMoveFree
+      ? 0
+      : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - escapeReduction - shadowBootsReduction);
 
   if (floor.ap < cost) return noop(state);
   if (isBlockedByMonster(floor, to)) return noop(state);
   if (isBlockedByRock(floor, to)) return noop(state);
   if (isBlockedByIceWall(floor, to)) return noop(state);
 
-  // FINE+(baseStat≥2)：揭示半径 +1
-  const revealRadius = FOG_REVEAL_RADIUS + (shoesBaseStat >= SHOES_REVEAL_BONUS_THRESHOLD ? 1 : 0);
+  // FINE+(baseStat≥2)：揭示半径 +1；固定头盔可读 fogRadius
+  const revealRadius = FOG_REVEAL_RADIUS
+    + (shoesBaseStat >= SHOES_REVEAL_BONUS_THRESHOLD ? 1 : 0)
+    + fixedHelmetFogBonus(state.player.equipment.HELMET);
   const revealedNext = floor.revealed.map((row) => row.slice());
   const newlyRevealed = revealAround(revealedNext, to, revealRadius);
 
@@ -184,15 +194,17 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
       : {}),
     // 命运守卫行为镜像：累计本回合移动步数（endTurn 时供 recordPlayerActionForMirror 读取）
     playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
+    stationaryPressureStacks: undefined,
     rogueEscapeMoveReady: false,
     ...(sandPitEntity || shatteredIce || lavaTile ? { generalTerrainPowerReady: true } : {}),
-    // 词条：疾袭（aff_swift_strike）移动后标记，playerAttack 首击时消耗
-    affixSwiftStrikeReady: true,
   };
 
   const events: PveEvent[] = [
     { type: 'MOVE', entityId: 'PLAYER', from, to, apLeft: nextAp },
   ];
+  if ((floor.stationaryPressureStacks ?? 0) > 0) {
+    events.push({ type: 'STATIONARY_PRESSURE_CHANGED', stacks: 0 });
+  }
   if (newlyRevealed.length > 0) {
     events.push({ type: 'REVEAL', cells: newlyRevealed });
   }
@@ -210,14 +222,11 @@ export function applyMove(state: ExpeditionState, dir: Direction): ApplyResult {
 
   // 遗物：永冻之核 — 每移动 3 步标记下次普攻冰冻
   // 滑行整体仅算一步（沿用现有 AP 模型：滑行收 1 次移动费），与玩家直观一致。
-  const relicMove = relicOnMoveStep(state.player, state.balanceSnapshot, state.chapter);
-  events.push(...relicMove.events);
-
   return {
     state: {
       ...state,
       status: finalDead ? ('DEAD' as const) : state.status,
-      player: { ...relicMove.nextPlayer, hp: finalHp },
+      player: { ...state.player, hp: finalHp },
       floorState: nextFloor,
     },
     events,

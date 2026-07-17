@@ -155,13 +155,6 @@ export type Equipment = Partial<Record<EquipSlot, EquipItem>>;
 
 // 鈹€鈹€ 閬楃墿锛圔oss 閬楃墿 / 灞€鍐呰鍔?buff锛屾浜℃椂娓呯┖锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 /** Boss 閬楃墿 id锛堟瘡绔?1 浠讹紝鎺夎惤瑙勫垯瑙?BOSS_DROP_TABLE锛夈€?*/
-export type RelicId =
-  | 'CHIEF_ROAR' // 绗?绔?閰嬮暱鎬掑惣
-  | 'QUICKSAND_HEART' // 绗?绔?娴佹矙涔嬪績
-  | 'PERMAFROST_CORE' // 绗?绔?姘稿喕涔嬫牳
-  | 'MAGMA_HEART' // 绗?绔?鐔旂伀涔嬪績
-  | 'FATE_ECHO'; // 绗?绔?鍛借繍鍥炲搷
-
 // 鈹€鈹€ 杩滃緛鐜╁锛堣法灞傛寔涔呮€侊級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export interface RunPlayer {
   hp: number;
@@ -176,23 +169,15 @@ export interface RunPlayer {
   /** 宸查€夎亴涓氳瘝鏉?id 鍒楄〃銆?*/
   classTraits: string[];
   equipment: Equipment;
+  equipmentEffectState?: {
+    bossReviveUsed?: boolean;
+  };
   /** 宸查€氬叧鐨勬渶澶х珷鑺傚彿锛堟瘡绔?Boss 鍑昏触鍚庢洿鏂帮紝鐢ㄤ簬瑙夐啋鏉′欢鍒ゅ畾锛夈€?*/
   maxChapterCleared?: number;
   /** 鏈€杩戜竴娆″己鍖栧€欓€夛紝鐢ㄤ簬 V2 鍊欓€夐槻閲嶅锛涢殢瀛樻。鎸佷箙鍖栥€?*/
   recentStrengthenOffers?: string[];
   /** Chapter number in which Berserker's Undying has already triggered. */
   undyingUsedChapter?: number;
-  /** 鏈満杩滃緛鎷惧彇鐨?Boss 閬楃墿鍒楄〃锛堟浜℃竻绌猴紝涓嶈法杩滃緛淇濈暀锛涘浘閴磋В閿佽褰曡 PveMeta.codex.relics锛夈€?
-   *  Phase 5 璧峰惈涔夊彉涓恒€屾縺娲绘Ы鍐呴仐鐗┿€嶏紙鏈€澶?3 涓級锛宱wnedRelics 涓哄叏閮ㄥ凡鎸佹湁閬楃墿銆?*/
-  relics?: RelicId[];
-  /** Phase 5锛氭湰鍦鸿繙寰佹墍鏈夊凡鎷惧彇鐨?Boss 閬楃墿锛堝惈鏈縺娲荤殑锛夈€俽elics 鍙槸鍏朵腑婵€娲荤殑鏈€澶?3 涓€?
-   *  鍚戝悗鍏煎锛氳嫢 ownedRelics 鏈垵濮嬪寲鍒欒鍚?relics锛堟棫瀛樻。鎵€鏈夊凡鎷?= 鍏ㄩ儴婵€娲伙級銆?*/
-  ownedRelics?: RelicId[];
-  /** 閬楃墿鍥鹃壌蹇収锛堝紑灞€鏃朵粠 PveMeta.codex.relics 澶嶅埗 + 鏈満杩滃緛棣栨鎷惧彇鏃跺悓姝ヨ拷鍔狅級銆?
-   *  鐢ㄤ簬 Boss 鎺夎惤銆屽浘閴村凡瑙ｉ攣 +10%銆嶅垽瀹氥€傝繍琛岀粨鏉熷悗鐢?Controller 鍚屾鍥炰簯绔?codex.relics銆?*/
-  codexRelics?: RelicId[];
-  /** 本场远征内 Boss 遗物未掉落补偿概率；Boss 掉出遗物后重置，远征结束清空。 */
-  relicPityBonus?: number;
   /** 鑳屽寘锛堟Ы浣嶅凡鍗犳椂瑁呭鍏ュ寘锛屽彲鎵嬪姩瑁呭 / 缃崲锛夈€?*/
   bag?: EquipItem[];
   /** 钀ュ湴銆屽己鍖栦綋榄勩€嶅凡璐拱娆℃暟锛涚敤浜庢湰娆¤繙寰佸唴閫掑浠锋牸锛岃繙寰佺粨鏉熷悗閲嶇疆銆?*/
@@ -209,18 +194,6 @@ export interface RunPlayer {
     fateAmuletStacks?: number;
   };
   /** 閬楃墿杩愯鎬侊細CHIEF_ROAR/PERMAFROST_CORE 绱涓庡緟瑙﹀彂鏍囪锛汧ATE_ECHO 涓€娆℃€ф秷鑰楁爣璁般€?*/
-  relicState?: {
-    /** CHIEF_ROAR锛氫笂娆″嚮鏉€鍚庝笅涓€娆℃櫘鏀?+50%锛岃Е鍙戝悗缃?false銆?*/
-    chiefRoarPending?: boolean;
-    /** PERMAFROST_CORE锛氱疮璁＄Щ鍔ㄦ鏁帮紙姣?3 姝ヨЕ鍙戜竴娆″啺鍐诲苟褰掗浂锛夈€?*/
-    permafrostSteps?: number;
-    /** PERMAFROST_CORE锛氭鏁拌揪 3 鍚庣疆 true锛屼笅娆″懡涓€墿鏃舵秷璐瑰苟鍐板喕鐩爣銆?*/
-    permafrostPending?: boolean;
-    /** FATE_ECHO锛氭湰鍦鸿繙寰佸凡瑙﹀彂杩囪嚧姝诲厹搴曞垯涓?true锛堟瘡鍦鸿繙寰佷粎涓€娆★級銆?*/
-    fateEchoUsed?: boolean;
-    /** boss_revive_50锛堝畧鍗湥鐩撅級锛氭湰鍦鸿繙寰佸凡瑙﹀彂杩囪澶囩骇鑷存鍏滃簳鍒欎负 true锛堟瘡鍦鸿繙寰佷粎涓€娆★級銆?*/
-    shieldUsed?: boolean;
-  };
 }
 
 export interface PveBalancePlayerConfig {
@@ -255,23 +228,11 @@ export interface PveBalanceEquipmentConfig {
   trinketBaseMultiplier?: number;
 }
 
-export interface PveBalanceRelicConfig {
-  chiefRoarDamageMultiplier?: number;
-  quicksandPitCount?: number;
-  quicksandPitDuration?: number;
-  quicksandAttackBonus?: number;
-  permafrostChargeSteps?: number;
-  permafrostFreezeRounds?: number;
-  magmaReflectPercent?: number;
-  fateEchoRevivePercent?: number;
-}
-
 export interface PveBalanceConfig {
   player?: PveBalancePlayerConfig;
   monster?: PveBalanceUnitConfig;
   boss?: PveBalanceUnitConfig;
   equipment?: PveBalanceEquipmentConfig;
-  relic?: PveBalanceRelicConfig;
 }
 
 export interface PveBalanceSnapshot {
@@ -624,15 +585,11 @@ export type PveEvent =
   /** 娴佹矙宸ㄨ潕娌欐毚鍛戒腑鐜╁锛氱湡瀹炰激瀹筹紙鏃犺鎶ょ敳锛夈€?*/
   | { type: 'SANDSTORM_HIT'; damage: number; hp: number }
   /** Boss 击杀掉落：拾取一件 Boss 遗物（局内生效，死亡清空）。 */
-  | { type: 'RELIC_PICKUP'; relicId: RelicId; source: string }
   /** Boss 鍑绘潃鎺夎惤锛氭嬀鍙栬嫢骞插懡杩愮鐗囷紙鐙珛 10% 鍒ゅ畾锛屾寜绔犺妭缂╂斁锛夈€?*/
   | { type: 'SHARDS_PICKUP'; amount: number; source: string }
   /** 棣栨瑙ｉ攣 Boss 閬楃墿鍥鹃壌锛堝啓鍏?PveMeta.codex.relics锛屽奖鍝嶅悗缁帀钀芥鐜囷級銆?*/
-  | { type: 'CODEX_RELIC_UNLOCKED'; relicId: RelicId }
   /** 钀ュ湴閬楃墿瀹濈寮€鍚粨鏋滐細success=true 琛ㄧず鑾峰緱閬楃墿锛沠alse 琛ㄧず鏈腑锛堝凡鎵ｈ祫婧愶級锛況efunded=true 琛ㄧず閬楃墿宸叉寔鏈夎嚜鍔ㄨ浆琛ュ伩銆?*/
-  | { type: 'RELIC_CHEST_OPENED'; success: boolean; relicId?: RelicId; refunded?: boolean; refundGold?: number; refundDiamond?: number }
   /** 閬楃墿 hook 瑙﹀彂鎻愮ず锛堜緥锛氭案鍐讳箣鏍稿啺鍐汇€佺啍鐏箣蹇冨弽寮癸級锛屼緵鎴樻姤灞曠ず銆?*/
-  | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string }
   /** 浼犲瑁呭鏁堟灉瑙﹀彂鎻愮ず锛圥hase 3锛夛紝渚涙垬鎶ュ睍绀恒€?*/
   | { type: 'LEGENDARY_TRIGGERED'; legendaryId: string; detail?: string }
   /** 鍛借疆鍏藉懡杞洖婧細棣栨琚嚮鏉€鏃跺師鍦板娲诲埌 50% 鐢熷懡銆?*/
@@ -689,7 +646,6 @@ export interface PveCodex {
   /** EquipSlot 瀛楃涓查泦鍚堬紙'WEAPON'/'ARMOR' 绛夛級銆?*/
   equipment: string[];
   /** 宸茶В閿佽繃鐨?Boss 閬楃墿 id 鍒楄〃锛堥娆℃嬀鍙栧悗鍐欏叆锛屽奖鍝嶅悗缁帀钀芥鐜?+RELIC_CODEX_BONUS锛夈€?*/
-  relics?: RelicId[];
 }
 
 /**

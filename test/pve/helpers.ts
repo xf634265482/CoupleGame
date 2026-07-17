@@ -27,7 +27,6 @@ export function makeRunPlayer(overrides: Partial<RunPlayer> = {}): RunPlayer {
     classId: INITIAL_CLASS,
     classTraits: [],
     equipment: {},
-    classFragments: {},
     ...overrides,
   };
 }
@@ -60,6 +59,7 @@ export interface MakeStateOptions {
   floor?: number;
   seed?: number;
   chapter?: number;
+  persistentFloorMode?: true;
   floorOverrides?: Partial<FloorState>;
   playerOverrides?: Partial<RunPlayer>;
 }
@@ -82,5 +82,6 @@ export function makeExpeditionState(options: MakeStateOptions = {}): ExpeditionS
     status: 'ACTIVE',
     player: makeRunPlayer(options.playerOverrides),
     floorState,
+    ...(options.persistentFloorMode ? { persistentFloorMode: true } : {}),
   };
 }

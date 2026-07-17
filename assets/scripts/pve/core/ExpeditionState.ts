@@ -7,7 +7,6 @@ import { warHornAssist } from './CombatSystem';
 import { stepMonsters } from './MonsterAI';
 import { tickInteractionExposure } from './AlertSystem';
 import { generateFloor } from './MapGenerator';
-import { relicOnNewFloor } from './RelicSystem';
 import { isPlayerBurnImmune, tickMonsterDots } from './BossEquipTraitEffects';
 import { VARIANT_FROST_SPRITE } from './Chapter3Monsters';
 import {
@@ -130,10 +129,6 @@ export function startExpedition(
   const snapshot = getBalanceSnapshot(balanceSnapshot);
   const difficultySnapshot = makeDifficultySnapshot((difficultyTier as DifficultySnapshot['tier']) ?? 'NORMAL');
   const player = createInitialPlayerWithBalance(chapterOfFloor(floor), snapshot);
-  // 閬楃墿鍥鹃壌蹇収锛氬紑灞€浠庡厓鏁版嵁澶嶅埗鍒?player.codexRelics锛屼緵 Boss 鎺夎惤銆屽浘閴村凡瑙ｉ攣 +10%銆嶅垽瀹氥€?  // 鏈満鎷惧彇鏂伴仐鐗╂椂涔熶細鍐欏叆姝ゅ瓧娈碉紝杩滃緛缁撴潫鐢?Controller 鍚屾鍥炰簯绔?codex.relics銆?
-  if (meta?.codex?.relics && meta.codex.relics.length > 0) {
-    player.codexRelics = [...meta.codex.relics];
-  }
 
   // 鏂版父鎴忕帺瀹舵棤璇嶆潯锛屼紶绌烘暟缁勶紙淇濇寔鍑芥暟绛惧悕涓€鑷达級
   const useTutorialFloor = floor === 1 && meta?.tutorialCompleted !== true;
@@ -502,10 +497,6 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
   };
 
   // 閬楃墿锛氭祦娌欎箣蹇?鈥?杩涘叆鏂版埧闂撮殢鏈虹敓鎴?2 鏍兼矙鍧戯紙娑堣€楁湰灞?rngState 鎺ㄨ繘锛岀‘瀹氭€э級
-  const relicResult = relicOnNewFloor(next);
-  next = relicResult.state;
-  events.push(...relicResult.events);
-
   if (recoveryOverhealAnima > 0) {
     const animaResult = addAnima(next, recoveryOverhealAnima);
     next = {
@@ -534,10 +525,7 @@ export function applyDeath(state: ExpeditionState): ApplyResult {
 
   const player: RunPlayer = {
     ...basePlayer,
-    codexRelics: state.player.codexRelics ? [...state.player.codexRelics] : undefined,
-    relics: [],
     bag: [],
-    relicState: undefined,
     maxChapterCleared: undefined,
   };
 

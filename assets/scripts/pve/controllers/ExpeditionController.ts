@@ -28,17 +28,15 @@ import {
 } from '../views/AttackFxNodes';
 import { HEAVY_STRIKE_RANGE, isCellShadowedByRock } from '../core/bosses/GoblinChief';
 import { chooseDestinyRewrite } from '../core/bosses/FateGuardian';
-import { applySellBagEquip, applySellEquip, applyShopBuy, getCampShopItems, openRelicChest } from '../core/CampSystem';
+import { applySellBagEquip, applySellEquip, applyShopBuy, getCampShopItems } from '../core/CampSystem';
 import type { CampItemId } from '../core/CampSystem';
 import { GameSession } from '../../core/GameSession';
-import { CHAPTER_BOSS_RELIC, RELIC_CHEST } from '../core/PveConstants';
 import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import { endTurn } from '../core/ExpeditionState';
 import { activateGunpowderBarrel, detonateBlastTarget, interactPortal, openExit, pickKey, spawnPortal } from '../core/FloorRules';
 import { isRevealed } from '../core/FogSystem';
 import { checkLos } from '../core/LosSystem';
 import { openChest } from '../core/LootSystem';
-import { RELIC_DEFS } from '../core/RelicSystem';
 import { applyMove } from '../core/MovementSystem';
 import { CAMP_BLACKSMITH_ID, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
 import { equipFromBag } from '../core/EquipHelper';
@@ -59,7 +57,7 @@ import type { Direction } from '../core/MovementSystem';
 import { AP_COST, FLOORS_PER_CHAPTER, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS } from '../core/PveConstants';
 import { MAX_READY_FLOOR } from '../core/chapterRouting';
 import type { ClassId } from '../core/PveConstants';
-import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta, RelicId } from '../core/PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta } from '../core/PveTypes';
 import { loadPveMeta, updatePveMeta } from '../../network/PveService';
 import {
   loadActiveFloorChallenge,
@@ -498,31 +496,8 @@ function describeForLog(
         : { kind: 'ENEMY_ACT', text: '💥 命运爆炸（5×5，已规避）' };
     case 'DESTINY_AP_LOCKED':
       return { kind: 'PLAYER_HURT', text: `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}` };
-    case 'RELIC_PICKUP': {
-      const def = RELIC_DEFS[ev.relicId];
-      return { kind: 'LOOT', text: `🏺 拾取遗物：${def?.name ?? ev.relicId}（${def?.description ?? ''}）` };
-    }
     case 'SHARDS_PICKUP':
       return { kind: 'LOOT', text: `💎 命运碎片 +${ev.amount}` };
-    case 'CODEX_RELIC_UNLOCKED': {
-      const def = RELIC_DEFS[ev.relicId];
-      return { kind: 'SYSTEM', text: `📖 首次解锁遗物图鉴：${def?.name ?? ev.relicId}（后续掉落率 +10%）` };
-    }
-    case 'RELIC_CHEST_OPENED': {
-      if (!ev.success) return { kind: 'SYSTEM', text: '🎁 遗物宝箱：未开出（星尘已扣）' };
-      const def = ev.relicId ? RELIC_DEFS[ev.relicId] : undefined;
-      if (ev.refunded) {
-        return {
-          kind: 'LOOT',
-          text: `🎁 遗物宝箱：已持有 ${def?.name ?? ev.relicId}，返还 +${ev.refundGold ?? 0} 星尘`,
-        };
-      }
-      return { kind: 'LOOT', text: `🎁 遗物宝箱开出：${def?.name ?? ev.relicId}！` };
-    }
-    case 'RELIC_TRIGGERED': {
-      const def = RELIC_DEFS[ev.relicId];
-      return { kind: 'PLAYER_ACT', text: `✨ ${def?.name ?? ev.relicId} 触发${ev.detail ? `：${ev.detail}` : ''}` };
-    }
     case 'ELITE_REVIVE':
       return { kind: 'ENEMY_ACT', text: `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}` };
     case 'ELITE_EXPLODE':
@@ -672,22 +647,8 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return ev.damage > 0 ? `💥 命运爆炸：-${ev.damage}（剩 ${ev.hp} 血）` : '💥 命运爆炸（已规避）';
     case 'DESTINY_AP_LOCKED':
       return `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}`;
-    case 'RELIC_PICKUP': {
-      const def = RELIC_DEFS[ev.relicId];
-      return `🏺 获得遗物：${def?.name ?? ev.relicId}`;
-    }
-    case 'CODEX_RELIC_UNLOCKED': {
-      const def = RELIC_DEFS[ev.relicId];
-      return `📖 首次解锁遗物图鉴：${def?.name ?? ev.relicId}`;
-    }
     case 'SHARDS_PICKUP':
       return `💎 命运碎片 +${ev.amount}`;
-    case 'RELIC_CHEST_OPENED': {
-      if (!ev.success) return '🎁 遗物宝箱未开出';
-      const def = ev.relicId ? RELIC_DEFS[ev.relicId] : undefined;
-      if (ev.refunded) return `🎁 已持有，返还 ${ev.refundGold ?? 0} 星尘`;
-      return `🎁 开出遗物：${def?.name ?? ev.relicId}！`;
-    }
     case 'ELITE_REVIVE':
       return `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}`;
     case 'ELITE_EXPLODE':

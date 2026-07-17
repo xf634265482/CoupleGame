@@ -146,7 +146,6 @@ export const DEATH_KEEP = ['achievements', 'codex', 'diamond', 'destinyShards'] 
 export const DEATH_CLEAR = ['equipment', 'classId', 'classTraits', 'gold', 'anima'] as const;
 
 /** 鍚屾椂鏈€澶氭縺娲荤殑閬楃墿妲芥暟锛圥hase 5锛孉C-EQ-8锛夈€?*/
-export const RELIC_ACTIVE_SLOTS = 3;
 
 // 鈹€鈹€ 绫诲瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type ClassId = keyof typeof CLASS_STATS;
@@ -311,35 +310,6 @@ export const BOSS_DROP_CHAPTER_MULT = [1.0, 1.2, 1.5, 1.8, 2.2] as const;
 export const BOSS_RARE_DROP = {
   /** Boss 额外掉落一层楼层固定池装备的概率（非 100%）。 */
   EXTRA_FLOOR_EQUIP_CHANCE: 0.30,
-  /** Boss 遗物基础掉落概率（图鉴已解锁该遗物时 +RELIC_CODEX_BONUS）。 */
-  RELIC_BASE_CHANCE: 0.15,
-  /** 鍥鹃壌宸茶В閿佽閬楃墿鏃剁殑棰濆鎺夎惤姒傜巼鍔犳垚銆?*/
-  RELIC_CODEX_BONUS: 0.10,
-  /** 鏈満杩滃緛鍐?Boss 閬楃墿鏈帀钀芥椂锛屼笅娆?Boss 閬楃墿姒傜巼閫掑琛ュ伩銆?*/
-  RELIC_PITY_STEP: 0.05,
-  /** 鏈満杩滃緛鍐?Boss 閬楃墿姒傜巼琛ュ伩涓婇檺銆?*/
-  RELIC_PITY_CAP: 0.30,
-} as const;
-
-/** 钀ュ湴閬楃墿瀹濈锛堟瘡涓惀鍦版ゼ灞傜粦瀹氫笂涓€涓?Boss 灞傜殑绔犺妭锛屽彧鑳藉紑鍑鸿绔犺妭閬楃墿锛夈€?*/
-export const RELIC_CHEST = {
-  /** 单次开箱花费星尘（存档/局内 gold 字段）。 */
-  COST_GOLD: 50,
-  /** 已废弃：遗物箱不再扣局外钻石。 */
-  COST_DIAMOND: 0,
-  /** 开箱开出本章遗物的概率（其余 90% 为「未中」）。 */
-  SUCCESS_CHANCE: 0.10,
-  /** 开出已持有的遗物时返还资源的比例。 */
-  REFUND_PCT: 0.30,
-} as const;
-
-/** 姣忎釜绔犺妭 Boss 瀵瑰簲鐨勯仐鐗?id锛堣惀鍦板疂绠辨寜妤煎眰鎵€灞炵珷鑺傚畾浣嶆湰绔犻仐鐗╋級銆?*/
-export const CHAPTER_BOSS_RELIC: Record<number, string> = {
-  1: 'CHIEF_ROAR',
-  2: 'QUICKSAND_HEART',
-  3: 'PERMAFROST_CORE',
-  4: 'MAGMA_HEART',
-  5: 'FATE_ECHO',
 } as const;
 
 /** 鎸夌珷鑺傝繑鍥?Boss 閫氱敤鎺夎惤鏁板€硷紙閲戝竵/鐏垫皵/鍛借繍纰庣墖锛夈€俢hapter 1-5锛岃秺鐣屽す绱с€?*/

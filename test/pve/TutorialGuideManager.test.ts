@@ -13,7 +13,7 @@ function makeState(stepId: string): ExpeditionState {
     player: {
       hp: 100, maxHp: 100, gold: 0, anima: 0, animaProgress: 0, animaThreshold: 100,
       classId: 'BERSERKER', classTraits: [], equipment: {}, classFragments: {},
-      bag: [], relics: [], ownedRelics: [], campMaxHpBuys: 0,
+      bag: [], campMaxHpBuys: 0,
     },
     floorState,
     balanceSnapshot: null,

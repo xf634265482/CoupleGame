@@ -1,4 +1,4 @@
-import { callFunction } from './CloudService';
+﻿import { callFunction } from './CloudService';
 import type { ExpeditionStatus, FloorState, PveBalanceSnapshot, PveMeta, RunPlayer } from '../pve/core/PveTypes';
 
 interface CloudOk {
@@ -7,7 +7,7 @@ interface CloudOk {
   message?: string;
 }
 
-/** 与云端 PveSave.toSaveVO 对齐的存档视图（design ddl-sql.md §1）。 */
+/** 涓庝簯绔?PveSave.toSaveVO 瀵归綈鐨勫瓨妗ｈ鍥撅紙design ddl-sql.md 搂1锛夈€?*/
 export interface PveSaveVO {
   runSeed: number;
   status: ExpeditionStatus;
@@ -16,6 +16,7 @@ export interface PveSaveVO {
   player: RunPlayer;
   floorState: FloorState | null;
   balanceSnapshot?: PveBalanceSnapshot | null;
+  difficultyTier?: string;
   updatedAt: number;
 }
 
@@ -30,6 +31,7 @@ export interface SaveFloorReport {
   player: RunPlayer;
   floorState: FloorState;
   balanceSnapshot?: PveBalanceSnapshot | null;
+  difficultyTier?: string;
 }
 
 export interface SaveFloorResponse extends CloudOk {
@@ -59,7 +61,7 @@ function ensureOk<T extends CloudOk>(res: T, fallback: string): T {
   return res;
 }
 
-/** 读取活跃远征存档（无存档返回 save: null，客户端据此开启新远征 → AC-11）。 */
+/** 璇诲彇娲昏穬杩滃緛瀛樻。锛堟棤瀛樻。杩斿洖 save: null锛屽鎴风鎹寮€鍚柊杩滃緛 鈫?AC-11锛夈€?*/
 export async function loadPveSave(): Promise<LoadPveSaveResponse> {
   return ensureOk(
     await callFunction<LoadPveSaveResponse>('pve', { action: 'loadSave' }),
@@ -70,12 +72,13 @@ export async function loadPveSave(): Promise<LoadPveSaveResponse> {
 export interface StartRunResponse extends CloudOk {
   runSeed: number;
   resume: boolean;
+  difficultyTier?: string;
   charged?: number;
   stamina?: number;
   staminaNextRecoveryAt?: number | null;
 }
 
-/** 开始一次远征：runSeed 由服务端生成，客户端不可重试以套取有利地图（→ AC-503/504）。 */
+/** 寮€濮嬩竴娆¤繙寰侊細runSeed 鐢辨湇鍔＄鐢熸垚锛屽鎴风涓嶅彲閲嶈瘯浠ュ鍙栨湁鍒╁湴鍥撅紙鈫?AC-503/504锛夈€?*/
 export async function startRun(): Promise<StartRunResponse> {
   return ensureOk(
     await callFunction<StartRunResponse>('pve', { action: 'startRun' }),
@@ -83,7 +86,7 @@ export async function startRun(): Promise<StartRunResponse> {
   );
 }
 
-/** 每完成一层自动存档（→ AC-11）。 */
+/** 姣忓畬鎴愪竴灞傝嚜鍔ㄥ瓨妗ｏ紙鈫?AC-11锛夈€?*/
 export async function savePveFloor(report: SaveFloorReport): Promise<SaveFloorResponse> {
   return ensureOk(
     await callFunction<SaveFloorResponse>('pve', { action: 'saveFloor', report }),
@@ -91,7 +94,7 @@ export async function savePveFloor(report: SaveFloorReport): Promise<SaveFloorRe
   );
 }
 
-/** 远征结束（死亡或通关）结算：奖励由服务端按已通关层数计算后入账（→ AC-12, AC-14）。 */
+/** 杩滃緛缁撴潫锛堟浜℃垨閫氬叧锛夌粨绠楋細濂栧姳鐢辨湇鍔＄鎸夊凡閫氬叧灞傛暟璁＄畻鍚庡叆璐︼紙鈫?AC-12, AC-14锛夈€?*/
 export async function settlePveRun(report: SettleRunReport): Promise<SettleRunResponse> {
   return ensureOk(
     await callFunction<SettleRunResponse>('pve', { action: 'settleRun', report }),
@@ -99,7 +102,7 @@ export async function settlePveRun(report: SettleRunReport): Promise<SettleRunRe
   );
 }
 
-// ── AC-20：局外元进度 ──────────────────────────────────────
+// 鈹€鈹€ AC-20锛氬眬澶栧厓杩涘害 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export interface LoadMetaResponse extends CloudOk {
   meta: PveMeta;
@@ -112,31 +115,31 @@ export interface PveLeaderboardEntry {
   nickname: string;
   avatarUrl: string;
   highestFloor: number;
+  highestTier?: string;
+  highestClassId?: string;
+  highestAwakenForm?: string;
 }
 
 export interface LoadPveLeaderboardResponse extends CloudOk {
   entries: PveLeaderboardEntry[];
-  /** 当前玩家全服排名（比自己层数高的人数 + 1）；0 层或未上榜时为 null */
+  /** 褰撳墠鐜╁鍏ㄦ湇鎺掑悕锛堟瘮鑷繁灞傛暟楂樼殑浜烘暟 + 1锛夛紱0 灞傛垨鏈笂姒滄椂涓?null */
   myRank?: number | null;
 }
 
 export interface UpdateMetaReport {
-  /** 本次新解锁的成就 id 列表。 */
+  /** @deprecated Achievements are not a live feature; client no longer uploads. */
   newAchievements?: string[];
-  /** 本次新发现的怪物类型列表（MonsterType）。 */
+  /** @deprecated Codex is not a live feature; client no longer uploads. */
   codexMonsters?: string[];
-  /** 本次新获得的装备槽位列表（EquipSlot）。 */
+  /** @deprecated Codex is not a live feature; client no longer uploads. */
   codexEquipment?: string[];
-  /** 钻石余额净变化（营地遗物宝箱消费/退款时使用，负值为扣减、正值为返还）。
-   *  云端边界校验：扣减后不得 < 0，否则整次更新拒绝。 */
+  /** Diamond delta (camp relic chest spend / refund). Cloud rejects if balance would go < 0. */
   diamond?: number;
-  /** 本次新解锁的 Boss 遗物图鉴 id 列表（首次拾取时 emit）。 */
-  codexRelics?: string[];
   tutorialCompleted?: boolean;
   resetTutorial?: boolean;
 }
 
-/** 读取局外元进度（命运碎片余额 + 成就 + 图鉴，→ AC-20）。 */
+/** Load out-of-run meta snapshot (diamond / shards; achievement/codex fields are legacy-only). */
 export async function loadPveMeta(): Promise<LoadMetaResponse> {
   return ensureOk(
     await callFunction<LoadMetaResponse>('pve', { action: 'loadMeta' }),
@@ -154,7 +157,7 @@ export async function loadPveLeaderboard(limit = 50): Promise<LoadPveLeaderboard
   );
 }
 
-/** 追加元进度条目（幂等写入，→ AC-20）。失败不阻塞游玩流程（客户端下次启动补同步）。 */
+/** Update out-of-run markers (tutorial / diamond). Do not use for achievement or codex uploads. */
 export async function updatePveMeta(report: UpdateMetaReport): Promise<CloudOk> {
   return ensureOk(
     await callFunction<CloudOk>('pve', { action: 'updateMeta', report }),
@@ -163,20 +166,8 @@ export async function updatePveMeta(report: UpdateMetaReport): Promise<CloudOk> 
 }
 
 /**
- * 解锁命运树节点（服务端权威重新校验，→ specs/260610-destiny-tree-ui/design.md）。
- * 失败（碎片不足/顺序不满足/重复解锁）抛错，调用方应保持原状态不做乐观更新。
+ * 瑙ｉ攣鍛借繍鏍戣妭鐐癸紙鏈嶅姟绔潈濞侀噸鏂版牎楠岋紝鈫?specs/260610-destiny-tree-ui/design.md锛夈€?
+ * 澶辫触锛堢鐗囦笉瓒?椤哄簭涓嶆弧瓒?閲嶅瑙ｉ攣锛夋姏閿欙紝璋冪敤鏂瑰簲淇濇寔鍘熺姸鎬佷笉鍋氫箰瑙傛洿鏂般€?
  */
-export async function unlockTreeNode(nodeId: string): Promise<LoadMetaResponse> {
-  return ensureOk(
-    await callFunction<LoadMetaResponse>('pve', { action: 'unlockTreeNode', nodeId }),
-    'PVE_UNLOCK_TREE_NODE_FAILED',
-  );
-}
 
-/** 重置命运树（消耗 20 钻石，退还全部命运碎片，清空已解锁节点，→ specs/game-design/命运树设计V1.md §七）。 */
-export async function resetTree(): Promise<LoadMetaResponse> {
-  return ensureOk(
-    await callFunction<LoadMetaResponse>('pve', { action: 'resetTreeNodes' }),
-    'PVE_RESET_TREE_FAILED',
-  );
-}
+/** 閲嶇疆鍛借繍鏍戯紙娑堣€?20 閽荤煶锛岄€€杩樺叏閮ㄥ懡杩愮鐗囷紝娓呯┖宸茶В閿佽妭鐐癸紝鈫?specs/game-design/鍛借繍鏍戣璁1.md 搂涓冿級銆?*/

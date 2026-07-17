@@ -42,15 +42,6 @@ import {
 } from './strengthen/CommonStrengthenEffects';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
-  applyFreezeToMonsters,
-  relicComputeAttackBonus,
-  relicOnHitTarget,
-  relicOnKill,
-  relicReflectDamage,
-  relicTryRevive,
-} from './RelicSystem';
-import { getBalancedPermafrostFreezeRounds } from './PveBalance';
-import {
   bossCritMult,
   bossDamageReducePct,
   bossKillHeal,
@@ -807,10 +798,6 @@ function resolveHit(
       events.push(...dropResult.events);
     }
     // 遗物：酋长怒吼 — 击杀后下次普攻 +50%（已 pending 时不重复标记）
-    if (grantPlayerKillRewards) {
-      const killBuff = relicOnKill(next.player);
-      next = { ...next, player: killBuff.nextPlayer };
-    }
   } else if (fateWheelReviving) {
     events.push({ type: 'ELITE_REVIVE', monsterId: targetId, hp: targetHp });
   }
@@ -1167,9 +1154,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
   }
 
   // ── 遗物伤害加成（CHIEF_ROAR / QUICKSAND_HEART）──
-  const relicAtk = relicComputeAttackBonus(state, damage);
-  damage += relicAtk.bonus;
-  let relicPlayerPatch: RunPlayer = relicAtk.nextPlayer;
+  const playerAfterAttackEffects: RunPlayer = state.player;
 
   // 熔岩领主：站在 LAVA_TILE 上时受到的伤害减免 LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION
   if (monster.bossId === 'LAVA_LORD') {
@@ -1184,7 +1169,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
   // ── 造伤 ──
   const targetHp = Math.max(0, monster.hp - damage);
   const dead = targetHp <= 0;
-  const events: PveEvent[] = [...relicAtk.events];
+  const events: PveEvent[] = [];
 
   // ── 玩家 HP 更新（吸血 / 血怒 / 觉醒·狂热回血；静默更新，HUD 在下一帧刷新）──
   let playerHp = state.player.hp;
@@ -1297,7 +1282,7 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
 
   let nextState: ExpeditionState = {
     ...state,
-    player: { ...relicPlayerPatch, hp: playerHp },
+    player: { ...playerAfterAttackEffects, hp: playerHp },
     floorState: nextFloorState,
   };
 
@@ -1387,20 +1372,6 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
   // 注意：若 resolveHit 已致死，则不冰冻（已无意义）。
   const targetStillAlive = nextState.floorState.monsters.find((m) => m.id === monsterId)?.aiState !== 'DEAD';
   if (targetStillAlive) {
-    const freeze = relicOnHitTarget(nextState.player, monsterId);
-    if (freeze.freezeTargetId) {
-      const freezeRounds = getBalancedPermafrostFreezeRounds(nextState.balanceSnapshot, nextState.chapter);
-      nextState = {
-        ...nextState,
-        player: freeze.nextPlayer,
-        floorState: {
-          ...nextState.floorState,
-          monsters: applyFreezeToMonsters(nextState.floorState.monsters, freeze.freezeTargetId, freezeRounds),
-        },
-      };
-      events.push(...freeze.events);
-    }
-
     // Boss 装备 trait: 命中附加 debuff（boss_bleed_on_hit / boss_burn_on_hit / boss_slow_on_hit）
     const debuffPatch = bossOnHitDebuffPatch(state.player.equipment);
     if (Object.keys(debuffPatch).length > 0) {
@@ -1747,29 +1718,19 @@ export function monsterAttack(
   }
 
   // ── 遗物：命运回响 — 不屈未触发但仍 dead 时兜底（每场远征一次），优先级低于不屈 ──
-  let nextPlayerAfterRelic = state.player;
-  let fateEchoEvent: PveEvent | null = null;
-  if (dead) {
-    const revive = relicTryRevive(state.player, state.balanceSnapshot, state.chapter);
-    if (revive.revived) {
-      hp = revive.restoredHp;
-      dead = false;
-      nextPlayerAfterRelic = revive.nextPlayer;
-      fateEchoEvent = { type: 'RELIC_TRIGGERED', relicId: 'FATE_ECHO', detail: `兜底回 ${revive.restoredHp} HP` };
-    }
-  }
+  let nextPlayerAfterEquipment = state.player;
   // ── Boss 装备 trait: 守卫圣盾（boss_revive_50）— 命运回响也未触发时，装备级再兜底一次 ──
   if (dead) {
-    const shieldRevive = bossTryRevive(nextPlayerAfterRelic);
+    const shieldRevive = bossTryRevive(nextPlayerAfterEquipment);
     if (shieldRevive.revived) {
       hp = shieldRevive.restoredHp;
       dead = false;
-      nextPlayerAfterRelic = shieldRevive.nextPlayer;
+      nextPlayerAfterEquipment = shieldRevive.nextPlayer;
     }
   }
   // ── 传奇：永恒板甲 — 守卫圣盾未触发时再兜底（本层首次，每层仅 1 次）──
   let legEternalPlateTriggered = false;
-  if (dead && playerHasLegendary(nextPlayerAfterRelic.equipment, 'leg_eternal_plate') && !(floor.legEternalPlateUsed ?? false)) {
+  if (dead && playerHasLegendary(nextPlayerAfterEquipment.equipment, 'leg_eternal_plate') && !(floor.legEternalPlateUsed ?? false)) {
     hp = 1;
     dead = false;
     legEternalPlateTriggered = true;
@@ -1778,9 +1739,6 @@ export function monsterAttack(
   // ── 传奇：疾风幻影甲 — 下次受击伤害减半后消耗标记 ──（注：已在 reducedDamage 之前应用了 phantom dodge；此处读取 floor 状态）
 
   // ── 遗物：熔火之心 — 受伤后反弹 30% 给攻击者（即便玩家被击杀也反弹一次）──
-  const reflectDamage = relicReflectDamage(nextPlayerAfterRelic, damage, state.balanceSnapshot, state.chapter);
-  let reflectEvent: PveEvent | null = null;
-
   // ── 复仇系(vengeance/retreat_shot/retribution)：受击后下次主动攻击 +5 伤害 ──
   const vengeanceTriggered = !dead && hasVengeanceTrait(traits);
 
@@ -1813,17 +1771,6 @@ export function monsterAttack(
   }
 
   // ── 遗物：熔火之心反弹（不触发击杀，最低 1 HP；玩家死亡也反弹一次）──
-  if (reflectDamage > 0) {
-    nextMonsters = nextMonsters.map((m) =>
-      m.id === monsterId && m.aiState !== 'DEAD'
-        ? { ...m, hp: Math.max(1, m.hp - reflectDamage) }
-        : m,
-    );
-    reflectEvent = { type: 'RELIC_TRIGGERED', relicId: 'MAGMA_HEART', detail: `反弹 ${reflectDamage}` };
-  }
-  if (fateEchoEvent) events.push(fateEchoEvent);
-  if (reflectEvent) events.push(reflectEvent);
-
   // ── Boss 装备 trait: boss_stun_on_hurt（破旧王冠 10% 受击眩晕攻击者）──
   // 消耗 RNG 一次保证 AC-13 确定性；仅在玩家未死且攻击者未死时生效。
   let stunRngState = incomingRngState;
@@ -1838,7 +1785,7 @@ export function monsterAttack(
       );
     }
     // 传奇：疾风幻影甲 30% 概率置下次受击减半标记（始终消耗 RNG 保证 AC-13）
-    legPhantomArmorNextReady = playerHasLegendary(nextPlayerAfterRelic.equipment, 'leg_phantom_armor') && stunRng.chance(0.30);
+    legPhantomArmorNextReady = playerHasLegendary(nextPlayerAfterEquipment.equipment, 'leg_phantom_armor') && stunRng.chance(0.30);
     stunRngState = stunRng.state();
   }
 
@@ -1863,7 +1810,7 @@ export function monsterAttack(
     state: {
       ...state,
       status: dead ? 'DEAD' : state.status,
-      player: { ...nextPlayerAfterRelic, hp, ...(undyingTriggered ? { undyingUsedChapter: state.chapter } : {}) },
+      player: { ...nextPlayerAfterEquipment, hp, ...(undyingTriggered ? { undyingUsedChapter: state.chapter } : {}) },
       floorState: {
         ...floor,
         rngState: stunRngState,

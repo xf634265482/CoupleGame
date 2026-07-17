@@ -23,8 +23,6 @@ import { BOSS_SPOILS, rollBossSpoil } from './bosses/BossSpoils';
 import type { BossId } from './bosses/BossSpoils';
 import {
   ANIMA_MONSTER_DROP,
-  BOSS_RARE_DROP,
-  CHAPTER_BOSS_RELIC,
   CHEST_EQUIP_DROP_TABLE,
   ELITE_MONSTER_DROP,
   ELITE_MONSTER_EQUIP_DROP_TABLE,
@@ -32,8 +30,7 @@ import {
   NORMAL_MONSTER_EQUIP_DROP_TABLE,
   bossDropScaled,
 } from './PveConstants';
-import { pickupRelic } from './RelicSystem';
-import type { EquipQuality, RelicId } from './PveTypes';
+import type { EquipQuality } from './PveTypes';
 import { createRng } from './rng';
 import type { Rng } from './rng';
 import type { ApplyResult, EquipItem, ExpeditionState, PveEvent } from './PveTypes';
@@ -374,7 +371,6 @@ function applyBossEquipDrop(
  *      - 15%+10% → Boss 遗物（图鉴已解锁 +10%，含 pity）
  *
  * emit 序列：LOOT(星尘/灵气/专属) → 可能的 LOOT(额外楼层装备) →
- *           可能的 RELIC_PICKUP / CODEX_RELIC_UNLOCKED。
  *
  * 注意：随机判定顺序固定（额外装备 → 遗物）以保证 AC-13 确定性。
  */
@@ -395,14 +391,6 @@ function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: Bo
   // 第 3 层：额外楼层池装备（独立判定，~30%）
   const extraRoll = rollBossExtraFloorEquip(rng, { ...state, lootSeq });
   if (extraRoll) lootSeq = extraRoll.nextLootSeq;
-
-  const codexHasRelic = (state.player.codexRelics ?? []).includes(CHAPTER_BOSS_RELIC[state.chapter] as RelicId);
-  const pityBonus = Math.max(0, Math.min(state.player.relicPityBonus ?? 0, BOSS_RARE_DROP.RELIC_PITY_CAP));
-  const relicChance = Math.min(
-    1,
-    BOSS_RARE_DROP.RELIC_BASE_CHANCE + (codexHasRelic ? BOSS_RARE_DROP.RELIC_CODEX_BONUS : 0) + pityBonus,
-  );
-  const dropRelic = rng.chance(relicChance);
 
   const scaledGold = thinPersistentStardust(scaled.gold, state);
   let next: ExpeditionState = {
@@ -442,23 +430,6 @@ function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: Bo
       source: monsterId,
       bagged: extraApplied.bagged,
     });
-  }
-
-  if (dropRelic) {
-    const relicId = CHAPTER_BOSS_RELIC[state.chapter] as RelicId | undefined;
-    if (relicId) {
-      const relicResult = pickupRelic(next.player, relicId, monsterId);
-      next = { ...next, player: { ...relicResult.player, relicPityBonus: 0 } };
-      events.push(...relicResult.events);
-    }
-  } else {
-    next = {
-      ...next,
-      player: {
-        ...next.player,
-        relicPityBonus: Math.min(pityBonus + BOSS_RARE_DROP.RELIC_PITY_STEP, BOSS_RARE_DROP.RELIC_PITY_CAP),
-      },
-    };
   }
 
   return { state: next, events };

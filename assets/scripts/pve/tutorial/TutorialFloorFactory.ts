@@ -38,8 +38,6 @@ function createTutorialPlayer(profile: PveProfile): RunPlayer {
     classTraits: [],
     equipment,
     bag: [],
-    relics: [],
-    ownedRelics: [],
     campMaxHpBuys: 0,
   };
 }

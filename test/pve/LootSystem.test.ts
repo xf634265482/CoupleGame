@@ -1,12 +1,10 @@
 import {
   applyMonsterKillDrop,
   openChest,
-  rollEliteMonsterDrop,
   rollNormalMonsterDrop,
 } from '../../assets/scripts/pve/core/LootSystem';
 import { createRng } from '../../assets/scripts/pve/core/rng';
-import { EMPTY_TREE_BONUSES } from '../../assets/scripts/pve/core/DestinyTreeSystem';
-import { ELITE_MONSTER_DROP, NORMAL_MONSTER_DROP, TREE_C2_CHEST_GOLD_BONUS_PCT } from '../../assets/scripts/pve/core/PveConstants';
+import { NORMAL_MONSTER_DROP } from '../../assets/scripts/pve/core/PveConstants';
 import { makeEntity, makeExpeditionState, makeMonster } from './helpers';
 import type { EquipQuality } from '../../assets/scripts/pve/core/PveTypes';
 
@@ -49,7 +47,7 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       expect(both / 2000).toBeLessThan(0.35);
     });
 
-    it('ch1 总装备掉率约 9%（COMMON 6% + FINE 3%，单次掷骰 Phase 4）', () => {
+    it('ch1 总装备掉率约 4%（COMMON≈2.7% + FINE≈1.3%，单次掷骰 Phase 4）', () => {
       const rng = createRng(20260608);
       let equipDrops = 0;
       for (let i = 0; i < 3000; i++) {
@@ -60,78 +58,15 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
           equipDrops++;
         }
       }
-      // 名义 9%，允许统计误差 [5%, 14%]
-      expect(equipDrops / 3000).toBeGreaterThan(0.05);
-      expect(equipDrops / 3000).toBeLessThan(0.14);
+      // 名义约 4%，允许统计误差
+      expect(equipDrops / 3000).toBeGreaterThan(0.02);
+      expect(equipDrops / 3000).toBeLessThan(0.08);
     });
 
     it('同种子序列确定可复现', () => {
       const a = rollNormalMonsterDrop(createRng(42));
       const b = rollNormalMonsterDrop(createRng(42));
       expect(a).toEqual(b);
-    });
-  });
-
-  describe('rollEliteMonsterDrop — 职业碎片对', () => {
-    it('FRAGMENT_PAIR 概率为 5%（配置值）', () => {
-      expect(ELITE_MONSTER_DROP.FRAGMENT_PAIR).toBe(0.05);
-    });
-
-    it('5% 概率掉落职业碎片对（统计验证）', () => {
-      const rng = createRng(20260608);
-      let pairDrops = 0;
-      for (let i = 0; i < 3000; i++) {
-        const drop = rollEliteMonsterDrop(rng);
-        if (drop.fragmentPair) pairDrops++;
-      }
-      // 名义 5%，允许统计误差 [2%, 10%]
-      expect(pairDrops / 3000).toBeGreaterThan(0.02);
-      expect(pairDrops / 3000).toBeLessThan(0.10);
-    });
-
-    it('职业碎片对掉落时不携带 gold/anima/equip，且为 2 个不同职业', () => {
-      const rng = createRng(20260608);
-      for (let i = 0; i < 3000; i++) {
-        const drop = rollEliteMonsterDrop(rng);
-        if (drop.fragmentPair) {
-          expect(drop.gold).toBeUndefined();
-          expect(drop.anima).toBeUndefined();
-          expect(drop.equip).toBeUndefined();
-          expect(drop.fragmentPair).toHaveLength(2);
-          expect(drop.fragmentPair[0]).not.toBe(drop.fragmentPair[1]);
-          break;
-        }
-      }
-    });
-
-    it('职业碎片对经 applyMonsterKillDrop 落地：2 个不同职业各 +1 碎片', () => {
-      // 找到一个会掉落职业碎片对的 rngState
-      let pairRngState: number | null = null;
-      const probe = createRng(99999);
-      for (let i = 0; i < 5000 && pairRngState === null; i++) {
-        const saved = probe.state();
-        const drop = rollEliteMonsterDrop(probe);
-        if (drop.fragmentPair) pairRngState = saved;
-      }
-      expect(pairRngState).not.toBeNull();
-
-      const state = makeExpeditionState({
-        floorOverrides: {
-          rngState: pairRngState!,
-          monsters: [makeMonster('e1', { x: 2, y: 2 }, { type: 'ELITE', aiState: 'DEAD' })],
-        },
-      });
-      const result = applyMonsterKillDrop(state, 'e1');
-      // 应有 LOOT 事件携带 fragmentPair: 2 个职业
-      const lootEv = result.events.find((e) => e.type === 'LOOT');
-      expect(lootEv).toBeDefined();
-      if (lootEv && lootEv.type === 'LOOT' && lootEv.fragmentPair) {
-        expect(lootEv.fragmentPair).toHaveLength(2);
-        const frags = result.state.player.classFragments;
-        for (const cls of lootEv.fragmentPair) {
-          expect(frags[cls] ?? 0).toBeGreaterThanOrEqual(1);
-        }
-      }
     });
   });
 
@@ -162,7 +97,7 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       expect(result.state.player.anima).toBe(state.player.anima + (expectedDrop.anima ?? 0));
     });
 
-    it('灵气掉落经由 AnimaSystem 累积进度，跨阈值时连锁产生 ANIMA_STRENGTHEN', () => {
+    it('灵气掉落经 AnimaSystem 累积进度，不 emit 强化事件', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 3, y: 3 },
@@ -175,34 +110,14 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       const expectedDrop = rollNormalMonsterDrop(createRng(state.floorState.rngState));
       const result = openChest(state, 'chest1');
 
-      if (expectedDrop.anima !== undefined && 95 + expectedDrop.anima >= 100) {
-        expect(result.events.some((e) => e.type === 'ANIMA_STRENGTHEN')).toBe(true);
-      } else {
-        expect(result.events.some((e) => e.type === 'ANIMA_STRENGTHEN')).toBe(false);
+      expect(result.events[0]?.type).toBe('OPEN_CHEST');
+      expect(result.events.some((e) => e.type === 'LOOT')).toBe(true);
+      expect(result.events.every((e) => (e.type as string) !== 'ANIMA_STRENGTHEN')).toBe(true);
+      if (expectedDrop.anima !== undefined) {
+        expect(result.state.player.animaProgress).toBe(95 + expectedDrop.anima);
       }
     });
 
-    it('命运树 C2 宝箱老手：宝箱金币额外 +20%（取整）', () => {
-      const state = makeExpeditionState({
-        floorOverrides: {
-          player: { x: 3, y: 3 },
-          ap: 10,
-          entities: [makeEntity('chest1', 'CHEST', { x: 3, y: 3 })],
-        },
-        playerOverrides: {
-          treeBonuses: { ...EMPTY_TREE_BONUSES, chestGoldBonusPct: TREE_C2_CHEST_GOLD_BONUS_PCT },
-        },
-      });
-
-      const expectedDrop = rollNormalMonsterDrop(createRng(state.floorState.rngState));
-      const result = openChest(state, 'chest1');
-
-      if (expectedDrop.gold) {
-        const boosted = Math.round(expectedDrop.gold * (1 + TREE_C2_CHEST_GOLD_BONUS_PCT));
-        expect((result.events[1] as { gold?: number }).gold).toBe(boosted);
-        expect(result.state.player.gold).toBe(state.player.gold + boosted);
-      }
-    });
 
     it('已开启的宝箱不能重复开启（no-op）', () => {
       const state = makeExpeditionState({
@@ -310,30 +225,50 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       }
     });
 
-    it('稀有掉落概率叠加：多次击杀时碎片/卷轴/遗物事件均可能出现', () => {
-      // 用大样本验证：100 次击杀（每次种子不同），SHARDS/SCROLL/RELIC 至少各出现一次
-      let shardsCount = 0;
-      let scrollCount = 0;
-      let relicCount = 0;
+    it('稀有掉落：多次击杀不再产生旧碎片、卷轴或遗物', () => {
+      const goblinChiefSlotBlockers = {
+        WEAPON: { id: 'stub_w', name: '铁制长剑', slot: 'WEAPON' as const, quality: 'COMMON' as const, baseStat: 10 },
+        HELMET: { id: 'stub_h', name: '皮革头盔', slot: 'HELMET' as const, quality: 'COMMON' as const, baseStat: 10 },
+        TRINKET: { id: 'stub_t', name: '幸运铜币', slot: 'TRINKET' as const, quality: 'COMMON' as const, baseStat: 5 },
+      };
       for (let seed = 1; seed <= 100; seed++) {
         const state = makeExpeditionState({
           seed,
           chapter: 1,
+          playerOverrides: { equipment: goblinChiefSlotBlockers },
           floorOverrides: {
             monsters: [makeMonster('boss1', { x: 1, y: 1 }, { type: 'BOSS', bossId: 'GOBLIN_CHIEF', aiState: 'DEAD' })],
           },
         });
         const result = applyMonsterKillDrop(state, 'boss1');
-        if (result.events.some((e) => e.type === 'SHARDS_PICKUP')) shardsCount++;
-        if (result.events.some((e) => e.type === 'SCROLL_PICKUP')) scrollCount++;
-        if (result.events.some((e) => e.type === 'RELIC_PICKUP')) relicCount++;
+        expect(result.events.every((e) => (e.type as string) !== 'SHARDS_PICKUP')).toBe(true);
+        expect(result.events.every((e) => (e.type as string) !== 'SCROLL_PICKUP')).toBe(true);
+        expect(result.events.every((e) => (e.type as string) !== 'RELIC_PICKUP')).toBe(true);
       }
-      // 概率 10% / 30% / 20%，100 次样本至少各出现 1 次
-      expect(shardsCount).toBeGreaterThan(0);
-      expect(scrollCount).toBeGreaterThan(0);
-      expect(relicCount).toBeGreaterThan(0);
-      // 卷轴出现率（30%）应明显高于碎片（10%）
-      expect(scrollCount).toBeGreaterThan(shardsCount);
+    });
+
+    it('永久逐层 Boss 掉落专属战利品（RARE 哥布林池），非楼层传说池', () => {
+      const state = makeExpeditionState({
+        chapter: 1,
+        floor: 7,
+        persistentFloorMode: true,
+        floorOverrides: {
+          monsters: [makeMonster('boss1', { x: 1, y: 1 }, { type: 'BOSS', bossId: 'GOBLIN_CHIEF', aiState: 'DEAD' })],
+        },
+        playerOverrides: {
+          equipment: {},
+        },
+      });
+      const result = applyMonsterKillDrop(state, 'boss1');
+      const lootEvents = result.events.filter((e) => e.type === 'LOOT');
+      expect(lootEvents.length).toBeGreaterThanOrEqual(1);
+      const spoilLoot = lootEvents[0];
+      expect(spoilLoot && spoilLoot.type === 'LOOT' && spoilLoot.equip).toBeTruthy();
+      if (spoilLoot && spoilLoot.type === 'LOOT' && spoilLoot.equip) {
+        expect(spoilLoot.equip.quality).toBe('RARE');
+        expect(['哥布林酋长战斧', '战争号角', '破旧王冠']).toContain(spoilLoot.equip.name);
+        expect(spoilLoot.equip.name).not.toBe('命运之刃');
+      }
     });
   });
 });
