@@ -1,11 +1,10 @@
-/**
- * 云数据库访问封装
- * 使用前云函数须已 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+﻿/**
+ * 浜戞暟鎹簱璁块棶灏佽
+ * 浣跨敤鍓嶄簯鍑芥暟椤诲凡 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
  */
 
 const cloud = require('wx-server-sdk');
 const { COLLECTIONS, PVE_DIFFICULTY_ORDER } = require('./constants');
-const { canUnlockNode, getNodeDef } = require('./pve/PveDestinyTree');
 const {
   STAMINA_MAX,
   resolveStamina,
@@ -53,10 +52,10 @@ async function getGame(gameId) {
 }
 
 /**
- * 更新对局文档（全量替换字段用 update，传 patch 对象）
+ * 鏇存柊瀵瑰眬鏂囨。锛堝叏閲忔浛鎹㈠瓧娈电敤 update锛屼紶 patch 瀵硅薄锛?
  * @param {string} gameId
  * @param {object} patch
- * @param {number} [expectedVersion] 乐观锁，不匹配则抛错
+ * @param {number} [expectedVersion] 涔愯閿侊紝涓嶅尮閰嶅垯鎶涢敊
  */
 async function updateGameDoc(gameId, patch, expectedVersion) {
   const db = getDb();
@@ -103,7 +102,7 @@ async function updateGameDoc(gameId, patch, expectedVersion) {
     }
   }
 
-  // 云库字段曾为 null 时，不能直接 merge 子字段（会报 Cannot create field 'seat'…）
+  // 浜戝簱瀛楁鏇句负 null 鏃讹紝涓嶈兘鐩存帴 merge 瀛愬瓧娈碉紙浼氭姤 Cannot create field 'seat'鈥︼級
   patchNestedField('pendingInteraction');
   patchNestedField('movePause');
   patchNestedField('luckySpin');
@@ -134,8 +133,8 @@ async function incrementUserDiamond(userId, delta) {
 }
 
 /**
- * 读取用户 PVE 元进度快照（命运碎片余额 + 钻石余额 + 成就 + 图鉴），用于 loadMeta action（→ AC-20）。
- * 若字段不存在则返回安全默认值（首次读取时）。
+ * 璇诲彇鐢ㄦ埛 PVE 鍏冭繘搴﹀揩鐓э紙鍛借繍纰庣墖浣欓 + 閽荤煶浣欓 + 鎴愬氨 + 鍥鹃壌锛夛紝鐢ㄤ簬 loadMeta action锛堚啋 AC-20锛夈€?
+ * 鑻ュ瓧娈典笉瀛樺湪鍒欒繑鍥炲畨鍏ㄩ粯璁ゅ€硷紙棣栨璇诲彇鏃讹級銆?
  */
 async function getUserPveMeta(userId) {
   const user = await getUserById(userId);
@@ -169,21 +168,20 @@ async function getUserPveMeta(userId) {
       ? 0
       : user?.pveFirstRunStarted === true ? 20 : 0,
     highestFloor: user?.pveHighestFloor ?? 0,
-    achievements: user?.achievements ?? [],
-    codex: {
-      monsters: user?.pveCodex?.monsters ?? [],
-      equipment: user?.pveCodex?.equipment ?? [],
-    },
     unlockedTreeNodes: user?.unlockedTreeNodes ?? [],
     tutorialCompleted: user?.pveTutorialCompleted === true,
   };
 }
 
 /**
- * 追加 PVE 元进度条目（成就 + 图鉴，→ AC-20）：读取已有数据 → 合并去重 → 写回。
- * 幂等：已有的条目不会重复写入。
+ * 杩藉姞 PVE 鍏冭繘搴︽潯鐩紙鎴愬氨 + 鍥鹃壌锛屸啋 AC-20锛夛細璇诲彇宸叉湁鏁版嵁 鈫?鍚堝苟鍘婚噸 鈫?鍐欏洖銆?
+ * 骞傜瓑锛氬凡鏈夌殑鏉＄洰涓嶄細閲嶅鍐欏叆銆?
  */
-async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters = [], codexEquipment = [], codexRelics = [], diamond = 0, tutorialCompleted = false, resetTutorial = false }) {
+async function updateUserPveMeta(userId, {
+  diamond = 0,
+  tutorialCompleted = false,
+  resetTutorial = false,
+} = {}) {
   const user = await getUserById(userId);
   if (!user) {
     const err = new Error('USER_NOT_FOUND');
@@ -191,19 +189,7 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
     throw err;
   }
 
-  // 现有数据（安全默认）
-  const existAch = new Set(user.achievements ?? []);
-  const existMon = new Set(user.pveCodex?.monsters ?? []);
-  const existEq  = new Set(user.pveCodex?.equipment ?? []);
-  const existRelics = new Set(user.pveCodex?.relics ?? []);
-
-  // 过滤出真正新增的条目
-  const addAch = newAchievements.filter((id) => !existAch.has(id));
-  const addMon = codexMonsters.filter((t)  => !existMon.has(t));
-  const addEq  = codexEquipment.filter((s) => !existEq.has(s));
-  const addRelics = codexRelics.filter((r) => !existRelics.has(r));
-
-  // 钻石净变化（营地遗物宝箱）：边界校验余额不得 < 0
+  // 閽荤煶鍑€鍙樺寲锛堣惀鍦伴仐鐗╁疂绠憋級锛氳竟鐣屾牎楠屼綑棰濅笉寰?< 0
   let diamondDelta = Number.isFinite(diamond) ? Math.trunc(diamond) : 0;
   if (diamondDelta < 0) {
     const cur = user.diamond ?? 0;
@@ -214,17 +200,9 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
     }
   }
 
-  if (addAch.length === 0 && addMon.length === 0 && addEq.length === 0 && addRelics.length === 0 && diamondDelta === 0 && !tutorialCompleted && !resetTutorial) return;
-
-  // 合并后写回（整体替换数组，兼容微信云数据库）
-  const mergedAch = [...existAch, ...addAch];
-  const mergedMon = [...existMon, ...addMon];
-  const mergedEq  = [...existEq,  ...addEq];
-  const mergedRelics = [...existRelics, ...addRelics];
+  if (diamondDelta === 0 && !tutorialCompleted && !resetTutorial) return;
 
   const data = {
-    achievements: mergedAch,
-    pveCodex: { monsters: mergedMon, equipment: mergedEq, relics: mergedRelics },
     updatedDate: serverDate(),
   };
   if (tutorialCompleted) data.pveTutorialCompleted = true;
@@ -241,20 +219,23 @@ async function updateUserPveMeta(userId, { newAchievements = [], codexMonsters =
 }
 
 /**
- * PVE 元进度账户资产入账：钻石（与 PVP 共享）+ 命运碎片（PVE 专属，→ ddl-sql.md §2）。
- * 支持复合排行榜更新（→ AC-P3-7）和难度通关记录（→ AC-P3-6）。
+ * PVE 鍏冭繘搴﹁处鎴疯祫浜у叆璐︼細閽荤煶锛堜笌 PVP 鍏变韩锛? 鍛借繍纰庣墖锛圥VE 涓撳睘锛屸啋 ddl-sql.md 搂2锛夈€?
+ * 鏀寔澶嶅悎鎺掕姒滄洿鏂帮紙鈫?AC-P3-7锛夊拰闅惧害閫氬叧璁板綍锛堚啋 AC-P3-6锛夈€?
  *
  * @param {string} userId
  * @param {{ diamond?: number, destinyShards?: number, highestFloor?: number,
- *           tier?: string, isClearRecord?: boolean }} opts
- *   - tier: 难度档（缺省 NORMAL，→ AC-P3-10 老账号兼容）
- *   - isClearRecord: true 时记录通关该难度档（用于下一档解锁校验）
+ *           tier?: string, classId?: string, awakenForm?: string,
+ *           isClearRecord?: boolean }} opts
+ *   - tier: 闅惧害妗ｏ紙缂虹渷 NORMAL锛屸啋 AC-P3-10 鑰佽处鍙峰吋瀹癸級
+ *   - isClearRecord: true 鏃惰褰曢€氬叧璇ラ毦搴︽。锛堢敤浜庝笅涓€妗ｈВ閿佹牎楠岋級
  */
 async function incrementUserPveRewards(userId, {
   diamond = 0,
   destinyShards = 0,
   highestFloor = 0,
   tier = 'NORMAL',
+  classId = '',
+  awakenForm = '',
   isClearRecord = false,
 } = {}) {
   const db = getDb();
@@ -269,14 +250,14 @@ async function incrementUserPveRewards(userId, {
   if (diamond) data.diamond = _.inc(diamond);
   if (destinyShards) data.destinyShards = _.inc(destinyShards);
 
-  // 复合排行榜：(tierLevel DESC, floor DESC, updatedAt ASC)，→ AC-P3-7
+  // 澶嶅悎鎺掕姒滐細(tierLevel DESC, floor DESC, updatedAt ASC)锛屸啋 AC-P3-7
   const newTierLevel = PVE_DIFFICULTY_ORDER.indexOf(tier) >= 0
     ? PVE_DIFFICULTY_ORDER.indexOf(tier)
     : 0;
   const curTierLevel = user.pveHighestTierLevel ?? 0;
   const curFloor = user.pveHighestFloor ?? 0;
 
-  // 仅当复合成绩严格高于历史时更新（tier 更高 OR 同 tier 且 floor 更高）
+  // 浠呭綋澶嶅悎鎴愮哗涓ユ牸楂樹簬鍘嗗彶鏃舵洿鏂帮紙tier 鏇撮珮 OR 鍚?tier 涓?floor 鏇撮珮锛?
   const isHigherRecord =
     newTierLevel > curTierLevel ||
     (newTierLevel === curTierLevel && highestFloor > curFloor);
@@ -286,9 +267,11 @@ async function incrementUserPveRewards(userId, {
     data.pveHighestTier = tier;
     data.pveHighestTierLevel = newTierLevel;
     data.pveHighestFloorUpdatedAt = serverDate();
+    data.pveHighestClassId = classId || 'ADVENTURER';
+    data.pveHighestAwakenForm = awakenForm || '';
   }
 
-  // 难度通关记录：写入 pveClearedTiers（用于下一档解锁校验，→ AC-P3-6）
+  // 闅惧害閫氬叧璁板綍锛氬啓鍏?pveClearedTiers锛堢敤浜庝笅涓€妗ｈВ閿佹牎楠岋紝鈫?AC-P3-6锛?
   if (isClearRecord) {
     const cleared = user.pveClearedTiers ?? [];
     if (!cleared.includes(tier)) {
@@ -299,9 +282,27 @@ async function incrementUserPveRewards(userId, {
   await db.collection(COLLECTIONS.USERS).doc(user._id).update({ data });
 }
 
+async function updateUserPveClassSnapshot(userId, classId = '', awakenForm = '') {
+  const user = await getUserById(userId);
+  if (!user) {
+    const err = new Error('USER_NOT_FOUND');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  const nextClassId = classId || 'ADVENTURER';
+  const nextAwakenForm = awakenForm || '';
+  await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
+    data: {
+      pveCurrentClassId: nextClassId,
+      pveCurrentAwakenForm: nextAwakenForm,
+      updatedDate: serverDate(),
+    },
+  });
+}
+
 /**
- * 为新远征预留服务端种子并权威扣除体力。
- * pending seed 使客户端重试保持幂等：同一轮尚未写入首层存档前不会重复扣费。
+ * 涓烘柊杩滃緛棰勭暀鏈嶅姟绔瀛愬苟鏉冨▉鎵ｉ櫎浣撳姏銆?
+ * pending seed 浣垮鎴风閲嶈瘯淇濇寔骞傜瓑锛氬悓涓€杞皻鏈啓鍏ラ灞傚瓨妗ｅ墠涓嶄細閲嶅鎵ｈ垂銆?
  */
 async function reservePveRunStart(user, proposedSeed) {
   const db = getDb();
@@ -362,17 +363,19 @@ async function clearPendingPveRun(userId) {
   });
 }
 
+// DB 鍗曟鎷夊彇涓婇檺锛孞S 閲嶆帓鍚庡啀鎴彇 safeLimit銆?
+// WeChat CloudDB 鍦?desc 鎺掑簭鏃舵妸 null/缂哄け瀛楁鎺掑湪鏈€鍓嶏紝瀵艰嚧鏃?pveHighestTierLevel 鐨?
+// 鑰佽处鍙烽敊璇湴鎺掑湪 tierLevel=0 鐨勬柊璐﹀彿鍓嶉潰銆傛敼涓哄湪 JS 灞傚仛鎺掑簭锛宯ull 涓€寰嬭涓?0銆?
+const LEADERBOARD_FETCH_CAP = 200;
+
 /**
- * 排行榜查询（→ AC-508, AC-P3-7）：
- * - 仅含至少通关第 1 层的玩家（pveHighestFloor > 0）
- * - 主排序：最高难度档级别降序（pveHighestTierLevel）；次排序：档内最深层降序；
- *   第三排序：首次到达时间升序（先到先得，稳定排名）
- * - limit 范围 [1, 100]，默认 50
- * - 额外查询当前用户复合排名（比自己复合成绩高的人数 + 1；未上榜时为 null）
- *
- * 需要复合索引：
- *   users.pveHighestTierLevel desc + users.pveHighestFloor desc + users.pveHighestFloorUpdatedAt asc
- * 老账号（无 pveHighestTierLevel 字段）视为 NORMAL(0)，排在已更新账号之后（AC-P3-10）。
+ * 鎺掕姒滄煡璇紙鈫?AC-508, AC-P3-7锛夛細
+ * - 浠呭惈鑷冲皯閫氬叧绗?1 灞傜殑鐜╁锛坧veHighestFloor > 0锛?
+ * - 涓绘帓搴忥細鏈€楂橀毦搴︽。绾у埆闄嶅簭锛坧veHighestTierLevel锛宯ull 瑙嗕负 0锛夛紱
+ *   娆℃帓搴忥細妗ｅ唴鏈€娣卞眰闄嶅簭锛涚涓夋帓搴忥細棣栨鍒拌揪鏃堕棿鍗囧簭锛堝厛鍒板厛寰楋級
+ * - 浠?DB 鎷夊彇鏈€澶?LEADERBOARD_FETCH_CAP 鏉″悗鍦?JS 閲岄噸鎺掞紝閬垮厤 CloudDB null 鎺掑簭寮傚父
+ * - limit 鑼冨洿 [1, 100]锛岄粯璁?50锛屽喅瀹氭渶缁堣繑鍥炵殑 entries 鏁伴噺
+ * - myRank 浠庢帓濂藉簭鐨勫畬鏁村垪琛ㄩ噷鏌ュ綋鍓嶇敤鎴蜂綅缃紝涓?entries 澶╃劧涓€鑷?
  */
 async function listPveLeaderboard(userId, limit = 50) {
   const db = getDb();
@@ -382,130 +385,62 @@ async function listPveLeaderboard(userId, limit = 50) {
   const { data } = await db
     .collection(COLLECTIONS.USERS)
     .where({ pveHighestFloor: _.gt(0) })
-    .orderBy('pveHighestTierLevel', 'desc')
     .orderBy('pveHighestFloor', 'desc')
-    .orderBy('pveHighestFloorUpdatedAt', 'asc')
-    .limit(safeLimit)
+    .limit(LEADERBOARD_FETCH_CAP)
     .get();
 
-  const entries = data.map((user, index) => ({
-    rank: index + 1,
-    userId: user.id,
-    nickname: (user.nickname || '玩家').slice(0, 12),
-    avatarUrl: user.avatarUrl || '',
-    highestFloor: user.pveHighestFloor ?? 0,
-    highestTier: user.pveHighestTier ?? 'NORMAL',
-  }));
+  data.sort((a, b) => {
+    const ta = a.pveHighestTierLevel ?? 0;
+    const tb = b.pveHighestTierLevel ?? 0;
+    if (tb !== ta) return tb - ta;
+    const fa = a.pveHighestFloor ?? 0;
+    const fb = b.pveHighestFloor ?? 0;
+    if (fb !== fa) return fb - fa;
+    const da = a.pveHighestFloorUpdatedAt != null ? new Date(a.pveHighestFloorUpdatedAt).getTime() : Infinity;
+    const db2 = b.pveHighestFloorUpdatedAt != null ? new Date(b.pveHighestFloorUpdatedAt).getTime() : Infinity;
+    return da - db2;
+  });
 
-  // 查询当前用户排名（比自己复合成绩严格高的人数 + 1）
   let myRank = null;
   if (userId) {
-    const myUser = await getUserById(userId);
-    const myFloor = myUser?.pveHighestFloor ?? 0;
-    const myTierLevel = myUser?.pveHighestTierLevel ?? 0;
-    if (myFloor > 0) {
-      // 比自己排名高的条件：tierLevel 更高，或同 tierLevel 且 floor 更高
-      const { total } = await db
-        .collection(COLLECTIONS.USERS)
-        .where(_.or([
-          { pveHighestTierLevel: _.gt(myTierLevel) },
-          {
-            pveHighestTierLevel: _.eq(myTierLevel),
-            pveHighestFloor: _.gt(myFloor),
-          },
-        ]))
-        .count();
-      myRank = total + 1;
+    const myIndex = data.findIndex((u) => u.id === userId);
+    if (myIndex >= 0) myRank = myIndex + 1;
+  }
+
+  const topUsers = data.slice(0, safeLimit);
+  const saveClassByUserId = new Map();
+  const savePairs = await Promise.all(
+    topUsers.map(async (user) => {
+      if (typeof user.id !== 'string' || user.id.length === 0) return null;
+      const save = await getPveSaveByUserId(user.id);
+      if (!save) return null;
+      return [user.id, {
+        classId: save.player?.classId || '',
+        awakenForm: save.player?.awakenForm || '',
+      }];
+    }),
+  );
+  for (const pair of savePairs) {
+    if (pair) {
+      saveClassByUserId.set(pair[0], pair[1]);
     }
   }
 
+  const entries = topUsers.map((user, index) => {
+    const saveClass = saveClassByUserId.get(user.id);
+    return {
+      rank: index + 1,
+      userId: user.id,
+      nickname: (user.nickname || '鐜╁').slice(0, 12),
+      avatarUrl: user.avatarUrl || '',
+      highestFloor: user.pveHighestFloor ?? 0,
+      highestTier: user.pveHighestTier ?? 'NORMAL',
+      highestClassId: saveClass?.classId || user.pveCurrentClassId || user.pveHighestClassId || 'ADVENTURER',
+      highestAwakenForm: saveClass?.awakenForm || user.pveCurrentAwakenForm || user.pveHighestAwakenForm || '',
+    };
+  });
+
   return { entries, myRank };
-}
-
-/**
- * 解锁命运树节点（权威校验，→ specs/260610-destiny-tree-ui/design.md）：
- * 重新读取用户当前 destinyShards/unlockedTreeNodes，用 canUnlockNode 校验
- * （节点存在/未解锁/碎片足够/同列顺序），通过则扣费并写入，否则抛 CANNOT_UNLOCK。
- * 返回最新的 PveMeta（与 getUserPveMeta 同形）。
- */
-async function unlockUserTreeNode(userId, nodeId) {
-  const user = await getUserById(userId);
-  if (!user) {
-    const err = new Error('USER_NOT_FOUND');
-    err.code = 'USER_NOT_FOUND';
-    throw err;
-  }
-
-  const meta = {
-    destinyShards: user.destinyShards ?? 0,
-    unlockedTreeNodes: user.unlockedTreeNodes ?? [],
-  };
-
-  if (!canUnlockNode(meta, nodeId)) {
-    const err = new Error('CANNOT_UNLOCK');
-    err.code = 'CANNOT_UNLOCK';
-    throw err;
-  }
-
-  const def = getNodeDef(nodeId);
-  const nextShards = meta.destinyShards - def.cost;
-  const nextUnlocked = [...meta.unlockedTreeNodes, nodeId];
-
-  await getDb()
-    .collection(COLLECTIONS.USERS)
-    .doc(user._id)
-    .update({
-      data: {
-        destinyShards: nextShards,
-        unlockedTreeNodes: nextUnlocked,
-        updatedDate: serverDate(),
-      },
-    });
-
-  return getUserPveMeta(userId);
-}
-
-/**
- * 重置命运树（→ specs/game-design/命运树设计V1.md §七）：
- * 扣除 TREE_RESET_DIAMOND_COST(20) 钻石，退还所有已解锁节点的命运碎片总和，清空 unlockedTreeNodes。
- * 校验失败抛出带 code 的 Error：INSUFFICIENT_DIAMOND / TREE_ALREADY_EMPTY。
- */
-async function resetUserTreeNodes(userId) {
-  const { DESTINY_TREE_NODES } = require('./pve/PveDestinyTree');
-  const RESET_COST = 20;
-
-  const user = await getUserById(userId);
-  if (!user) {
-    const err = new Error('USER_NOT_FOUND'); err.code = 'USER_NOT_FOUND'; throw err;
-  }
-
-  const unlocked = user.unlockedTreeNodes ?? [];
-  if (unlocked.length === 0) {
-    const err = new Error('命运树尚未解锁任何节点'); err.code = 'TREE_ALREADY_EMPTY'; throw err;
-  }
-
-  const diamond = user.diamond ?? 0;
-  if (diamond < RESET_COST) {
-    const err = new Error(`钻石不足（需要 ${RESET_COST}，当前 ${diamond}）`); err.code = 'INSUFFICIENT_DIAMOND'; throw err;
-  }
-
-  const nodeMap = Object.fromEntries(DESTINY_TREE_NODES.map((n) => [n.id, n.cost]));
-  const refundShards = unlocked.reduce((sum, id) => sum + (nodeMap[id] ?? 0), 0);
-  const nextShards = (user.destinyShards ?? 0) + refundShards;
-
-  await getDb()
-    .collection(COLLECTIONS.USERS)
-    .doc(user._id)
-    .update({
-      data: {
-        diamond: getDb().command.inc(-RESET_COST),
-        destinyShards: nextShards,
-        unlockedTreeNodes: [],
-        updatedDate: serverDate(),
-      },
-    });
-
-  return getUserPveMeta(userId);
 }
 
 async function getPveSaveByUserId(userId) {
@@ -518,8 +453,8 @@ async function getPveSaveByUserId(userId) {
 }
 
 /**
- * 写入/覆盖用户的 PVE 存档（每用户一条活跃存档，→ ddl-sql.md §1）。
- * 不存在则创建；已存在则按乐观锁版本覆盖更新。
+ * 鍐欏叆/瑕嗙洊鐢ㄦ埛鐨?PVE 瀛樻。锛堟瘡鐢ㄦ埛涓€鏉℃椿璺冨瓨妗ｏ紝鈫?ddl-sql.md 搂1锛夈€?
+ * 涓嶅瓨鍦ㄥ垯鍒涘缓锛涘凡瀛樺湪鍒欐寜涔愯閿佺増鏈鐩栨洿鏂般€?
  */
 async function putPveSave(userId, patch, expectedVersion) {
   const db = getDb();
@@ -567,13 +502,12 @@ module.exports = {
   updateGameDoc,
   incrementUserDiamond,
   incrementUserPveRewards,
+  updateUserPveClassSnapshot,
   reservePveRunStart,
   clearPendingPveRun,
   listPveLeaderboard,
   getUserPveMeta,
   updateUserPveMeta,
-  unlockUserTreeNode,
-  resetUserTreeNodes,
   getPveSaveByUserId,
   putPveSave,
   deletePveSave,

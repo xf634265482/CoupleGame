@@ -128,18 +128,15 @@ export interface LoadPveLeaderboardResponse extends CloudOk {
 
 export interface UpdateMetaReport {
   /** @deprecated Achievements are not a live feature; client no longer uploads. */
-  newAchievements?: string[];
   /** @deprecated Codex is not a live feature; client no longer uploads. */
-  codexMonsters?: string[];
   /** @deprecated Codex is not a live feature; client no longer uploads. */
-  codexEquipment?: string[];
   /** Diamond delta (camp relic chest spend / refund). Cloud rejects if balance would go < 0. */
   diamond?: number;
   tutorialCompleted?: boolean;
   resetTutorial?: boolean;
 }
 
-/** Load out-of-run meta snapshot (diamond / shards; achievement/codex fields are legacy-only). */
+/** Load out-of-run meta snapshot. */
 export async function loadPveMeta(): Promise<LoadMetaResponse> {
   return ensureOk(
     await callFunction<LoadMetaResponse>('pve', { action: 'loadMeta' }),
@@ -157,7 +154,7 @@ export async function loadPveLeaderboard(limit = 50): Promise<LoadPveLeaderboard
   );
 }
 
-/** Update out-of-run markers (tutorial / diamond). Do not use for achievement or codex uploads. */
+/** Update out-of-run markers (tutorial / diamond). */
 export async function updatePveMeta(report: UpdateMetaReport): Promise<CloudOk> {
   return ensureOk(
     await callFunction<CloudOk>('pve', { action: 'updateMeta', report }),

@@ -333,8 +333,6 @@ function describeForLog(
       return { kind: 'AP', text: `🔋 结转上回合剩余行动力 +${ev.amount}` };
     case 'SHOP_BUY':
       return { kind: 'LOOT', text: `🏕️ 营地购买：${ev.effect}（-${ev.cost} 金）` };
-    case 'ACHIEVEMENT_UNLOCKED':
-      return { kind: 'SYSTEM', text: `🏆 成就解锁：${ev.name}` };
     case 'FLOOR_CLEARED':
       return { kind: 'SYSTEM', text: '✓ 楼层通关，准备进入下一层' };
     case 'PLAYER_DEAD':
@@ -548,8 +546,6 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `♨️ 温泉治疗 +${ev.healed} HP`;
     case 'SHOP_BUY':
       return `🏕️ 购买成功 · ${ev.effect}`;
-    case 'ACHIEVEMENT_UNLOCKED':
-      return `🏆 成就解锁：${ev.name}`;
     case 'FLOOR_CLEARED':
       return '楼层已通关！';
     case 'PLAYER_DEAD':
@@ -2792,9 +2788,6 @@ export class ExpeditionController extends Component {
         if (node) void Effects.buffGain(node);
         break;
       }
-      // ── 成就解锁：去掉相机效果，弹窗已足够 ──
-      case 'ACHIEVEMENT_UNLOCKED':
-        break;
       // ── 踩熔岩地块每回合扣血：flash 替代 hit ──
       case 'LAVA_TILE_DAMAGED': {
         const node = this._map.getOccupantArtAt(this._state.floorState.player);
@@ -3413,9 +3406,6 @@ export class ExpeditionController extends Component {
         ...(this._meta ?? {
           destinyShards: 0,
           diamond: 0,
-          achievements: [],
-          codex: { monsters: [], equipment: [] },
-          unlockedTreeNodes: [],
         }),
         tutorialCompleted: true,
       };

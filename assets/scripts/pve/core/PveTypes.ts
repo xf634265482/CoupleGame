@@ -460,7 +460,6 @@ export type PveEvent =
   | { type: 'HOT_SPRING_HEAL'; entityId: string; healed: number }
   | { type: 'SHOP_BUY'; itemId: string; cost: number; effect: string }
   /** 鎴愬氨瑙ｉ攣锛圕ontroller 鍚堟垚锛屼笉鐢?core 绾嚱鏁颁骇鐢燂紱渚?_playEvents 灞曠ず toast锛夈€?*/
-  | { type: 'ACHIEVEMENT_UNLOCKED'; achievementId: string; name: string }
   | { type: 'FLOOR_CLEARED'; floor: number }
   | { type: 'PLAYER_DEAD' }
   /** 娴佹矙宸ㄨ潕娼滃叆鍦颁笅锛堝厤鐤敾鍑伙紝涓嬪洖鍚堝啋鍑猴級銆?*/
@@ -587,7 +586,6 @@ export type PveEvent =
   /** Boss 击杀掉落：拾取一件 Boss 遗物（局内生效，死亡清空）。 */
   /** Boss 鍑绘潃鎺夎惤锛氭嬀鍙栬嫢骞插懡杩愮鐗囷紙鐙珛 10% 鍒ゅ畾锛屾寜绔犺妭缂╂斁锛夈€?*/
   | { type: 'SHARDS_PICKUP'; amount: number; source: string }
-  /** 棣栨瑙ｉ攣 Boss 閬楃墿鍥鹃壌锛堝啓鍏?PveMeta.codex.relics锛屽奖鍝嶅悗缁帀钀芥鐜囷級銆?*/
   /** 钀ュ湴閬楃墿瀹濈寮€鍚粨鏋滐細success=true 琛ㄧず鑾峰緱閬楃墿锛沠alse 琛ㄧず鏈腑锛堝凡鎵ｈ祫婧愶級锛況efunded=true 琛ㄧず閬楃墿宸叉寔鏈夎嚜鍔ㄨ浆琛ュ伩銆?*/
   /** 閬楃墿 hook 瑙﹀彂鎻愮ず锛堜緥锛氭案鍐讳箣鏍稿啺鍐汇€佺啍鐏箣蹇冨弽寮癸級锛屼緵鎴樻姤灞曠ず銆?*/
   /** 浼犲瑁呭鏁堟灉瑙﹀彂鎻愮ず锛圥hase 3锛夛紝渚涙垬鎶ュ睍绀恒€?*/
@@ -639,15 +637,6 @@ export interface ApplyResult {
 
 // 鈹€鈹€ 灞€澶栧厓杩涘害锛圓C-20锛岃繙寰侀棿鎸佷箙鍖栵級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-/** 鍥鹃壌锛氬凡瑙佽繃鐨勬€墿绫诲瀷 / 宸茶幏寰楃殑瑁呭妲戒綅 / 宸茶В閿佺殑 Boss 閬楃墿銆?*/
-export interface PveCodex {
-  /** MonsterType 瀛楃涓查泦鍚堬紙'NORMAL'/'ANIMA'/'ELITE'/'BOSS'锛夈€?*/
-  monsters: string[];
-  /** EquipSlot 瀛楃涓查泦鍚堬紙'WEAPON'/'ARMOR' 绛夛級銆?*/
-  equipment: string[];
-  /** 宸茶В閿佽繃鐨?Boss 閬楃墿 id 鍒楄〃锛堥娆℃嬀鍙栧悗鍐欏叆锛屽奖鍝嶅悗缁帀钀芥鐜?+RELIC_CODEX_BONUS锛夈€?*/
-}
-
 /**
  * PVE 灞€澶栧厓杩涘害锛坉esign 搂2.1锛氭浜″悗淇濈暀鐨勫眬澶栬祫浜э級銆?
  * 瀛樺偍浜?`users` 浜戞枃妗ｏ紝涓嶅睘浜?`ExpeditionState`銆?
@@ -670,10 +659,7 @@ export interface PveMeta {
   /** 鍘嗗彶鍒拌揪鐨勬渶楂樻ゼ灞傦紝鐢ㄤ簬澶у巺韬唤鍗′笌鎺掕姒溿€?*/
   highestFloor?: number;
   /** 宸茶В閿佺殑鎴愬氨 id 鍒楄〃锛圓chievementId[]锛夈€?*/
-  achievements: string[];
   /** 鍥鹃壌锛氬凡瑙佽繃鐨勬€墿/瑁呭绫诲瀷銆?*/
-  codex: PveCodex;
   /** 旧账号兼容字段：已退役账号成长系统残留，仅保留给 GM/云端清理历史数据。 */
-  unlockedTreeNodes: string[];
   tutorialCompleted?: boolean;
 }
