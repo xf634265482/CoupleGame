@@ -1,5 +1,5 @@
 const STAMINA_MAX = 60;
-const STAMINA_RUN_COST = 20;
+const STAMINA_CHALLENGE_COST = 5;
 const STAMINA_RECOVERY_MS = 5 * 60 * 1000;
 
 function normalizeInt(value, fallback) {
@@ -35,31 +35,46 @@ function resolveStamina(current, updatedAt, now = Date.now()) {
   };
 }
 
-function consumeForNewRun(state, firstRunStarted) {
-  if (!firstRunStarted) {
+function consumeForFloorChallenge(state, freeEligible) {
+  const stamina = Math.max(
+    0,
+    Math.min(STAMINA_MAX, normalizeInt(state.stamina, STAMINA_MAX)),
+  );
+  if (freeEligible) {
     return {
       ...state,
+      stamina,
       charged: 0,
-      firstRunStarted: true,
+      tutorialFreeChallengeConsumed: true,
     };
   }
-  if (state.stamina < STAMINA_RUN_COST) {
+  if (stamina < STAMINA_CHALLENGE_COST) {
     const err = new Error('体力不足');
     err.code = 'PVE_STAMINA_INSUFFICIENT';
     throw err;
   }
   return {
     ...state,
-    stamina: state.stamina - STAMINA_RUN_COST,
-    charged: STAMINA_RUN_COST,
+    stamina: stamina - STAMINA_CHALLENGE_COST,
+    charged: STAMINA_CHALLENGE_COST,
+    tutorialFreeChallengeConsumed: state.tutorialFreeChallengeConsumed === true,
+  };
+}
+
+// Legacy save-chain compatibility. The public startRun route is removed later in this plan.
+function consumeForNewRun(state, firstRunStarted) {
+  const result = consumeForFloorChallenge(state, !firstRunStarted);
+  return {
+    ...result,
     firstRunStarted: true,
   };
 }
 
 module.exports = {
   STAMINA_MAX,
-  STAMINA_RUN_COST,
+  STAMINA_CHALLENGE_COST,
   STAMINA_RECOVERY_MS,
   resolveStamina,
+  consumeForFloorChallenge,
   consumeForNewRun,
 };
