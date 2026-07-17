@@ -78,7 +78,7 @@ async function startFloorChallenge(user, rawRequest = {}) {
     }
 
     const now = Date.now();
-    const profile = normalizeProfile(userDoc.pveProfile, now, userDoc);
+    const profile = normalizeProfile(userDoc.pveProfile, now);
     const request = validateStartFloorChallengeRequest(profile, rawRequest);
     validateLoadoutOwnership(profile, request);
 

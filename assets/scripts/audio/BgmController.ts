@@ -8,6 +8,7 @@ import {
   Node,
 } from 'cc';
 import { bindWechatAudioUnlock, initWxAudioPolicy, unbindWechatAudioUnlock } from '../platform/wechat/WxAudio';
+import { SCENE } from '../core/Constants';
 
 const { ccclass } = _decorator;
 
@@ -16,6 +17,7 @@ const WECHAT_BGM_MAIN_NATIVE = ['assets', 'resources', 'native', 'f1', 'f1a2b3c4
 const WECHAT_BGM_SUB_NATIVE = ['subpackages', 'resources', 'native', 'f1', 'f1a2b3c4-5678-4901-a234-567890abcdef.mp3'].join('/');
 const WECHAT_BGM_TEMP_NAME = 'couple-bgm-main.mp3';
 const FALLBACK_PERSIST_NODE = 'CoupleGameBgm';
+const MAIN_BGM_VOLUME = 0.45;
 
 let bgmInstance: BgmController | null = null;
 /** 切场景后 bootstrap 的 Bgm 节点可能被销毁，clip 缓存供触摸恢复 */
@@ -26,6 +28,10 @@ let wxBgmPreparing: Promise<string | null> | null = null;
 
 export function getBgmController(): BgmController | null {
   return bgmInstance?.isValid ? bgmInstance : null;
+}
+
+function shouldPlayMainBgmInCurrentScene(): boolean {
+  return director.getScene()?.name === SCENE.LOBBY;
 }
 
 function ensureFallbackAudioSource(): AudioSource | null {
@@ -164,7 +170,7 @@ function ensureWechatBgmAudio(): any {
   }
   wxBgmAudio = wx.createInnerAudioContext();
   wxBgmAudio.loop = true;
-  wxBgmAudio.volume = 0.55;
+  wxBgmAudio.volume = MAIN_BGM_VOLUME;
   wxBgmAudio.obeyMuteSwitch = false;
   // 注：原本注册 onPlay 打 log，但微信 InnerAudio loop 模式每次循环重新播放都会触发，
   // 真机连续日志噪音；功能不依赖此日志，注释掉。如需 debug 临时打开。
@@ -178,11 +184,14 @@ function playWechatBgm(): Promise<void> {
   if (!isWechatInnerAudioRuntime()) {
     return Promise.resolve();
   }
+  if (!shouldPlayMainBgmInCurrentScene()) {
+    return Promise.resolve();
+  }
   initWxAudioPolicy();
   const barePath = WECHAT_BGM_MAIN_NATIVE.replace(/^\/+/, '');
   const audio = ensureWechatBgmAudio();
   audio.loop = true;
-  audio.volume = 0.55;
+  audio.volume = MAIN_BGM_VOLUME;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -199,6 +208,10 @@ function playWechatBgm(): Promise<void> {
 
     const tryTempCopy = () => {
       void prepareWechatBgmSrc().then((src) => {
+        if (!shouldPlayMainBgmInCurrentScene()) {
+          finish('scene-changed');
+          return;
+        }
         if (src) {
           audio.src = src;
           audio.play();
@@ -221,7 +234,7 @@ function playWechatBgm(): Promise<void> {
     audio.src = barePath;
     audio.play();
     setTimeout(() => {
-      if (!settled && audio.paused === false) {
+      if (!settled && audio.paused === false && shouldPlayMainBgmInCurrentScene()) {
         finish('direct-subpackage');
       }
     }, 800);
@@ -235,6 +248,9 @@ function playWechatBgm(): Promise<void> {
 
 /** GameApp / 大厅：优先 bootstrap 上的 BgmController，否则用持久 fallback 节点 */
 export function playMainBgm(bundle: AssetManager.Bundle): Promise<void> {
+  if (!shouldPlayMainBgmInCurrentScene()) {
+    return Promise.resolve();
+  }
   if (typeof wx !== 'undefined') {
     bindWechatAudioUnlock(resumeMainBgmAfterTouch);
   }
@@ -256,9 +272,9 @@ export function playMainBgm(bundle: AssetManager.Bundle): Promise<void> {
       }
       cachedBgmClip = clip;
       const audio = ensureFallbackAudioSource();
-      if (audio) {
+      if (audio && shouldPlayMainBgmInCurrentScene()) {
         audio.loop = true;
-        audio.volume = 0.55;
+        audio.volume = MAIN_BGM_VOLUME;
         audio.clip = clip;
         audio.play();
         console.log('[BgmController] playing on fallback', BGM_PATH, 'playing=', audio.playing);
@@ -284,6 +300,10 @@ export function stopMainBgm(): void {
 }
 
 export function resumeMainBgmAfterTouch(): void {
+  if (!shouldPlayMainBgmInCurrentScene()) {
+    stopMainBgm();
+    return;
+  }
   // 真机 InnerAudio 路径：wxBgmAudio 自身在跑就直接解绑触摸监听，不再每次 touch 重置
   if (isWechatInnerAudioRuntime() && wxBgmAudio && !wxBgmAudio.paused) {
     unbindWechatAudioUnlock();
@@ -305,7 +325,7 @@ export function resumeMainBgmAfterTouch(): void {
     return;
   }
   audio.loop = true;
-  audio.volume = 0.55;
+  audio.volume = MAIN_BGM_VOLUME;
   audio.clip = cachedBgmClip;
   audio.play();
   console.log('[BgmController] touch resume on fallback node, playing=', audio.playing);
@@ -346,6 +366,10 @@ export class BgmController extends Component {
 
   /** 用户首次触摸后重试（微信真机常见要求） */
   resumeAfterUserGesture(): void {
+    if (!shouldPlayMainBgmInCurrentScene()) {
+      stopMainBgm();
+      return;
+    }
     if (!this.isValid || !this.node?.isValid) {
       resumeMainBgmAfterTouch();
       return;
@@ -368,7 +392,7 @@ export class BgmController extends Component {
       return;
     }
     audio.loop = true;
-    audio.volume = 0.55;
+    audio.volume = MAIN_BGM_VOLUME;
     audio.play();
     this._started = true;
     console.log('[BgmController] resume after touch, playing=', audio.playing);
@@ -387,6 +411,9 @@ export class BgmController extends Component {
 
   /** GameApp / 大厅在 ensureResourcesBundle 成功后调用 */
   playWithBundle(bundle: AssetManager.Bundle): Promise<void> {
+    if (!shouldPlayMainBgmInCurrentScene()) {
+      return Promise.resolve();
+    }
     if (isWechatRealDevice()) {
       return playWechatBgm();
     }
@@ -415,11 +442,15 @@ export class BgmController extends Component {
         this._clip = clip;
         cachedBgmClip = clip;
         this.scheduleOnce(() => {
+          if (!shouldPlayMainBgmInCurrentScene()) {
+            resolve();
+            return;
+          }
           if (!this.isValid || !this.node?.isValid) {
             const fallback = ensureFallbackAudioSource();
             if (fallback) {
               fallback.loop = true;
-              fallback.volume = 0.55;
+              fallback.volume = MAIN_BGM_VOLUME;
               fallback.clip = clip;
               fallback.play();
               this._started = true;
@@ -430,7 +461,7 @@ export class BgmController extends Component {
           }
           try {
             audio.loop = true;
-            audio.volume = 0.55;
+            audio.volume = MAIN_BGM_VOLUME;
             audio.clip = clip;
             audio.play();
             this._started = true;

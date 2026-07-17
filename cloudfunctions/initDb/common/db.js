@@ -4,11 +4,10 @@
  */
 
 const cloud = require('wx-server-sdk');
-const { COLLECTIONS, PVE_DIFFICULTY_ORDER } = require('./constants');
+const { COLLECTIONS } = require('./constants');
 const {
   STAMINA_MAX,
   resolveStamina,
-  consumeForNewRun,
 } = require('./pve/PveStamina');
 
 function getDb() {
@@ -133,7 +132,7 @@ async function incrementUserDiamond(userId, delta) {
 }
 
 /**
- * 璇诲彇鐢ㄦ埛 PVE 鍏冭繘搴﹀揩鐓э紙鍛借繍纰庣墖浣欓 + 閽荤煶浣欓 + 鎴愬氨 + 鍥鹃壌锛夛紝鐢ㄤ簬 loadMeta action锛堚啋 AC-20锛夈€?
+ * 读取用户 PVE 账户快照，用于 loadMeta。
  * 鑻ュ瓧娈典笉瀛樺湪鍒欒繑鍥炲畨鍏ㄩ粯璁ゅ€硷紙棣栨璇诲彇鏃讹級銆?
  */
 async function getUserPveMeta(userId) {
@@ -158,17 +157,11 @@ async function getUserPveMeta(userId) {
     });
   }
   return {
-    destinyShards: user?.destinyShards ?? 0,
     diamond: user?.diamond ?? 0,
     stamina: stamina.stamina,
     staminaMax: STAMINA_MAX,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
-    hasPendingRun: Number.isInteger(user?.pvePendingRunSeed) && user.pvePendingRunSeed > 0,
-    nextRunCost: Number.isInteger(user?.pvePendingRunSeed) && user.pvePendingRunSeed > 0
-      ? 0
-      : user?.pveFirstRunStarted === true ? 20 : 0,
     highestFloor: user?.pveProfile?.highestClearedFloor ?? 0,
-    unlockedTreeNodes: user?.unlockedTreeNodes ?? [],
     tutorialCompleted: user?.pveTutorialCompleted === true,
   };
 }
@@ -216,151 +209,6 @@ async function updateUserPveMeta(userId, {
     .collection(COLLECTIONS.USERS)
     .doc(user._id)
     .update({ data });
-}
-
-/**
- * PVE 鍏冭繘搴﹁处鎴疯祫浜у叆璐︼細閽荤煶锛堜笌 PVP 鍏变韩锛? 鍛借繍纰庣墖锛圥VE 涓撳睘锛屸啋 ddl-sql.md 搂2锛夈€?
- * 鏀寔澶嶅悎鎺掕姒滄洿鏂帮紙鈫?AC-P3-7锛夊拰闅惧害閫氬叧璁板綍锛堚啋 AC-P3-6锛夈€?
- *
- * @param {string} userId
- * @param {{ diamond?: number, destinyShards?: number, highestFloor?: number,
- *           tier?: string, classId?: string, awakenForm?: string,
- *           isClearRecord?: boolean }} opts
- *   - tier: 闅惧害妗ｏ紙缂虹渷 NORMAL锛屸啋 AC-P3-10 鑰佽处鍙峰吋瀹癸級
- *   - isClearRecord: true 鏃惰褰曢€氬叧璇ラ毦搴︽。锛堢敤浜庝笅涓€妗ｈВ閿佹牎楠岋級
- */
-async function incrementUserPveRewards(userId, {
-  diamond = 0,
-  destinyShards = 0,
-  highestFloor = 0,
-  tier = 'NORMAL',
-  classId = '',
-  awakenForm = '',
-  isClearRecord = false,
-} = {}) {
-  const db = getDb();
-  const _ = db.command;
-  const user = await getUserById(userId);
-  if (!user) {
-    const err = new Error('USER_NOT_FOUND');
-    err.code = 'USER_NOT_FOUND';
-    throw err;
-  }
-  const data = { updatedDate: serverDate() };
-  if (diamond) data.diamond = _.inc(diamond);
-  if (destinyShards) data.destinyShards = _.inc(destinyShards);
-
-  // 澶嶅悎鎺掕姒滐細(tierLevel DESC, floor DESC, updatedAt ASC)锛屸啋 AC-P3-7
-  const newTierLevel = PVE_DIFFICULTY_ORDER.indexOf(tier) >= 0
-    ? PVE_DIFFICULTY_ORDER.indexOf(tier)
-    : 0;
-  const curTierLevel = user.pveHighestTierLevel ?? 0;
-  const curFloor = user.pveHighestFloor ?? 0;
-
-  // 浠呭綋澶嶅悎鎴愮哗涓ユ牸楂樹簬鍘嗗彶鏃舵洿鏂帮紙tier 鏇撮珮 OR 鍚?tier 涓?floor 鏇撮珮锛?
-  const isHigherRecord =
-    newTierLevel > curTierLevel ||
-    (newTierLevel === curTierLevel && highestFloor > curFloor);
-
-  if (isHigherRecord && highestFloor > 0) {
-    data.pveHighestFloor = Math.trunc(highestFloor);
-    data.pveHighestTier = tier;
-    data.pveHighestTierLevel = newTierLevel;
-    data.pveHighestFloorUpdatedAt = serverDate();
-    data.pveHighestClassId = classId || 'ADVENTURER';
-    data.pveHighestAwakenForm = awakenForm || '';
-  }
-
-  // 闅惧害閫氬叧璁板綍锛氬啓鍏?pveClearedTiers锛堢敤浜庝笅涓€妗ｈВ閿佹牎楠岋紝鈫?AC-P3-6锛?
-  if (isClearRecord) {
-    const cleared = user.pveClearedTiers ?? [];
-    if (!cleared.includes(tier)) {
-      data.pveClearedTiers = _.push(tier);
-    }
-  }
-
-  await db.collection(COLLECTIONS.USERS).doc(user._id).update({ data });
-}
-
-async function updateUserPveClassSnapshot(userId, classId = '', awakenForm = '') {
-  const user = await getUserById(userId);
-  if (!user) {
-    const err = new Error('USER_NOT_FOUND');
-    err.code = 'USER_NOT_FOUND';
-    throw err;
-  }
-  const nextClassId = classId || 'ADVENTURER';
-  const nextAwakenForm = awakenForm || '';
-  await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
-    data: {
-      pveCurrentClassId: nextClassId,
-      pveCurrentAwakenForm: nextAwakenForm,
-      updatedDate: serverDate(),
-    },
-  });
-}
-
-/**
- * 涓烘柊杩滃緛棰勭暀鏈嶅姟绔瀛愬苟鏉冨▉鎵ｉ櫎浣撳姏銆?
- * pending seed 浣垮鎴风閲嶈瘯淇濇寔骞傜瓑锛氬悓涓€杞皻鏈啓鍏ラ灞傚瓨妗ｅ墠涓嶄細閲嶅鎵ｈ垂銆?
- */
-async function reservePveRunStart(user, proposedSeed) {
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
-    const ref = transaction.collection(COLLECTIONS.USERS).doc(user._id);
-    const snapshot = await ref.get();
-    const doc = snapshot.data;
-    if (!doc) {
-      const err = new Error('USER_NOT_FOUND');
-      err.code = 'USER_NOT_FOUND';
-      throw err;
-    }
-
-    const stamina = resolveStamina(
-      doc.pveStamina ?? STAMINA_MAX,
-      doc.pveStaminaUpdatedAt,
-    );
-    if (Number.isInteger(doc.pvePendingRunSeed) && doc.pvePendingRunSeed > 0) {
-      return {
-        runSeed: doc.pvePendingRunSeed,
-        charged: 0,
-        stamina,
-      };
-    }
-
-    const consumed = consumeForNewRun(stamina, doc.pveFirstRunStarted === true);
-    await ref.update({
-      data: {
-        pveStamina: consumed.stamina,
-        pveStaminaUpdatedAt: consumed.updatedAt,
-        pveFirstRunStarted: true,
-        pvePendingRunSeed: proposedSeed,
-        updatedDate: serverDate(),
-      },
-    });
-    return {
-      runSeed: proposedSeed,
-      charged: consumed.charged,
-      stamina: {
-        stamina: consumed.stamina,
-        updatedAt: consumed.updatedAt,
-        nextRecoveryAt: consumed.stamina >= STAMINA_MAX
-          ? null
-          : consumed.updatedAt + 5 * 60 * 1000,
-      },
-    };
-  });
-}
-
-async function clearPendingPveRun(userId) {
-  const user = await getUserById(userId);
-  if (!user || user.pvePendingRunSeed === undefined) return;
-  await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
-    data: {
-      pvePendingRunSeed: getDb().command.remove(),
-      updatedDate: serverDate(),
-    },
-  });
 }
 
 // DB 鍗曟鎷夊彇涓婇檺锛孞S 閲嶆帓鍚庡啀鎴彇 safeLimit銆?
@@ -418,54 +266,6 @@ async function listPveLeaderboard(userId, limit = 50) {
   return { entries, myRank };
 }
 
-async function getPveSaveByUserId(userId) {
-  const { data } = await getDb()
-    .collection(COLLECTIONS.PVE_SAVES)
-    .where({ userId })
-    .limit(1)
-    .get();
-  return data[0] || null;
-}
-
-/**
- * 鍐欏叆/瑕嗙洊鐢ㄦ埛鐨?PVE 瀛樻。锛堟瘡鐢ㄦ埛涓€鏉℃椿璺冨瓨妗ｏ紝鈫?ddl-sql.md 搂1锛夈€?
- * 涓嶅瓨鍦ㄥ垯鍒涘缓锛涘凡瀛樺湪鍒欐寜涔愯閿佺増鏈鐩栨洿鏂般€?
- */
-async function putPveSave(userId, patch, expectedVersion) {
-  const db = getDb();
-  const col = db.collection(COLLECTIONS.PVE_SAVES);
-  const current = await getPveSaveByUserId(userId);
-
-  if (!current) {
-    const data = {
-      ...patch,
-      userId,
-      version: 0,
-      updatedAt: nowMs(),
-    };
-    const { _id } = await col.add({ data });
-    return { ...data, _id };
-  }
-
-  if (expectedVersion !== undefined && current.version !== expectedVersion) {
-    const err = new Error('PVE_SAVE_VERSION_CONFLICT');
-    err.code = 'PVE_SAVE_VERSION_CONFLICT';
-    throw err;
-  }
-
-  const data = {
-    ...patch,
-    version: current.version + 1,
-    updatedAt: nowMs(),
-  };
-  await col.doc(current._id).update({ data });
-  return { ...current, ...data, _id: current._id };
-}
-
-async function deletePveSave(saveId) {
-  await getDb().collection(COLLECTIONS.PVE_SAVES).doc(saveId).remove();
-}
-
 module.exports = {
   getDb,
   serverDate,
@@ -476,14 +276,7 @@ module.exports = {
   getGame,
   updateGameDoc,
   incrementUserDiamond,
-  incrementUserPveRewards,
-  updateUserPveClassSnapshot,
-  reservePveRunStart,
-  clearPendingPveRun,
   listPveLeaderboard,
   getUserPveMeta,
   updateUserPveMeta,
-  getPveSaveByUserId,
-  putPveSave,
-  deletePveSave,
 };

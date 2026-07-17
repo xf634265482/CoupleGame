@@ -33,7 +33,7 @@ export interface MinghenLoadoutPreset {
 
 export interface PveEquipmentInstance {
   instanceId: string;
-  /** 旧装备库中文名称，如「皮革轻甲」。 */
+  /** 当前装备目录中的中文名称，如「皮革轻甲」。 */
   definitionId: string;
   quality: 'COMMON' | 'FINE' | 'RARE' | 'EPIC' | 'LEGENDARY';
   enhanceLevel: number;

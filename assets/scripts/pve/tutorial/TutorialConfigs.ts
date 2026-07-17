@@ -93,9 +93,16 @@ export const FIRST_TUTORIAL_STEPS: TutorialStepConfig[] = [
   },
   {
     id: 'charge',
-    message: '点「蓄力」投入 1 点 AP。\n蓄力会让下一次攻击更强。',
+    message: '先阅读说明，再点「蓄力」。',
     allowedAction: 'CHARGE',
     completeOnChargeAp: 1,
+    onEnterExplain:
+      '【蓄力】\n'
+      + '攻击前可额外投入 0～3 点 AP。\n'
+      + '投入越多，下一次攻击伤害越高，并附带击退与撞碎。\n\n'
+      + '本教程先点 1 次「蓄力」（投入 1 AP）：\n'
+      + '伤害约 ×1.40，击退 1。\n\n'
+      + '注意：常驻蓄力没有破甲；破甲来自灵气爆发「破阵」。',
   },
   {
     id: 'charge_kill',
@@ -113,20 +120,27 @@ export const FIRST_TUTORIAL_STEPS: TutorialStepConfig[] = [
   },
   {
     id: 'burst',
-    message: '灵气已满！点「灵气爆发」开启破阵。',
+    message: '先阅读说明，再点「灵气爆发」。',
     allowedAction: 'SPIRIT_BURST',
     onEnterFillSpirit: true,
     completeOnSpiritBurst: true,
+    onEnterExplain:
+      '【灵气爆发 · 破阵】\n'
+      + '满灵气时可主动开启，只强化下一次蓄力攻击：\n'
+      + '· 本次额外获得 20% 护甲穿透（破甲）\n'
+      + '· 前 2 点蓄力 AP 免费，仍按投入等级算强度\n'
+      + '· 只用一次，打完就结束\n\n'
+      + '实战中命中与击杀会攒灵气；本教程已帮你灌满。',
   },
   {
     id: 'burst_charge',
-    message: '破阵强化下一次蓄力攻击。\n再点一次「蓄力」。',
+    message: '破阵已开启（含破甲）。\n再点一次「蓄力」，然后攻击。',
     allowedAction: 'CHARGE',
     completeOnChargeAp: 1,
   },
   {
     id: 'burst_kill',
-    message: '用破阵蓄力击杀第二只怪物。',
+    message: '用破阵蓄力击杀第二只怪物\n（这次攻击带破甲）。',
     allowedAction: 'TAP_CELL',
     allowedCells: [{ x: 3, y: 2 }],
     completeOnKillMonsterId: 'tutorial_mon_b',

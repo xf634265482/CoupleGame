@@ -49,7 +49,7 @@ function eqWithTrait(slot: EquipItem['slot'], trait: string): EquipItem {
 function mockPlayer(equipment: Partial<Record<EquipItem['slot'], EquipItem>> = {}): RunPlayer {
   return {
     hp: 100, maxHp: 200, gold: 0, anima: 0, animaProgress: 0,
-    classId: 'ADVENTURER', classTraits: [], equipment,
+    classId: 'ADVENTURER', equipment,
   };
 }
 
@@ -175,7 +175,6 @@ describe('受击侧 traits', () => {
     expect(r.revived).toBe(true);
     expect(r.restoredHp).toBe(Math.round(200 * REVIVE_HP_PCT));
     expect(r.nextPlayer.equipmentEffectState?.bossReviveUsed).toBe(true);
-    expect('relicState' in r.nextPlayer).toBe(false);
 
     // 二次不触发
     const r2 = bossTryRevive(r.nextPlayer);

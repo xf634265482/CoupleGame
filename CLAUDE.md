@@ -1,110 +1,111 @@
-# CoupleGame — AI 协作指南
+﻿# CoupleGame 鈥?AI 鍗忎綔鎸囧崡
 
-微信小游戏 · Cocos Creator 3.8.8 + 微信云开发。核心玩法：
+寰俊灏忔父鎴?路 Cocos Creator 3.8.8 + 寰俊浜戝紑鍙戙€傛牳蹇冪帺娉曪細
 
-- **PVE**：单人「命运远征」迷雾爬塔（客户端模拟 + 云端校验）。设计主文档 `specs/260608-pve-destiny-expedition/design.md`
+- **PVE**锛氬崟浜恒€屽懡杩愯繙寰併€嶈糠闆剧埇濉旓紙瀹㈡埛绔ā鎷?+ 浜戠鏍￠獙锛夈€傝璁′富鏂囨。 `specs/260608-pve-destiny-expedition/design.md`
 
-> PVP 棋盘对战已于 2026-06-29 彻底移除（见 `specs/260629-pvp-removal/`）。
+> PVP 妫嬬洏瀵规垬宸蹭簬 2026-06-29 褰诲簳绉婚櫎锛堣 `specs/260629-pvp-removal/`锛夈€?
 
-## 目录心智模型
+## 鐩綍蹇冩櫤妯″瀷
 
 ```
-assets/scripts/        # 客户端 TS，按模块分
+assets/scripts/        # 瀹㈡埛绔?TS锛屾寜妯″潡鍒?
   core/                # GameApp / SceneLoader / EventBus / Constants
   network/             # CloudService / PveService
-  pve/                 # PVE 模块（core 纯逻辑 + controllers + views）
+  pve/                 # PVE 妯″潡锛坈ore 绾€昏緫 + controllers + views锛?
   ui/  audio/  platform/
 
-cloudfunctions/        # 云函数
-  common/              # ★ 共享源码的唯一权威源 ★
+cloudfunctions/        # 浜戝嚱鏁?
+  common/              # 鈽?鍏变韩婧愮爜鐨勫敮涓€鏉冨▉婧?鈽?
   login/ pve/ initDb/ adminLogin/ adminTool/
-    └─ common/         # ⚠️ 自动同步的副本，禁止直接编辑（见下）
+    鈹斺攢 common/         # 鈿狅笍 鑷姩鍚屾鐨勫壇鏈紝绂佹鐩存帴缂栬緫锛堣涓嬶級
 
-specs/                 # 真正的需求/计划/AC 文档（按迭代分目录）
-test/pve/              # PVE 客户端 ts-jest 单测（不在 assets/，避免被打进游戏包）
-scripts/               # 构建/同步脚本
+specs/                 # 鐪熸鐨勯渶姹?璁″垝/AC 鏂囨。锛堟寜杩唬鍒嗙洰褰曪級
+test/pve/              # PVE 瀹㈡埛绔?ts-jest 鍗曟祴锛堜笉鍦?assets/锛岄伩鍏嶈鎵撹繘娓告垙鍖咃級
+scripts/               # 鏋勫缓/鍚屾鑴氭湰
 ```
 
-## ⚠️ 最大的坑：cloudfunctions/common 同步副本
+## 鈿狅笍 鏈€澶х殑鍧戯細cloudfunctions/common 鍚屾鍓湰
 
-**`cloudfunctions/common/` 是唯一源头。** 它被 `node scripts/sync-cloud-common.js` 复制到 5 个子目录下的 `cloudfunctions/{login,pve,initDb,adminLogin,adminTool}/common/`，因为微信部署单个云函数时不会带兄弟目录。
+**`cloudfunctions/common/` 鏄敮涓€婧愬ご銆?* 瀹冭 `node scripts/sync-cloud-common.js` 澶嶅埗鍒?5 涓瓙鐩綍涓嬬殑 `cloudfunctions/{login,pve,initDb,adminLogin,adminTool}/common/`锛屽洜涓哄井淇￠儴缃插崟涓簯鍑芥暟鏃朵笉浼氬甫鍏勫紵鐩綍銆?
 
-- ✅ **改 `cloudfunctions/common/<file>.js`，然后跑 `node scripts/sync-cloud-common.js`**
-- ❌ 改 `cloudfunctions/pve/common/<file>.js`（会被下次 sync 覆盖）
-- 🔍 **Grep 时排除副本**：`--glob '!cloudfunctions/*/common/**'` 或路径只搜 `cloudfunctions/common/`。否则会命中 6 份同名文件。
+- 鉁?**鏀?`cloudfunctions/common/<file>.js`锛岀劧鍚庤窇 `node scripts/sync-cloud-common.js`**
+- 鉂?鏀?`cloudfunctions/pve/common/<file>.js`锛堜細琚笅娆?sync 瑕嗙洊锛?
+- 馃攳 **Grep 鏃舵帓闄ゅ壇鏈?*锛歚--glob '!cloudfunctions/*/common/**'` 鎴栬矾寰勫彧鎼?`cloudfunctions/common/`銆傚惁鍒欎細鍛戒腑 6 浠藉悓鍚嶆枃浠躲€?
 
-副本文件清单见 `scripts/sync-cloud-common.js` 顶部数组。
+鍓湰鏂囦欢娓呭崟瑙?`scripts/sync-cloud-common.js` 椤堕儴鏁扮粍銆?
 
-## 常用命令
+## 甯哥敤鍛戒护
 
 ```bash
-npm test                            # 全部 jest（含 cloudfunctions/common/__tests__）
-npm run test:pve                    # PVE 客户端单测（test/pve/）
-node scripts/sync-cloud-common.js   # 改 cloudfunctions/common/ 后必跑
-node scripts/patch-wechatgame-config.js  # Cocos 构建后跑（细节见 .cursor/rules/cocos-wechatgame-subpackage.mdc）
+npm test                            # 鍏ㄩ儴 jest锛堝惈 cloudfunctions/common/__tests__锛?
+npm run test:pve                    # PVE 瀹㈡埛绔崟娴嬶紙test/pve/锛?
+node scripts/sync-cloud-common.js   # 鏀?cloudfunctions/common/ 鍚庡繀璺?
+node scripts/patch-wechatgame-config.js  # Cocos 鏋勫缓鍚庤窇锛堢粏鑺傝 .cursor/rules/cocos-wechatgame-subpackage.mdc锛?
 ```
 
-云函数 jest 在 `cloudfunctions/common/`：`cd cloudfunctions/common && npm test`。
+浜戝嚱鏁?jest 鍦?`cloudfunctions/common/`锛歚cd cloudfunctions/common && npm test`銆?
 
-## 玩法改动 → 必须同步设计文档
+## 鐜╂硶鏀瑰姩 鈫?蹇呴』鍚屾璁捐鏂囨。
 
-- 改 PVE 玩法代码（`assets/scripts/pve/core/**` / `cloudfunctions/common/pve/**`）→ 同步 `specs/260608-pve-destiny-expedition/design.md`
+- 鏀?PVE 鐜╂硶浠ｇ爜锛坄assets/scripts/pve/core/**` / `cloudfunctions/common/pve/**`锛夆啋 鍚屾 `specs/260608-pve-destiny-expedition/design.md`
 
-详细约束见 `.cursor/rules/gameplay-design-doc.mdc` 与 `.cursor/rules/pve-module.mdc`（Cursor 规则，Claude Code 不会自动读，需要时手动 Read）。
+璇︾粏绾︽潫瑙?`.cursor/rules/gameplay-design-doc.mdc` 涓?`.cursor/rules/pve-module.mdc`锛圕ursor 瑙勫垯锛孋laude Code 涓嶄細鑷姩璇伙紝闇€瑕佹椂鎵嬪姩 Read锛夈€?
 
-## 工程约定
+## 宸ョ▼绾﹀畾
 
-- UI 用代码构建，不依赖 prefab；命名 `XxxController.ts`（`@ccclass`）/ `XxxView.ts`（普通类）/ `xxxLayout.ts`（工具）
-- 不用 enum，用 `as const` 对象或字面量联合；私有字段 `_` 前缀；`import type` 引类型
-- 错误处理：`err instanceof Error ? err.message : String(err)`；并发输入用 `_busy` 守卫
-- 复用 `SceneLoader` / `GameSession` / `EventBus` / `CloudService.callFunction` / `UiAssets`
-- PVE `core/` **零框架依赖**：禁止 `import 'cc'`、禁止直接 `Math.random()`（用 `core/rng.ts`）
+- UI 鐢ㄤ唬鐮佹瀯寤猴紝涓嶄緷璧?prefab锛涘懡鍚?`XxxController.ts`锛坄@ccclass`锛? `XxxView.ts`锛堟櫘閫氱被锛? `xxxLayout.ts`锛堝伐鍏凤級
+- 涓嶇敤 enum锛岀敤 `as const` 瀵硅薄鎴栧瓧闈㈤噺鑱斿悎锛涚鏈夊瓧娈?`_` 鍓嶇紑锛沗import type` 寮曠被鍨?
+- 閿欒澶勭悊锛歚err instanceof Error ? err.message : String(err)`锛涘苟鍙戣緭鍏ョ敤 `_busy` 瀹堝崼
+- 澶嶇敤 `SceneLoader` / `GameSession` / `EventBus` / `CloudService.callFunction` / `UiAssets`
+- PVE `core/` **闆舵鏋朵緷璧?*锛氱姝?`import 'cc'`銆佺姝㈢洿鎺?`Math.random()`锛堢敤 `core/rng.ts`锛?
+- **AI 鐢熸垚浜х墿涓嶈繘 `assets/`**锛氱敓鎴愭€佺編鏈?闊抽鏆傚瓨鏀句粨搴撴牴 `_ai_staging/`锛堝凡 gitignore锛夛紝鍙妸"鎻愬崌涓烘寮忚祫婧?鐨勯偅涓€浠芥斁杩?`assets/resources` 绛夋寮忕洰褰曘€傜姝㈡暣鎵圭敓鎴愮粨鏋滀涪杩?`assets/generated`鈥斺€斾細琚?Cocos 瀵煎叆銆佷骇瀛ゅ効 .meta銆佹拺澶?.git锛堝巻鍙叉暀璁笌娓呯悊瑙?`specs/260629-repo-cleanup/`锛夈€?
 
-## 微信真机/构建相关
+## 寰俊鐪熸満/鏋勫缓鐩稿叧
 
-每次重大改动后的真机发布流程、主包 4MB 红线、`UiAssets` critical native 清单规则 —— 全部见 `.cursor/rules/cocos-wechatgame-subpackage.mdc`（"2026-06 真机 UI/BGM 事故复盘"那节是必读）。
+姣忔閲嶅ぇ鏀瑰姩鍚庣殑鐪熸満鍙戝竷娴佺▼銆佷富鍖?4MB 绾㈢嚎銆乣UiAssets` critical native 娓呭崟瑙勫垯 鈥斺€?鍏ㄩ儴瑙?`.cursor/rules/cocos-wechatgame-subpackage.mdc`锛?2026-06 鐪熸満 UI/BGM 浜嬫晠澶嶇洏"閭ｈ妭鏄繀璇伙級銆?
 
-## 代码导航规则（必须遵守）
+## 浠ｇ爜瀵艰埅瑙勫垯锛堝繀椤婚伒瀹堬級
 
-1. **定位功能时，优先阅读 `PROJECT_NAVIGATION.md`**，通过系统列表找到入口文件，再打开代码。
-2. **理解调用链时，优先查 `CALL_FLOW.md`**，找到对应操作的完整执行路径。
-3. **修改代码时，从导航指定的入口文件开始，逐层向下追踪**，不要从中间层切入。
-4. **除非导航无法定位，否则禁止全项目全文搜索**（`grep -r` 整个 `assets/` 或 `cloudfunctions/`）。
-5. **如果发现导航文档指向的入口不准确或缺失**，先更新 `PROJECT_NAVIGATION.md` / `CALL_FLOW.md`，再继续开发。
+1. **瀹氫綅鍔熻兘鏃讹紝浼樺厛闃呰 `PROJECT_NAVIGATION.md`**锛岄€氳繃绯荤粺鍒楄〃鎵惧埌鍏ュ彛鏂囦欢锛屽啀鎵撳紑浠ｇ爜銆?
+2. **鐞嗚В璋冪敤閾炬椂锛屼紭鍏堟煡 `CALL_FLOW.md`**锛屾壘鍒板搴旀搷浣滅殑瀹屾暣鎵ц璺緞銆?
+3. **淇敼浠ｇ爜鏃讹紝浠庡鑸寚瀹氱殑鍏ュ彛鏂囦欢寮€濮嬶紝閫愬眰鍚戜笅杩借釜**锛屼笉瑕佷粠涓棿灞傚垏鍏ャ€?
+4. **闄ら潪瀵艰埅鏃犳硶瀹氫綅锛屽惁鍒欑姝㈠叏椤圭洰鍏ㄦ枃鎼滅储**锛坄grep -r` 鏁翠釜 `assets/` 鎴?`cloudfunctions/`锛夈€?
+5. **濡傛灉鍙戠幇瀵艰埅鏂囨。鎸囧悜鐨勫叆鍙ｄ笉鍑嗙‘鎴栫己澶?*锛屽厛鏇存柊 `PROJECT_NAVIGATION.md` / `CALL_FLOW.md`锛屽啀缁х画寮€鍙戙€?
 
-## 文档入口（按问题查）
+## 鏂囨。鍏ュ彛锛堟寜闂鏌ワ級
 
-| 想查什么 | 去哪里 |
+| 鎯虫煡浠€涔?| 鍘诲摢閲?|
 |----------|--------|
-| **系统入口 / 文件职责** | `PROJECT_NAVIGATION.md` |
-| **操作的完整调用链** | `CALL_FLOW.md` |
-| **开发规则 / 常见陷阱** | `DEVELOPMENT_GUIDE.md` |
-| 项目入门 / 构建 / 云函数部署 | `README.md` |
-| PVE 玩法规则 / AC / 数值 | `specs/260608-pve-destiny-expedition/` |
-| 大厅 UI / 真机分包 | `specs/260603-ui-entry/` |
-| 命运树（PVE 元进度 UI） | `specs/260610-destiny-tree-ui/` |
-| 云数据库 / 索引 | `cloud/database/`、各 spec 的 `ddl-sql.md` |
-| 各 specs 索引（按主题） | `README.md` 底部"文档索引"表 |
+| **绯荤粺鍏ュ彛 / 鏂囦欢鑱岃矗** | `PROJECT_NAVIGATION.md` |
+| **鎿嶄綔鐨勫畬鏁磋皟鐢ㄩ摼** | `CALL_FLOW.md` |
+| **寮€鍙戣鍒?/ 甯歌闄烽槺** | `DEVELOPMENT_GUIDE.md` |
+| 椤圭洰鍏ラ棬 / 鏋勫缓 / 浜戝嚱鏁伴儴缃?| `README.md` |
+| PVE 鐜╂硶瑙勫垯 / AC / 鏁板€?| `specs/260608-pve-destiny-expedition/` |
+| 澶у巺 UI / 鐪熸満鍒嗗寘 | `specs/260603-ui-entry/` |
+| PVE 永久逐层细化资料 | `specs/260712-pve-persistent-floor-progression/` |
+| 浜戞暟鎹簱 / 绱㈠紩 | `cloud/database/`銆佸悇 spec 鐨?`ddl-sql.md` |
+| 鍚?specs 绱㈠紩锛堟寜涓婚锛?| `README.md` 搴曢儴"鏂囨。绱㈠紩"琛?|
 
-## 给自己的提醒
+## 缁欒嚜宸辩殑鎻愰啋
 
-- 看到 6 份同名云函数文件 → 只信 `cloudfunctions/common/`
-- 改了 `cloudfunctions/common/**` → 提醒用户跑 sync 脚本
-- 改 PVE 玩法 → 主动询问是否同步对应 design.md
-- specs/ 已有的 design.md 就是当前的"代码地图"，不要再造 PROJECT_MAP.md 类文档
+- 鐪嬪埌 6 浠藉悓鍚嶄簯鍑芥暟鏂囦欢 鈫?鍙俊 `cloudfunctions/common/`
+- 鏀逛簡 `cloudfunctions/common/**` 鈫?鎻愰啋鐢ㄦ埛璺?sync 鑴氭湰
+- 鏀?PVE 鐜╂硶 鈫?涓诲姩璇㈤棶鏄惁鍚屾瀵瑰簲 design.md
+- specs/ 宸叉湁鐨?design.md 灏辨槸褰撳墠鐨?浠ｇ爜鍦板浘"锛屼笉瑕佸啀閫?PROJECT_MAP.md 绫绘枃妗?
 
-## 排查规则（用户强制反馈，必须遵守）
+## 鎺掓煡瑙勫垯锛堢敤鎴峰己鍒跺弽棣堬紝蹇呴』閬靛畧锛?
 
-**渲染 / 资源 / 构建 / 平台适配类 bug**：每次构建+部署+刷新成本高（3-5 分钟），猜错代价大。
+**娓叉煋 / 璧勬簮 / 鏋勫缓 / 骞冲彴閫傞厤绫?bug**锛氭瘡娆℃瀯寤?閮ㄧ讲+鍒锋柊鎴愭湰楂橈紙3-5 鍒嗛挓锛夛紝鐚滈敊浠ｄ环澶с€?
 
-- **第一次猜测修复失败后，立刻切换系统化排查模式**。禁止连续盲改代码。
-- 系统化排查 = 每步只验证一个假设 + 必须输出日志/截图证据 + 给"如果 A 则进 X，如果 B 则进 Y"决策矩阵。
-- 排查从最便宜的步骤开始：浏览器预览 > 编辑器预览 > devtools > 真机；纯代码构造 > 走加载链路；对照已知能用的 case > 直接调试目标。
-- 完整模板和反例见 `memory/feedback-systematic-debugging.md`。
+- **绗竴娆＄寽娴嬩慨澶嶅け璐ュ悗锛岀珛鍒诲垏鎹㈢郴缁熷寲鎺掓煡妯″紡**銆傜姝㈣繛缁洸鏀逛唬鐮併€?
+- 绯荤粺鍖栨帓鏌?= 姣忔鍙獙璇佷竴涓亣璁?+ 蹇呴』杈撳嚭鏃ュ織/鎴浘璇佹嵁 + 缁?濡傛灉 A 鍒欒繘 X锛屽鏋?B 鍒欒繘 Y"鍐崇瓥鐭╅樀銆?
+- 鎺掓煡浠庢渶渚垮疁鐨勬楠ゅ紑濮嬶細娴忚鍣ㄩ瑙?> 缂栬緫鍣ㄩ瑙?> devtools > 鐪熸満锛涚函浠ｇ爜鏋勯€?> 璧板姞杞介摼璺紱瀵圭収宸茬煡鑳界敤鐨?case > 鐩存帴璋冭瘯鐩爣銆?
+- 瀹屾暣妯℃澘鍜屽弽渚嬭 `memory/feedback-systematic-debugging.md`銆?
 
-**微信小游戏 Sprite 不显示**：
-- 第一反应查 **DynamicAtlas**，不要去查 layer / UITransform / normalize / ensureArtChild 那些表层细节。
-- 新项目 GameApp.onLoad 顶部必须 `dynamicAtlasManager.enabled = false`。
-- 详见 `memory/feedback-wechat-dynamic-atlas.md`。
+**寰俊灏忔父鎴?Sprite 涓嶆樉绀?*锛?
+- 绗竴鍙嶅簲鏌?**DynamicAtlas**锛屼笉瑕佸幓鏌?layer / UITransform / normalize / ensureArtChild 閭ｄ簺琛ㄥ眰缁嗚妭銆?
+- 鏂伴」鐩?GameApp.onLoad 椤堕儴蹇呴』 `dynamicAtlasManager.enabled = false`銆?
+- 璇﹁ `memory/feedback-wechat-dynamic-atlas.md`銆?
 
-**Cocos 资源 SpriteFrame UUID 引用**：场景里的 SpriteFrame 引用用 `<uuid>@f9941` 格式，UUID 在对应 `.png.meta` 文件的 `f9941` subMeta 里。MCP `cocos_component.set_property` 设 spriteFrame 时，**参数名是 `node` 不是 `nodeUuid`**；`contentSize` 写入回读 `actualValue` 常为 100×100（验证失败），但实际可能已生效，宁可用 `scale` 调整尺寸或在编辑器里手动改。
+**Cocos 璧勬簮 SpriteFrame UUID 寮曠敤**锛氬満鏅噷鐨?SpriteFrame 寮曠敤鐢?`<uuid>@f9941` 鏍煎紡锛孶UID 鍦ㄥ搴?`.png.meta` 鏂囦欢鐨?`f9941` subMeta 閲屻€侻CP `cocos_component.set_property` 璁?spriteFrame 鏃讹紝**鍙傛暟鍚嶆槸 `node` 涓嶆槸 `nodeUuid`**锛沗contentSize` 鍐欏叆鍥炶 `actualValue` 甯镐负 100脳100锛堥獙璇佸け璐ワ級锛屼絾瀹為檯鍙兘宸茬敓鏁堬紝瀹佸彲鐢?`scale` 璋冩暣灏哄鎴栧湪缂栬緫鍣ㄩ噷鎵嬪姩鏀广€?

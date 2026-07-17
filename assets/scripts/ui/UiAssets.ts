@@ -81,10 +81,7 @@ export const UI_SPRITE_UUID: Record<string, string> = {
   'pve/map/mark_move_range': '7cd41b51-8d59-4da8-b245-b2d2c86c9ba2@f9941',
   'pve/map/tile_floor_ch1': '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6@f9941',
   'pve/map/tile_floor_ch1L': '6b9be095-3a24-4603-83f0-e81dafd9c46b@f9941',
-  // tile_floor_ch2 历史声明，源 PNG 从未存在；FogMapView 取不到自动 fallback 不显示地砖。
-  // tile_floor_ch3 历史声明，源 PNG 从未存在；FogMapView 取不到自动 fallback 不显示地砖。
-  // tile_floor_ch4 历史声明，源 PNG 从未存在。
-  // tile_floor_ch5 历史声明，源 PNG 从未存在。
+  // 章节地砖缺图时由 FogMapView 自动回退，不阻塞地图显示。
   'pve/map/tile_fog': 'cb221eaf-62c2-42df-b751-2d6d521e1652@f9941',
   // terrain_rock 跨章共享（ch1 GoblinChief 召唤 + ch3 FrostGiant 路径检测），留主包 critical。
   'pve/map/terrain_rock': '6de48a38-f929-42c3-9fdc-f02682a9013e@f9941',
@@ -149,10 +146,10 @@ export const PVE_HUD_KEYS = [
   'pve/hud/btn_pve_interact',
 ] as const;
 
-/** 战斗状态/战报/遗物图标（旧 status/relic/scroll 图已退役） */
+/** 战斗状态与战报图标。 */
 export const PVE_STATUS_KEYS = [] as const;
 
-/** 职业图标（旧 icon_class_* 已退役；觉醒图按需 loadUiSprite，不进预加载） */
+/** 职业图标。 */
 export const PVE_CLASS_KEYS = [] as const;
 
 export const PVE_POPUP_KEYS = [

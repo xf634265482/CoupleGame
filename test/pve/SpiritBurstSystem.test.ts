@@ -33,7 +33,7 @@ describe('spirit burst', () => {
     const normal = previewProfessionAttack(active, { apCost: 2 }, 7, { professionId: 'WARRIOR', extraChargeAp: 0 });
     expect(normal).toMatchObject({ apCost: 2, consumesSpiritBurst: false });
     const charged = previewProfessionAttack(active, { apCost: 2 }, 7, { professionId: 'WARRIOR', extraChargeAp: 3 });
-    expect(charged).toMatchObject({ apCost: 3, damageMultiplier: 1.8, armorPenetration: 0.2, consumesSpiritBurst: true });
+    expect(charged).toMatchObject({ apCost: 3, damageMultiplier: 2.1, armorPenetration: 0.2, consumesSpiritBurst: true });
     expect(commitProfessionAttack(active, charged).profession.spiritBurstActive).toBe(false);
   });
 

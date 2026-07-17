@@ -9,15 +9,17 @@ const ADMIN_ACTIONS = {
   LIST_PLAYERS: 'listPlayers',
   LIST_BALANCE_CONFIGS: 'listBalanceConfigs',
   GET_BALANCE_CONFIG: 'getBalanceConfig',
+  GET_BALANCE_CONFIG_DETAIL: 'getBalanceConfigDetail',
   SAVE_BALANCE_CONFIG: 'saveBalanceConfig',
   RESET_BALANCE_CONFIG: 'resetBalanceConfig',
+  REMOVE_BALANCE_FIELD_OVERRIDE: 'removeBalanceFieldOverride',
+  REMOVE_BALANCE_SECTION_OVERRIDE: 'removeBalanceSectionOverride',
   SYNC_BALANCE_DOCS_PREVIEW: 'syncBalanceDocsPreview',
   SYNC_BALANCE_DOCS_LOG: 'syncBalanceDocsLog',
   ADJUST_RESOURCES: 'adjustResources',
   RESET_EXPEDITION: 'resetExpedition',
+  RESET_CAMP_INVENTORY: 'resetCampInventory',
   RESET_TUTORIAL: 'resetTutorial',
-  RESET_DESTINY_TREE_ONLY: 'resetDestinyTreeOnly',
-  RESET_DESTINY_TREE_AND_REFUND: 'resetDestinyTreeAndRefund',
   RESET_LEADERBOARD_GLOBAL: 'resetLeaderboardGlobal',
   LIST_LOGS: 'listLogs',
 };
@@ -25,16 +27,12 @@ const ADMIN_ACTIONS = {
 const ADMIN_ACTION_SET = new Set(Object.values(ADMIN_ACTIONS));
 
 const RESOURCE_TYPES = {
-  RUN_GOLD: 'runGold',
   DIAMOND: 'diamond',
-  DESTINY_SHARDS: 'destinyShards',
   STAMINA: 'stamina',
 };
 
 const RESOURCE_LIMITS = {
-  [RESOURCE_TYPES.RUN_GOLD]: 5000,
   [RESOURCE_TYPES.DIAMOND]: 2000,
-  [RESOURCE_TYPES.DESTINY_SHARDS]: 5000,
   [RESOURCE_TYPES.STAMINA]: 200,
 };
 

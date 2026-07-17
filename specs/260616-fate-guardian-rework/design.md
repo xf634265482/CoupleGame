@@ -336,11 +336,11 @@ export const DESTINY_5X5_DMG_MULT = 1.2;                 // E4 = atk × 1.2
 
 ## 十二、文档同步清单
 
-- `specs/game-design/Boss设计V1.md` §五 命运守卫整段重写
+- `specs/260608-pve-destiny-expedition/design.md` 中对应 Boss 规则
 - `specs/balance-reference.md` §11 命运守卫数值表更新
 - `specs/260608-pve-destiny-expedition/design.md` 第 5 章 Boss 部分更新
 - `specs/260614-boss-anti-kite/design.md` 命运守卫部分加注"狂暴后预言停用"
-- `specs/game-design/战斗系统V1.md` §九战报新事件文案
+- `specs/260608-pve-destiny-expedition/design.md` 中对应战斗事件文案
 
 ## 十三、不在本批范围
 

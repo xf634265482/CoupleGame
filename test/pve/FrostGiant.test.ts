@@ -5,6 +5,7 @@ import { endTurn } from '../../assets/scripts/pve/core/ExpeditionState';
 import {
   CHAPTER3_ICE_WALL_HP,
   FROST_GIANT_CHARGE_DAMAGE_MULT,
+  FROST_GIANT_CHARGE_MISS_ICE_WALLS,
   FROST_GIANT_CHILL_STACKS_TO_FREEZE,
   FROST_GIANT_ENRAGE_HP_RATIO,
   FROST_GIANT_FREEZE_ATTACKS_TO_BREAK,
@@ -396,28 +397,6 @@ describe('FrostGiant — 反风筝重做（寒气/冻结/重击/狂暴冲锋）'
   });
 
   describe('狂暴冲锋 — 执行（CHARGE_EXECUTED）', () => {
-    it('车道内首先遇到 ICE_WALL → 击碎并停止（WALL_SHATTERED）', () => {
-      const state = makeFrostGiantState({
-        bossOverrides: { hp: 30, maxHp: 80, frostChargeDir: { x: 0, y: -1 } },
-        floorOverrides: {
-          player: { x: 0, y: 0 },
-          entities: [makeEntity('wall1', 'ICE_WALL', { x: 4, y: 3 }, { hp: CHAPTER3_ICE_WALL_HP })],
-        },
-      });
-      const result = stepFrostGiant(state, getBoss(state))!;
-
-      const exec = result.events.find((e) => e.type === 'CHARGE_EXECUTED');
-      expect(exec && exec.type === 'CHARGE_EXECUTED' ? exec.result : '').toBe('WALL_SHATTERED');
-      expect(exec && exec.type === 'CHARGE_EXECUTED' ? exec.to : null).toEqual({ x: 4, y: 3 });
-
-      const shattered = result.events.find((e) => e.type === 'ICE_WALL_SHATTERED');
-      expect(shattered && shattered.type === 'ICE_WALL_SHATTERED' ? shattered.entityId : '').toBe('wall1');
-
-      const boss = result.state.floorState.monsters.find((m) => m.id === 'boss');
-      expect(boss?.pos).toEqual({ x: 4, y: 3 });
-      expect(boss?.frostChargeDir).toBeUndefined();
-    });
-
     it('车道内命中玩家 → 造成 boss.attack × 倍率伤害并停止（PLAYER_HIT）', () => {
       const state = makeFrostGiantState({
         bossOverrides: { hp: 30, maxHp: 80, frostChargeDir: { x: 0, y: -1 } },
@@ -439,27 +418,6 @@ describe('FrostGiant — 反风筝重做（寒气/冻结/重击/狂暴冲锋）'
       expect(boss?.frostChargeDir).toBeUndefined();
     });
 
-    it('车道内均未命中 → 冲到路径终点并随机生成新 ICE_WALL（ICE_WALL_SPAWNED）', () => {
-      const state = makeFrostGiantState({
-        bossOverrides: { hp: 30, maxHp: 80, frostChargeDir: { x: 0, y: -1 } },
-        floorOverrides: { player: { x: 0, y: 0 } },
-      });
-      const result = stepFrostGiant(state, getBoss(state))!;
-
-      const exec = result.events.find((e) => e.type === 'CHARGE_EXECUTED');
-      expect(exec && exec.type === 'CHARGE_EXECUTED' ? exec.result : '').toBe('ICE_WALL_SPAWNED');
-      expect(exec && exec.type === 'CHARGE_EXECUTED' ? exec.to : null).toEqual({ x: 4, y: 0 });
-
-      const spawned = result.events.find((e) => e.type === 'ICE_WALL_SPAWNED');
-      expect(spawned).toBeDefined();
-      const newWalls = result.state.floorState.entities.filter((e) => e.type === 'ICE_WALL' && !e.consumed);
-      expect(newWalls.length).toBe(1);
-      expect(newWalls[0].hp).toBe(CHAPTER3_ICE_WALL_HP);
-
-      const boss = result.state.floorState.monsters.find((m) => m.id === 'boss');
-      expect(boss?.pos).toEqual({ x: 4, y: 0 });
-      expect(boss?.frostChargeDir).toBeUndefined();
-    });
   });
 
   describe('SHATTERED_ICE 碎冰地块', () => {

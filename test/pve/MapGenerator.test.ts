@@ -152,16 +152,18 @@ describe('MapGenerator — 章节怪物缩放', () => {
 
   it('第 2 章（第 8 层）普通层怪物 HP/攻击按 ×1.8 缩放', () => {
     const floor = generateFloor(8, 100); // floor 8 = chapter 2, normal floor
-    const { hpMult, attackMult } = chapterScaling(2);
+    const { attackMult } = chapterScaling(2);
     const normals = floor.monsters.filter((m) => m.type === 'NORMAL');
     expect(normals.length).toBeGreaterThan(0);
     normals.forEach((m) => {
-      expect(m.hp).toBe(Math.round(MONSTER_BASE.NORMAL.hp * hpMult));
-      expect(m.attack).toBe(Math.round(MONSTER_BASE.NORMAL.attack * attackMult));
+      expect(m.hp).toBe(155);
+      expect(m.armor).toBe(8);
+      expect(m.attack).toBe(21);
     });
     const elites = floor.monsters.filter((m) => m.type === 'ELITE');
     elites.forEach((m) => {
-      expect(m.hp).toBe(Math.round(MONSTER_BASE.ELITE.hp * hpMult));
+      expect(m.hp).toBe(305);
+      expect(m.armor).toBe(14);
       expect(m.attack).toBe(Math.round(MONSTER_BASE.ELITE.attack * attackMult));
     });
   });

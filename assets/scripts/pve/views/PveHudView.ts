@@ -380,7 +380,6 @@ export class PveHudView {
   private _floorLabel: Label;
   private _bossBadge: Node;
   private _bossBadgeLabel: Label;
-  private _shardsLabel: Label | null = null;
   private _goldLabel: Label;
   private _animaG: Graphics;
   private _animaLabel: Label;
@@ -415,7 +414,6 @@ export class PveHudView {
   private _classLabel!: Label;
   private _statusLabel: Label;
 
-  private _destinyShards = 0;
   private _chargeButton: Node | null = null;
   private _chargeButtonLabel: Label | null = null;
   private _spiritBurstButton: Node | null = null;
@@ -1151,7 +1149,6 @@ export class PveHudView {
     this._floorLabel.color = bossFloor ? GOLD : WHITE;
     this._bossBadge.active = bossFloor;
     this._bossBadgeLabel.string = bossFloor ? '首领回合' : '';
-    if (this._shardsLabel) this._shardsLabel.string = `碎片 ${this._destinyShards}`;
     this._goldLabel.string = `星尘 ${player.gold}`;
     this._animaLabel.string = `灵气 ${player.animaProgress}/${player.animaThreshold ?? 100}`;
     const animaBarW = this._animaG.node.getComponent(UITransform)?.width ?? 120;
@@ -1188,11 +1185,6 @@ export class PveHudView {
     this._statusLabel.string = statuses.join('  ·  ');
 
     this._refreshTarget(state);
-  }
-
-  refreshMeta(destinyShards: number): void {
-    this._destinyShards = destinyShards;
-    if (this._shardsLabel) this._shardsLabel.string = `碎片 ${destinyShards}`;
   }
 
   focusMonster(monsterId: string | null): void {

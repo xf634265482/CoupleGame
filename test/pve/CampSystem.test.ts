@@ -81,11 +81,11 @@ describe('CampSystem — HEAL_FULL（完全治疗）', () => {
     expect(result.state.player.gold).toBe(0);
   });
 
-  it('不修改其他 player 字段（classTraits / equipment 等）', () => {
-    const state = makeState({ hp: 10, maxHp: 20, gold: 100, classTraits: ['crit', 'backstab'] });
+  it('不修改职业与装备字段', () => {
+    const state = makeState({ hp: 10, maxHp: 20, gold: 100 });
     const result = applyShopBuy(state, 'HEAL_FULL');
-    expect(result.state.player.classTraits).toEqual(['crit', 'backstab']);
     expect(result.state.player.classId).toBe(state.player.classId);
+    expect(result.state.player.equipment).toEqual(state.player.equipment);
   });
 });
 

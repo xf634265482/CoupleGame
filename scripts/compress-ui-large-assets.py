@@ -6,6 +6,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -21,13 +22,11 @@ BACKGROUND_SPECS: dict[str, tuple[int, int]] = {
     "backgrounds/bg_room.png": (1334, 750),
     "backgrounds/bg_board.png": (1334, 750),
     "backgrounds/bg_settlement.png": (1334, 750),
-    # bg_pve_ch1 进主包 critical native（patch-wechatgame-config.js: isMainNativeExcluded
-    # 对 'pve/backgrounds/bg_pve_ch1' 显式 return false）。其余章节背景留分包，无需压缩。
-    "pve/backgrounds/bg_pve_ch1.png": (576, 1024),
 }
 
 PROTECTED_SOURCE_ASSETS = {
     "backgrounds/bg_lobby.png",
+    "pve/backgrounds/bg_pve_ch1.png",
 }
 
 PANEL_SPECS: dict[str, int] = {
@@ -60,6 +59,10 @@ EXTRA_RGBA_SPECS: dict[str, dict] = {
     # terrain_rock 跨章共享（第1章 GoblinChief 召唤 + 第3章 FrostGiant 路径碰撞检测），
     # 留主包 critical。源图 512×512 / 292KB 过剩，战场显示约 60-80px。
     "pve/map/terrain_rock.png": {"size": (128, 128), "colors": 64, "max_kb": 24},
+    # 第 5 层目标交互图标需要留主包避免真机红方块，但战斗格显示约 80px；
+    # 源图 256×256 体积偏大，压到 128px 仍保留 2x 清晰度。
+    "pve/map/icon_gunpowder_barrel.png": {"size": (128, 128), "colors": 64, "max_kb": 28},
+    "pve/map/icon_blast_target.png": {"size": (128, 128), "colors": 64, "max_kb": 28},
 }
 
 BATCH_MIN_KB = 16
@@ -72,6 +75,16 @@ MAX_BG_KB = 280
 MAX_BG_LOBBY_KB = 120
 MAX_BG_BOARD_KB = 130
 MAX_BG_ROOM_KB = 220
+
+# Chapter terrain tiles are displayed at roughly 100 px in the battle grid.
+# Their original 512 px source textures dominate the chapter subpackages, so
+# 256 px / indexed PNG keeps the visual detail while cutting first-load size.
+CHAPTER_TERRAIN_SPECS: dict[str, dict] = {
+    "chapter_3/map/terrain_freeze_wall.png": {"size": (256, 256), "colors": 128, "max_kb": 70},
+    "chapter_3/map/terrain_ice_tile.png": {"size": (256, 256), "colors": 128, "max_kb": 70},
+    "chapter_3/map/terrain_ice_wall.png": {"size": (256, 256), "colors": 128, "max_kb": 70},
+    "chapter_3/map/terrain_shattered_ice.png": {"size": (256, 256), "colors": 128, "max_kb": 70},
+}
 
 
 def kb(path: Path) -> float:
@@ -251,6 +264,23 @@ def compress_rgba_spec(rel: str, spec: dict) -> None:
     print(f"[ui] {rel}: {before:.0f} KB -> {after:.0f} KB ({w}x{h})")
 
 
+def compress_chapter_terrain(rel: str, spec: dict) -> None:
+    src = ROOT / "assets" / "chapter_backgrounds" / rel
+    if not src.exists():
+        print(f"[skip] missing {rel}")
+        return
+    before = kb(src)
+    backup_once(src)
+    im = Image.open(src).convert("RGBA")
+    target = spec["size"]
+    if im.size != target:
+        im = im.resize(target, Image.Resampling.LANCZOS)
+    save_quantized_capped(im, src, int(spec["colors"]), float(spec["max_kb"]))
+    after = kb(src)
+    update_sprite_meta(src.with_suffix(".png.meta"), *im.size)
+    print(f"[chapter] {rel}: {before:.0f} KB -> {after:.0f} KB ({im.size[0]}x{im.size[1]})")
+
+
 def batch_compress_dir(rel_dir: str) -> None:
     folder = UI_ROOT / rel_dir
     if not folder.is_dir():
@@ -282,6 +312,14 @@ def compress_bgm() -> None:
 
 
 def main() -> None:
+    chapter_only = "--chapter-only" in sys.argv[1:]
+    if chapter_only:
+        print("compress-ui-large-assets --chapter-only")
+        for rel, spec in CHAPTER_TERRAIN_SPECS.items():
+            compress_chapter_terrain(rel, spec)
+        print("done - refresh assets in Cocos Creator, rebuild wechatgame, then run the patch script")
+        return
+
     print("compress-ui-large-assets")
     for rel in sorted(PROTECTED_SOURCE_ASSETS):
         print(f"[protected] excluded from source compression: {rel}")

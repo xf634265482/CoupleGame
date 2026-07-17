@@ -18,7 +18,7 @@ describe('profession action integration', () => {
     const warrior = previewProfessionAttack(runtime('WARRIOR'), sameWeapon, 7, { professionId: 'WARRIOR', extraChargeAp: 2 });
     const archer = previewProfessionAttack(endProfessionTurn(endProfessionTurn(endProfessionTurn(runtime('ARCHER'), 8), 8), 8), sameWeapon, 7, { professionId: 'ARCHER' });
     const ranger = previewProfessionAttack(runtime('RANGER'), sameWeapon, 7, { professionId: 'RANGER' });
-    expect(warrior).toMatchObject({ apCost: 4, damageMultiplier: 1.5, chargeLevel: 2 });
+    expect(warrior).toMatchObject({ apCost: 4, damageMultiplier: 1.75, chargeLevel: 2, collisionRatio: 0.4 });
     expect(archer).toMatchObject({ apCost: 2, damageMultiplier: 1.3, rangeBonus: 1 });
     expect(ranger).toMatchObject({ apCost: 2, damageMultiplier: 1 });
   });
@@ -49,6 +49,18 @@ describe('profession action integration', () => {
     expect(state.profession.rangerCombo).toBe(4);
     const finish = commitRangerFinisher(state, 'SHADOW_END', 3);
     expect(finish).toMatchObject({ valid: true, state: { profession: { rangerCombo: 0, rangerPendingAttackMultiplier: 1.6 } } });
+  });
+
+  test('ranger finisher at 3 combo arms quick damage and free move', () => {
+    let state = runtime('RANGER');
+    state = commitProfessionMove(state, 1);
+    state = commitProfessionAttack(state, previewProfessionAttack(state, sameWeapon, 1, { professionId: 'RANGER' }));
+    state = commitProfessionMove(state, 1);
+    expect(state.profession.rangerCombo).toBe(3);
+    const damage = commitRangerFinisher(state, 'QUICK_DAMAGE', 1);
+    expect(damage).toMatchObject({ valid: true, state: { profession: { rangerCombo: 0, rangerPendingAttackMultiplier: 1.25, rangerFreeMoveSteps: 0 } } });
+    const move = commitRangerFinisher(state, 'QUICK_MOVE', 1);
+    expect(move).toMatchObject({ valid: true, freeMoveRange: 1, state: { profession: { rangerFreeMoveSteps: 1 } } });
   });
 
   test('invalid preview cannot be committed', () => {

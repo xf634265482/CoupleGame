@@ -22,6 +22,8 @@ export async function callFunction<T>(
     return res.result as T;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    // The gateway message is commonly generic; preserve errCode and errMsg on device.
+    console.error('[CloudService] callFunction failed', { name, data, err });
     throw new CloudServiceError(msg, 'CLOUD_CALL_FAILED');
   }
 }

@@ -1,5 +1,20 @@
-const MINGHEN_SOURCES={1:['M05','M06','M07'],2:['M01','M02','M09','M15'],3:['M03','M04','M10'],4:['M08','M11','M12','M16'],5:['M13','M14','M19'],6:['M17','M18','M20','M22'],7:['M21','M23','M24']};
-const TRIAL_REQUIREMENTS={M01:{bleedApplied:6,bloodwalkKills:2},M02:{maxPoisonStacks:5,poisonKills:1},M03:{emberTriggers:5,burnConsumed:6},M04:{freezeOrStagger:3,followupActions:1},M05:{hiddenEdgeTriggers:3,overkillHalfHp:1},M06:{reserveApGained:4,reserveApSpentOnAttack:3},M07:{revengeTriggers:2,lowHpEliteKills:1},M08:{terrainEffectsTaken:3,terrainChargedTargets:3,cleared:1},M09:{huntTriggers:5,huntKills:2},M10:{catalystTargets:3,maxSimultaneousStatuses:3},M11:{shieldBreaks:3,rebuiltShieldPct:15},M12:{overhealShieldPct:30,shieldedEliteKills:1},M13:{collisions:4,doubleEnemyCollisions:2,discountKills:1},M14:{fullFlowChains:4,fourthActionFromRefund:1},M15:{retargetKillChain:3},M16:{backflowSpirit:45,backflowFilledBurst:1},M17:{spreadTargets:6,spreadStatusKills:2},M18:{detonations:5,detonationClimaxKills:1},M19:{secondaryDamage:100,doubleTransfers:1},M20:{multiToSingleChains:2,threeTargetHits:1},M21:{lowHpBossDamagePct:20,cleared:1},M22:{cloudStepTriggers:6,maxActionsInTurn:5},M23:{bloodforgeUses:4,bloodforgeKills:2,cleared:1},M24:{stillFieldBossHits:4,warningZoneHits:2,cleared:1}};
+const MINGHEN_SOURCES={
+  1:['M05','M06','M07'],
+  2:['M01','M02','M09','M15'],
+  3:['M03','M04','M10'],
+  4:['M08','M11','M12','M16'],
+  5:['M13','M14','M19'],
+  6:['M17','M18','M20','M22'],
+  7:['M21','M23','M24'],
+  8:['M08','M22','M09'],
+  9:['M02','M17','M15','M10'],
+  10:['M05','M03','M13'],
+  11:['M11','M12','M16','M14'],
+  12:['M19','M18','M20','M25'],
+  13:['M21','M23','M22','M26'],
+  14:['M24','M01','M04'],
+};
+const TRIAL_REQUIREMENTS={M01:{bleedApplied:6,bloodwalkKills:2},M02:{maxPoisonStacks:5,poisonKills:1},M03:{emberTriggers:5,burnConsumed:6},M04:{freezeOrStagger:3,followupActions:1},M05:{hiddenEdgeTriggers:3,overkillHalfHp:1},M06:{reserveApGained:4,reserveApSpentOnAttack:3},M07:{revengeTriggers:2,lowHpEliteKills:1},M08:{terrainEffectsTaken:3,terrainChargedTargets:3,cleared:1},M09:{huntTriggers:5,huntKills:2},M10:{catalystTargets:3,maxSimultaneousStatuses:3},M11:{shieldBreaks:3,rebuiltShieldPct:15},M12:{overhealShieldPct:30,shieldedEliteKills:1},M13:{collisions:4,doubleEnemyCollisions:2,discountKills:1},M14:{fullFlowChains:4,fourthActionFromRefund:1},M15:{retargetKillChain:3},M16:{backflowSpirit:45,backflowFilledBurst:1},M17:{spreadTargets:6,spreadStatusKills:2},M18:{detonations:5,detonationClimaxKills:1},M19:{secondaryDamage:100,doubleTransfers:1},M20:{multiToSingleChains:2,threeTargetHits:1},M21:{lowHpBossDamagePct:20,cleared:1},M22:{cloudStepTriggers:6,maxActionsInTurn:5},M23:{bloodforgeUses:4,bloodforgeKills:2,cleared:1},M24:{stillFieldBossHits:4,warningZoneHits:2,cleared:1},M25:{sandPitSteps:3,sandPitEmpoweredHits:1},M26:{sandstormHits:3,stormGuardKills:1}};
 function sourceAllows(floor,id){return(MINGHEN_SOURCES[floor]??[]).includes(id);}
 function levelFor(entry){if(entry.copies>=4&&entry.trialCompleted)return 3;if(entry.copies>=2)return 2;return 1;}
 function grantCopy(collection,id){const old=collection[id]??{id,level:1,copies:0,trialCompleted:false};const next={...old,copies:old.copies+1};next.level=levelFor(next);return{...collection,[id]:next};}

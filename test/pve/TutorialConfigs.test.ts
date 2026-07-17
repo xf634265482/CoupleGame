@@ -15,6 +15,8 @@ test('steps cover charge then burst then key/portal', () => {
     'burst', 'burst_charge', 'burst_kill', 'key', 'portal',
   ]);
   expect(FIRST_TUTORIAL_STEPS.find((s) => s.id === 'burst')?.onEnterFillSpirit).toBe(true);
+  expect(FIRST_TUTORIAL_STEPS.find((s) => s.id === 'charge')?.onEnterExplain).toMatch(/蓄力/);
+  expect(FIRST_TUTORIAL_STEPS.find((s) => s.id === 'burst')?.onEnterExplain).toMatch(/破甲/);
 });
 
 test('monster B sits within warrior attack range of the approach_b landing cell', () => {

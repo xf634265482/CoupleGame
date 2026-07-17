@@ -2,21 +2,21 @@
 // 数值已按 ×5.0 缩放后取整（普通层设计V1 §五）。
 //
 // 变体 id：
-//   LAVA_GRUNT      — 普通怪：200HP/50攻/1射程，无特殊行为
-//   LAVA_CRAB       — 普通怪：200HP/50攻/1射程，硬甲（受物理伤害减半，向下取整）
-//   FIRE_ELEMENTAL  — 精英怪：400HP/100攻/2射程，灼烧（命中后5HP/回合×2回合，叠加）
+//   ASH_HOUND       — 普通怪：350HP/53攻/38甲/1射程，踏火
+//   LAVA_CRAB       — 普通怪：350HP/53攻/5甲/1射程，硬甲（受物理伤害减半）
+//   FIRE_ELEMENTAL  — 精英怪：700HP/100攻/56甲/2射程，灼烧
 
 import type { Coord, Monster } from './PveTypes';
 
-export const VARIANT_LAVA_GRUNT = 'LAVA_GRUNT';
+export const VARIANT_ASH_HOUND = 'ASH_HOUND';
 export const VARIANT_LAVA_CRAB = 'LAVA_CRAB';
 export const VARIANT_FIRE_ELEMENTAL = 'FIRE_ELEMENTAL';
 
-/** 熔岩暴徒（普通怪）：近战基础单位，无特殊行为。护甲 20。 */
-export function makeLavaGrunt(id: string, pos: Coord): Monster {
+/** 灰烬猎犬（普通怪）：免疫熔岩伤害，站在熔岩上时攻击 +20%。 */
+export function makeAshHound(id: string, pos: Coord): Monster {
   return {
-    id, type: 'NORMAL', variantId: VARIANT_LAVA_GRUNT, pos,
-    hp: 200, maxHp: 200, attack: 50, range: 1, aggroRadius: 3, aiState: 'IDLE', armor: 20,
+    id, type: 'NORMAL', variantId: VARIANT_ASH_HOUND, pos,
+    hp: 410, maxHp: 410, attack: 53, range: 1, aggroRadius: 3, aiState: 'IDLE', armor: 22,
   };
 }
 
@@ -24,14 +24,14 @@ export function makeLavaGrunt(id: string, pos: Coord): Monster {
 export function makeLavaCrab(id: string, pos: Coord): Monster {
   return {
     id, type: 'NORMAL', variantId: VARIANT_LAVA_CRAB, pos,
-    hp: 200, maxHp: 200, attack: 50, range: 1, aggroRadius: 2, aiState: 'IDLE',
+    hp: 410, maxHp: 410, attack: 53, range: 1, aggroRadius: 2, aiState: 'IDLE', armor: 5,
   };
 }
 
-/** 火焰元素（精英怪）：灼烧——命中玩家后5HP/回合×2回合（叠加，复用赤炎哥布林机制）。射程2。护甲 30。 */
+/** 火焰元素（精英怪）：灼烧——命中玩家后5HP/回合×2回合（叠加，复用赤炎哥布林机制）。射程2。护甲 56。 */
 export function makeFireElemental(id: string, pos: Coord): Monster {
   return {
     id, type: 'ELITE', variantId: VARIANT_FIRE_ELEMENTAL, pos,
-    hp: 400, maxHp: 400, attack: 100, range: 2, aggroRadius: 4, aiState: 'IDLE', armor: 30,
+    hp: 790, maxHp: 790, attack: 100, range: 2, aggroRadius: 4, aiState: 'IDLE', armor: 34,
   };
 }

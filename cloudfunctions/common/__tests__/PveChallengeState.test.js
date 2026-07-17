@@ -73,7 +73,7 @@ describe('PveChallengeState', () => {
     const settled = applyChallengeSettlement(active, challenge, {
       status: 'CLEAR',
       clearTurns: 12,
-      completedOptionalObjectiveIds: ['F1_FULL_SEARCH'],
+      completedOptionalObjectiveIds: [],
     }, 200);
     expect(settled.profile.highestClearedFloor).toBe(1);
     expect(settled.profile.highestUnlockedFloor).toBe(2);
@@ -81,8 +81,81 @@ describe('PveChallengeState', () => {
     expect(settled.profile.floorRecords['1']).toMatchObject({
       clearCount: 1,
       bestClearTurns: 12,
-      completedOptionalObjectiveIds: ['F1_FULL_SEARCH'],
+      completedOptionalObjectiveIds: [],
     });
+  });
+
+  test('grants combat loot into inventory and loadout on clear', () => {
+    const profile = createDefaultProfile();
+    const challenge = buildChallenge('u1', request(), 100, 'c1', 1);
+    const active = applyChallengeStart(profile, challenge, 100);
+    const settled = applyChallengeSettlement(active, challenge, {
+      status: 'CLEAR',
+      clearTurns: 8,
+      completedOptionalObjectiveIds: [],
+      lootedEquipment: [{
+        instanceId: 'loot_1_1_1',
+        definitionId: '生锈短刃',
+        quality: 'COMMON',
+        enhanceLevel: 0,
+        locked: false,
+      }],
+      equipmentLoadout: { WEAPON: 'loot_1_1_1' },
+    }, 200);
+    expect(settled.profile.equipmentInventory).toEqual([{
+      instanceId: 'loot_1_1_1',
+      definitionId: '生锈短刃',
+      quality: 'COMMON',
+      enhanceLevel: 0,
+      locked: false,
+    }]);
+    expect(settled.profile.equipmentLoadout).toEqual({ WEAPON: 'loot_1_1_1' });
+    expect(settled.rewards.lootedEquipment).toHaveLength(1);
+  });
+
+  test('keeps combat loot on death without unlocking floors', () => {
+    const profile = createDefaultProfile();
+    const challenge = buildChallenge('u1', request(), 100, 'c1', 1);
+    const active = applyChallengeStart(profile, challenge, 100);
+    const settled = applyChallengeSettlement(active, challenge, {
+      status: 'DEAD',
+      completedOptionalObjectiveIds: [],
+      lootedEquipment: [{
+        instanceId: 'loot_dead_w01',
+        definitionId: '生锈短刃',
+        quality: 'COMMON',
+        enhanceLevel: 0,
+        locked: false,
+      }],
+      equipmentLoadout: { WEAPON: 'loot_dead_w01' },
+    }, 200);
+    expect(settled.profile.highestUnlockedFloor).toBe(1);
+    expect(settled.profile.equipmentInventory).toHaveLength(1);
+    expect(settled.profile.equipmentLoadout).toEqual({ WEAPON: 'loot_dead_w01' });
+  });
+
+  test('floor 7 clear accepts GOBLIN_CHIEF exclusive spoil outside floor pool', () => {
+    const profile = createDefaultProfile();
+    profile.highestUnlockedFloor = 7;
+    const challenge = buildChallenge('u1', request({ floor: 7 }), 100, 'c7', 7);
+    const active = applyChallengeStart(profile, challenge, 100);
+    const settled = applyChallengeSettlement(active, challenge, {
+      status: 'CLEAR',
+      clearTurns: 30,
+      completedOptionalObjectiveIds: [],
+      lootedEquipment: [{
+        instanceId: 'loot_42_7_1',
+        definitionId: '哥布林酋长战斧',
+        quality: 'RARE',
+        enhanceLevel: 0,
+        locked: false,
+        baseStat: 30,
+      }],
+      equipmentLoadout: { WEAPON: 'loot_42_7_1' },
+    }, 200);
+    expect(settled.profile.equipmentInventory.some((item) => item.definitionId === '哥布林酋长战斧')).toBe(true);
+    expect(settled.profile.equipmentLoadout.WEAPON).toBe('loot_42_7_1');
+    expect(settled.rewards.lootedEquipment?.[0]?.definitionId).toBe('哥布林酋长战斧');
   });
 
   test('death and withdraw only clear the active pointer', () => {

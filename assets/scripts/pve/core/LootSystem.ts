@@ -3,14 +3,13 @@
 // Boss 击杀三层结构（永久逐层 + 旧远征统一）：
 //   1. 通用必掉：星尘 + 灵气（章节缩放，bossDropScaled）
 //   2. 专属战利品：BOSS_SPOILS 中等概率 1 件（100%，rollBossSpoil）
-//   3. 稀有独立判定：~30% 额外楼层固定池装备 + Boss 遗物 pity（无命运碎片）
+//   3. 稀有独立判定：~30% 额外楼层固定池装备。
 //
 // rollNormalMonsterDrop 是纯随机抽取函数：调用方传入 rng，便于复用同一份楼层 RNG 续算（AC-13 确定性）。
 // openChest 是 ApplyResult 纯函数：星尘直接入账；灵气经 AnimaSystem.addAnima 累加（不再触发强化三选一）。
 
 import { addAnima } from './AnimaSystem';
 import { applyInteractionExposure } from './AlertSystem';
-import { generalChestGoldPct, generalGoldGainPct } from './strengthen/CommonStrengthenEffects';
 import { canAfford, spend } from './ApSystem';
 import { equipItem, putInBag } from './EquipHelper';
 import { rollEquipment, rollRandomSlot } from './EquipmentSystem';
@@ -201,9 +200,7 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
   };
 
   // 鍛借繍鏍?C2 瀹濈鑰佹墜锛氬疂绠遍噾甯?+chestGoldBonusPct锛堝彇鏁达級
-  const chestGoldBonusPct = generalChestGoldPct(state.player.classTraits)
-    + generalGoldGainPct(state.player.classTraits);
-  const actualGoldRaw = drop.gold ? Math.round(drop.gold * (1 + chestGoldBonusPct)) : undefined;
+  const actualGoldRaw = drop.gold;
   const actualGold = actualGoldRaw != null ? thinPersistentStardust(actualGoldRaw, state) : undefined;
 
   const slotOccupied = equip ? !!next.player.equipment[equip.slot] : false;
@@ -246,7 +243,7 @@ function applySimpleDrop(
   const rng = createRng(floor.rngState);
   const drop = roller(rng, state.chapter, state.balanceSnapshot, state.player.classId);
 
-  // 永久逐层：星尘（字段 gold）/灵气仍走旧表再折薄；装备固定图鉴池且无随机词条。
+  // 永久逐层：星尘（字段 gold）/灵气按当前表折薄；装备来自固定装备目录。
   let lootSeq = state.lootSeq;
   if (state.persistentFloorMode) {
     delete drop.equip;
@@ -265,11 +262,7 @@ function applySimpleDrop(
     ...(lootSeq !== undefined ? { lootSeq } : {}),
   };
 
-  // strengthen_gold_find：拾取星尘加成（可叠加，取整）
-  const goldBonusPct = generalGoldGainPct(state.player.classTraits);
-  const actualGoldRaw = drop.gold
-    ? (goldBonusPct > 0 ? Math.round(drop.gold * (1 + goldBonusPct)) : drop.gold)
-    : undefined;
+  const actualGoldRaw = drop.gold;
   const actualGold = actualGoldRaw != null ? thinPersistentStardust(actualGoldRaw, state) : undefined;
 
   const slotOccupiedForDrop = drop.equip ? !!next.player.equipment[drop.equip.slot] : false;
@@ -368,11 +361,10 @@ function applyBossEquipDrop(
  *   2. 专属战利品：从 BOSS_SPOILS[bossId] 等概率随机 1 件（100%，rollBossSpoil）
  *   3. 稀有独立判定（互不影响）：
  *      - ~30% → 额外一层楼层固定池装备（FLOOR_EQUIP_QUALITY_WEIGHTS，非 100%）
- *      - 15%+10% → Boss 遗物（图鉴已解锁 +10%，含 pity）
  *
  * emit 序列：LOOT(星尘/灵气/专属) → 可能的 LOOT(额外楼层装备) →
  *
- * 注意：随机判定顺序固定（额外装备 → 遗物）以保证 AC-13 确定性。
+ * 注意：随机判定顺序固定，以保证同一 seed 的结果确定。
  */
 function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: BossId): ApplyResult {
   const floor = state.floorState;

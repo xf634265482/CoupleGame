@@ -102,13 +102,12 @@ describe('蒙特卡洛掉率分布（AC-EQ-12）', () => {
     expect(counts['COMMON'] / N).toBeLessThan(0.045);
   });
 
-  it('精英怪 ch3：FINE+以上总掉率在 14%±3%', () => {
+  it('精英怪 ch3：FINE+以上总掉率约 10%', () => {
     const N = 100000;
     const counts = sampleQualityDistribution(ELITE_MONSTER_EQUIP_DROP_TABLE, 3, N);
     const total = (counts['LEGENDARY'] + counts['EPIC'] + counts['RARE'] + counts['FINE']) / N;
-    // 0.5+3+5+6 = 14.5%
-    expect(total).toBeGreaterThan(0.11);
-    expect(total).toBeLessThan(0.18);
+    expect(total).toBeGreaterThan(0.08);
+    expect(total).toBeLessThan(0.12);
   });
 
   it('宝箱 ch1：装备总掉率约 12%±3%', () => {
@@ -118,6 +117,35 @@ describe('蒙特卡洛掉率分布（AC-EQ-12）', () => {
     // 8+4=12%
     expect(total).toBeGreaterThan(0.09);
     expect(total).toBeLessThan(0.15);
+  });
+});
+
+describe('章节装备总掉率目标', () => {
+  const totalByChapter = (table: EquipDropTable): number[] =>
+    [0, 1, 2, 3, 4].map((chapterIndex) =>
+      table.LEGENDARY[chapterIndex]
+      + table.EPIC[chapterIndex]
+      + table.RARE[chapterIndex]
+      + table.FINE[chapterIndex]
+      + table.COMMON[chapterIndex],
+    );
+
+  it('普通怪为 4/5/6/7/8%', () => {
+    expect(totalByChapter(NORMAL_MONSTER_EQUIP_DROP_TABLE)).toEqual(
+      [0.04, 0.05, 0.06, 0.07, 0.08].map((value) => expect.closeTo(value, 7)),
+    );
+  });
+
+  it('精英怪为 8/9/10/11/12%', () => {
+    expect(totalByChapter(ELITE_MONSTER_EQUIP_DROP_TABLE)).toEqual(
+      [0.08, 0.09, 0.10, 0.11, 0.12].map((value) => expect.closeTo(value, 7)),
+    );
+  });
+
+  it('宝箱为 12/14/16/18/20%', () => {
+    expect(totalByChapter(CHEST_EQUIP_DROP_TABLE)).toEqual(
+      [0.12, 0.14, 0.16, 0.18, 0.20].map((value) => expect.closeTo(value, 7)),
+    );
   });
 });
 

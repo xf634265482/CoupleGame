@@ -26,6 +26,8 @@ export interface TutorialStepConfig {
   completeOnKillMonsterId?: string;
   completeOnAttackTargetId?: string;
   onEnterFillSpirit?: boolean;
+  /** 进入本步时先弹一次说明窗（知道了之后才允许点蓄力/爆发）。 */
+  onEnterExplain?: string;
 }
 
 export interface TutorialScenarioConfig {

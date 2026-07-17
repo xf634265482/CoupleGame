@@ -17,7 +17,7 @@ async function loadProfile(user) {
 
   const now = Date.now();
   const current = latest.pveProfile;
-  const profile = normalizeProfile(current, now, latest);
+  const profile = normalizeProfile(current, now);
   const hasOwn = (key) => Object.prototype.hasOwnProperty.call(current ?? {}, key);
   const shouldPersist = current?.version !== PROFILE_VERSION
     || !Number.isFinite(current?.stamina)

@@ -6,7 +6,7 @@ import {
   type FloorProfessionRuntimeState,
   type FloorRuntimeStatus,
 } from './FloorChallengeState';
-import { createMinghenTriggerMemory, type MinghenTriggerMemory } from './minghen/MinghenEffects';
+import { createMinghenTriggerMemory, pruneMinghenMemory, type MinghenTriggerMemory } from './minghen/MinghenEffects';
 import { getChapter1Objective } from './objectives/Chapter1Objectives';
 import type { FloorObjectiveState, ObjectiveCommand, ObjectiveDefinition, ObjectiveEvent } from './objectives/FloorObjective';
 import type { ApplyResult, ExpeditionState, PveEvent } from './PveTypes';
@@ -240,12 +240,16 @@ export function applyPersistentMinghenTurnChoice(
   minghenId: 'M23' | 'M24' | null,
 ): PersistentExpeditionRuntime {
   const turnKey = `MINGHEN_TURN_CHOICE:${runtime.turn}`;
-  if (runtime.battleState.minghenMemory.turnKeys.includes(turnKey)) return runtime;
+  const baseMemory = pruneMinghenMemory(runtime.battleState.minghenMemory, runtime.turn);
+  if (baseMemory.turnKeys.includes(turnKey)) {
+    if (baseMemory === runtime.battleState.minghenMemory) return runtime;
+    return { ...runtime, battleState: { ...runtime.battleState, minghenMemory: baseMemory } };
+  }
   const memory = {
-    eventKeys: [...runtime.battleState.minghenMemory.eventKeys],
-    turnKeys: [...runtime.battleState.minghenMemory.turnKeys, turnKey],
-    layerKeys: [...runtime.battleState.minghenMemory.layerKeys],
-    states: [...runtime.battleState.minghenMemory.states],
+    eventKeys: [...baseMemory.eventKeys],
+    turnKeys: [...baseMemory.turnKeys, turnKey],
+    layerKeys: [...baseMemory.layerKeys],
+    states: [...baseMemory.states],
   };
   memory.states = memory.states.filter((state) => state !== 'M23_ACTIVE' && state !== 'M24_ACTIVE' && state !== 'M24_SHIELD');
   if (!minghenId) return { ...runtime, battleState: { ...runtime.battleState, minghenMemory: memory } };
@@ -341,7 +345,62 @@ function findChapter1Floor3Altar(state: ExpeditionState, consumed?: boolean): Ex
   ));
 }
 
-function completionPortalPos(state: ExpeditionState): { x: number; y: number } {
+/** 击杀型目标（精英/追逃/清哨/Boss）：门刷在目标尸体格，与第一章同类层一致。 */
+function killTargetIdsForFloor(floor: number, objective?: FloorObjectiveState): string[] {
+  const fromObjective = objective ? stringArray(objective.data.sentinelIds) : [];
+  if (fromObjective.length > 0) return fromObjective;
+  if (objective && typeof objective.data.targetId === 'string') return [objective.data.targetId];
+  if (floor === 10) return ['F10_SENTINEL_1', 'F10_SENTINEL_2'];
+  const targetIdByFloor: Record<number, string> = {
+    2: 'FLOOR2_ELITE',
+    4: 'GOBLIN_SENTINEL',
+    7: 'GOBLIN_CHIEF',
+    9: 'FLOOR9_ELITE',
+    11: 'CHASE_TARGET',
+    14: 'QUICKSAND_SCORPION',
+  };
+  const id = targetIdByFloor[floor];
+  return id ? [id] : [];
+}
+
+/** 本批事件里最后一只目标击杀的尸体格——「怪死在哪，门出现在哪」。 */
+function lastObjectiveKillPos(
+  expedition: ExpeditionState,
+  events: readonly PveEvent[],
+  targetIds: readonly string[],
+): { x: number; y: number } | undefined {
+  if (targetIds.length === 0) return undefined;
+  const idSet = new Set(targetIds);
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (!event || event.type !== 'KILL' || !idSet.has(event.monsterId)) continue;
+    const monster = expedition.floorState.monsters.find((entry) => entry.id === event.monsterId);
+    if (monster) return { ...monster.pos };
+  }
+  return undefined;
+}
+
+/** 无击杀事件时：取仍在场上的目标格，优先靠近玩家（镜头下可见）。 */
+function nearestTargetMonsterPos(
+  floor: ExpeditionState['floorState'],
+  targetIds: readonly string[],
+): { x: number; y: number } | undefined {
+  let best: { pos: { x: number; y: number }; dist: number } | undefined;
+  for (const id of targetIds) {
+    const monster = floor.monsters.find((entry) => entry.id === id);
+    if (!monster) continue;
+    const dist = Math.abs(monster.pos.x - floor.player.x) + Math.abs(monster.pos.y - floor.player.y);
+    if (!best || dist < best.dist) best = { pos: { ...monster.pos }, dist };
+  }
+  return best?.pos;
+}
+
+function completionPortalPos(
+  state: ExpeditionState,
+  preferredPos?: { x: number; y: number },
+  objective?: FloorObjectiveState,
+): { x: number; y: number } {
+  if (preferredPos) return { ...preferredPos };
   const floor = state.floorState;
   if (state.floor === 1) {
     // 拿钥匙即完成：门刷在钥匙格（玩家拾取处），与战报同时出现。
@@ -364,38 +423,28 @@ function completionPortalPos(state: ExpeditionState): { x: number; y: number } {
     return floor.entities.find((entity) => entity.type === 'KEY')?.pos
       ?? floor.player;
   }
-  if (state.floor === 10) {
-    // 通关门刷在最后一只哨卫尸体格，避免叠在玩家脚下难辨认。
-    for (const id of ['F10_SENTINEL_2', 'F10_SENTINEL_1']) {
-      const sentinel = floor.monsters.find((monster) => monster.id === id);
-      if (sentinel) return { ...sentinel.pos };
-    }
-    return floor.player;
-  }
   if (state.floor === 12) {
     return floor.entities.find((entity) => entity.type === 'EXIT')?.pos
       ?? floor.player;
   }
-  const targetIdByFloor: Record<number, string> = {
-    2: 'FLOOR2_ELITE',
-    4: 'GOBLIN_SENTINEL',
-    7: 'GOBLIN_CHIEF',
-    9: 'FLOOR9_ELITE',
-    11: 'CHASE_TARGET',
-    14: 'QUICKSAND_SCORPION',
-  };
-  const targetId = targetIdByFloor[state.floor];
-  if (targetId) {
-    const target = floor.monsters.find((monster) => monster.id === targetId);
-    if (target) return target.pos;
+  const killTargets = killTargetIdsForFloor(state.floor, objective);
+  if (killTargets.length > 0) {
+    return nearestTargetMonsterPos(floor, killTargets) ?? floor.player;
   }
   return floor.entities.find((entity) => entity.type === 'EXIT' && entity.consumed)?.pos
     ?? floor.entities.find((entity) => entity.type === 'EXIT')?.pos
     ?? floor.player;
 }
 
-function openCompletionPortal(expedition: ExpeditionState): { expedition: ExpeditionState; events: PveEvent[] } {
-  const portal = spawnObjectivePortal(expedition, completionPortalPos(expedition));
+function openCompletionPortal(
+  expedition: ExpeditionState,
+  preferredPos?: { x: number; y: number },
+  objective?: FloorObjectiveState,
+): { expedition: ExpeditionState; events: PveEvent[] } {
+  const portal = spawnObjectivePortal(
+    expedition,
+    completionPortalPos(expedition, preferredPos, objective),
+  );
   return { expedition: portal.state, events: portal.events };
 }
 
@@ -406,11 +455,12 @@ function extendPersistentEvents(
 ): { runtime: PersistentExpeditionRuntime; expedition: ExpeditionState } {
   let nextRuntime = runtime;
   let nextExpedition = expedition;
+  const pruned = pruneMinghenMemory(runtime.battleState.minghenMemory, expedition.floorState.turn);
   const memory = {
-    eventKeys: [...runtime.battleState.minghenMemory.eventKeys],
-    turnKeys: [...runtime.battleState.minghenMemory.turnKeys],
-    layerKeys: [...runtime.battleState.minghenMemory.layerKeys],
-    states: [...runtime.battleState.minghenMemory.states],
+    eventKeys: [...pruned.eventKeys],
+    turnKeys: [...pruned.turnKeys],
+    layerKeys: [...pruned.layerKeys],
+    states: [...pruned.states],
   };
   const applyHook = (hook: MinghenHook, event: PveEvent, index: number, targetId?: string): void => {
     const target = targetId
@@ -1003,7 +1053,11 @@ export function applyPersistentBattleResult(
     if (runtime.floor === 10) {
       expedition = dissolveHuntPressure(expedition);
     }
-    const opened = openCompletionPortal(expedition);
+    // 击杀型目标：门刷在「完成本次目标的最后一击」尸体格（怪死哪门在哪），
+    // 与第一章精英/追逃层同类；勿写死某一只目标 ID。
+    const killTargets = killTargetIdsForFloor(runtime.floor, objective);
+    const preferredPortalPos = lastObjectiveKillPos(expedition, result.events, killTargets);
+    const opened = openCompletionPortal(expedition, preferredPortalPos, objective);
     expedition = opened.expedition;
     events = [...events, ...opened.events];
     if (runtime.floor === 3 && !opened.events.some((event) => event.type === 'PORTAL_SPAWNED')) {

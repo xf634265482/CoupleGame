@@ -13,7 +13,7 @@ function loadedInstance(profile: PveProfile, instanceId: string | undefined): Pv
     : null;
 }
 
-function toLegacyEquipment(profile: PveProfile): Equipment {
+function toRunEquipment(profile: PveProfile): Equipment {
   const equipment: Equipment = {};
   for (const slot of ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'] as const) {
     const instance = loadedInstance(profile, profile.equipmentLoadout[slot]);
@@ -24,7 +24,7 @@ function toLegacyEquipment(profile: PveProfile): Equipment {
 }
 
 function createTutorialPlayer(profile: PveProfile): RunPlayer {
-  const equipment = toLegacyEquipment(profile);
+  const equipment = toRunEquipment(profile);
   const base = professionBaseStats('WARRIOR');
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
@@ -35,7 +35,6 @@ function createTutorialPlayer(profile: PveProfile): RunPlayer {
     animaProgress: 0,
     animaThreshold: 100,
     classId: 'BERSERKER',
-    classTraits: [],
     equipment,
     bag: [],
     campMaxHpBuys: 0,

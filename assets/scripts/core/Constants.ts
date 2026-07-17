@@ -9,5 +9,4 @@ export const SCENE = {
   BOOTSTRAP: 'bootstrap',
   LOBBY: 'lobby',
   PVE_EXPEDITION: 'pve_expedition',
-  DESTINY_TREE: 'destiny_tree',
 } as const;

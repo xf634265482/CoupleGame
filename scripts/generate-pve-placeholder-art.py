@@ -237,24 +237,12 @@ def make_buttons() -> None:
         save(img, f"hud/{filename}")
 
 
-def make_popups() -> None:
-    save(rounded_panel((1240, 1280), 72, (34, 33, 54, 242), OUTLINE, 16), "popup/panel_strengthen_9s.png")
-    card = rounded_panel((360, 480), 34, (39, 36, 64, 246), OUTLINE, 10)
-    d = ImageDraw.Draw(card)
-    d.rounded_rectangle((34, 34, 326, 446), radius=28, outline=TEAL, width=6)
-    d.rounded_rectangle((58, 62, 302, 220), radius=24, fill=(24, 30, 48, 210), outline=(128, 244, 236, 110), width=4)
-    d.line((68, 262, 292, 262), fill=(128, 244, 236, 100), width=5)
-    d.line((68, 310, 292, 310), fill=(128, 244, 236, 65), width=4)
-    save(card, "popup/card_strengthen_choice_9s.png")
-
-
 def main() -> None:
     ensure_dirs()
     make_tiles()
     make_entities()
     make_hud_icons()
     make_buttons()
-    make_popups()
     print(f"Generated PVE placeholder art under {OUT}")
 
 

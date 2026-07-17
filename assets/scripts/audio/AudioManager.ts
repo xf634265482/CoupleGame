@@ -36,9 +36,9 @@ const DEFAULT_VOLUME = 0.7;
 
 const SFX_THROTTLE_MS: Partial<Record<SfxId, number>> = {
   sfx_ui_click: 80,
-  sfx_player_move: 120,
-  sfx_attack_hit: 60,
-  sfx_damage_pop: 80,
+  sfx_player_move: 160,
+  sfx_attack_hit: 90,
+  sfx_damage_pop: 100,
   sfx_reward_get: 140,
   sfx_door_open: 160,
 };
@@ -83,6 +83,8 @@ class Manager {
   private _pool: AudioSource[] = [];
   private _poolCursor = 0;
   private _warned = new Set<SfxId>();
+  private _sfxFrameBucket = -1;
+  private _sfxStartsThisFrame = 0;
 
   private _pickSource(pool: AudioSource[], id: SfxId): AudioSource | null {
     for (let i = 0; i < pool.length; i++) {
@@ -147,6 +149,15 @@ class Manager {
   playSfx(id: SfxId): void {
     if (this._settings.muted) return;
     const now = Date.now();
+    // 同帧最多起 2 条 SFX：Boss 增援回合并行攻击时否则会连打 8+ 次 InnerAudio，
+    // 真机 WAGame 日志 + AudioDynamic 切换会造成动画明显卡一下。
+    const frameBucket = Math.floor(now / 16);
+    if (frameBucket !== this._sfxFrameBucket) {
+      this._sfxFrameBucket = frameBucket;
+      this._sfxStartsThisFrame = 0;
+    }
+    if (this._sfxStartsThisFrame >= 2) return;
+
     const last = this._lastPlayedAt.get(id) ?? 0;
     const throttleMs = SFX_THROTTLE_MS[id] ?? DEFAULT_THROTTLE_MS;
     if (now - last < throttleMs) return;
@@ -167,6 +178,7 @@ class Manager {
     src.clip = clip;
     src.volume = this._settings.volume;
     src.play();
+    this._sfxStartsThisFrame += 1;
   }
 
   preload(ids?: readonly SfxId[]): void {

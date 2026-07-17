@@ -123,7 +123,7 @@
 
 > 玩家 / 怪物 / 宝箱 / 楼梯 / 钥匙等可交互或重要元素。
 
-- 走 `Character_Reference.md` / `Item_Reference.md` 规范
+- 走 `Character_Reference.md` / `Icon_Reference.md` 规范
 - 必须有 100% 强外描边
 - 与 Tile 描边对比形成"能交互 vs 装饰"的视觉提示
 - 位于格子中心

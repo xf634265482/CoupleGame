@@ -87,17 +87,6 @@ function buildFieldMetaMap() {
       shoesBaseMultiplier: { label: '鞋子基础倍率' },
       trinketBaseMultiplier: { label: '饰品基础倍率' },
     },
-    relic: {
-      __sectionLabel: '遗物运行参数',
-      chiefRoarDamageMultiplier: { label: '酋长怒吼伤害倍率' },
-      quicksandPitCount: { label: '流沙生成格数' },
-      quicksandPitDuration: { label: '流沙持续回合' },
-      quicksandAttackBonus: { label: '流沙攻击加成' },
-      permafrostChargeSteps: { label: '永冻充能步数' },
-      permafrostFreezeRounds: { label: '永冻冻结回合' },
-      magmaReflectPercent: { label: '熔火反伤比例' },
-      fateEchoRevivePercent: { label: '命运回响复活比例' },
-    },
   };
 }
 
@@ -184,7 +173,7 @@ function renderOverrideList(configs, scopeTypeLabelMap, scopeIdLabelMap, fieldMe
 
 function renderChapterEffectiveList(chapterOptions, chapterEffective, fieldRules, fieldMetaMap) {
   if (!chapterOptions.length) return '- 暂无章节数据';
-  const sectionOrder = ['player', 'monster', 'boss', 'equipment', 'relic'];
+  const sectionOrder = ['player', 'monster', 'boss', 'equipment'];
   return chapterOptions.map((option) => {
     const config = chapterEffective[option.id] || {};
     const sectionBlocks = sectionOrder.map((sectionKey) => {

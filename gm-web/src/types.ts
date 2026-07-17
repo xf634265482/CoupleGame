@@ -3,21 +3,23 @@ export type AdminAction =
   | 'listPlayers'
   | 'adjustResources'
   | 'resetExpedition'
+  | 'resetCampInventory'
   | 'resetTutorial'
-  | 'resetDestinyTreeOnly'
-  | 'resetDestinyTreeAndRefund'
   | 'resetLeaderboardGlobal'
   | 'listLogs'
   | 'listBalanceConfigs'
   | 'getBalanceConfig'
+  | 'getBalanceConfigDetail'
   | 'saveBalanceConfig'
   | 'resetBalanceConfig'
+  | 'removeBalanceFieldOverride'
+  | 'removeBalanceSectionOverride'
   | 'syncBalanceDocsPreview'
   | 'syncBalanceDocsLog';
 
-export type ResourceType = 'runGold' | 'diamond' | 'destinyShards' | 'stamina';
+export type ResourceType = 'diamond' | 'stamina';
 export type BalanceScopeType = 'global' | 'chapter' | 'unit';
-export type BalanceUnitType = 'player' | 'monster' | 'boss' | 'equipment' | 'relic';
+export type BalanceUnitType = 'player' | 'monster' | 'boss' | 'equipment';
 
 export interface LoginResponse {
   ok: boolean;
@@ -38,30 +40,19 @@ export interface PlayerView {
   userId: string;
   lastActiveAt: number | null;
   diamond: number;
-  destinyShards: number;
   highestFloor: number;
   tutorialCompleted: boolean;
   stamina: number;
-  hasPendingRun: boolean;
-  destinyTreeProgress: {
-    unlockedCount: number;
-    unlockedNodes: string[];
-    totalNodes: number;
-  };
-  codexCounts: {
-    monsters: number;
+  campInventory?: {
+    minghen: number;
+    minghenLoadout: number;
+    minghenPresets: number;
     equipment: number;
-    relics: number;
+    equipmentLoadout: number;
+    activeChallengeId: string;
   };
   activeExpedition: {
-    chapter: number;
-    floor: number;
-    classId: string;
-    runGold: number;
-    bagCount: number;
-    scrolls: number;
-    relicCount: number;
-    saveUpdatedAt: number | null;
+    challengeId: string;
   } | null;
 }
 
@@ -71,7 +62,6 @@ export interface PlayerListItem {
   userId: string;
   lastActiveAt: number | null;
   diamond: number;
-  destinyShards: number;
   highestFloor: number;
   hasActiveExpedition: boolean;
   chapter: number;
@@ -117,7 +107,6 @@ export interface BalanceCatalog {
     monster: BalanceFieldRules;
     boss: BalanceFieldRules;
     equipment: BalanceFieldRules;
-    relic: BalanceFieldRules;
   };
 }
 
@@ -126,7 +115,6 @@ export interface BalanceConfigValues {
   monster?: Record<string, number>;
   boss?: Record<string, number>;
   equipment?: Record<string, number>;
-  relic?: Record<string, number>;
 }
 
 export interface BalanceConfigDoc {
@@ -154,13 +142,21 @@ export interface ToolResponse {
   configs?: BalanceConfigDoc[];
   configDoc?: BalanceConfigDoc | null;
   catalog?: BalanceCatalog;
-  removed?: boolean;
-  verification?: {
-    configPersisted: boolean;
-    logWritten: boolean;
-    logId: string;
-    scopeType: string;
+  balanceDetail?: {
+    scopeType: BalanceScopeType;
     scopeId: string;
+    overrideConfig: BalanceConfigValues;
+    effectiveConfig: BalanceConfigValues;
+    codeDefaultConfig: BalanceConfigValues;
+    unitScopeChapterMap: Record<string, string>;
+  };
+  removed?: boolean;
+  verification?: Record<string, unknown> & {
+    configPersisted?: boolean;
+    logWritten?: boolean;
+    logId?: string;
+    scopeType?: string;
+    scopeId?: string;
   };
   logId?: string;
   docSyncPreview?: {

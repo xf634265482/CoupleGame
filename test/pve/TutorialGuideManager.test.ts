@@ -12,7 +12,7 @@ function makeState(stepId: string): ExpeditionState {
     status: 'ACTIVE',
     player: {
       hp: 100, maxHp: 100, gold: 0, anima: 0, animaProgress: 0, animaThreshold: 100,
-      classId: 'BERSERKER', classTraits: [], equipment: {}, classFragments: {},
+      classId: 'BERSERKER', equipment: {},
       bag: [], campMaxHpBuys: 0,
     },
     floorState,

@@ -4,7 +4,6 @@
 
 import { unequipItem } from './EquipmentSystem';
 import type { ApplyResult, EquipQuality, EquipSlot, ExpeditionState, RunPlayer } from './PveTypes';
-import { payGoldWithTraits } from './strengthen/StrengthenEconomy';
 
 // ── 营地商店物品类型 ───────────────────────────────────
 
@@ -52,8 +51,8 @@ export function applyShopBuy(state: ExpeditionState, itemId: CampItemId): ApplyR
 
   const { player } = state;
   const cost = campShopCost(player, entry.cost);
-  const paidPlayer = payGoldWithTraits(player, cost);
-  if (!paidPlayer) return { state, events: [] };
+  if (player.gold < cost) return { state, events: [] };
+  const paidPlayer = { ...player, gold: player.gold - cost };
 
   let nextPlayer = paidPlayer;
   let effect = '';

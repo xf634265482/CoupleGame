@@ -6,19 +6,20 @@
 import type { EquipItem, EquipQuality, EquipSlot, PveBalanceSnapshot, RunPlayer } from './PveTypes';
 import type { Rng } from './rng';
 import { getBalancedEquipmentBaseStat } from './PveBalance';
-import { rollAffixes } from './AffixSystem';
 import { LEGENDARY_BY_SLOT, getLegendaryIdsByClass } from './LegendarySystem';
 
 // ── 优缺点 implicit 效果 id（AC-EQ-3，CombatSystem/MovementSystem/MonsterAI 识别）──
 /** 斧类武器：攻击消耗额外 AP +1（高伤 / 高代价）。 */
 export const IMPLICIT_WEAPON_AXE = 'weapon_axe';
+/** 剑类武器：攻击消耗额外 AP -1（均衡 / 高频输出）。 */
+export const IMPLICIT_WEAPON_SWORD = 'weapon_sword';
 /** 矛/弓类武器：攻击范围 +1（远程 / 略低伤）。 */
 export const IMPLICIT_WEAPON_SPEAR = 'weapon_spear';
 /** 板甲：移动消耗额外 AP +1（高防 / 机动差）。 */
 export const IMPLICIT_ARMOR_PLATE = 'armor_plate';
 /** 重盔：怪物警戒范围 +1（高 HP / 更易被发现）。 */
 export const IMPLICIT_HELMET_HEAVY = 'helmet_heavy';
-/** 财运饰品：金币获取量加成（Phase 4 实现具体效果）。 */
+/** 财运饰品：星尘获取量加成（字段仍名 gold；永久逐层新装不洗炼 trait）。 */
 export const IMPLICIT_TRINKET_GOLD = 'trinket_gold';
 
 interface EquipTemplate {
@@ -38,31 +39,31 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
   // ─ 武器（WEAPON.baseStat → 攻击加成）─────────────────────────────────────────────────
   WEAPON: {
     COMMON: [
-      { name: '生锈短刃',   baseStatMin:  8, baseStatMax: 12 },                          // 剑·均衡
+      { name: '生锈短刃',   baseStatMin:  4, baseStatMax:  6, implicit: IMPLICIT_WEAPON_SWORD }, // 剑·均衡 / AP-1
       { name: '钝铁斧',     baseStatMin: 10, baseStatMax: 14, implicit: IMPLICIT_WEAPON_AXE   }, // 斧·攻/AP+1
-      { name: '木矛',       baseStatMin:  6, baseStatMax: 10, implicit: IMPLICIT_WEAPON_SPEAR }, // 矛·射程+1
+      { name: '木矛',       baseStatMin:  3, baseStatMax:  5, implicit: IMPLICIT_WEAPON_SPEAR }, // 矛·射程+1 / 半伤
     ],
     FINE: [
-      { name: '铁制长剑',   baseStatMin: 17, baseStatMax: 23 },
+      { name: '铁制长剑',   baseStatMin:  9, baseStatMax: 12, implicit: IMPLICIT_WEAPON_SWORD },
       { name: '铁战斧',     baseStatMin: 21, baseStatMax: 27, implicit: IMPLICIT_WEAPON_AXE   },
-      { name: '铁制长矛',   baseStatMin: 14, baseStatMax: 20, implicit: IMPLICIT_WEAPON_SPEAR },
+      { name: '铁制长矛',   baseStatMin:  7, baseStatMax: 10, implicit: IMPLICIT_WEAPON_SPEAR },
     ],
     RARE: [
-      { name: '精钢剑',     baseStatMin: 26, baseStatMax: 34 },
+      { name: '精钢剑',     baseStatMin: 13, baseStatMax: 17, implicit: IMPLICIT_WEAPON_SWORD },
       { name: '钢铁战斧',   baseStatMin: 32, baseStatMax: 40, implicit: IMPLICIT_WEAPON_AXE   },
-      { name: '精钢长枪',   baseStatMin: 22, baseStatMax: 30, implicit: IMPLICIT_WEAPON_SPEAR },
+      { name: '精钢长枪',   baseStatMin: 11, baseStatMax: 15, implicit: IMPLICIT_WEAPON_SPEAR },
     ],
     EPIC: [
-      { name: '英雄之刃',   baseStatMin: 43, baseStatMax: 53 },
-      { name: '战场阔剑',   baseStatMin: 44, baseStatMax: 54 },
+      { name: '英雄之刃',   baseStatMin: 22, baseStatMax: 27, implicit: IMPLICIT_WEAPON_SWORD },
+      { name: '战场阔剑',   baseStatMin: 22, baseStatMax: 27, implicit: IMPLICIT_WEAPON_SWORD },
       { name: '英雄战斧',   baseStatMin: 49, baseStatMax: 59, implicit: IMPLICIT_WEAPON_AXE   },
       { name: '烈焰巨斧',   baseStatMin: 51, baseStatMax: 61, implicit: IMPLICIT_WEAPON_AXE   },
-      { name: '英雄长枪',   baseStatMin: 38, baseStatMax: 48, implicit: IMPLICIT_WEAPON_SPEAR },
+      { name: '英雄长枪',   baseStatMin: 19, baseStatMax: 24, implicit: IMPLICIT_WEAPON_SPEAR },
     ],
     LEGENDARY: [
-      { name: '命运之刃',   baseStatMin: 72, baseStatMax: 82, legendaryId: 'leg_fate_blade' },
+      { name: '命运之刃',   baseStatMin: 36, baseStatMax: 41, implicit: IMPLICIT_WEAPON_SWORD, legendaryId: 'leg_fate_blade' },
       { name: '噬魂战斧',   baseStatMin: 80, baseStatMax: 90, implicit: IMPLICIT_WEAPON_AXE,   legendaryId: 'leg_soul_axe'  },
-      { name: '贯日长弓',   baseStatMin: 64, baseStatMax: 74, implicit: IMPLICIT_WEAPON_SPEAR, legendaryId: 'leg_sun_bow'   },
+      { name: '贯日长弓',   baseStatMin: 32, baseStatMax: 37, implicit: IMPLICIT_WEAPON_SPEAR, legendaryId: 'leg_sun_bow'   },
     ],
   },
 
@@ -208,25 +209,77 @@ export function shoesStealthReduction(baseStat: number): number {
 }
 
 /**
- * 装备词条池（铁匠洗炼用，design §3 铁匠 / Phase 2 AC-EQ-4/5）。
- * Phase 1 保留 id 占位；Phase 2 再扩展词条池与条件触发效果。
- */
-export const EQUIP_TRAIT_POOL: readonly string[] = [
-  'equip_atk_up',   // 攻击 +10
-  'equip_def_up',   // 防御 +10
-  'equip_hp_up',    // 最大 HP +20
-  'equip_crit_up',  // 暴击率 +5%（Phase 2 实现）
-  'equip_gold_up',  // 拾取金币 +10%（Phase 2 实现）
-  'equip_swift',    // 移动消耗 -1 AP（Phase 2 实现）
-];
-
-/**
  * 生成指定槽位与品质的装备实例（AC-EQ-1/2/3）：
  *   1. 从基础装备池随机选款（等概率）
  *   2. 在该款 [min, max] 区间内随机 roll baseStat
  *   3. 应用章节数值缩放（getBalancedEquipmentBaseStat）
  *   4. 携带 baseStatMax（原始区间上限，UI 展示「当前/上限」）与 implicit
  */
+export interface ClassicEquipmentTemplate {
+  name: string;
+  slot: EquipSlot;
+  quality: EquipQuality;
+  baseStatMin: number;
+  baseStatMax: number;
+  implicit?: string;
+  legendaryId?: string;
+}
+
+const CLASSIC_EQUIPMENT_BY_NAME = new Map<string, ClassicEquipmentTemplate>();
+
+for (const slot of EQUIP_SLOTS) {
+  for (const quality of ['COMMON', 'FINE', 'RARE', 'EPIC', 'LEGENDARY'] as const) {
+    for (const tpl of EQUIPMENT_POOL[slot][quality]) {
+      CLASSIC_EQUIPMENT_BY_NAME.set(tpl.name, {
+        name: tpl.name,
+        slot,
+        quality,
+        baseStatMin: tpl.baseStatMin,
+        baseStatMax: tpl.baseStatMax,
+        implicit: tpl.implicit,
+        legendaryId: tpl.legendaryId,
+      });
+    }
+  }
+}
+
+export function getClassicEquipmentTemplate(name: string): ClassicEquipmentTemplate | null {
+  return CLASSIC_EQUIPMENT_BY_NAME.get(name) ?? null;
+}
+
+export function listClassicEquipmentNames(): string[] {
+  return [...CLASSIC_EQUIPMENT_BY_NAME.keys()];
+}
+
+/**
+ * 从当前固定装备目录按名称生成实例。
+ */
+export function rollClassicEquipmentByName(
+  rng: Rng,
+  name: string,
+  quality: EquipQuality,
+  chapter = 1,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+  options?: { instanceId?: string; classId?: string },
+): EquipItem {
+  const tpl = CLASSIC_EQUIPMENT_BY_NAME.get(name);
+  if (!tpl) throw new Error('UNKNOWN_CLASSIC_EQUIPMENT');
+  const rolledStat = rng.int(tpl.baseStatMin, tpl.baseStatMax);
+  const scaledStat = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, tpl.slot, rolledStat);
+  const scaledMax = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, tpl.slot, tpl.baseStatMax);
+  const uid = rng.int(10000, 99999);
+  return {
+    id: options?.instanceId ?? `equip_${tpl.slot.toLowerCase()}_${quality.toLowerCase()}_${uid}`,
+    slot: tpl.slot,
+    quality,
+    name: tpl.name,
+    baseStat: scaledStat,
+    baseStatMax: scaledMax,
+    ...(tpl.implicit ? { implicit: tpl.implicit } : {}),
+    ...(tpl.legendaryId ? { legendaryId: tpl.legendaryId } : {}),
+  };
+}
+
 export function rollEquipment(
   rng: Rng,
   slot: EquipSlot,
@@ -254,9 +307,6 @@ export function rollEquipment(
   const scaledStat = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, slot, rolledStat);
   const scaledMax  = getBalancedEquipmentBaseStat(balanceSnapshot, chapter, slot, tpl.baseStatMax);
 
-  // 蓝1/紫2/橙2 条件触发词条（AC-EQ-4/5）；白绿 rollAffixes 返回 []
-  const affixes = rollAffixes(rng, quality);
-
   return {
     id: `equip_${slot.toLowerCase()}_${quality.toLowerCase()}_${uid}`,
     slot,
@@ -265,7 +315,6 @@ export function rollEquipment(
     baseStat: scaledStat,
     baseStatMax: scaledMax,
     ...(tpl.implicit ? { implicit: tpl.implicit } : {}),
-    ...(affixes.length > 0 ? { affixes } : {}),
     ...(tpl.legendaryId ? { legendaryId: tpl.legendaryId } : {}),
   };
 }

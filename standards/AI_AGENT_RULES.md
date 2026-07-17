@@ -15,7 +15,7 @@
 
 1. `standards/AI_AGENT_RULES.md` ← **本文件**（最高优先级）
 2. `standards/README.md` ← 规范库入口与索引
-3. `standards/PROJECT_CONTEXT.md` ← 项目背景、核心设计理念
+3. `specs/260608-pve-destiny-expedition/design.md` ← 当前 PVE 功能边界
 4. **若任务涉及任何视觉决策（角色 / 怪物 / Boss / NPC / UI / Icon / 道具 / 场景 / 特效）**，必读：
    - `standards/Visual_Style_System/README.md`
    - `standards/Visual_Style_System/Visual_Design_Pillars.md`
@@ -89,7 +89,7 @@
 任何 AI 在执行任务之前**必须**通过以下自检：
 
 - [ ] 已读取本文件 `AI_AGENT_RULES.md`
-- [ ] 已读取 `standards/README.md` 与 `standards/PROJECT_CONTEXT.md`
+- [ ] 已读取 `standards/README.md` 与当前 PVE 设计
 - [ ] 已识别任务所属模块（Game Design / Programming / Art / AI / UI / Audio / Project / Assets）
 - [ ] 已读取对应模块的核心规范
 - [ ] 已检查任务是否会触发 R5（双写）

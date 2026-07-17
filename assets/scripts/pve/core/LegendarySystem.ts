@@ -99,7 +99,7 @@ export const LEGENDARY_DEFS: Record<string, LegendaryDef> = {
   leg_fortune_blessing: {
     id: 'leg_fortune_blessing',
     name: '财神赐福',
-    description: '金币获取+80%；每层入场时按持有金币回HP（每20金=1HP，最多15HP）',
+    description: '星尘获取+80%；每层入场时按持有星尘回HP（每20星尘=1HP，最多15HP）',
     classAffinity: 'ANY',
   },
   leg_lucky_eye: {

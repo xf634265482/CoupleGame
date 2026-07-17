@@ -24,7 +24,6 @@ import {
 import { playerAttack, monsterAttack } from '../../assets/scripts/pve/core/CombatSystem';
 import { applyMove } from '../../assets/scripts/pve/core/MovementSystem';
 import { advanceFloor } from '../../assets/scripts/pve/core/ExpeditionState';
-import { applyStrengthen, addAnima } from '../../assets/scripts/pve/core/AnimaSystem';
 import type { Equipment, EquipItem, EquipSlot } from '../../assets/scripts/pve/core/PveTypes';
 import { makeExpeditionState, makeMonster, makeRunPlayer } from './helpers';
 import { createRng } from '../../assets/scripts/pve/core/rng';
@@ -283,69 +282,5 @@ describe('leg_fortune_blessing — 入场回血', () => {
     });
     const result = advanceFloor(state);
     expect(result.state.player.hp).toBe(85);
-  });
-});
-
-// ── 智慧轻冠：灵气强化回30HP ──────────────────────────────────────────────
-
-describe('leg_sage_crown — 强化回血', () => {
-  it('applyStrengthen 后 HP +30', () => {
-    const state = makeExpeditionState({
-      playerOverrides: {
-        classId: 'BERSERKER',
-        classTraits: ['BERSERKER'],
-        hp: 60,
-        maxHp: 100,
-        equipment: equipWith('leg_sage_crown', 'HELMET'),
-        animaProgress: 0,
-        animaThreshold: 100,
-      },
-    });
-    // 用 addAnima 触发一次强化选择
-    const withAnima = addAnima(state, 100);
-    // 找到提供的候选之一来 applyStrengthen
-    const choiceEvent = withAnima.events.find((e) => e.type === 'ANIMA_STRENGTHEN');
-    if (choiceEvent && choiceEvent.type === 'ANIMA_STRENGTHEN' && choiceEvent.choices.length > 0) {
-      const choiceId = choiceEvent.choices[0];
-      const result = applyStrengthen(withAnima.state, choiceId);
-      expect(result.state.player.hp).toBeGreaterThanOrEqual(60); // 至少不降低
-      expect(result.state.player.hp).toBeLessThanOrEqual(100);
-    }
-  });
-});
-
-// ── 命运护符：灵气强化叠层 ────────────────────────────────────────────────
-
-describe('leg_fate_amulet — 强化叠层', () => {
-  it('每次 applyStrengthen 后叠层 +1，最多 5 叠', () => {
-    let state = makeExpeditionState({
-      playerOverrides: {
-        classId: 'BERSERKER',
-        classTraits: ['BERSERKER'],
-        hp: 100,
-        maxHp: 100,
-        equipment: equipWith('leg_fate_amulet', 'TRINKET'),
-        anima: 1000,
-        animaProgress: 0,
-        animaThreshold: 100,
-      },
-    });
-
-    let stacks = 0;
-    for (let i = 0; i < 6; i++) {
-      const withAnima = addAnima(state, 100);
-      state = withAnima.state;
-      const choiceEvent = withAnima.events.find((e) => e.type === 'ANIMA_STRENGTHEN');
-      if (choiceEvent && choiceEvent.type === 'ANIMA_STRENGTHEN' && choiceEvent.choices.length > 0) {
-        const result = applyStrengthen(state, choiceEvent.choices[0]);
-        if (result.state !== state) {
-          state = result.state;
-          stacks = state.player.legendaryState?.fateAmuletStacks ?? 0;
-        }
-      }
-    }
-    // 叠层最多 5
-    expect(stacks).toBeLessThanOrEqual(5);
-    expect(stacks).toBeGreaterThan(0);
   });
 });

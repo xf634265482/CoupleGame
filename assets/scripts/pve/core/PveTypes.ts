@@ -57,7 +57,6 @@ export interface Monster {
   /** 每章特殊怪是否已触发过一次性的半血撤退。 */
   specialRetreatUsed?: boolean;
   /** 被射手在距离至少 2 格命中后，下一怪物回合额外追击 1 格。 */
-  archerPursuitPending?: boolean;
   /** Chapter 1 floor 5 gunpowder alarm: +1 move step and doubled attack until clear. */
   frenzied?: boolean;
   /** Boss 澧炴彺鎶€鑳藉彫鍞ゅ嚭鐨勬€墿锛氬嚮鏉€鏃朵笉浜х敓浠讳綍鎺夎惤锛堥噾甯?鐏垫皵/瑁呭锛夛紝閬垮厤鍒峰鎻寸櫧瀚栨敹鐩娿€?*/
@@ -141,8 +140,6 @@ export interface EquipItem {
   implicit?: string;
   /** Boss 专属等效果 id（旧铁匠 equip_* 洗炼已删除；残留字段忽略）。 */
   trait?: string;
-  /** 旧随机词条残留（AffixSystem 已删除；读档可忽略，战斗不再生效）。 */
-  affixes?: ReadonlyArray<{ id: string; tier: string; value: number }>;
   /** 传奇独特效果 id。 */
   legendaryId?: string;
   /** 宸插己鍖栨鏁帮紙0 = 鏈己鍖栵紝鏄剧ず涓?+N 鍚庣紑锛夈€?*/
@@ -166,16 +163,12 @@ export interface RunPlayer {
   /** 鐏垫皵寮哄寲瑙﹀彂闃堝€硷紙鍒濆 100锛屾瘡娆″己鍖栧悗 脳 1.5 閫掑锛屽瓨妗ｅ瓧娈碉級銆?*/
   animaThreshold?: number;
   classId: ClassId;
-  /** 宸查€夎亴涓氳瘝鏉?id 鍒楄〃銆?*/
-  classTraits: string[];
   equipment: Equipment;
   equipmentEffectState?: {
     bossReviveUsed?: boolean;
   };
   /** 宸查€氬叧鐨勬渶澶х珷鑺傚彿锛堟瘡绔?Boss 鍑昏触鍚庢洿鏂帮紝鐢ㄤ簬瑙夐啋鏉′欢鍒ゅ畾锛夈€?*/
   maxChapterCleared?: number;
-  /** 鏈€杩戜竴娆″己鍖栧€欓€夛紝鐢ㄤ簬 V2 鍊欓€夐槻閲嶅锛涢殢瀛樻。鎸佷箙鍖栥€?*/
-  recentStrengthenOffers?: string[];
   /** Chapter number in which Berserker's Undying has already triggered. */
   undyingUsedChapter?: number;
   /** 鑳屽寘锛堟Ы浣嶅凡鍗犳椂瑁呭鍏ュ寘锛屽彲鎵嬪姩瑁呭 / 缃崲锛夈€?*/
@@ -193,7 +186,6 @@ export interface RunPlayer {
     /** 鍛借繍鎶ょ锛氱伒姘斿己鍖栧彔灞傦紙鏈€澶?5 鍙狅紝姣忓彔 +5 鏀诲嚮锛夈€?*/
     fateAmuletStacks?: number;
   };
-  /** 閬楃墿杩愯鎬侊細CHIEF_ROAR/PERMAFROST_CORE 绱涓庡緟瑙﹀彂鏍囪锛汧ATE_ECHO 涓€娆℃€ф秷鑰楁爣璁般€?*/
 }
 
 export interface PveBalancePlayerConfig {
@@ -245,7 +237,6 @@ export interface PveBalanceSnapshot {
 export type FloorStatus = 'EXPLORING' | 'CLEARED' | 'DEAD';
 
 export interface FloorState {
-  relicChestOpened?: boolean;
   floor: number; // 1-based
   size: number; // 杈归暱锛?/9/10锛?
   seed: number; // 鏈眰鍦板浘鐢熸垚绉嶅瓙
@@ -279,27 +270,6 @@ export interface FloorState {
   playerFireBurnAccum?: number;
   /** 姣掕潕涓瘨鍓╀綑鍥炲悎鏁帮紙姣忓洖鍚?8HP锛屼笉鍙犲姞锛屽埛鏂拌鏃讹級銆?*/
   playerPoisonRounds?: number;
-  /** 鏉€鎰忔哺鑵撅細鍑绘潃鍚庝笅涓€娆′富鍔ㄦ敾鍑诲浼わ紝瑙﹀彂鍚庢秷璐广€?*/
-  frenzyPending?: boolean;
-  /** 鏃犲敖鏉€鎰忓眰鏁帮紙鏈€澶?灞傦紝寮哄寲鏀诲嚮鏈嚮鏉€鏃舵竻绌猴級銆?*/
-  awakenSlayerIntentStacks?: number;
-  /** 鍙岄噸褰辫鍙秷璐瑰眰鏁帮紙鏈€澶?灞傦紝鏂板洖鍚堟竻绌猴級銆?*/
-  awakenShadowCharges?: number;
-  /** 鍙岄噸褰辫鏈洖鍚堟槸鍚﹀凡缁忕敱涓诲姩绉诲姩鎺堜簣杩囧眰鏁般€?*/
-  awakenShadowGrantedThisTurn?: boolean;
-  /** 鐮寸唤閿佸畾鐩爣銆?*/
-  awakenSniperExposedTargetId?: string;
-  /** 绮剧‘鏍″噯锛氫笅涓€娆¤搫鍔垮己寮撳繀瀹氭毚鍑汇€?*/
-  awakenSniperGuaranteedCrit?: boolean;
-  /** 闇囨厬浣欐尝锛氭€墿涓嬩竴娆¤鍔ㄤ激瀹抽檷浣庛€?*/
-  awakenWeakenedMonsterIds?: string[];
-  /** 姝讳骸瀹ｅ憡鏍囪鐩爣銆?*/
-  awakenExecutionMarkId?: string;
-  /** 鍚勮閱掍笓灞炶瘝鏉℃瘡鍥炲悎涓€娆＄殑瑙﹀彂鏍囪銆?*/
-  awakenBreakerShieldUsed?: boolean;
-  awakenSniperDecisiveUsed?: boolean;
-  awakenExecutionStealthUsed?: boolean;
-  awakenShadowTradeUsed?: boolean;
   /** 鐔斿博棰嗕富绗簩闃舵鏍囪锛圔oss HP/maxHp 鈮?CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO 鍚庣疆 true锛屼笉鍙€嗭級銆?*/
   lavaLordPhase2?: boolean;
   /** 鐔斿博娼睈鍥炲悎璁℃暟鍣細phase2 鏈熼棿姣忓洖鍚?+1锛岃揪鍒?CHAPTER4_LAVA_TIDE_INTERVAL 鏃舵帹杩涗笅涓€鎺掑苟褰掗浂銆?*/
@@ -375,12 +345,6 @@ export interface FloorState {
   rogueChainBackstabReady?: boolean;
   rogueVanishStrikeReady?: boolean;
   rogueSmokeUsed?: boolean;
-  /** 璇嶆潯锛氳繛鏉€鏈眰鍑绘潃璁℃暟锛坅ff_kill_chain 鏀诲嚮鍔犳垚锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
-  affixKillChainStacks?: number;
-  /** 璇嶆潯锛氬厛鍙戝埗浜烘湰灞傞鏀诲凡瑙﹀彂锛坅ff_preemptive锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
-  affixPreemptiveUsed?: boolean;
-  /** 璇嶆潯锛氱柧琚湰鍥炲悎绉诲姩鍚庡緟瑙﹀彂锛坅ff_swift_strike锛沞ndTurn 閲嶇疆锛夈€?*/
-  affixSwiftStrikeReady?: boolean;
   /** 浼犲锛氬懡杩愪箣鍒冩湰灞傚嚮鏉€鍙犲眰璁℃暟锛坙eg_fate_blade锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
   legFateBladeStacks?: number;
   /** 浼犲锛氬櫖榄傛垬鏂т笅娆℃敾鍑诲繀鏆村嚮鏍囪锛坙eg_soul_axe锛涘嚮鏉€鍚庣疆 true锛岄娆℃敾鍑绘秷鑰楋級銆?*/
@@ -583,11 +547,6 @@ export type PveEvent =
   | { type: 'SANDSTORM_SPAWNED'; tiles: Coord[] }
   /** 娴佹矙宸ㄨ潕娌欐毚鍛戒腑鐜╁锛氱湡瀹炰激瀹筹紙鏃犺鎶ょ敳锛夈€?*/
   | { type: 'SANDSTORM_HIT'; damage: number; hp: number }
-  /** Boss 击杀掉落：拾取一件 Boss 遗物（局内生效，死亡清空）。 */
-  /** Boss 鍑绘潃鎺夎惤锛氭嬀鍙栬嫢骞插懡杩愮鐗囷紙鐙珛 10% 鍒ゅ畾锛屾寜绔犺妭缂╂斁锛夈€?*/
-  | { type: 'SHARDS_PICKUP'; amount: number; source: string }
-  /** 钀ュ湴閬楃墿瀹濈寮€鍚粨鏋滐細success=true 琛ㄧず鑾峰緱閬楃墿锛沠alse 琛ㄧず鏈腑锛堝凡鎵ｈ祫婧愶級锛況efunded=true 琛ㄧず閬楃墿宸叉寔鏈夎嚜鍔ㄨ浆琛ュ伩銆?*/
-  /** 閬楃墿 hook 瑙﹀彂鎻愮ず锛堜緥锛氭案鍐讳箣鏍稿啺鍐汇€佺啍鐏箣蹇冨弽寮癸級锛屼緵鎴樻姤灞曠ず銆?*/
   /** 浼犲瑁呭鏁堟灉瑙﹀彂鎻愮ず锛圥hase 3锛夛紝渚涙垬鎶ュ睍绀恒€?*/
   | { type: 'LEGENDARY_TRIGGERED'; legendaryId: string; detail?: string }
   /** 鍛借疆鍏藉懡杞洖婧細棣栨琚嚮鏉€鏃跺師鍦板娲诲埌 50% 鐢熷懡銆?*/
@@ -642,20 +601,14 @@ export interface ApplyResult {
  * 瀛樺偍浜?`users` 浜戞枃妗ｏ紝涓嶅睘浜?`ExpeditionState`銆?
  */
 export interface PveMeta {
-  /** 褰撳墠鍛借繍纰庣墖浣欓锛堢敱缁撶畻浜戝嚱鏁扮疮鍔狅紝姝ゅ涓哄彧璇诲揩鐓э級銆?*/
-  destinyShards: number;
   /** 褰撳墠閽荤煶浣欓锛堢敤鎴风骇绱璐у竵锛岀敱缁撶畻浜戝嚱鏁扮疮鍔狅紝姝ゅ涓哄彧璇诲揩鐓э級銆?*/
   diamond: number;
   /** 褰撳墠杩滃緛浣撳姏锛涙柊杩滃緛娑堣€?20锛岀户缁瓨妗ｄ笉娑堣€椼€?*/
   stamina?: number;
-  /** 浣撳姏涓婇檺锛屽綋鍓嶅浐瀹氫负 60銆?*/
+  /** 体力上限。 */
   staminaMax?: number;
   /** 鏈弧浣撳姏鏃朵笅涓€鐐规仮澶嶇殑鏈嶅姟绔椂闂存埑锛涙弧浣撳姏鏃朵负 null銆?*/
   staminaNextRecoveryAt?: number | null;
-  /** 涓嬫鏂拌繙寰佸疄闄呮秷鑰楋紱棣栨涓?0锛屼箣鍚庝负 20銆?*/
-  nextRunCost?: number;
-  /** 宸叉墸璐瑰苟棰勭暀绉嶅瓙銆佷絾灏氭湭鍐欏叆棣栧眰瀛樻。鐨勮繙寰併€?*/
-  hasPendingRun?: boolean;
   /** 鍘嗗彶鍒拌揪鐨勬渶楂樻ゼ灞傦紝鐢ㄤ簬澶у巺韬唤鍗′笌鎺掕姒溿€?*/
   highestFloor?: number;
   /** 宸茶В閿佺殑鎴愬氨 id 鍒楄〃锛圓chievementId[]锛夈€?*/

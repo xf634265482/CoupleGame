@@ -9,6 +9,7 @@ if (!envId) {
 
 const app = cloudbase.init({
   env: envId,
+  timeout: 30000,
 });
 
 let authReady: Promise<void> | null = null;

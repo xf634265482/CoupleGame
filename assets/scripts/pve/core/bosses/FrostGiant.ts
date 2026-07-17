@@ -343,13 +343,8 @@ function applyKnockback(state: ExpeditionState, bossId: string): ApplyResult {
 
     const damage = FROST_GIANT_ICE_SLIDE_DAMAGE;
     const hp = Math.max(0, state.player.hp - damage);
-    let dead = hp <= 0;
-    let undyingTriggered = false;
-    if (dead && state.player.classTraits.includes('undying') && (floor.undyingAvailable ?? true)) {
-      dead = false;
-      undyingTriggered = true;
-    }
-    const finalHp = undyingTriggered ? 1 : hp;
+    const dead = hp <= 0;
+    const finalHp = hp;
 
     const events: PveEvent[] = [
       { type: 'KNOCKBACK', entityId: 'PLAYER', from, to: slideEnd, slid: true },
@@ -366,7 +361,6 @@ function applyKnockback(state: ExpeditionState, bossId: string): ApplyResult {
           ...floor,
           player: slideEnd,
           status: dead ? ('DEAD' as const) : floor.status,
-          ...(undyingTriggered ? { undyingAvailable: false } : {}),
         },
       },
       events,
@@ -408,13 +402,8 @@ function frostGiantHeavyStrike(state: ExpeditionState, bossId: string): ApplyRes
   if (manhattan(center, floor.player) <= FROST_GIANT_HEAVY_STRIKE_RADIUS) {
     const damage = boss.attack;
     const hp = Math.max(0, current.player.hp - damage);
-    let dead = hp <= 0;
-    let undyingTriggered = false;
-    if (dead && current.player.classTraits.includes('undying') && (current.floorState.undyingAvailable ?? true)) {
-      dead = false;
-      undyingTriggered = true;
-    }
-    const finalHp = undyingTriggered ? 1 : hp;
+    const dead = hp <= 0;
+    const finalHp = hp;
 
     events.push({ type: 'PLAYER_DAMAGED', damage, hp: finalHp, sourceId: bossId });
     if (dead) events.push({ type: 'PLAYER_DEAD' });
@@ -426,7 +415,6 @@ function frostGiantHeavyStrike(state: ExpeditionState, bossId: string): ApplyRes
       floorState: {
         ...current.floorState,
         status: dead ? ('DEAD' as const) : current.floorState.status,
-        ...(undyingTriggered ? { undyingAvailable: false } : {}),
       },
     };
 
@@ -565,13 +553,8 @@ function executeFrostGiantCharge(state: ExpeditionState, bossId: string): ApplyR
 
       const damage = Math.round(boss.attack * FROST_GIANT_CHARGE_DAMAGE_MULT);
       const hp = Math.max(0, current.player.hp - damage);
-      let dead = hp <= 0;
-      let undyingTriggered = false;
-      if (dead && current.player.classTraits.includes('undying') && (current.floorState.undyingAvailable ?? true)) {
-        dead = false;
-        undyingTriggered = true;
-      }
-      const finalHp = undyingTriggered ? 1 : hp;
+      const dead = hp <= 0;
+      const finalHp = hp;
 
       const events: PveEvent[] = [
         { type: 'CHARGE_EXECUTED', bossId, from: boss.pos, to: cell, result: 'PLAYER_HIT' },
@@ -586,7 +569,6 @@ function executeFrostGiantCharge(state: ExpeditionState, bossId: string): ApplyR
         floorState: {
           ...current.floorState,
           status: dead ? ('DEAD' as const) : current.floorState.status,
-          ...(undyingTriggered ? { undyingAvailable: false } : {}),
         },
       };
 

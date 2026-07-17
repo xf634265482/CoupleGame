@@ -50,7 +50,15 @@ import type {
   PveEvent,
 } from '../PveTypes';
 import { makeGoblinWarrior } from '../Chapter1Monsters';
-import { GOBLIN_CHIEF_SUMMON_CAP, HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
+import { BOSS_ARMOR_PENETRATION, GOBLIN_CHIEF_SUMMON_CAP, HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
+
+function bossPhysicalDamage(state: ExpeditionState, rawAttack: number, multiplier = 1): number {
+  const player = state.player;
+  const armor = (player.equipment.ARMOR?.baseStat ?? 0)
+    + (player.idolArmorBonus ?? 0);
+  const effectiveArmor = Math.floor(Math.max(0, armor) * (1 - BOSS_ARMOR_PENETRATION));
+  return Math.max(1, Math.round(Math.max(0, rawAttack - effectiveArmor) * multiplier));
+}
 
 /** HP ≤ 此值时进入狂暴：攻击 +10、移动 +1（MonsterAI 处理额外移动步；2026-06-15 由 200 下调为 170）。 */
 export const GOBLIN_CHIEF_ENRAGE_HP = 170;
@@ -169,7 +177,7 @@ function getAdjacentFreeCells(floor: FloorState, center: Coord, count: number): 
     if (d.x < 0 || d.y < 0 || d.x >= floor.size || d.y >= floor.size) continue;
     if (d.x === floor.player.x && d.y === floor.player.y) continue;
     if (floor.monsters.some((m) => m.aiState !== 'DEAD' && m.pos.x === d.x && m.pos.y === d.y)) continue;
-    if (floor.entities.some((e) => e.type === 'ROCK' && !e.consumed && e.pos.x === d.x && e.pos.y === d.y)) continue;
+    if (floor.entities.some((e) => !e.consumed && e.pos.x === d.x && e.pos.y === d.y)) continue;
     result.push(d);
   }
   return result;
@@ -199,7 +207,7 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
       return noop(state);
     }
 
-    const damage = baseAttack;
+    const damage = bossPhysicalDamage(state, baseAttack);
     const hp = Math.max(0, state.player.hp - damage);
     const dead = hp <= 0;
 
@@ -245,18 +253,10 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 
   // 按距离计算伤害倍率：内圈×HEAVY_STRIKE_MULTIPLIER，外圈×HEAVY_STRIKE_OUTER_MULTIPLIER
   const mult = playerDist <= HEAVY_STRIKE_INNER_RANGE ? HEAVY_STRIKE_MULTIPLIER : HEAVY_STRIKE_OUTER_MULTIPLIER;
-  const damage = Math.round(baseAttack * mult);
+  const damage = bossPhysicalDamage(state, baseAttack, mult);
 
-  let hp = Math.max(0, state.player.hp - damage);
-  let dead = hp <= 0;
-
-  // BERSERKER 不屈：本层首次将死时保留 1HP
-  let undyingTriggered = false;
-  if (dead && state.player.classTraits.includes('undying') && (floor.undyingAvailable ?? true)) {
-    hp = 1;
-    dead = false;
-    undyingTriggered = true;
-  }
+  const hp = Math.max(0, state.player.hp - damage);
+  const dead = hp <= 0;
 
   const events: PveEvent[] = [resolvedEvent, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: bossId }];
   if (dead) events.push({ type: 'PLAYER_DEAD' });
@@ -269,7 +269,6 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
       floorState: {
         ...floor,
         status: dead ? 'DEAD' : floor.status,
-        ...(undyingTriggered ? { undyingAvailable: false } : {}),
       },
     },
     events,

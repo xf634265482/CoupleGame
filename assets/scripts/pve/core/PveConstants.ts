@@ -67,9 +67,7 @@ export const CLASS_STATS = {
   ROGUE: { attackBonus: 0, attackRangeBonus: 0, moveBonus: 1, hpCost: 0 },
 } as const;
 
-export const CLASS_FRAGMENTS_TO_ADVANCE = 7; // 闆嗛綈 7 涓悓鑱屼笟纰庣墖鍙繘闃讹紙V3锛氱洰鏍囪繘闃惰惤鐐圭 8-10 灞傦級
 /** 绮捐嫳銆佺壒娈婃€笌 Boss 瀵瑰皠鎵嬪叏閮ㄧ帺瀹舵潵婧愪激瀹崇殑鏈€缁堝噺浼ゃ€?*/
-export const ARCHER_TARGET_DAMAGE_REDUCTION = 0.25;
 /** 鐜╁鏀诲嚮鎬墿鏃讹紝鎬墿鎶ょ敳鏈€澶氬墛鍑忔湰娆″師浼ゅ鐨勬瘮渚嬨€?*/
 export const MONSTER_ARMOR_MAX_REDUCTION_RATIO = 0.30;
 /** 鎬墿鏀诲嚮鐜╁鏃讹紝鐜╁鎶ょ敳鏈€澶氬墛鍑忔湰娆″師浼ゅ鐨勬瘮渚嬨€?*/
@@ -84,7 +82,7 @@ export const SPECIAL_MONSTER_RETREAT_HP_RATIO = 0.5;
 export const SPECIAL_MONSTER_RETREAT_STEPS = 3;
 
 // 鈹€鈹€ 鐏垫皵锛坉esign 搂9锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-export const ANIMA_PER_STRENGTHEN = 100; // 鍒濆寮哄寲闃堝€?
+export const ANIMA_PROGRESS_CAP = 100;
 export const ANIMA_THRESHOLD_MULTIPLIER = 1.35; // 姣忔瑙﹀彂鍚庨槇鍊?脳 姝ょ郴鏁帮紙V3 搂4b.1锛?.5鈫?.35锛屽欢缂撳悗鏈熸柇渚涳級
 export const STRENGTHEN_CHOICES = 3; // 3 閫?1
 
@@ -142,9 +140,6 @@ export const ELITE_ARMOR_PENETRATION_BY_CHAPTER = [0, 0.25, 0.50, 0.55, 0.60, 0.
 export const BOSS_ARMOR_PENETRATION = 0.70;
 
 // 鈹€鈹€ 姝讳骸缁撶畻淇濈暀/娓呯┖锛坉esign 搂2.1锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-export const DEATH_KEEP = ['achievements', 'codex', 'diamond', 'destinyShards'] as const;
-export const DEATH_CLEAR = ['equipment', 'classId', 'classTraits', 'gold', 'anima'] as const;
-
 /** 鍚屾椂鏈€澶氭縺娲荤殑閬楃墿妲芥暟锛圥hase 5锛孉C-EQ-8锛夈€?*/
 
 // 鈹€鈹€ 绫诲瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -154,126 +149,6 @@ export type BossId = (typeof CHAPTER_BOSS)[keyof typeof CHAPTER_BOSS];
 // 鈹€鈹€ M2 鎬墿鏁伴噺锛堟瘡鏅€氬眰锛宒esign 搂6 AC-18锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const ANIMA_MONSTER_COUNT = 1; // 鐏垫皵鎬細閫冭窇锛?00% 澶ч噺鐏垫皵
 export const ELITE_MONSTER_COUNT = 1; // 绮捐嫳鎬細宸￠€烩啋杩藉嚮锛屾帀钀芥洿濂?
-
-// 鈹€鈹€ 鑱屼笟纰庣墖浜у嚭锛圴3 搂3.1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-/** 姣忔櫘閫氬眰淇濆簳 1 涓鐗囷紙V3锛氬簾闄ゅ浐瀹?2 涓紝鏀逛繚搴?姒傜巼锛夈€?*/
-export const FRAGMENT_COUNT = 1; // 淇濆簳鏁伴噺锛坙egacy锛孷3 宸插垏鎹㈠埌姒傜巼妯″瀷锛?
-export const CHAPTER1_FRAGMENT_SECOND_CHANCE = 0.25;
-export const CHAPTER1_FRAGMENT_THIRD_CHANCE = 0;
-/** 绗?2 涓鐗囩殑杩藉姞姒傜巼锛圴3 搂3.1 棣栧彂鍊硷級銆?*/
-export const FRAGMENT_SECOND_CHANCE = 0.70;
-/** 绗?3 涓鐗囩殑杩藉姞姒傜巼锛圴3 搂3.1 棣栧彂鍊硷紝鐙珛浜庣 2 涓級銆?*/
-export const FRAGMENT_THIRD_CHANCE = 0.25;
-/** 杩涢樁鍚庡亸鍚戜富鑱屼笟鐨勬鐜囷紙70%锛涘叾浣?30% 鍧囧垎鍙﹀涓よ亴涓氾紝鍚?15%锛夈€?*/
-export const FRAGMENT_ADVANCED_BIAS = 0.70;
-
-/** 鍙繘闃剁殑鑱屼笟鍒楄〃锛圓DVENTURER 鏄垵濮嬭亴涓氾紝涓嶄綔涓鸿繘闃剁洰鏍囷級銆?*/
-export const ADVANCABLE_CLASSES = ['BERSERKER', 'ARCHER', 'ROGUE'] as const;
-export type AdvancableClass = (typeof ADVANCABLE_CLASSES)[number];
-
-// 鈹€鈹€ 浜岄樁杩涢樁/瑙夐啋锛圴2 搂涓冿級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-/** 瑙夐啋鎵€闇€鏈亴涓氱鐗囨暟锛堣繙楂樹簬涓€闃惰繘闃堕槇鍊硷紝瀵瑰簲"宸竴鐐?鍚庣殑闀跨嚎杩介€愶級銆?*/
-export const CLASS_FRAGMENTS_TO_AWAKEN = 10;
-/** 瑙夐啋鎵€闇€"鍙﹀涓や釜鑱屼笟纰庣墖鍚堣"鏁帮紙鍙栧鏁帮紝淇濊瘉涓よ€呭繀鏈夐珮浣庯紝鍐冲畾瑙夐啋褰㈡€侊級銆?*/
-export const AWAKEN_SECONDARY_TOTAL = 7;
-/** 瑙夐啋棰濆闂ㄦ锛氶渶鍑昏触绗笁绔?Boss锛團ROST_GIANT锛夈€?*/
-export const AWAKEN_REQUIRED_CHAPTER = 3;
-
-/** 瑙夐啋褰㈡€?id锛氳亴涓?+ 褰㈡€佸簭鍙凤紙1/2锛岀敱鍓亴涓氱鐗囧姣斿喅瀹氾級銆?*/
-export type AwakenForm = 'BERSERKER_1' | 'BERSERKER_2' | 'ARCHER_1' | 'ARCHER_2' | 'ROGUE_1' | 'ROGUE_2';
-
-/** 瑙夐啋褰㈡€佸畾涔夛細鏍稿績澶╄祴銆佺帺娉曟爣绛句笌鐜版湁缇庢湳璧勬簮鐨勭粺涓€鏁版嵁婧愩€?*/
-export interface AwakenFormDef {
-  id: AwakenForm;
-  classId: AdvancableClass;
-  /** 涓枃褰㈡€佸悕锛堢晫闈㈠睍绀猴紝涓嶅惈鑻辨枃锛夈€?*/
-  name: string;
-  /** 褰㈡€佺帺娉曟爣绛俱€?*/
-  routeTag: string;
-  /** 瑙夐啋缇庢湳璧勬簮 key銆?*/
-  iconKey: string;
-  /** 鏃х増鑷姩闄勮禒璇嶆潯锛屼粎鐢ㄤ簬娲诲姩瀛樻。杩佺Щ銆?*/
-  legacyStatTrait: string;
-  /** 涓撳睘瑙夐啋璇嶆潯 id锛圕ombatSystem 鍐呰仈鍒ゆ柇锛夈€?*/
-  traitId: string;
-  /** 鏍稿績澶╄祴涓枃鍚嶃€?*/
-  coreName: string;
-  /** 鏍稿績澶╄祴涓枃鎻忚堪銆?*/
-  coreDesc: string;
-}
-
-export const AWAKEN_FORMS: Record<AwakenForm, AwakenFormDef> = {
-  BERSERKER_1: {
-    id: 'BERSERKER_1',
-    classId: 'BERSERKER',
-    name: '鐙傛垬澹风牬闃靛瀷',
-    routeTag: '鑼冨洿鐮撮樀',
-    iconKey: 'pve/class/icon_awaken_berserker_a',
-    legacyStatTrait: 'eagle_eye',
-    traitId: 'awakened_cleave',
-    coreName: '瑁傞樀妯壂',
-    coreDesc: '涓诲姩鏀诲嚮瀵圭浉閭绘晫浜洪€犳垚50%娆＄敓浼ゅ锛涙棤鐩搁偦鏁屼汉鏃朵富鐩爣浼ゅ+15%',
-  },
-  BERSERKER_2: {
-    id: 'BERSERKER_2',
-    classId: 'BERSERKER',
-    name: '鐙傛垬澹峰棞鏉€鍨?',
-    routeTag: '鍑绘潃杩為攣',
-    iconKey: 'pve/class/icon_awaken_berserker_b',
-    legacyStatTrait: 'swift',
-    traitId: 'awakened_frenzy',
-    coreName: '鏉€鎰忔哺鑵?',
-    coreDesc: '涓诲姩鏀诲嚮鍑绘潃鍚庡洖澶?0鐢熷懡锛屼笅涓€娆′富鍔ㄦ敾鍑讳激瀹?40%锛涘啀娆″嚮鏉€鍙埛鏂?',
-  },
-  ARCHER_1: {
-    id: 'ARCHER_1',
-    classId: 'ARCHER',
-    name: '灏勬墜路寮哄嚮鍨?',
-    routeTag: '瀹氱偣鐙欏嚮',
-    iconKey: 'pve/class/icon_awaken_archer_a',
-    legacyStatTrait: 'strengthen_attack_up',
-    traitId: 'awakened_power_shot',
-    coreName: '钃勫娍寮哄紦',
-    coreDesc: '鏈洖鍚堟湭绉诲姩涓旂洰鏍囪窛绂昏嚦灏?鏍兼椂锛岄娆′富鍔ㄦ敾鍑讳激瀹?50%骞舵棤瑙嗘姢鐢?',
-  },
-  ARCHER_2: {
-    id: 'ARCHER_2',
-    classId: 'ARCHER',
-    name: '灏勬墜路娓稿嚮鍨?',
-    routeTag: '绉诲姩杩炲皠',
-    iconKey: 'pve/class/icon_awaken_archer_b',
-    legacyStatTrait: 'swift',
-    traitId: 'awakened_volley',
-    coreName: '鐤捐杩炵彔',
-    coreDesc: '鏈洖鍚堢Щ鍔ㄥ悗锛岄娆′富鍔ㄦ敾鍑诲繀瀹氳拷鍔犱竴绠紝閫犳垚涓绘敾鍑?0%娆＄敓浼ゅ',
-  },
-  ROGUE_1: {
-    id: 'ROGUE_1',
-    classId: 'ROGUE',
-    name: '闅愬尶鑰吢峰睜鎴瀷',
-    routeTag: '鍗曚綋鏂╂潃',
-    iconKey: 'pve/class/icon_awaken_rogue_a',
-    legacyStatTrait: 'strengthen_attack_up',
-    traitId: 'awakened_execute',
-    coreName: '鑷村懡澶勫喅',
-    coreDesc: '鑳屽埡鍔犳垚鎻愬崌鑷?100%锛涙櫘閫?绮捐嫳浣庝簬20%鐢熷懡鏃跺鍐筹紝Boss鏀逛负浼ゅ+30%',
-  },
-  ROGUE_2: {
-    id: 'ROGUE_2',
-    classId: 'ROGUE',
-    name: '闅愬尶鑰吢峰奖琚瀷',
-    routeTag: '杩炵画鑳屽埡',
-    iconKey: 'pve/class/icon_awaken_rogue_b',
-    legacyStatTrait: 'eagle_eye',
-    traitId: 'awakened_shadow_strike',
-    coreName: '鍙岄噸褰辫',
-    coreDesc: '姣忓洖鍚堢涓€娆′富鍔ㄧЩ鍔ㄥ悗鑾峰緱2灞傚奖琚紝鎺ヤ笅鏉ヤ袱娆′富鍔ㄦ敾鍑昏幏寰楄儗鍒哄姞鎴?',
-  },
-};
-
-export function awakenFormsForClass(classId: ClassId): AwakenFormDef[] {
-  return Object.values(AWAKEN_FORMS).filter((form) => form.classId === classId);
-}
 
 // 鈹€鈹€ M2 鐏垫皵鎬帀钀?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const ANIMA_MONSTER_DROP = {
@@ -285,7 +160,7 @@ export const ELITE_MONSTER_DROP = {
   GOLD_ONLY: 0.40,
   GOLD_AND_ANIMA: 0.30,
   GOLD_HIGH: 0.25,     // 澶ч噺閲戝竵锛?0+30+25=95%锛?
-  FRAGMENT_PAIR: 0.05, // 鑱屼笟纰庣墖瀵癸紙40+30+25+5=100%锛?
+  GOLD_HIGH_EXTRA: 0.05,
   goldMid: [15, 30] as const,
   goldHigh: [35, 60] as const,
   animaMid: [20, 40] as const,
@@ -306,7 +181,7 @@ export const BOSS_DROP_BASE = {
 /** Boss 鎺夎惤鏁板€肩殑绔犺妭缂╂斁鍊嶇巼锛?~5 绔狅級銆?*/
 export const BOSS_DROP_CHAPTER_MULT = [1.0, 1.2, 1.5, 1.8, 2.2] as const;
 
-/** Boss 稀有掉落：额外楼层池装备（独立判定）+ Boss 遗物（含 pity）；命运碎片与卷轴已删除。 */
+/** Boss 稀有掉落：独立判定的额外楼层池装备。 */
 export const BOSS_RARE_DROP = {
   /** Boss 额外掉落一层楼层固定池装备的概率（非 100%）。 */
   EXTRA_FLOOR_EQUIP_CHANCE: 0.30,
@@ -532,9 +407,6 @@ export const ANIMA_MIRAGE_DEBUFF_IDS = ['HURT_20', 'FIRE_BURN_2', 'SLOW_2', 'AP_
 export type AnimaMirageBuffId = (typeof ANIMA_MIRAGE_BUFF_IDS)[number];
 export type AnimaMirageDebuffId = (typeof ANIMA_MIRAGE_DEBUFF_IDS)[number];
 
-// 鈹€鈹€ 鍛借繍纰庣墖鎴愰暱鏍戯紙destiny tree锛孷2锛? 鍒嗘敮 x 9 鑺傜偣锛夆攢鈹€
-/** 瀹堟姢1 鍧氶煣涔嬭函锛歮axHp/hp +15銆?*/
-// 鈹€鈹€ 鎺╀綋瑙嗙嚎锛圠OS锛宻pecs/260629-map-terrain Phase 2锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 /** 鎸¤绾跨殑鍦板舰绫诲瀷锛堝浣撳瀷锛涘湴闈㈠瀷 SAND_PIT / ICE_TILE / LAVA_TILE 涓嶆尅锛孉C-MT-5锛夈€?*/
 export const BLOCKS_LOS_TYPES = new Set(['ROCK', 'ICE_WALL', 'FREEZE_WALL']);
 

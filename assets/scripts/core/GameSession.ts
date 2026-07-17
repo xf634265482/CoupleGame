@@ -5,6 +5,7 @@ export class GameSession {
   private static _user: UserVO | null = null;
   private static _roomId: string | null = null;
   private static _gameId: string | null = null;
+  private static _pendingPveFloor: number | null = null;
 
   static get user(): UserVO | null {
     return this._user;
@@ -28,6 +29,14 @@ export class GameSession {
 
   static set gameId(v: string | null) {
     this._gameId = v;
+  }
+
+  static get pendingPveFloor(): number | null {
+    return this._pendingPveFloor;
+  }
+
+  static set pendingPveFloor(v: number | null) {
+    this._pendingPveFloor = v;
   }
 
   static clearRoom(): void {

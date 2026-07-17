@@ -4,6 +4,8 @@
 
 import { Color, Graphics, Label, Layout, Mask, Node, ScrollView, UITransform } from 'cc';
 import { makeLabel } from './pveUiKit';
+import { PveDebug } from '../debug/PveDebug';
+import { disposeOldestOverflow } from './MessageLogRetention';
 
 /** 战报条目分类，对应不同颜色，让玩家一眼分辨"谁干了什么"。 */
 export type LogKind =
@@ -32,10 +34,9 @@ const PAD_X = 14;
 const PAD_TOP = 10;
 const TITLE_H = 30;
 /** 判断"是否已滚到底部"的容差像素，浮点误差用。 */
-const SCROLL_EPS = 4;
 
 /** 单层最大保留条目数：超过则丢最早。防止 layout 成本随回合数线性增长。 */
-const MAX_ENTRIES = 200;
+const MAX_ENTRIES = 120;
 
 /** 战报视图：固定大小面板，内部为可滚动列表，append-only 显示本层全部回合记录。 */
 export class PveMessageLog {
@@ -43,9 +44,13 @@ export class PveMessageLog {
   private _content: Node;
   private _scrollView: ScrollView;
   private _lastTurn = -1;
+  private _lastRawTurn = -1;
+  private _lastRawText = '';
   /** 合批 flush 状态：同一帧内多次 push 只触发一次 layout + scroll，消除 N×O(N) 重排。 */
   private _flushScheduled = false;
   private _pendingScrollBottom = false;
+  private _flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private _destroyed = false;
 
   constructor(parent: Node, x: number, y: number, w: number = 240, h: number = 320) {
     this._root = new Node('PveMessageLog');
@@ -108,13 +113,18 @@ export class PveMessageLog {
 
   /** 追加一条战报；append-only，本层切换前全部保留，可上下滑动查看。 */
   push(turn: number, kind: LogKind, text: string): void {
+    if (this._destroyed) return;
+    if (turn === this._lastRawTurn && text === this._lastRawText) {
+      return;
+    }
+    this._lastRawTurn = turn;
+    this._lastRawText = text;
+
     // 同回合内只在首行显示「回合N」前缀，其余空两格对齐（视觉分组）。
     // 用中文「回合N」而非「T{n}」更白话，符合普通玩家直觉。
     const showTurnPrefix = turn !== this._lastTurn;
     this._lastTurn = turn;
     const str = showTurnPrefix ? `回合${turn}  ${text}` : `        ${text}`;
-
-    const wasAtBottom = this._isAtBottom();
 
     const contentW = this._content.getComponent(UITransform)!.width;
     const lbl = makeLabel(this._content, 0, 0, contentW, LINE_H, 21, COLOR_BY_KIND[kind], Label.HorizontalAlign.LEFT);
@@ -126,22 +136,27 @@ export class PveMessageLog {
     // 让 Label 在下一帧 render phase 自然刷新即可，玩家肉眼无感。
 
     // 同层条目超过上限时砍掉最早的，保证 layout 成本不随回合数线性增长。
-    while (this._content.children.length > MAX_ENTRIES) {
-      this._content.children[0].destroy();
-    }
+    disposeOldestOverflow(this._content.children, MAX_ENTRIES, (entry) => {
+      // Cocos destroy() only finalizes at frame end. Detach first so the
+      // Layout child list and subsequent pushes observe the new length now.
+      entry.removeFromParent();
+      entry.destroy();
+    });
 
-    if (wasAtBottom) this._pendingScrollBottom = true;
+    this._pendingScrollBottom = true;
 
     // 合批：同一帧多次 push 只在 microtask 末尾跑一次 updateLayout + scrollToBottom。
     // 回合结束时 N 个事件依次 push → 原本 N 次 O(N) layout，合批后仅 1 次。
     if (!this._flushScheduled) {
       this._flushScheduled = true;
-      setTimeout(() => this._flush(), 0);
+      this._flushTimer = setTimeout(() => this._flush(), 0);
     }
   }
 
   private _flush(): void {
+    if (this._destroyed) return;
     this._flushScheduled = false;
+    this._flushTimer = null;
     this._content.getComponent(Layout)?.updateLayout();
     if (this._pendingScrollBottom) {
       this._pendingScrollBottom = false;
@@ -151,20 +166,22 @@ export class PveMessageLog {
 
   /** 清空（楼层切换 / 死亡 / 重开远征时调用）。 */
   clear(): void {
-    this._content.removeAllChildren();
+    if (this._destroyed) return;
+    if (this._flushTimer) {
+      clearTimeout(this._flushTimer);
+      this._flushTimer = null;
+    }
+    this._flushScheduled = false;
+    this._pendingScrollBottom = false;
+    this._content.destroyAllChildren();
     this._lastTurn = -1;
+    this._lastRawTurn = -1;
+    this._lastRawText = '';
     this._content.getComponent(Layout)?.updateLayout();
     this._scrollView.scrollToBottom(0);
   }
 
   /** 当前滚动位置是否已在底部（容差 SCROLL_EPS），用于决定新条目是否需要自动跟随滚动。 */
-  private _isAtBottom(): boolean {
-    const maxOffset = this._scrollView.getMaxScrollOffset();
-    if (maxOffset.y <= 0) return true;
-    const offset = this._scrollView.getScrollOffset();
-    return Math.abs(offset.y - maxOffset.y) < SCROLL_EPS;
-  }
-
   get node(): Node {
     return this._root;
   }
@@ -174,6 +191,21 @@ export class PveMessageLog {
   }
 
   destroy(): void {
-    this._root.destroy();
+    if (this._destroyed) return;
+    this._destroyed = true;
+    PveDebug.mark('MsgLog.destroy.begin');
+    try {
+      if (this._flushTimer) {
+        clearTimeout(this._flushTimer);
+        this._flushTimer = null;
+      }
+      if (this._content && this._content.isValid) this._content.destroyAllChildren();
+      if (this._root && this._root.isValid) this._root.destroy();
+      else PveDebug.mark('MsgLog.destroy.rootInvalid');
+      PveDebug.mark('MsgLog.destroy.end');
+    } catch (err) {
+      PveDebug.dump('MsgLog.destroy throw');
+      throw err;
+    }
   }
 }

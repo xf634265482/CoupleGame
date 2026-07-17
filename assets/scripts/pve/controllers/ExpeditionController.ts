@@ -71,7 +71,7 @@ import { PveCharacterPanel } from '../views/PveCharacterPanel';
 import { PVE_HUD_INFO_H, PveHudView } from '../views/PveHudView';
 import type { LogKind } from '../views/PveMessageLog';
 import { PveMessageLog } from '../views/PveMessageLog';
-import { PveToastView, STRENGTHEN_LABEL } from '../views/PveToastView';
+import { PveToastView } from '../views/PveToastView';
 import { getCachedSprite, loadUiSprite, preloadPveUi } from '../../ui/UiAssets';
 import { ensureChapterAssets, isChapterReady, preloadChapter } from '../ChapterResourceLoader';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
@@ -494,8 +494,6 @@ function describeForLog(
         : { kind: 'ENEMY_ACT', text: '💥 命运爆炸（5×5，已规避）' };
     case 'DESTINY_AP_LOCKED':
       return { kind: 'PLAYER_HURT', text: `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}` };
-    case 'SHARDS_PICKUP':
-      return { kind: 'LOOT', text: `💎 命运碎片 +${ev.amount}` };
     case 'ELITE_REVIVE':
       return { kind: 'ENEMY_ACT', text: `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}` };
     case 'ELITE_EXPLODE':
@@ -643,8 +641,6 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return ev.damage > 0 ? `💥 命运爆炸：-${ev.damage}（剩 ${ev.hp} 血）` : '💥 命运爆炸（已规避）';
     case 'DESTINY_AP_LOCKED':
       return `🔒 命运封锁：下回合 AP → ${ev.nextTurnAp}`;
-    case 'SHARDS_PICKUP':
-      return `💎 命运碎片 +${ev.amount}`;
     case 'ELITE_REVIVE':
       return `✨ 虚空虫双生复活！HP 恢复至 ${ev.hp}`;
     case 'ELITE_EXPLODE':
@@ -662,7 +658,7 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
 @ccclass('ExpeditionController')
 export class ExpeditionController extends Component {
   private _state: ExpeditionState | null = null;
-  /** 局外快照（钻石/命运碎片等）；成就/图鉴字段仅只读兼容，战内不再检测或上传。bootstrap 异步加载，失败时置空降级。 */
+  /** 局外快照；bootstrap 异步加载，失败时置空降级。 */
   private _meta: PveMeta | null = null;
   private _balanceSnapshot: ExpeditionState['balanceSnapshot'] | null = null;
   private _floorFlow: PersistentFloorFlow | null = null;
@@ -1026,7 +1022,7 @@ export class ExpeditionController extends Component {
       if (!this._map) { onContact(); resolve(); return; }
       const ghost = this._map.cloneOccupantForFx(attackerPos);
       if (!ghost) {
-        void this._playLegacySwordArc(attackerPos, targetPos, onContact).then(resolve);
+        void this._playSwordArc(attackerPos, targetPos, onContact).then(resolve);
         return;
       }
       const fromWp = this._map.getCellWorldPosition(attackerPos);
@@ -1140,7 +1136,7 @@ export class ExpeditionController extends Component {
   }
 
   /** 旧剑弧兜底（克隆失败时）。 */
-  private _playLegacySwordArc(attackerPos: Coord, targetPos: Coord, onContact: () => void): Promise<void> {
+  private _playSwordArc(attackerPos: Coord, targetPos: Coord, onContact: () => void): Promise<void> {
     return new Promise((resolve) => {
       if (!this._map) { onContact(); resolve(); return; }
       const fromWp = this._map.getCellWorldPosition(attackerPos);
@@ -1400,7 +1396,7 @@ export class ExpeditionController extends Component {
     Effects.setScreenRoot(mapRoot);
   }
 
-  /** HUD「角色」按钮回调：弹出角色详情面板（属性 / 装备 / 遗物 / 碎片）。 */
+  /** HUD「角色」按钮回调：弹出属性、职业与装备详情。 */
   private _onShowCharacter(): void {
     if (!this._state || !this._character) return;
     this._character.show(this._state);
@@ -1415,7 +1411,6 @@ export class ExpeditionController extends Component {
         {
           equipment: this._state.player.equipment,
           bag: this._state.player.bag ?? [],
-          classId: this._state.player.classId,
         },
         (itemId) => {
           if (!this._state) return null;
@@ -1485,7 +1480,6 @@ export class ExpeditionController extends Component {
       if (metaRes.status === 'fulfilled') {
         this._meta = metaRes.value.meta;
         this._balanceSnapshot = metaRes.value.balanceSnapshot ?? null;
-        this._hud?.refreshMeta(this._meta.destinyShards);
       }
 
       this._floorFlow = new PersistentFloorFlow({
@@ -3403,10 +3397,7 @@ export class ExpeditionController extends Component {
     const completedTutorialFloor = this._state.isTutorialRun && this._state.floor === 1;
     if (completedTutorialFloor) {
       this._meta = {
-        ...(this._meta ?? {
-          destinyShards: 0,
-          diamond: 0,
-        }),
+        ...(this._meta ?? { diamond: 0 }),
         tutorialCompleted: true,
       };
       try {
@@ -3611,15 +3602,13 @@ export class ExpeditionController extends Component {
         : {});
       const { rewards } = await this._floorFlow.settle(selection);
 
-      // 结算后更新本地碎片/钻石余额快照，刷新 HUD
+      // 结算后更新本地钻石余额快照。
       if (rewards && this._meta) {
         const rewardRecord = rewards as Record<string, unknown>;
         this._meta = {
           ...this._meta,
-          destinyShards: this._meta.destinyShards + (Number(rewardRecord.destinyShards ?? 0)),
           diamond: this._meta.diamond + (Number(rewardRecord.diamond ?? 0)),
         };
-        this._hud?.refreshMeta(this._meta.destinyShards);
       }
 
       const rewardRecord = (rewards ?? {}) as Record<string, unknown>;
@@ -3648,7 +3637,6 @@ export class ExpeditionController extends Component {
           minghenName,
           equipmentName,
           diamond: 0,
-          destinyShards: Number(rewardRecord.destinyShards ?? 0),
         });
       } else {
         await delay(2000);

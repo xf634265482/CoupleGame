@@ -117,9 +117,18 @@ describe('playerAttack — 远程 LOS 校验（AC-MT-4）', () => {
       },
       playerOverrides: {
         classId: 'ARCHER',
-        classTraits: [],
-        // 给射程 3 (BASE_ATTACK_RANGE=1 + ARCHER.attackRangeBonus=2)
-        equipment: { WEAPON: { id: 'w1', name: '测试弓', slot: 'WEAPON', quality: 'COMMON', baseStat: 0, trait: 'none' } },
+        // 游侠基础射程 2；测 LOS 时用矛类武器 + implicit 拉到射程 3，保持距离 3 的用例
+        equipment: {
+          WEAPON: {
+            id: 'w1',
+            name: '铁制长矛',
+            slot: 'WEAPON',
+            quality: 'COMMON',
+            baseStat: 0,
+            trait: 'none',
+            implicit: 'weapon_spear',
+          },
+        },
       },
     });
   }

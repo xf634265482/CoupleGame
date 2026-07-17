@@ -1,7 +1,6 @@
 ﻿// 杩滃緛杩愯鎬佺敓鍛藉懆鏈燂紙design 搂2 / 搂14锛夛細寮€灞€銆佸洖鍚堟帹杩涖€佹ゼ灞傚垏鎹€佸瓨妗ｅ簭鍒楀寲銆佹浜＄粨绠椼€?// 杩欐槸 PVE core 鐨勭紪鎺掑眰 鈥斺€?缁勫悎 MapGenerator/ApSystem/MonsterAI 绛夌函閫昏緫妯″潡锛?// 浠嶄繚鎸侀浂妗嗘灦渚濊禆銆佺‘瀹氭€э紙鍚?runSeed + 鍚屾搷浣滃簭鍒?鈫?鍚岀粨鏋滐紝AC-13锛夛紝渚?Controller 涓庝簯绔绠楄皟鐢ㄣ€?
 import { rollAp } from './ApSystem';
-import { addAnima, traitCount } from './AnimaSystem';
-import { traitLayers } from './strengthen/CommonStrengthenEffects';
+import { addAnima } from './AnimaSystem';
 import { recordPlayerActionForMirror } from './bosses/FateGuardian';
 import { warHornAssist } from './CombatSystem';
 import { stepMonsters } from './MonsterAI';
@@ -10,7 +9,7 @@ import { generateFloor } from './MapGenerator';
 import { isPlayerBurnImmune, tickMonsterDots } from './BossEquipTraitEffects';
 import { VARIANT_FROST_SPRITE } from './Chapter3Monsters';
 import {
-  ANIMA_PER_STRENGTHEN,
+  ANIMA_PROGRESS_CAP,
   AP_CARRY_CAP,
   INITIAL_ANIMA,
   INITIAL_CLASS,
@@ -35,17 +34,6 @@ import {
 } from './PveBalance';
 import { legFateArmorHeal, legFortuneBlessingFloorHeal } from './LegendarySystem';
 import { professionBaseStats, professionIdFromClassId } from './professions/ProfessionBaseStats';
-import { LEGACY_VARIANT_SANDWORM_LARVA, VARIANT_DESERT_HOPPER_LIZARD } from './Chapter2Monsters';
-import { LEGACY_VARIANT_ICE_SLIME, VARIANT_FROSTSPIKE_PORCUPINE } from './Chapter3Monsters';
-import { LEGACY_VARIANT_LAVA_GRUNT, VARIANT_ASH_HOUND } from './Chapter4Monsters';
-import { LEGACY_VARIANT_VOID_WORM, VARIANT_FATE_WHEEL_BEAST } from './Chapter5Monsters';
-
-const LEGACY_MONSTER_VARIANT_IDS: Record<string, string> = {
-  [LEGACY_VARIANT_SANDWORM_LARVA]: VARIANT_DESERT_HOPPER_LIZARD,
-  [LEGACY_VARIANT_ICE_SLIME]: VARIANT_FROSTSPIKE_PORCUPINE,
-  [LEGACY_VARIANT_LAVA_GRUNT]: VARIANT_ASH_HOUND,
-  [LEGACY_VARIANT_VOID_WORM]: VARIANT_FATE_WHEEL_BEAST,
-};
 
 function deriveFloorSeed(runSeed: number, floor: number): number {
   return hashSeed(`${runSeed}:floor:${floor}`);
@@ -75,9 +63,8 @@ function createInitialPlayerWithBalance(
     gold: base.gold,
     anima: base.anima,
     animaProgress: base.animaProgress,
-    animaThreshold: ANIMA_PER_STRENGTHEN,
+    animaThreshold: ANIMA_PROGRESS_CAP,
     classId: INITIAL_CLASS,
-    classTraits: [],
     equipment: {},
   };
 }
@@ -86,12 +73,10 @@ function startFloorTurn(
   generated: FloorState,
   chapter: number,
   balanceSnapshot?: ExpeditionState['balanceSnapshot'],
-  playerTraits?: readonly string[],
 ): FloorState {
   const rng = createRng(generated.rngState);
   const { dice, ap } = rollAp(rng, getBalancedApBase(balanceSnapshot, chapter));
-  const apBonus = playerTraits ? traitCount(playerTraits, 'strengthen_ap_up') : 0;
-  const finalAp = ap + apBonus;
+  const finalAp = ap;
   return { ...generated, ap: finalAp, maxAp: finalAp, dice, turn: 1, rngState: rng.state() };
 }
 
@@ -105,19 +90,9 @@ function collectRevealedCells(revealed: boolean[][]): Coord[] {
   return cells;
 }
 
-function normalizeSavedMonsterVariants(floorState: FloorState): FloorState {
-  return {
-    ...floorState,
-    monsters: floorState.monsters.map((monster) => {
-      const variantId = monster.variantId ? LEGACY_MONSTER_VARIANT_IDS[monster.variantId] : undefined;
-      return variantId ? { ...monster, variantId } : monster;
-    }),
-  };
-}
-
 /**
  * 开启一次新远征：生成第 1 层、初始化玩家与首回合 AP。
- * meta 仅用于教程状态、图鉴快照等局外信息；不再读取已退役账号成长加成。
+ * meta 仅用于教程等账户状态。
  */
 export function startExpedition(
   runSeed: number,
@@ -139,7 +114,7 @@ export function startExpedition(
     applyBalanceToFloor(firstFloorBase, snapshot, chapterOfFloor(floor)),
     difficultySnapshot,
   );
-  const floorState = startFloorTurn(firstFloor, chapterOfFloor(floor), snapshot, []);
+  const floorState = startFloorTurn(firstFloor, chapterOfFloor(floor), snapshot);
 
   return {
     runSeed,
@@ -167,8 +142,6 @@ export function endTurn(state: ExpeditionState): ApplyResult {
   // 锛圓TTACK > MOVE > IDLE 浼樺厛绾т簰鏂ワ紱闀滃儚鍦ㄤ笅涓€墿鍥炲悎鎸夋鎵ц锛夈€?
   const attackedThisTurn = !!state.floorState.playerAttackedThisTurn;
   const stepsThisTurn = state.floorState.playerStepsThisTurn ?? 0;
-  const reserveReady = state.player.classTraits.includes('general_reserve_setup') && state.floorState.ap >= 3;
-  const storedEdgeReady = state.player.classTraits.includes('general_stored_edge') && !attackedThisTurn;
   const mirrorRecord = recordPlayerActionForMirror(state, attackedThisTurn, stepsThisTurn);
   events.push(...mirrorRecord.events);
 
@@ -210,13 +183,12 @@ export function endTurn(state: ExpeditionState): ApplyResult {
     ? professionBaseStats(professionIdFromClassId(postExposureState.player.classId)).apBase
     : getBalancedApBase(postExposureState.balanceSnapshot, postExposureState.chapter);
   const { dice, ap } = rollAp(rng, professionApBase);
-  const apBonus = traitCount(postExposureState.player.classTraits, 'strengthen_ap_up');
   const nextTurn = postExposureState.floorState.turn + 1;
 
   // AP 缁撹浆锛氫笂鍥炲悎鍓╀綑 AP 鎸夊浐瀹氫笂闄愬姞鍏ユ湰鍥炲悎銆?
   const carryCap = AP_CARRY_CAP;
   const carryAp = Math.min(postExposureState.floorState.ap, carryCap);
-  let finalAp = ap + apBonus + carryAp + (reserveReady ? 1 : 0);
+  let finalAp = ap + carryAp;
 
   // 鍛借繍瀹堝崼 E5 鍛借繍灏侀攣锛氫笂涓€涓?Boss 鍥炲悎鍐欏叆 destinyLockNextTurn=true 鈫?鏈洖鍚?AP 鍑忓崐锛堟渶灏?1锛?
   const destinyLocked = !!postExposureState.floorState.destinyLockNextTurn;
@@ -345,18 +317,10 @@ export function endTurn(state: ExpeditionState): ApplyResult {
       playerMoveApPenaltyRounds: newMoveApPenaltyRounds > 0 ? newMoveApPenaltyRounds : undefined,
       status: lavaDead ? 'DEAD' : postExposureState.floorState.status,
       shoesFirstMoveDone: undefined, // 姣忓洖鍚堝紑濮嬫椂閲嶇疆闈村瓙棣栨鍏嶈垂鏍囪
-      awakenShadowCharges: 0,
-      awakenShadowGrantedThisTurn: undefined,
-      awakenBreakerShieldUsed: undefined,
-      awakenSniperDecisiveUsed: undefined,
-      awakenExecutionStealthUsed: undefined,
-      awakenShadowTradeUsed: undefined,
       destinyLockNextTurn: undefined, // 鍛借繍灏侀攣鏈洖鍚堝凡缁撶畻锛坒inalAp 宸插噺鍗婏級锛屾竻绌?
       playerAttackedThisTurn: undefined,
       playerStepsThisTurn: undefined,
       killApRefundedThisTurn: undefined,
-      generalReserveApReady: undefined,
-      generalStoredEdgeReady: storedEdgeReady || postExposureState.floorState.generalStoredEdgeReady,
       rogueAttackCountThisTurn: 0,
       rogueHidden: undefined,
     },
@@ -378,7 +342,7 @@ export function resumeExpedition(
   const snapshot = getBalanceSnapshot(balanceSnapshot);
   if (savedFloorState) {
     const allowTutorialState = floor === 1 && !!savedFloorState.tutorialScenarioId;
-    const normalizedFloorState = normalizeSavedMonsterVariants(allowTutorialState
+    const normalizedFloorState = (allowTutorialState
       ? savedFloorState
       : {
         ...savedFloorState,
@@ -409,7 +373,6 @@ export function resumeExpedition(
     ),
     chapterOfFloor(nextFloor),
     snapshot,
-    player.classTraits,
   );
   const events: PveEvent[] = [
     { type: 'REVEAL', cells: collectRevealedCells(floorState.revealed) },
@@ -444,14 +407,6 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
     ? { ...state.player, maxChapterCleared: clearedChapter }
     : state.player;
 
-  const recoveryLayers = traitLayers(player.classTraits, 'general_recovery_rhythm');
-  let recoveryOverhealAnima = 0;
-  if (recoveryLayers > 0) {
-    const heal = Math.max(1, Math.round(player.maxHp * recoveryLayers * 0.05));
-    const overheal = Math.max(0, heal - (player.maxHp - player.hp));
-    if (player.classTraits.includes('general_overheal_anima')) recoveryOverhealAnima = Math.min(20, Math.floor(overheal * 0.5));
-    player = { ...player, hp: Math.min(player.maxHp, player.hp + heal) };
-  }
   const fateArmorHeal = legFateArmorHeal(player.equipment, player.maxHp);
   if (fateArmorHeal > 0) {
     player = { ...player, hp: Math.min(player.maxHp, player.hp + fateArmorHeal) };
@@ -479,7 +434,6 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
     ),
     chapterOfFloor(nextFloor),
     state.balanceSnapshot,
-    player.classTraits,
   );
   const events: PveEvent[] = [
     { type: 'REVEAL', cells: collectRevealedCells(floorState.revealed) },
@@ -497,15 +451,6 @@ export function advanceFloor(state: ExpeditionState): ApplyResult {
   };
 
   // 閬楃墿锛氭祦娌欎箣蹇?鈥?杩涘叆鏂版埧闂撮殢鏈虹敓鎴?2 鏍兼矙鍧戯紙娑堣€楁湰灞?rngState 鎺ㄨ繘锛岀‘瀹氭€э級
-  if (recoveryOverhealAnima > 0) {
-    const animaResult = addAnima(next, recoveryOverhealAnima);
-    next = {
-      ...animaResult.state,
-      floorState: { ...animaResult.state.floorState, generalOverhealAnimaThisFloor: recoveryOverhealAnima },
-    };
-    events.push(...animaResult.events);
-  }
-
   return { state: next, events };
 }
 

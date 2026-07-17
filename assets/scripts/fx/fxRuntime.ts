@@ -63,6 +63,13 @@ function clearEntry(host: object, channel: string, entry: Entry): void {
   _liveTweens.delete(entry.tw);
 }
 
+function isAliveHost(host: object): boolean {
+  const maybeNode = host as { isValid?: boolean; node?: { isValid?: boolean } };
+  if (typeof maybeNode.isValid === 'boolean') return maybeNode.isValid;
+  if (maybeNode.node && typeof maybeNode.node.isValid === 'boolean') return maybeNode.node.isValid;
+  return true;
+}
+
 /** 驱动器选项。 */
 export interface DriveOptions {
   duration: number;            // 已是「该效果默认值或调用方覆盖值」，drive 内再按 timeScale 换算
@@ -93,25 +100,38 @@ export function drive(
   const dur = scaledDuration(opts.duration, _timeScale);
   let done = false;
   let resolveFn: () => void = () => {};
+  let tw: Tween<object> | null = null;
+  let entry: Entry | null = null;
 
-  const settle = (): void => { apply(1); };
+  const safeApply = (t: number, force = false): boolean => {
+    if (!isAliveHost(host)) {
+      if (!force && !done) {
+        tw?.stop();
+        finish();
+      }
+      return false;
+    }
+    apply(t);
+    return true;
+  };
+  const settle = (): void => { void safeApply(1, true); };
   const finish = (): void => {
     if (done) return;
     done = true;
-    clearEntry(host, channel, entry);
+    if (entry) clearEntry(host, channel, entry);
     opts.onComplete?.();
     resolveFn();
   };
 
-  const tw = tween(proxy)
+  tw = tween(proxy)
     .delay(opts.delay ?? 0)
     .to(dur, { t: 1 }, {
       easing: (opts.easing ?? 'linear') as never,
-      onUpdate: () => apply(proxy.t),
+      onUpdate: () => { void safeApply(proxy.t); },
     })
-    .call(() => { apply(1); finish(); }) as unknown as Tween<object>;
+    .call(() => { settle(); finish(); }) as unknown as Tween<object>;
 
-  const entry: Entry = { tw, settle, finish };
+  entry = { tw, settle, finish };
   channelMap(host).set(channel, entry);
   _liveTweens.add(tw);
   tw.start();

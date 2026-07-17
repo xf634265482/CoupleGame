@@ -2,9 +2,7 @@
  * PVE account meta read/write.
  *
  * Current meta responsibilities: tutorial flags, account currency,
- * stamina and balance snapshot. Legacy fields such as destinyShards and
- * unlockedTreeNodes may still exist on old user documents; admin reset keeps
- * clearing them, but gameplay no longer reads them as a system entry.
+ * stamina and balance snapshot.
  */
 const {
   getUserPveMeta,

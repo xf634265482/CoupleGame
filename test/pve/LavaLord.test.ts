@@ -281,7 +281,7 @@ describe('LavaLord', () => {
       const ev = result.events.find((e) => e.type === 'ATTACK');
       expect(ev).toBeDefined();
       if (ev && ev.type === 'ATTACK') {
-        const baseDamage = 10; // ADVENTURER 基础攻击力（无装备/词条加成）
+        const baseDamage = 13;
         const expected = Math.max(1, Math.round(baseDamage * (1 - LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION)));
         expect(ev.damage).toBe(expected);
         expect(ev.targetHp).toBe(1000 - expected);

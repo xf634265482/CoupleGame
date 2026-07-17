@@ -1,7 +1,7 @@
 # 260615 · 第4章 Boss「熔岩领主」机制重做
 
 > 状态：设计已确认，进入实现。
-> 关联：`specs/game-design/Boss设计V1.md` §五（需同步）、`specs/260608-pve-destiny-expedition/design.md` §11b（需同步）、`specs/260614-boss-anti-kite/design.md`（前置：第4章此前仅熔岩焰格 3→6，未做结构性重做）。
+> 关联：`specs/260608-pve-destiny-expedition/design.md` 与 `specs/260614-boss-anti-kite/design.md`。
 > 实现文件：`assets/scripts/pve/core/bosses/LavaLord.ts`。
 
 ## 一、背景
@@ -151,5 +151,5 @@ LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION = 0.2
 
 ## 十、文档同步
 
-- `specs/game-design/Boss设计V1.md` §五（第4章 Boss：熔岩领主）整段重写
+- `specs/260608-pve-destiny-expedition/design.md` 中第4章 Boss 规则
 - `specs/260608-pve-destiny-expedition/design.md` §11b Boss 机制部分同步

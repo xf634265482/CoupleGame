@@ -34,6 +34,8 @@ export interface MinghenEventContext {
   lastAction?: MinghenAction | null;
   action?: MinghenAction;
   voluntary?: boolean;
+  attackerOnSandPit?: boolean;
+  terrainDamage?: number;
 }
 
 export interface MinghenEffectResult {

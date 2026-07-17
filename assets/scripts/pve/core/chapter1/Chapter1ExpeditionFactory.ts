@@ -88,7 +88,7 @@ function loadedInstance(profile: PveProfile, instanceId: string | undefined): Pv
     : null;
 }
 
-function toLegacyEquipment(profile: PveProfile): Equipment {
+function toRunEquipment(profile: PveProfile): Equipment {
   const equipment: Equipment = {};
   for (const slot of ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'] as const) {
     const instance = loadedInstance(profile, profile.equipmentLoadout[slot]);
@@ -99,7 +99,7 @@ function toLegacyEquipment(profile: PveProfile): Equipment {
 }
 
 function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): RunPlayer {
-  const equipment = toLegacyEquipment(profile);
+  const equipment = toRunEquipment(profile);
   const base = professionBaseStats(snapshot.config.professionId);
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
@@ -110,7 +110,6 @@ function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): Ru
     animaProgress: 0,
     animaThreshold: 100,
     classId: classIdOf(snapshot.config.professionId),
-    classTraits: [],
     equipment,
     bag: [],
     campMaxHpBuys: 0,

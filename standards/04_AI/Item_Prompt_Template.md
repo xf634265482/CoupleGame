@@ -8,7 +8,7 @@
 
 当前状态：SUSPENDED。
 
-恢复后从 VSS `Prompt_Style_Template.md`、`Item_Reference.md` 与 `Icon_Reference.md` 派生。
+恢复后从 VSS `Prompt_Style_Template.md` 与 `Icon_Reference.md` 派生。
 
 ## Examples
 

@@ -35,29 +35,6 @@ describe('PveProgression', () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
-  test('migrates legacy root stamina into the current profile once', async () => {
-    const current = createDefaultProfile(100);
-    delete current.stamina;
-    delete current.staminaUpdatedAt;
-    delete current.staminaNextRecoveryAt;
-    delete current.tutorialFreeChallengeConsumed;
-    const now = Date.now();
-    mockGetUserById.mockResolvedValue({
-      _id: 'doc-stamina',
-      id: 'u-stamina',
-      pveProfile: current,
-      pveStamina: 12,
-      pveStaminaUpdatedAt: now,
-      pveFirstRunStarted: true,
-    });
-    const { profile } = await loadProfile({ id: 'u-stamina' });
-    expect(profile).toMatchObject({
-      stamina: 12,
-      tutorialFreeChallengeConsumed: true,
-    });
-    expect(mockUpdate).toHaveBeenCalledTimes(1);
-  });
-
   test('rejects a missing user', async () => {
     mockGetUserById.mockResolvedValue(null);
     await expect(loadProfile({ id: 'missing' })).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });

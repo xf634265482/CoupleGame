@@ -61,20 +61,10 @@ function consumeForFloorChallenge(state, freeEligible) {
   };
 }
 
-// Legacy save-chain compatibility. The public startRun route is removed later in this plan.
-function consumeForNewRun(state, firstRunStarted) {
-  const result = consumeForFloorChallenge(state, !firstRunStarted);
-  return {
-    ...result,
-    firstRunStarted: true,
-  };
-}
-
 module.exports = {
   STAMINA_MAX,
   STAMINA_CHALLENGE_COST,
   STAMINA_RECOVERY_MS,
   resolveStamina,
   consumeForFloorChallenge,
-  consumeForNewRun,
 };

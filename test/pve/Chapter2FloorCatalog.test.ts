@@ -43,13 +43,13 @@ describe('Chapter2FloorCatalog', () => {
 
   test('all floors bind locked metadata and empty optional objectives', () => {
     const locked = {
-      8: { name: '沙丘哨站', size: 8, fogMode: 'FULL', objectiveKind: 'KEY_EXPLORE', minghenIds: ['M08', 'M22', 'M09'], equipmentIds: ['W08', 'A04', 'S04'] },
-      9: { name: '毒蝎猎场', size: 8, fogMode: 'FULL', objectiveKind: 'ELITE_HUNT', minghenIds: ['M02', 'M17', 'M15', 'M10'], equipmentIds: ['W09', 'W10', 'H04'] },
-      10: { name: '沙丘哨卫', size: 8, fogMode: 'NONE', objectiveKind: 'PURGE', minghenIds: ['M05', 'M03', 'M13'], equipmentIds: ['W11', 'A05', 'H05'] },
-      11: { name: '沙暴追剿', size: 9, fogMode: 'NONE', objectiveKind: 'CHASE', minghenIds: ['M11', 'M12', 'M16', 'M14'], equipmentIds: ['W12', 'S05', 'T04', 'T05'] },
-      12: { name: '沙暴走廊', size: 9, fogMode: 'NONE', objectiveKind: 'TIMED_ESCAPE', minghenIds: ['M19', 'M18', 'M20', 'M25'], equipmentIds: ['W13', 'A06', 'S06'] },
-      13: { name: '流沙潮汐', size: 9, fogMode: 'NONE', objectiveKind: 'WAVE_SURVIVAL', minghenIds: ['M21', 'M23', 'M22', 'M26'], equipmentIds: ['H06', 'T06', 'W08', 'A04', 'S04', 'W09', 'W10', 'H04', 'W11', 'A05', 'H05', 'W12', 'S05', 'T04', 'T05', 'W13', 'A06', 'S06'] },
-      14: { name: '流沙王座', size: 10, fogMode: 'BOSS_FOG', objectiveKind: 'BOSS', minghenIds: ['M24', 'M01', 'M04'], equipmentIds: ['B04', 'B05', 'B06'] },
+      8: { name: '沙丘哨站', size: 8, fogMode: 'FULL', objectiveKind: 'KEY_EXPLORE', minghenIds: ['M08', 'M22', 'M09'], equipmentIds: ['铁制长剑', '铁制锁甲', '沙地靴'] },
+      9: { name: '毒蝎猎场', size: 8, fogMode: 'FULL', objectiveKind: 'ELITE_HUNT', minghenIds: ['M02', 'M17', 'M15', 'M10'], equipmentIds: ['铁制长矛', '木矛', '皮革头盔'] },
+      10: { name: '沙暴警戒', size: 8, fogMode: 'NONE', objectiveKind: 'PURGE', minghenIds: ['M05', 'M03', 'M13'], equipmentIds: ['钝铁斧', '铁制板甲', '铁制战盔'] },
+      11: { name: '沙暴追剿', size: 9, fogMode: 'NONE', objectiveKind: 'CHASE', minghenIds: ['M11', 'M12', 'M16', 'M14'], equipmentIds: ['铁战斧', '精制战靴', '聚灵碧玉', '财运挂件'] },
+      12: { name: '沙暴走廊', size: 9, fogMode: 'NONE', objectiveKind: 'TIMED_ESCAPE', minghenIds: ['M19', 'M18', 'M20', 'M25'], equipmentIds: ['精钢剑', '精钢板甲', '精制战靴'] },
+      13: { name: '流沙潮汐', size: 9, fogMode: 'NONE', objectiveKind: 'WAVE_SURVIVAL', minghenIds: ['M21', 'M23', 'M22', 'M26'], equipmentIds: ['精制轻盔', '灵力宝珠', '铁制长剑', '铁制锁甲', '沙地靴', '铁制长矛', '木矛', '皮革头盔', '钝铁斧', '铁制板甲', '铁制战盔', '铁战斧', '精制战靴', '聚灵碧玉', '财运挂件', '精钢剑', '精钢板甲', '精制战靴'] },
+      14: { name: '流沙王座', size: 10, fogMode: 'BOSS_FOG', objectiveKind: 'BOSS', minghenIds: ['M24', 'M01', 'M04'], equipmentIds: ['精钢剑', '精钢板甲', '精制战靴', '精制轻盔', '灵力宝珠'] },
     } as const;
     for (const [floor, expected] of Object.entries(locked)) {
       const d = getChapter2FloorDefinition(Number(floor));
@@ -61,6 +61,13 @@ describe('Chapter2FloorCatalog', () => {
       expect(d.equipmentIds).toEqual([...expected.equipmentIds]);
       expect(d.optionalObjectiveIds).toEqual([]);
     }
+  });
+
+  test('KEY_EXPLORE floors do not pre-place EXIT; only TIMED_ESCAPE starts with exit', () => {
+    expect(getChapter2FloorDefinition(8).exitCells).toEqual([]);
+    expect(getChapter2FloorDefinition(8).objectiveKind).toBe('KEY_EXPLORE');
+    expect(getChapter2FloorDefinition(12).exitCells.length).toBeGreaterThan(0);
+    expect(getChapter2FloorDefinition(12).objectiveKind).toBe('TIMED_ESCAPE');
   });
 
   test('special fields match locked chapter-two mechanics', () => {

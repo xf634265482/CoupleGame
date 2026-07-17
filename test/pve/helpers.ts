@@ -25,7 +25,6 @@ export function makeRunPlayer(overrides: Partial<RunPlayer> = {}): RunPlayer {
     anima: INITIAL_ANIMA,
     animaProgress: 0,
     classId: INITIAL_CLASS,
-    classTraits: [],
     equipment: {},
     ...overrides,
   };

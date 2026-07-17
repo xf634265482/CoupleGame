@@ -1,4 +1,4 @@
-/** 微信小游戏：启动后锁定横屏（board/settlement 等隐藏中的 PVP 场景仍调用，暂不重构） */
+﻿/** 寰俊灏忔父鎴忥細鍚姩鍚庨攣瀹氭í灞忥紙board/settlement 绛夐殣钘忎腑鐨?VVV 鍦烘櫙浠嶈皟鐢紝鏆備笉閲嶆瀯锛?*/
 export function lockLandscape(): void {
   if (typeof wx === 'undefined') return;
   const api = wx as typeof wx & {
@@ -11,7 +11,7 @@ export function lockLandscape(): void {
   }
 }
 
-/** 微信小游戏：启动后锁定竖屏（PVE/大厅/命运树，配合 game.json deviceOrientation: portrait） */
+/** 寰俊灏忔父鎴忥細鍚姩鍚庨攣瀹氱珫灞忥紙VVE/澶у巺/鍛借繍鏍戯紝閰嶅悎 game.json deviceOrientation: portrait锛?*/
 export function lockPortrait(): void {
   if (typeof wx === 'undefined') return;
   const api = wx as typeof wx & {
@@ -23,3 +23,5 @@ export function lockPortrait(): void {
     console.warn('[WxLandscape] setDeviceOrientation', err);
   }
 }
+
+export const lockVortrait = lockPortrait;

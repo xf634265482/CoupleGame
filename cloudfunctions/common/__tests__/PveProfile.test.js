@@ -35,21 +35,8 @@ describe('PveProfile', () => {
     source.highestClearedFloor = 3;
     source.highestClearedAt = 1234.9;
     expect(normalizeProfile(source, 200).highestClearedAt).toBe(1234);
-    source.highestClearedAt = 'legacy';
+    source.highestClearedAt = 'invalid';
     expect(normalizeProfile(source, 200).highestClearedAt).toBeNull();
-  });
-
-  test('migrates legacy root stamina fields once', () => {
-    const profile = normalizeProfile(undefined, 1_000, {
-      pveStamina: 12,
-      pveStaminaUpdatedAt: 500,
-      pveFirstRunStarted: true,
-    });
-    expect(profile).toMatchObject({
-      stamina: 12,
-      staminaUpdatedAt: 500,
-      tutorialFreeChallengeConsumed: true,
-    });
   });
 
   test('resets an incompatible profile instead of migrating old assets', () => {
@@ -147,7 +134,7 @@ describe('PveProfile', () => {
     expect(profile.professions.WARRIOR).toMatchObject({ xp: 88, level: 3, unlockedTechniqueIds: ['ARMOR_BREAK'] });
   });
 
-  test('merges legacy minghenDust into gold (stardust) on normalize', () => {
+  test('merges pending minghen dust into stardust on normalize', () => {
     const profile = normalizeProfile({
       ...createDefaultProfile(1),
       gold: 40,

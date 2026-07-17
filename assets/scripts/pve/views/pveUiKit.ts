@@ -1,10 +1,6 @@
 // PVE 视图共用的代码 UI 构建工具。Graphics 同时承担异步图片加载失败时的兜底。
 
 import { Button, Color, Graphics, HorizontalTextAlignment, Label, Node, UITransform } from 'cc';
-import { loadUiSprite } from '../../ui/UiAssets';
-import { ensureArtSliced } from '../../ui/UiSprite';
-
-const COMMON_BUTTON_INSETS = { top: 22, bottom: 22, left: 28, right: 28 };
 
 /** 纯色矩形按钮；调用方可在其底层追加 SpriteFrame，纯色保留为加载失败兜底。 */
 export function makeFlatButton(
@@ -52,20 +48,15 @@ export function makeFlatButton(
   lbl.overflow = Label.Overflow.SHRINK;
 
   const btn = n.addComponent(Button);
-  btn.transition = Button.Transition.SCALE;
+  // 半透明通用弹窗按钮经常会在点击回调里立刻关闭整块面板，
+  // 保留内置 SCALE 过渡会让 Cocos 下一帧继续写回已销毁节点的缩放。
+  btn.transition = options?.noArt ? Button.Transition.NONE : Button.Transition.SCALE;
   btn.zoomScale = 0.94;
   btn.target = n;
   n.on(Button.EventType.CLICK, onClick, n);
 
   // 通用按钮默认使用无文字的青蓝石质底图；专属按钮可在调用方覆盖同名 Art 节点。
   // noArt 模式下保留纯 Graphics 半透明风格（与玩家状态卡同款），不加石质底图叠层。
-  if (!options?.noArt) {
-    void loadUiSprite('pve/hud/btn_pve_interact').then((frame) => {
-      if (!frame || !n.isValid) return;
-      ensureArtSliced(n, 'Art', frame, w, h, COMMON_BUTTON_INSETS).node.setSiblingIndex(0);
-    });
-  }
-
   return n;
 }
 

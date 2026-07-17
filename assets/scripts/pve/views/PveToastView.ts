@@ -1,4 +1,4 @@
-﻿// 远征提示视图（design §6/§9）：战斗/拾取/开箱/钥匙/通关等事件文字提示，以及满 100 灵气触发的 3 选 1 强化弹窗。
+﻿// 远征提示视图（design §6/§9）：战斗、拾取、开箱、钥匙与通关事件提示。
 // 图片仅作为底框；动态 Label、按钮与交互仍由代码构建，Graphics 保留为加载失败兜底。
 
 import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, UITransform } from 'cc';
@@ -10,20 +10,13 @@ import {
   BLACKSMITH_FAIL_STEP,
   BLACKSMITH_FAIL_THRESHOLD,
   BLACKSMITH_UPGRADE_COST,
-  AWAKEN_FORMS,
-  CLASS_FRAGMENTS_TO_ADVANCE,
-  CLASS_FRAGMENTS_TO_AWAKEN,
-  awakenFormsForClass,
 } from '../core/PveConstants';
-import type { AwakenForm, ClassId } from '../core/PveConstants';
 import type { Equipment, EquipItem, EquipSlot } from '../core/PveTypes';
-import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
 import { loadUiSprite } from '../../ui/UiAssets';
 import { ensureArtChild, ensureArtCover, ensureArtSliced } from '../../ui/UiSprite';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 import { formatEquipDetailBody } from './pveEquipDetail';
-import { STRENGTHEN_DEFS } from '../core/strengthen/StrengthenCatalog';
 import { PveDebug } from '../debug/PveDebug';
 import { equipStatSummaryForUi } from '../core/equipment/EquipmentProgression';
 
@@ -37,79 +30,7 @@ const IMPORTANT_TEXT_COLOR = new Color(255, 238, 188, 255);
 const PANEL_INSETS = { top: 48, bottom: 48, left: 48, right: 48 };
 const CONFIRM_PANEL_COLOR = new Color(7, 31, 70, 170);
 const CONFIRM_PANEL_BORDER = new Color(84, 200, 239, 240);
-const CLASS_LABEL: Record<string, string> = CLASS_DISPLAY_NAMES;
 
-/** 所有灵气强化词条的显示标签（ADVENTURER 通用 + 三职业 15 词条，AC-16 M2）。供角色面板等外部读取。 */
-export const STRENGTHEN_LABEL: Record<string, { title: string; desc: string }> = {
-  // ── ADVENTURER 通用（M1）──
-  strengthen_hp_up:     { title: '生命强化',  desc: '最大 HP +40' },
-  strengthen_attack_up: { title: '力量强化',  desc: '攻击力 +5' },
-  strengthen_ap_up:     { title: '敏捷强化',  desc: '下回合起 AP 上限 +1' },
-  strengthen_gold_find: { title: '财富强化',  desc: '拾取星尘 +20%' },
-  // ── 狂战士（AC-16 M2 基础 + AC-404 扩展）──
-  life_steal:           { title: '吸血',        desc: '每次攻击回复 10 HP' },
-  berserk:              { title: '狂暴',        desc: 'HP ≤ 50% 时攻击 +10' },
-  blood_rage:           { title: '血怒',        desc: '击杀时回复 20 HP' },
-  undying:              { title: '不屈',        desc: '每层首次将死时保留 1 HP' },
-  counter:              { title: '反击',        desc: '被攻击时对攻击者造成 10 伤害' },
-  last_stand:           { title: '绝境一击',    desc: 'HP ≤ 25% 时攻击翻倍' },
-  vengeance:            { title: '复仇',        desc: '受击后下次攻击 +5 伤害' },
-  cleave:               { title: '横扫',        desc: '命中后对相邻敌人造成 50% 溅射伤害' },
-  pain_tolerance:       { title: '痛觉钝化',    desc: '受到 ≥5 伤害时额外减免 2' },
-  executioner:          { title: '处刑者',      desc: '对 HP ≤ 20% 目标 +3 伤害' },
-  iron_skin_stack:      { title: '铁骨',        desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
-  bloodlust_stack:      { title: '嗜血本能',    desc: '击杀时回复等同层数的 HP（可叠加）' },
-  rage_strike_stack:    { title: '怒击连击',    desc: '攻击力 + 当前层数×0.5（可叠加）' },
-  berserker_resolve:    { title: '背水一战',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
-  final_charge:         { title: '最后冲锋',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
-  // ── 射手（AC-16 M2 基础 + AC-404 扩展）──
-  eagle_eye:            { title: '鹰眼',        desc: '攻击范围 +1' },
-  marksman:             { title: '射手精通',    desc: '攻击力 +5' },
-  multi_shot:           { title: '连射',        desc: '30% 概率对同一目标再射一箭' },
-  pierce:               { title: '穿透',        desc: '攻击无视护甲减伤' },
-  crit:                 { title: '暴击',        desc: '10% 概率造成双倍伤害' },
-  headshot:             { title: '致命狩猎',    desc: 'HP ≤ 25% 时攻击翻倍' },
-  retreat_shot:         { title: '回马枪',      desc: '受击后下次攻击 +5 伤害' },
-  scatter_shot:         { title: '散射',        desc: '命中后对相邻敌人造成 50% 溅射伤害' },
-  steady_aim:           { title: '稳健射姿',    desc: '受到 ≥5 伤害时额外减免 2' },
-  finisher:             { title: '收割者',      desc: '对 HP ≤ 20% 目标 +3 伤害' },
-  quiver_stack:         { title: '强化箭袋',    desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
-  vital_shot_stack:     { title: '续命箭',      desc: '击杀时回复等同层数的 HP（可叠加）' },
-  focus_stack:          { title: '专注蓄力',    desc: '攻击力 + 当前层数×0.5（可叠加）' },
-  deadeye:              { title: '死神之眼',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
-  last_arrow:           { title: '最后一箭',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
-  // ── 隐匿者（AC-16 M2 基础 + AC-404 扩展）──
-  swift:                { title: '疾步',        desc: '移动消耗 AP -1' },
-  backstab:             { title: '背刺',        desc: '移动后首次攻击双倍伤害' },
-  stealth:              { title: '潜行',        desc: '怪物仇恨范围对你缩小 2' },
-  afterimage:           { title: '残影',        desc: '每层闪避首次受到的攻击' },
-  assassin_heart:       { title: '刺客之心',    desc: '对非追击状态敌人 +20 伤害' },
-  shadow_strike:        { title: '暗影突袭',    desc: 'HP ≤ 25% 时攻击翻倍' },
-  retribution:          { title: '夜枭反击',    desc: '受击后下次攻击 +5 伤害' },
-  shockwave:            { title: '震荡波',      desc: '命中后对相邻敌人造成 50% 溅射伤害' },
-  evasion_training:     { title: '闪避训练',    desc: '受到 ≥5 伤害时额外减免 2' },
-  coup_de_grace:        { title: '致命一击',    desc: '对 HP ≤ 20% 目标 +3 伤害' },
-  nimble_stack:         { title: '灵巧',        desc: '选中时最大 HP 及当前 HP +3（可叠加）' },
-  bloodletter_stack:    { title: '放血',        desc: '击杀时回复等同层数的 HP（可叠加）' },
-  flurry_stack:         { title: '连斩',        desc: '攻击力 + 当前层数×0.5（可叠加）' },
-  survival_instinct:    { title: '求生本能',    desc: 'HP ≤ 30% 时攻击 ×1.5' },
-  desperate_gambit:     { title: '背水孤注',    desc: '本层首次 HP ≤ 30% 时 AP +3（一次性）' },
-  // ── 二阶觉醒专属词条（design §七）──
-  awakened_cleave:      { title: '裂阵横扫', desc: AWAKEN_FORMS.BERSERKER_1.coreDesc },
-  awakened_frenzy:      { title: '杀意沸腾', desc: AWAKEN_FORMS.BERSERKER_2.coreDesc },
-  awakened_power_shot:  { title: '蓄势强弓', desc: AWAKEN_FORMS.ARCHER_1.coreDesc },
-  awakened_volley:      { title: '疾行连珠', desc: AWAKEN_FORMS.ARCHER_2.coreDesc },
-  awakened_execute:     { title: '致命处决', desc: AWAKEN_FORMS.ROGUE_1.coreDesc },
-  awakened_shadow_strike: { title: '双重影袭', desc: AWAKEN_FORMS.ROGUE_2.coreDesc },
-};
-
-for (const def of STRENGTHEN_DEFS) {
-  STRENGTHEN_LABEL[def.id] = { title: def.name, desc: def.desc };
-}
-
-export function strengthenInfo(id: string): { title: string; desc: string } {
-  return STRENGTHEN_LABEL[id] ?? { title: id, desc: '' };
-}
 
 /** 装备词条显示标签（Boss 掉落装备 + 背包列表展示用）。 */
 export const EQUIP_TRAIT_LABEL: Record<string, string> = {
@@ -131,7 +52,7 @@ export const EQUIP_TRAIT_LABEL: Record<string, string> = {
   boss_revive_50:       '致死复活',
 };
 
-/** 远征提示视图（战斗战报 toast + 灵气强化 3 选 1 弹窗） → P2 PveToastView */
+/** 远征提示视图（战斗战报 toast 与当前交互弹窗）。 */
 export class PveToastView {
   private _root: Node;
   private _toastNode: Node | null = null;
@@ -462,7 +383,6 @@ export class PveToastView {
     status: 'DEAD' | 'COMPLETED';
     floor: number;
     diamond?: number;
-    destinyShards?: number;
     gold?: number;
     minghenName?: string | null;
     equipmentName?: string | null;
@@ -478,7 +398,7 @@ export class PveToastView {
       const cancel = () => finish();
       this._closeChoice();
       this._choiceCancel = cancel;
-      const { status, floor, diamond, destinyShards, gold, minghenName, equipmentName } = params;
+      const { status, floor, diamond, gold, minghenName, equipmentName } = params;
 
       const rewardLines: string[] = [];
       if ((gold ?? 0) > 0) rewardLines.push(`星尘 +${gold}`);
@@ -486,7 +406,6 @@ export class PveToastView {
       if (equipmentName) rewardLines.push(`装备：${equipmentName}`);
       // diamond 字段已废弃（星尘走 gold）；若旧客户端仍回传则合并展示，避免重复两行
       if ((diamond ?? 0) > 0 && (gold ?? 0) <= 0) rewardLines.push(`星尘 +${diamond}`);
-      if ((destinyShards ?? 0) > 0) rewardLines.push(`命运碎片 +${destinyShards}`);
       const hasReward = rewardLines.length > 0;
 
       const lineH        = 32;
@@ -572,203 +491,6 @@ export class PveToastView {
   }
 
   /**
-   * 职业进阶选择弹窗（阻塞式，AC-15 M2）。
-   * available: 可进阶的职业 id 列表；玩家选定后 resolve 职业 id，点「稍后决定」resolve null。
-   */
-  showClassAdvanceChoice(available: string[]): Promise<string | null> {
-    const CLASS_NAME: Record<string, string> = {
-      BERSERKER: '⚔️ 战士（攻击 +8，立即损失当前一半HP，至少30）',
-      ARCHER: '🏹 游侠（攻击 +3，射程 +2）',
-      ROGUE: '🗡️ 潜行者（攻击 +5，移动 +1）',
-    };
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (value: string | null) => {
-        if (settled) return;
-        settled = true;
-        if (this._choiceCancel === cancel) this._choiceCancel = null;
-        resolve(value);
-      };
-      const cancel = () => finish(null);
-      this._closeChoice();
-      this._choiceCancel = cancel;
-      const transparentBtn = { noArt: true, border: new Color(255, 214, 110, 210) } as const;
-
-      const overlay = this._createChoiceOverlay('ClassAdvanceChoice');
-      const box = new Node('Panel');
-      box.setParent(overlay);
-      box.setPosition(0, 0, 0);
-      const boxW = 596;
-      const boxH = 162 + available.length * 80;
-      box.addComponent(UITransform).setContentSize(boxW, boxH);
-      const g = box.addComponent(Graphics);
-      g.fillColor = new Color(7, 31, 70, 170);
-      g.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 18);
-      g.fill();
-      g.strokeColor = new Color(84, 200, 239, 210);
-      g.lineWidth = 2;
-      g.roundRect(-boxW / 2 + 1, -boxH / 2 + 1, boxW - 2, boxH - 2, 17);
-      g.stroke();
-
-      makeLabel(
-        box, 0, boxH / 2 - 38, boxW - 56, 40, 28,
-        new Color(255, 220, 100, 255), Label.HorizontalAlign.CENTER,
-      ).string = '职业碎片集齐！选择进阶职业';
-
-      let y = boxH / 2 - 108;
-      for (const classId of available) {
-        const label = CLASS_NAME[classId] ?? classId;
-        makeFlatButton(
-          box, label, 0, y, boxW - 92, 66,
-          () => this._deferChoiceAction(() => { this._closeChoice(false); finish(classId); }),
-          new Color(84, 100, 132, 180),
-          transparentBtn,
-        );
-        y -= 80;
-      }
-      makeFlatButton(
-        box, '等待其他职业碎片', 0, y - 2, boxW - 92, 54,
-        () => this._deferChoiceAction(() => { this._closeChoice(false); finish(null); }),
-        new Color(84, 100, 132, 170),
-        transparentBtn,
-      );
-
-      this._setChoiceNode(overlay);
-    });
-  }
-
-  /** 二阶觉醒主动二选一；点击形态后进行二次确认。 */
-  showClassAwakenChoice(classId: ClassId): Promise<AwakenForm | null> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (value: AwakenForm | null) => {
-        if (settled) return;
-        settled = true;
-        if (this._choiceCancel === cancel) this._choiceCancel = null;
-        resolve(value);
-      };
-      const cancel = () => finish(null);
-      this._closeChoice();
-      this._choiceCancel = cancel;
-      const transparentBtn = { noArt: true, border: new Color(255, 214, 110, 210) } as const;
-      const forms = awakenFormsForClass(classId);
-
-      const showConfirm = (formId: AwakenForm) => {
-        this._destroyChoiceNode();
-        const form = AWAKEN_FORMS[formId];
-        const overlay = this._createChoiceOverlay('ClassAwakenConfirm');
-        const box = new Node('Panel');
-        box.setParent(overlay);
-        box.setPosition(0, 0, 0);
-        const boxW = 596;
-        const boxH = 390;
-        box.addComponent(UITransform).setContentSize(boxW, boxH);
-        const g = box.addComponent(Graphics);
-        g.fillColor = CONFIRM_PANEL_COLOR;
-        g.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 18);
-        g.fill();
-        g.strokeColor = CONFIRM_PANEL_BORDER;
-        g.lineWidth = 2;
-        g.roundRect(-boxW / 2 + 1, -boxH / 2 + 1, boxW - 2, boxH - 2, 17);
-        g.stroke();
-
-        const icon = new Node('AwakenIcon');
-        icon.setParent(box);
-        icon.setPosition(0, 82, 0);
-        icon.addComponent(UITransform).setContentSize(126, 126);
-        void loadUiSprite(form.iconKey).then((frame) => {
-          if (frame && icon.isValid) ensureArtChild(icon, 'Art', frame, 126, 126);
-        }).catch(() => null);
-
-        const title = makeLabel(box, 0, 4, boxW - 70, 38, 27, new Color(255, 220, 100, 255), Label.HorizontalAlign.CENTER);
-        title.isBold = true;
-        title.string = `${form.name} · ${form.routeTag}`;
-        const confirmCore = makeLabel(box, 0, -48, boxW - 80, 88, 20, TEXT_COLOR, Label.HorizontalAlign.CENTER);
-        confirmCore.string = `${form.coreName}\n${form.coreDesc}`;
-        confirmCore.overflow = Label.Overflow.RESIZE_HEIGHT;
-        confirmCore.verticalAlign = Label.VerticalAlign.TOP;
-        confirmCore.lineHeight = 24;
-        makeLabel(box, 0, -96, boxW - 80, 28, 17, new Color(255, 180, 130, 255), Label.HorizontalAlign.CENTER).string = '本次远征中不可更改';
-
-        makeFlatButton(box, '确认觉醒', -130, -154, 236, 54, () => {
-          this._deferChoiceAction(() => {
-            this._closeChoice(false);
-            finish(formId);
-          });
-        }, new Color(110, 82, 48, 190), transparentBtn);
-        makeFlatButton(
-          box,
-          '返回选择',
-          130,
-          -154,
-          236,
-          54,
-          () => this._deferChoiceAction(() => showChoices()),
-          new Color(64, 86, 116, 180),
-          transparentBtn,
-        );
-        this._setChoiceNode(overlay);
-      };
-
-      const showChoices = () => {
-        this._destroyChoiceNode();
-        const overlay = this._createChoiceOverlay('ClassAwakenChoice');
-        const box = new Node('Panel');
-        box.setParent(overlay);
-        box.setPosition(0, 0, 0);
-        const boxW = 596;
-        const boxH = 520;
-        box.addComponent(UITransform).setContentSize(boxW, boxH);
-        const g = box.addComponent(Graphics);
-        g.fillColor = CONFIRM_PANEL_COLOR;
-        g.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 18);
-        g.fill();
-        g.strokeColor = CONFIRM_PANEL_BORDER;
-        g.lineWidth = 2;
-        g.roundRect(-boxW / 2 + 1, -boxH / 2 + 1, boxW - 2, boxH - 2, 17);
-        g.stroke();
-
-        const heading = makeLabel(box, 0, boxH / 2 - 38, boxW - 48, 40, 28, new Color(255, 220, 100, 255), Label.HorizontalAlign.CENTER);
-        heading.isBold = true;
-        heading.string = '选择觉醒形态';
-        makeLabel(box, 0, boxH / 2 - 72, boxW - 60, 26, 17, new Color(180, 210, 236, 255), Label.HorizontalAlign.CENTER).string = '选择核心打法，后续只会出现该形态的觉醒词条';
-
-        forms.forEach((form, index) => {
-          const x = index === 0 ? -140 : 140;
-          const card = makeFlatButton(box, '', x, 10, 250, 330, () => showConfirm(form.id), new Color(38, 64, 100, 185), transparentBtn);
-          const icon = new Node('AwakenIcon');
-          icon.setParent(card);
-          icon.setPosition(0, 78, 0);
-          icon.addComponent(UITransform).setContentSize(120, 120);
-          void loadUiSprite(form.iconKey).then((frame) => {
-            if (frame && icon.isValid) ensureArtChild(icon, 'Art', frame, 120, 120);
-          }).catch(() => null);
-          const name = makeLabel(card, 0, 4, 220, 34, 22, new Color(255, 220, 100, 255), Label.HorizontalAlign.CENTER);
-          name.isBold = true;
-          name.string = form.name;
-          makeLabel(card, 0, -32, 220, 28, 18, new Color(100, 220, 235, 255), Label.HorizontalAlign.CENTER).string = form.routeTag;
-          const core = makeLabel(card, 0, -96, 216, 110, 17, TEXT_COLOR, Label.HorizontalAlign.CENTER);
-          core.string = `${form.coreName}\n${form.coreDesc}`;
-          core.overflow = Label.Overflow.RESIZE_HEIGHT;
-          core.verticalAlign = Label.VerticalAlign.TOP;
-          core.lineHeight = 22;
-        });
-
-        makeFlatButton(box, '稍后决定', 0, -224, boxW - 100, 48, () => {
-          this._deferChoiceAction(() => {
-            this._closeChoice(false);
-            finish(null);
-          });
-        }, new Color(64, 86, 116, 170), transparentBtn);
-        this._setChoiceNode(overlay);
-      };
-
-      showChoices();
-    });
-  }
-
-  /**
    * 营地全屏弹窗（阻塞式，AC-19）：章节 Boss 击败后触发。
    * - 显示当前玩家 HP / 金币
    * - 商店：每个商品可多次购买（购买成功后重建弹窗刷新状态）
@@ -824,7 +546,7 @@ export class PveToastView {
 
       const BOX_W = 640;
       // 默认 2 项 → 520（含装备整理按钮行 +80），每多一项 +80；
-      // 遗物宝箱按钮存在时再 +80；铁匠按钮存在时再 +80
+      // 可选按钮按实际存在数量扩展高度。
       const BOX_H = 520 + (initialShopItems.length - 2) * 80 + (blacksmithCbs ? 80 : 0);
 
       // ── 装备整理面板（先声明以便 buildModal 引用）────────────
@@ -1321,9 +1043,6 @@ export class PveToastView {
     initialPlayer: {
       equipment: Equipment;
       bag?: EquipItem[];
-      classFragments?: Partial<Record<ClassId, number>>;
-      classId?: ClassId;
-      awakenForm?: AwakenForm;
     },
     onEquipFromBag: (itemId: string) => { equipment: Equipment; bag?: EquipItem[] } | null,
   ): Promise<'close'> {
@@ -1455,29 +1174,6 @@ export class PveToastView {
         sv.content = contentNode;
 
         let curY = contentH / 2 - 22;
-
-        const fragmentEntries = Object.entries(current.classFragments ?? {})
-          .filter(([, n]) => (n ?? 0) > 0)
-          .map(([k, n]) => {
-            if (k === current.classId && current.awakenForm) return `${CLASS_LABEL[k] ?? k} ${n}（已觉醒）`;
-            if (k === current.classId) return `${CLASS_LABEL[k] ?? k} ${n}/${CLASS_FRAGMENTS_TO_AWAKEN}`;
-            return `${CLASS_LABEL[k] ?? k} ${n}/${CLASS_FRAGMENTS_TO_ADVANCE}`;
-          });
-        const fragmentLbl = makeLabel(
-          contentNode,
-          0,
-          curY,
-          SCROLL_W - 50,
-          42,
-          18,
-          new Color(170, 210, 240, 255),
-          Label.HorizontalAlign.CENTER,
-        );
-        fragmentLbl.string = `职业碎片：${fragmentEntries.length > 0 ? fragmentEntries.join('  ') : '(无)'}`;
-        fragmentLbl.isBold = true;
-        fragmentLbl.overflow = Label.Overflow.SHRINK;
-        fragmentLbl.lineHeight = 22;
-        curY -= 52;
 
         // ── 上半区：已装备 5 格 ──
         const sectionLbl = makeLabel(contentNode, 0, curY, SCROLL_W - 40, 30, 22, new Color(140, 200, 240, 255), Label.HorizontalAlign.CENTER);

@@ -13,10 +13,10 @@ function defaultMastery(unlocked, xp = 0, level = 1) {
   };
 }
 
-function createDefaultProfile(now = Date.now(), legacy = {}) {
+function createDefaultProfile(now = Date.now()) {
   const stamina = resolveStamina(
-    legacy.pveStamina,
-    legacy.pveStaminaUpdatedAt,
+    undefined,
+    undefined,
     now,
   );
   return {
@@ -43,7 +43,7 @@ function createDefaultProfile(now = Date.now(), legacy = {}) {
     stamina: stamina.stamina,
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
-    tutorialFreeChallengeConsumed: legacy.pveFirstRunStarted === true,
+    tutorialFreeChallengeConsumed: false,
     updatedAt: now,
   };
 }
@@ -69,16 +69,16 @@ function normalizeMastery(value, fallback) {
 }
 
 /**
- * 测试阶段不迁移旧 PVE 资产：版本不匹配时直接创建全新档案。
+ * 版本不匹配时直接创建全新档案。
  * 同版本只做防御性归一化，防止缺字段阻塞大厅。
- * 货币：gold 对外为「星尘」；读档时把 minghenDust 合并进 gold。
+ * 货币：gold 对外为「星尘」；结算中的命痕粉尘统一合并进 gold。
  */
-function normalizeProfile(value, now = Date.now(), legacy = {}) {
+function normalizeProfile(value, now = Date.now()) {
   if (!isPlainObject(value) || value.version !== PROFILE_VERSION) {
-    return createDefaultProfile(now, legacy);
+    return createDefaultProfile(now);
   }
 
-  const defaults = createDefaultProfile(now, legacy);
+  const defaults = createDefaultProfile(now);
   const professions = {};
   for (const id of PROFESSION_IDS) {
     professions[id] = normalizeMastery(value.professions?.[id], defaults.professions[id]);

@@ -113,7 +113,6 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     if (!inBounds(floor.size, to)) return noop(state);
   }
 
-  const traits = state.player.classTraits;
   const shoes = state.player.equipment.SHOES;
   const shoesBaseStat = shoes?.baseStat ?? 0;
   const fixedShoesReduction = fixedShoesMoveCostReduction(shoes);
@@ -124,7 +123,7 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
   // 靴子减耗：固定鞋履读 moveCostReduction；旧随机鞋 baseStat>0 时 -1 AP/步
   const shoesReduction = Math.max(fixedShoesReduction, shoesBaseStat > 0 ? 1 : 0);
   const configuredMoveCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'MOVE');
-  const baseCost = traits.includes('swift') ? 1 : configuredMoveCost; // ROGUE 疾步优先
+  const baseCost = configuredMoveCost;
   // 冰霜/AOE 减速：移动AP+1（>0时叠加）
   const slowPenalty = (floor.playerMoveApPenaltyRounds ?? 0) > 0 ? 1 : 0;
   // 第2章 Boss 房沙坑：踩入格是沙坑时移动 AP+CHAPTER2_SAND_PIT_MOVE_PENALTY（首步免费时不收）
@@ -133,7 +132,6 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
   );
   // Boss 装备 trait: boss_sand_immune（流沙护腿）→ 沙坑 AP 惩罚归零
   const sandPitPenalty = sandPitEntity && !bossSandImmune(state.player.equipment) ? CHAPTER2_SAND_PIT_MOVE_PENALTY : 0;
-  const escapeReduction = floor.rogueEscapeMoveReady && traits.includes('shockwave') ? 1 : 0;
   // 基础款优缺点：板甲移动消耗额外 AP+1（AC-EQ-3）
   const platePenalty = state.player.equipment.ARMOR?.implicit === 'armor_plate' ? 1 : 0;
   // 传奇：影踪战靴 每步移动额外 -1 AP
@@ -142,7 +140,7 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     ? 0
     : firstMoveFree
       ? 0
-      : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - escapeReduction - shadowBootsReduction);
+      : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - shadowBootsReduction);
 
   if (floor.ap < cost) return noop(state);
   if (isBlockedByMonster(floor, to)) return noop(state);
@@ -182,11 +180,6 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     entities: shatteredIce
       ? floor.entities.map((e) => (e.id === shatteredIce.id ? { ...e, consumed: true } : e))
       : floor.entities,
-    // ROGUE 背刺 / 觉醒·影袭：移动后标记，playerAttack 命中时生效并消耗
-    ...(traits.includes('backstab') && !traits.includes('awakened_shadow_strike') ? { backstabAvailable: true } : {}),
-    ...(traits.includes('awakened_shadow_strike') && !(floor.awakenShadowGrantedThisTurn ?? false)
-      ? { awakenShadowCharges: 2, awakenShadowGrantedThisTurn: true }
-      : {}),
     // RARE+ 靴子首步免费：本回合首步已用完；疾风之靴触发时额外标记首击+25%
     ...(firstMoveFree ? { shoesFirstMoveDone: true } : {}),
     ...(firstMoveFree && legGaleBootsFirstMoveFree(state.player.equipment)
@@ -196,7 +189,6 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     playerStepsThisTurn: (floor.playerStepsThisTurn ?? 0) + 1,
     stationaryPressureStacks: undefined,
     rogueEscapeMoveReady: false,
-    ...(sandPitEntity || shatteredIce || lavaTile ? { generalTerrainPowerReady: true } : {}),
   };
 
   const events: PveEvent[] = [
@@ -220,7 +212,6 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
   }
 
-  // 遗物：永冻之核 — 每移动 3 步标记下次普攻冰冻
   // 滑行整体仅算一步（沿用现有 AP 模型：滑行收 1 次移动费），与玩家直观一致。
   return {
     state: {

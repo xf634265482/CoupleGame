@@ -156,7 +156,7 @@ describe('FateGuardian', () => {
           size: 10, player: { x: 0, y: 0 }, ap: 10,
           monsters: [makeBossWithHp(500)], // 41%
         },
-        playerOverrides: { hp: 200, maxHp: 200 }, // 玩家攻击 = BASE_ATTACK + class + weapon
+        playerOverrides: { hp: 200, maxHp: 200, classId: 'ADVENTURER' },
       });
       const result = tryCrossMirrorThreshold(state, 'boss');
       expect(result.events.some((e) => e.type === 'MIRROR_SPAWNED')).toBe(true);
@@ -164,8 +164,8 @@ describe('FateGuardian', () => {
       expect(mirror).toBeDefined();
       expect(mirror!.hp).toBe(100); // 200 × 0.5
       expect(mirror!.maxHp).toBe(100);
-      // 玩家基础攻击 = BASE_ATTACK + ADVENTURER classBonus(0) + 无武器 = BASE_ATTACK
-      expect(mirror!.attack).toBe(Math.round(BASE_ATTACK * 0.5));
+      // ADVENTURER 映射战士面板攻击 13；镜像 = round(13 × 0.5)
+      expect(mirror!.attack).toBe(Math.round(13 * 0.5));
       // boss.mirrorSpawned 标记
       expect(result.state.floorState.monsters.find((m) => m.id === 'boss')!.mirrorSpawned).toBe(true);
     });

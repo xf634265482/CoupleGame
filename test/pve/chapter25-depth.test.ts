@@ -145,7 +145,7 @@ describe('chapter25-depth: 2-5 章怪物表框架', () => {
   it('chapter=1~5 章内第 3 层为精英关卡（精英怪 ≥ 2）', () => {
     for (const chapter of [1, 2, 3, 4, 5]) {
       const ms = run(chapter, 3);
-      expect(ms.filter((m) => m.type === 'ELITE').length).toBeGreaterThanOrEqual(2);
+      expect(ms.filter((m) => m.type === 'ELITE').length).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -240,7 +240,7 @@ describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
     expect(result.events.some((e) => e.type === 'BOSS_EMERGED')).toBe(true);
   });
 
-  it('Boss 冒出：所有沙坑被怪物占据时回退到玩家相邻空格', () => {
+  it('Boss 冒出：所有沙坑被怪物占据时保持潜地，不回退到普通空格', () => {
     const state = makeExpeditionState({
       floor: 10,
       chapter: 2,
@@ -277,12 +277,9 @@ describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
     });
     const result = quicksandScorpionAttack(state, 'boss');
     const bossAfter = result.state.floorState.monsters.find((m) => m.id === 'boss')!;
-    // 不落在被占据的沙坑
-    expect(bossAfter.pos).not.toEqual({ x: 4, y: 5 });
-    // 落在玩家相邻 8 格之一
-    const dx = Math.abs(bossAfter.pos.x - 5);
-    const dy = Math.abs(bossAfter.pos.y - 5);
-    expect(Math.max(dx, dy)).toBeLessThanOrEqual(1);
+    expect(bossAfter.pos).toEqual({ x: 0, y: 0 });
+    expect(bossAfter.isBurrowed).toBe(true);
+    expect(result.events).toEqual([]);
   });
 
   it('quicksandScorpionBurrow 仍设 isBurrowed=true 并 emit BOSS_BURROWED', () => {

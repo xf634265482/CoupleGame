@@ -1,5 +1,5 @@
 ﻿// 角色信息弹窗：点击 HUD「角色」按钮弹出。
-// 展示基础属性、装备（含生效属性当前值/上限）、觉醒词条与遗物。
+// 展示基础属性、职业与装备生效数值。
 
 import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, UITransform } from 'cc';
 import { playerArmorPower, playerAttackPower, playerWeaponArmorPenetration } from '../core/CombatSystem';
@@ -77,7 +77,6 @@ export class PveCharacterPanel {
   private _panel!: Node;
   private _content!: Node;
   private _statsLabel:        Label;
-  private _awakenIcon:        Node;
   /** 装备槽位行（可点击，点击弹出 _detailPopup）。 */
   private _equipRowLabels:    Label[]  = [];
   /** 对应每个槽位当前装备的快照，供点击时读取。 */
@@ -178,18 +177,13 @@ export class PveCharacterPanel {
     this._statsLabel = place(statsH, TEXT_COLOR);
     this._statsLabel.node.setPosition(-54, this._statsLabel.node.position.y, 0);
     this._statsLabel.node.getComponent(UITransform)?.setContentSize(SV_W - 132, statsH);
-    this._awakenIcon = new Node('AwakenPortrait');
-    this._awakenIcon.setParent(contentNode);
-    this._awakenIcon.setPosition(SV_W / 2 - 74, statsTop - 70, 0);
-    this._awakenIcon.addComponent(UITransform).setContentSize(104, 104);
-    this._awakenIcon.active = false;
 
     // 装备（标题 + 5 行）单独构建
     this._buildEquipRows(contentNode, cursorY);
     cursorY -= (equipBlockH + SEC_GAP);
 
     this._traitsLabel    = place(traitsH, DIM_COLOR);
-    // 遗物行可点击——轻触整个词条区域弹出遗物详情
+    // 装备效果区域支持点击查看详情。
     this._buildDetailPopup(panel);
 
     // 关闭按钮（底部固定）— 与 HUD「结束回合」同款 Graphics 圆角按钮，不加 sprite 叠层
@@ -439,8 +433,6 @@ export class PveCharacterPanel {
     const { damage, range } = playerAttackPower(player, state.balanceSnapshot, state.chapter);
 
     // ── 基础属性 ──────────────────────────────────────────────
-    this._awakenIcon.active = false;
-
     // HP/攻击力/AP 数值组成：职业基础 + 装备/词条等加成，方便玩家核对来源
     const hpBonus = player.maxHp - baseHp;
     const hpLine = hpBonus !== 0
@@ -496,7 +488,6 @@ export class PveCharacterPanel {
       }
     });
 
-    // ── 遗物（旧词条已退役，不再展示）────────────────────────
     this._traitsLabel.string = '';
   }
 

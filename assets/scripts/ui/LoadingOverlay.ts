@@ -59,12 +59,14 @@ export class LoadingOverlayView extends Component {
   private _bgLoadStarted = false;
   private _bgSpriteFrame: SpriteFrame | null = null;
   private _decorNodes: Node[] = [];
+  private _pendingState: LoadingOverlayState = {};
 
   onLoad(): void {
     const { w, h } = visibleDesignSize();
     this._width = w;
     this._height = h;
     this._build();
+    this._applyStateToNodes(this._pendingState);
     this._drawBase();
     this._drawProgress();
     this._drawSymbol();
@@ -107,6 +109,11 @@ export class LoadingOverlayView extends Component {
   }
 
   applyState(state: LoadingOverlayState): void {
+    this._pendingState = { ...this._pendingState, ...state };
+    this._applyStateToNodes(state);
+  }
+
+  private _applyStateToNodes(state: LoadingOverlayState): void {
     if (state.title !== undefined && this._titleLabel) this._titleLabel.string = state.title;
     if (state.subtitle !== undefined && this._subtitleLabel) this._subtitleLabel.string = state.subtitle;
     if (state.text !== undefined && this._statusLabel) this._statusLabel.string = state.text;

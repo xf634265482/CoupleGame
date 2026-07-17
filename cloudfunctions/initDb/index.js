@@ -7,6 +7,7 @@ const db = cloud.database();
 const COLLECTIONS = [
   'users',
   'pve_saves',
+  'pve_challenges',
   'pve_balance_configs',
   'admin_accounts',
   'admin_sessions',

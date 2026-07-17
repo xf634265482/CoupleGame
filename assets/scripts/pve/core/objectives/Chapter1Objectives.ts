@@ -1,18 +1,256 @@
-import { complete, failOnTerminalEvent, type FloorObjectiveState, type ObjectiveApplyResult, type ObjectiveDefinition, type ObjectiveEvent } from './FloorObjective';
-const base=(floor:number,kind:FloorObjectiveState['kind'],target:number,data:Record<string,unknown>):FloorObjectiveState=>({version:1,floor,kind,status:'ACTIVE',progress:0,target,data});
-function terminal(state:FloorObjectiveState,event:ObjectiveEvent):ObjectiveApplyResult|null{return failOnTerminalEvent(state,event);}
+import {
+  complete,
+  failOnTerminalEvent,
+  type FloorObjectiveState,
+  type ObjectiveApplyResult,
+  type ObjectiveDefinition,
+  type ObjectiveEvent,
+} from './FloorObjective';
+import { CHAPTER1_FLOOR3_BLOCKER_IDS } from '../chapter1/Chapter1FloorCatalog';
 
-export function createKeyExploreObjective():ObjectiveDefinition{return{id:'CH1_F1_KEY',floor:1,kind:'KEY_EXPLORE',title:'取得钥匙并开门',description:'探索迷雾，取得钥匙后抵达出口。',create:()=>base(1,'KEY_EXPLORE',2,{hasKey:false,exitUnlocked:false}),apply(state,event){const t=terminal(state,event);if(t)return t;if(event.type==='KEY_ACQUIRED'&&!state.data.hasKey)return{state:{...state,progress:1,data:{...state.data,hasKey:true,exitUnlocked:true}},commands:[{type:'UNLOCK_EXIT'}]};if(event.type==='EXIT_INTERACTED'&&state.data.hasKey&&event.apPaid>=0)return complete(state);return{state,commands:[]};}};}
-function killTargetDefinition(floor:number,kind:'ELITE_HUNT'|'CHASE'|'BOSS',id:string,title:string):ObjectiveDefinition{return{id:`CH1_F${floor}_${kind}`,floor,kind,title,description:`击败 ${id}`,create:()=>base(floor,kind,1,{targetId:id}),apply(state,event){const t=terminal(state,event);if(t)return t;if(kind==='CHASE'&&event.type==='TARGET_ESCAPED'&&event.entityId===id)return{state:{...state,status:'FAILED'},commands:[{type:'OBJECTIVE_FAILED',reason:'TARGET_ESCAPED'}]};if(event.type==='ENTITY_KILLED'&&event.entityId===id)return complete(state);return{state,commands:[]};}};}
-export function createEliteHuntObjective(){return killTargetDefinition(2,'ELITE_HUNT','BANNER_CAPTAIN','击败断旗哨长');}
-export function createChaseObjective(){return killTargetDefinition(4,'CHASE','MESSENGER','阻止传令兵逃离');}
-export function createBossObjective(){return killTargetDefinition(7,'BOSS','GOBLIN_CHIEF','击败哥布林酋长');}
+const base = (
+  floor: number,
+  kind: FloorObjectiveState['kind'],
+  target: number,
+  data: Record<string, unknown>,
+): FloorObjectiveState => ({
+  version: 1,
+  floor,
+  kind,
+  status: 'ACTIVE',
+  progress: 0,
+  target,
+  data,
+});
 
-export function createWaveSurvivalObjective():ObjectiveDefinition{return{id:'CH1_F3_WAVES',floor:3,kind:'WAVE_SURVIVAL',title:'击退三波敌人',description:'清空当前波并在准备回合后迎接下一波。',create:()=>base(3,'WAVE_SURVIVAL',3,{currentWave:0,aliveIds:[],preparationTurns:0}),apply(state,event){const t=terminal(state,event);if(t)return t;let currentWave=Number(state.data.currentWave??0),aliveIds=[...(state.data.aliveIds as string[]??[])],preparationTurns=Number(state.data.preparationTurns??0);const commands:ObjectiveApplyResult['commands']=[];if(event.type==='WAVE_SPAWNED'){if(event.wave!==currentWave+1)return{state,commands:[]};currentWave=event.wave;aliveIds=[...new Set(event.entityIds)];}else if(event.type==='ENTITY_KILLED'&&aliveIds.includes(event.entityId)){aliveIds=aliveIds.filter(x=>x!==event.entityId);if(aliveIds.length===0){if(currentWave>=3)return complete({...state,progress:3,data:{currentWave,aliveIds,preparationTurns:0}});preparationTurns=1;commands.push({type:'WARN_WAVE',wave:currentWave+1});}}else if(event.type==='PLAYER_TURN_ENDED'&&preparationTurns>0){preparationTurns-=1;if(preparationTurns===0)commands.push({type:'SPAWN_WAVE',wave:currentWave+1});}return{state:{...state,progress:currentWave,data:{currentWave,aliveIds,preparationTurns}},commands};}};}
+const terminal = (
+  state: FloorObjectiveState,
+  event: ObjectiveEvent,
+): ObjectiveApplyResult | null => failOnTerminalEvent(state, event);
 
-export function createBreakthroughObjective():ObjectiveDefinition{return{id:'CH1_F5_EXIT',floor:5,kind:'BREAKTHROUGH',title:'抵达出口完成突围',description:'出口交互消耗 1 AP。',create:()=>base(5,'BREAKTHROUGH',1,{}),apply(state,event){const t=terminal(state,event);if(t)return t;if(event.type==='EXIT_INTERACTED'&&event.apPaid>=1)return complete(state);return{state,commands:[]};}};}
+function stringList(value: unknown, fallback: readonly string[] = []): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [...fallback];
+}
 
-export function createPurgeObjective():ObjectiveDefinition{return{id:'CH1_F6_ALTARS',floor:6,kind:'PURGE',title:'摧毁三座号角祭坛',description:'摧毁祭坛后清空存活召唤物。',create:()=>base(6,'PURGE',3,{altarIds:['ALTAR_1','ALTAR_2','ALTAR_3'],destroyedIds:[],summonIds:[]}),apply(state,event){const t=terminal(state,event);if(t)return t;let destroyed=[...(state.data.destroyedIds as string[]??[])],summons=[...(state.data.summonIds as string[]??[])];if(event.type==='ALTAR_DESTROYED'&&(state.data.altarIds as string[]).includes(event.altarId))destroyed=[...new Set([...destroyed,event.altarId])];if(event.type==='SUMMONED')summons=[...new Set([...summons,event.entityId])];if(event.type==='ENTITY_KILLED')summons=summons.filter(x=>x!==event.entityId);const next={...state,progress:destroyed.length,data:{...state.data,destroyedIds:destroyed,summonIds:summons}};return destroyed.length===3&&summons.length===0?complete(next):{state:next,commands:[]};}};}
+export function createKeyExploreObjective(): ObjectiveDefinition {
+  return {
+    id: 'CH1_F1_KEY',
+    floor: 1,
+    kind: 'KEY_EXPLORE',
+    title: '取得钥匙',
+    description: '探索迷雾，取得钥匙。完成后传送门会出现在钥匙位置。',
+    create: () => base(1, 'KEY_EXPLORE', 1, { hasKey: false }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      if (event.type === 'KEY_ACQUIRED' && !state.data.hasKey) {
+        return complete({
+          ...state,
+          progress: 1,
+          data: { ...state.data, hasKey: true },
+        });
+      }
+      return { state, commands: [] };
+    },
+  };
+}
 
-export const CHAPTER1_OBJECTIVES:Record<number,ObjectiveDefinition>={1:createKeyExploreObjective(),2:createEliteHuntObjective(),3:createWaveSurvivalObjective(),4:createChaseObjective(),5:createBreakthroughObjective(),6:createPurgeObjective(),7:createBossObjective()};
-export function getChapter1Objective(floor:number):ObjectiveDefinition{const value=CHAPTER1_OBJECTIVES[floor];if(!value)throw new Error('CHAPTER1_OBJECTIVE_NOT_FOUND');return value;}
+function killTargetDefinition(
+  floor: number,
+  kind: 'ELITE_HUNT' | 'BOSS',
+  id: string,
+  title: string,
+  description: string,
+): ObjectiveDefinition {
+  return {
+    id: `CH1_F${floor}_${kind}`,
+    floor,
+    kind,
+    title,
+    description,
+    create: () => base(floor, kind, 1, { targetId: id }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      if (event.type === 'ENTITY_KILLED' && event.entityId === id) return complete(state);
+      return { state, commands: [] };
+    },
+  };
+}
+
+export function createEliteHuntObjective(): ObjectiveDefinition {
+  return killTargetDefinition(
+    2,
+    'ELITE_HUNT',
+    'FLOOR2_ELITE',
+    '击败双焰精英',
+    '找到并击败本层精英。',
+  );
+}
+
+export function createChaseObjective(): ObjectiveDefinition {
+  return {
+    id: 'CH1_F4_CHASE',
+    floor: 4,
+    kind: 'CHASE',
+    title: '截获哨兵军令',
+    description: '追上携令逃跑的哨兵；若它抵达闪烁逃离点则失败。',
+    create: () => base(4, 'CHASE', 1, { targetId: 'GOBLIN_SENTINEL' }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      if (event.type === 'ENTITY_KILLED' && event.entityId === 'GOBLIN_SENTINEL') return complete(state);
+      if (event.type === 'TARGET_ESCAPED' && event.entityId === 'GOBLIN_SENTINEL') {
+        return {
+          state: { ...state, status: 'FAILED' },
+          commands: [{ type: 'OBJECTIVE_FAILED', reason: 'SENTINEL_ESCAPED' }],
+        };
+      }
+      return { state, commands: [] };
+    },
+  };
+}
+
+export function createBossObjective(): ObjectiveDefinition {
+  return killTargetDefinition(
+    7,
+    'BOSS',
+    'GOBLIN_CHIEF',
+    '击败哥布林酋长',
+    '利用掩体躲避重击，击败哥布林酋长。',
+  );
+}
+
+export function createWaveSurvivalObjective(): ObjectiveDefinition {
+  return {
+    id: 'CH1_F6_WAVES',
+    floor: 6,
+    kind: 'WAVE_SURVIVAL',
+    title: '守住五波夜袭',
+    description: '四角刷怪点整波召唤敌人并立刻压向中场；清空五波夜袭后出现传送门。',
+    create: () => base(6, 'WAVE_SURVIVAL', 5, { currentWave: 0, aliveIds: [], preparationTurns: 0 }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      let currentWave = Number(state.data.currentWave ?? 0);
+      let aliveIds = stringList(state.data.aliveIds);
+      let preparationTurns = Number(state.data.preparationTurns ?? 0);
+      const commands: ObjectiveApplyResult['commands'] = [];
+      if (event.type === 'WAVE_SPAWNED') {
+        if (event.wave !== currentWave + 1) return { state, commands: [] };
+        currentWave = event.wave;
+        aliveIds = [...new Set(event.entityIds)];
+        preparationTurns = 0;
+      } else if (event.type === 'ENTITY_KILLED' && aliveIds.includes(event.entityId)) {
+        aliveIds = aliveIds.filter((id) => id !== event.entityId);
+        if (aliveIds.length === 0) {
+          if (currentWave >= 5) {
+            return complete({ ...state, progress: 5, data: { currentWave, aliveIds, preparationTurns: 0 } });
+          }
+          // 清波后立刻预警并刷下一波（不再等玩家再结束回合）。
+          preparationTurns = 0;
+          const nextWave = currentWave + 1;
+          commands.push({ type: 'WARN_WAVE', wave: nextWave });
+          commands.push({ type: 'SPAWN_WAVE', wave: nextWave });
+        }
+      } else if (event.type === 'PLAYER_TURN_ENDED' && preparationTurns > 0) {
+        // 旧档兼容：若仍残留 preparationTurns，结束回合时刷下一波。
+        preparationTurns -= 1;
+        if (preparationTurns === 0) {
+          commands.push({ type: 'WARN_WAVE', wave: currentWave + 1 });
+          commands.push({ type: 'SPAWN_WAVE', wave: currentWave + 1 });
+        }
+      }
+      return {
+        state: { ...state, progress: currentWave, data: { currentWave, aliveIds, preparationTurns } },
+        commands,
+      };
+    },
+  };
+}
+
+export function createBreakthroughObjective(): ObjectiveDefinition {
+  return {
+    id: 'CH1_F5_BLAST',
+    floor: 5,
+    kind: 'BREAKTHROUGH',
+    title: '爆破碎石封锁',
+    description: '先激活火药桶，再抵达爆破点引爆。',
+    create: () => base(5, 'BREAKTHROUGH', 2, { barrelActivated: false, detonated: false, barrelId: 'F5_BARREL', blastId: 'F5_BLAST_TARGET' }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      if (event.type === 'GUNPOWDER_ACTIVATED' && event.entityId === state.data.barrelId) {
+        return {
+          state: { ...state, progress: Math.max(state.progress, 1), data: { ...state.data, barrelActivated: true } },
+          commands: [],
+        };
+      }
+      if (
+        event.type === 'BLAST_DETONATED'
+        && event.entityId === state.data.blastId
+        && state.data.barrelActivated
+      ) {
+        return complete({ ...state, progress: 2, data: { ...state.data, detonated: true } });
+      }
+      return { state, commands: [] };
+    },
+  };
+}
+
+export function createSingleAltarObjective(): ObjectiveDefinition {
+  return {
+    id: 'CH1_F3_ALTAR',
+    floor: 3,
+    kind: 'PURGE',
+    title: '摧毁号角祭坛',
+    description: '击败封锁通道的敌人，关闭祭坛，并清除剩余召唤物。',
+    create: () => base(3, 'PURGE', 1, {
+      altarId: 'ALTAR_1',
+      destroyed: false,
+      aliveIds: [...CHAPTER1_FLOOR3_BLOCKER_IDS],
+      summonIds: [],
+    }),
+    apply(state, event) {
+      const t = terminal(state, event);
+      if (t) return t;
+      let destroyed = state.data.destroyed === true;
+      let aliveIds = stringList(state.data.aliveIds, CHAPTER1_FLOOR3_BLOCKER_IDS);
+      let summonIds = stringList(state.data.summonIds);
+      if (event.type === 'SUMMONED') {
+        summonIds = [...new Set([...summonIds, event.entityId])];
+      } else if (event.type === 'ALTAR_DESTROYED' && event.altarId === state.data.altarId) {
+        destroyed = true;
+      } else if (event.type === 'ENTITY_KILLED') {
+        aliveIds = aliveIds.filter((id) => id !== event.entityId);
+        summonIds = summonIds.filter((id) => id !== event.entityId);
+      }
+      const next = {
+        ...state,
+        progress: destroyed ? 1 : 0,
+        data: { ...state.data, destroyed, aliveIds, summonIds },
+      };
+      return destroyed && aliveIds.length === 0 && summonIds.length === 0
+        ? complete(next)
+        : { state: next, commands: [] };
+    },
+  };
+}
+
+export const CHAPTER1_OBJECTIVES: Record<number, ObjectiveDefinition> = {
+  1: createKeyExploreObjective(),
+  2: createEliteHuntObjective(),
+  3: createSingleAltarObjective(),
+  4: createChaseObjective(),
+  5: createBreakthroughObjective(),
+  6: createWaveSurvivalObjective(),
+  7: createBossObjective(),
+};
+
+export function getChapter1Objective(floor: number): ObjectiveDefinition {
+  const value = CHAPTER1_OBJECTIVES[floor];
+  if (!value) throw new Error('CHAPTER1_OBJECTIVE_NOT_FOUND');
+  return value;
+}

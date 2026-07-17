@@ -34,7 +34,7 @@ function usesChapterBundle(chapter: number): boolean {
   return MIGRATED_CHAPTERS.has(chapter);
 }
 
-function legacyChapterBgKey(chapter: number): string | null {
+function chapterBgKey(chapter: number): string | null {
   if (chapter === 1) return CH1_BG_KEY;
   if (chapter >= 2 && chapter <= 5) return `pve/backgrounds/bg_pve_ch${chapter}_runtime`;
   return null;
@@ -43,6 +43,8 @@ function legacyChapterBgKey(chapter: number): string | null {
 const CHAPTER_ASSETS: Record<number, ChapterAssetEntry[]> = {
   2: [
     { bundlePath: 'map/icon_monster_ch2_normal/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_normal' },
+    { bundlePath: 'map/icon_monster_ch2_hopper_lizard/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_hopper_lizard' },
+    { bundlePath: 'map/icon_monster_ch2_dune_sentinel/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_dune_sentinel' },
     { bundlePath: 'map/icon_monster_ch2_elite/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_elite' },
     { bundlePath: 'map/icon_monster_ch2_anima/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_anima' },
     { bundlePath: 'map/icon_monster_ch2_boss/spriteFrame', cacheKey: 'pve/map/icon_monster_ch2_boss' },
@@ -50,6 +52,8 @@ const CHAPTER_ASSETS: Record<number, ChapterAssetEntry[]> = {
   ],
   3: [
     { bundlePath: 'map/icon_monster_ch3_normal/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_normal' },
+    { bundlePath: 'map/icon_monster_ch3_frostspike_porcupine/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_frostspike_porcupine' },
+    { bundlePath: 'map/icon_monster_ch3_glacier_shaper/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_glacier_shaper' },
     { bundlePath: 'map/icon_monster_ch3_elite/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_elite' },
     { bundlePath: 'map/icon_monster_ch3_anima/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_anima' },
     { bundlePath: 'map/icon_monster_ch3_boss/spriteFrame', cacheKey: 'pve/map/icon_monster_ch3_boss' },
@@ -60,6 +64,9 @@ const CHAPTER_ASSETS: Record<number, ChapterAssetEntry[]> = {
   ],
   4: [
     { bundlePath: 'map/icon_monster_ch4_normal/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_normal' },
+    { bundlePath: 'map/icon_monster_ch4_ash_hound/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_ash_hound' },
+    { bundlePath: 'map/icon_monster_ch4_magma_crab/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_magma_crab' },
+    { bundlePath: 'map/icon_monster_ch4_fire_elemental/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_fire_elemental' },
     { bundlePath: 'map/icon_monster_ch4_elite/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_elite' },
     { bundlePath: 'map/icon_monster_ch4_anima/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_anima' },
     { bundlePath: 'map/icon_monster_ch4_boss/spriteFrame', cacheKey: 'pve/map/icon_monster_ch4_boss' },
@@ -69,6 +76,8 @@ const CHAPTER_ASSETS: Record<number, ChapterAssetEntry[]> = {
   ],
   5: [
     { bundlePath: 'map/icon_monster_ch5_normal/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_normal' },
+    { bundlePath: 'map/icon_monster_ch5_fatewheel_beast/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_fatewheel_beast' },
+    { bundlePath: 'map/icon_monster_ch5_fate_watcher/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_fate_watcher' },
     { bundlePath: 'map/icon_monster_ch5_elite/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_elite' },
     { bundlePath: 'map/icon_monster_ch5_anima/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_anima' },
     { bundlePath: 'map/icon_monster_ch5_boss/spriteFrame', cacheKey: 'pve/map/icon_monster_ch5_boss' },
@@ -107,7 +116,8 @@ function loadChapterBundleOnce(chapter: number): Promise<AssetManager.Bundle | n
     return loadBundleByName(name);
   }
   console.log('[ChapterResourceLoader] loading subpackage…', name);
-  return loadWechatSubpackage(name)
+  // 章节包比 resources 小；缩短落盘 settle，避免「下载完还干等 1~2s」。
+  return loadWechatSubpackage(name, { settleMs: 350, zeroBytesSettleMs: 500 })
     .then(() => loadBundleByName(name))
     .catch((err) => {
       console.error('[ChapterResourceLoader] loadSubpackage failed', name, err);
@@ -135,7 +145,7 @@ export function loadChapterBackground(chapter: number): Promise<SpriteFrame | nu
   if (cached && cached.isValid) return Promise.resolve(cached);
 
   if (!usesChapterBundle(chapter)) {
-    const key = legacyChapterBgKey(chapter);
+    const key = chapterBgKey(chapter);
     if (!key) return Promise.resolve(null);
     return loadUiSprite(key).then((spriteFrame) => {
       if (spriteFrame) _bgCache.set(chapter, spriteFrame);

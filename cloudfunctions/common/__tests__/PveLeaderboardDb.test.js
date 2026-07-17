@@ -42,7 +42,6 @@ test('orders by floor then earliest first-clear time and returns only current fi
   });
   expect(entries[0]).not.toHaveProperty('highestTier');
   expect(entries[0]).not.toHaveProperty('highestClassId');
-  expect(entries[0]).not.toHaveProperty('highestAwakenForm');
 });
 
 test('clamps response limit to 100', async () => {

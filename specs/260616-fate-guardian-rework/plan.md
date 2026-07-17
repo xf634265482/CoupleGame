@@ -95,8 +95,8 @@ npm run test:pve
 
 按设计稿 §12：
 
-- `specs/game-design/Boss设计V1.md` §五命运守卫整段重写
+- `specs/260608-pve-destiny-expedition/design.md` 中对应 Boss 规则
 - `specs/balance-reference.md` §11 数值表
 - `specs/260608-pve-destiny-expedition/design.md` 第 5 章 Boss
 - `specs/260614-boss-anti-kite/design.md` 加注"狂暴后预言停用"
-- `specs/game-design/战斗系统V1.md` §九战报新事件
+- `specs/260608-pve-destiny-expedition/design.md` 中对应战斗事件

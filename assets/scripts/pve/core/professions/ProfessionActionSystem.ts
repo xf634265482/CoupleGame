@@ -16,6 +16,8 @@ export interface ProfessionAttackResolution {
   armorPenetration: number;
   rangeBonus: number;
   knockback: number;
+  /** 战士蓄力撞碎：相对本次主动最终伤害；其它职业为 0。 */
+  collisionRatio: number;
   secondaryMultiplier: number;
   suppression: boolean;
   chargeLevel: number;
@@ -24,7 +26,7 @@ export interface ProfessionAttackResolution {
 }
 
 function invalid(reason: string): ProfessionAttackResolution {
-  return { valid: false, reason, apCost: 0, damageMultiplier: 1, armorPenetration: 0, rangeBonus: 0, knockback: 0, secondaryMultiplier: 0, suppression: false, chargeLevel: 0, ignoreFirstBreakableCover: false, consumesSpiritBurst: false };
+  return { valid: false, reason, apCost: 0, damageMultiplier: 1, armorPenetration: 0, rangeBonus: 0, knockback: 0, collisionRatio: 0, secondaryMultiplier: 0, suppression: false, chargeLevel: 0, ignoreFirstBreakableCover: false, consumesSpiritBurst: false };
 }
 
 export function previewProfessionAttack<T>(
@@ -40,20 +42,35 @@ export function previewProfessionAttack<T>(
     const result = previewWarriorAttack({ availableAp: state.resources.ap + burstAp, weaponApCost: weapon.apCost, extraChargeAp: choice.extraChargeAp, masteryLevel, technique: choice.technique, weaponKnockback: weapon.knockback, weaponHasSweep: weapon.hasSweep });
     const burstConsumed = state.profession.spiritBurstActive && choice.extraChargeAp > 0;
     return result.valid
-      ? { valid: true, apCost: Math.max(1, result.totalApCost - burstAp), damageMultiplier: result.damageMultiplier, armorPenetration: result.armorPenetration + (burstConsumed ? 0.2 : 0), rangeBonus: 0, knockback: burstConsumed && choice.technique === 'KNOCKBACK' ? Math.min(4, (weapon.knockback ?? 0) + choice.extraChargeAp - 1) : result.knockback, secondaryMultiplier: result.sweepMultiplier, suppression: false, chargeLevel: choice.extraChargeAp, ignoreFirstBreakableCover: false, consumesSpiritBurst: burstConsumed }
+      ? {
+        valid: true,
+        apCost: Math.max(1, result.totalApCost - burstAp),
+        damageMultiplier: result.damageMultiplier,
+        armorPenetration: result.armorPenetration + (burstConsumed ? 0.2 : 0),
+        rangeBonus: 0,
+        knockback: burstConsumed && choice.technique === 'KNOCKBACK'
+          ? Math.min(4, (weapon.knockback ?? 0) + choice.extraChargeAp - 1)
+          : result.knockback,
+        collisionRatio: result.collisionRatio,
+        secondaryMultiplier: result.sweepMultiplier,
+        suppression: false,
+        chargeLevel: choice.extraChargeAp,
+        ignoreFirstBreakableCover: false,
+        consumesSpiritBurst: burstConsumed,
+      }
       : invalid(result.reason ?? 'INVALID_ATTACK');
   }
   if (professionId === 'ARCHER' && choice.professionId === 'ARCHER') {
     const result = previewArcherAttack({ aimLevel: state.profession.archerAimLevel, masteryLevel, technique: choice.technique, weaponApCost: weapon.apCost, availableAp: state.resources.ap, straightProjectile: choice.straightProjectile ?? weapon.straightProjectile });
     return result.valid
-      ? { valid: true, apCost: result.apCost, damageMultiplier: result.damageMultiplier, armorPenetration: result.armorPenetration, rangeBonus: result.rangeBonus, knockback: weapon.knockback ?? 0, secondaryMultiplier: result.secondaryMultiplier, suppression: result.suppression, chargeLevel: 0, ignoreFirstBreakableCover: state.profession.spiritBurstActive && state.profession.archerBurstCoverPierce, consumesSpiritBurst: state.profession.spiritBurstActive }
+      ? { valid: true, apCost: result.apCost, damageMultiplier: result.damageMultiplier, armorPenetration: result.armorPenetration, rangeBonus: result.rangeBonus, knockback: weapon.knockback ?? 0, collisionRatio: 0, secondaryMultiplier: result.secondaryMultiplier, suppression: result.suppression, chargeLevel: 0, ignoreFirstBreakableCover: state.profession.spiritBurstActive && state.profession.archerBurstCoverPierce, consumesSpiritBurst: state.profession.spiritBurstActive }
       : invalid(result.reason);
   }
   if (professionId === 'RANGER' && choice.professionId === 'RANGER') {
     const burstActive = state.profession.spiritBurstActive && state.profession.rangerBurstActionsLeft > 0;
     const apCost = burstActive ? Math.max(1, weapon.apCost - 1) : weapon.apCost;
     if (apCost > state.resources.ap) return invalid('AP_NOT_ENOUGH');
-    return { valid: true, apCost, damageMultiplier: state.profession.rangerPendingAttackMultiplier, armorPenetration: state.profession.rangerPendingArmorPenetration, rangeBonus: 0, knockback: weapon.knockback ?? 0, secondaryMultiplier: 0, suppression: false, chargeLevel: 0, ignoreFirstBreakableCover: false, consumesSpiritBurst: burstActive && state.profession.rangerBurstActionsLeft === 1 };
+    return { valid: true, apCost, damageMultiplier: state.profession.rangerPendingAttackMultiplier, armorPenetration: state.profession.rangerPendingArmorPenetration, rangeBonus: 0, knockback: weapon.knockback ?? 0, collisionRatio: 0, secondaryMultiplier: 0, suppression: false, chargeLevel: 0, ignoreFirstBreakableCover: false, consumesSpiritBurst: burstActive && state.profession.rangerBurstActionsLeft === 1 };
   }
   return invalid('PROFESSION_NOT_SUPPORTED');
 }
@@ -84,7 +101,18 @@ export function commitRangerFinisher<T>(state: FloorChallengeRuntimeState<T>, fi
   const result = useRangerFinisher({ combo: state.profession.rangerCombo, lastAction: state.profession.rangerLastAction, pendingAttackMultiplier: state.profession.rangerPendingAttackMultiplier, pendingArmorPenetration: state.profession.rangerPendingArmorPenetration }, finisher, masteryLevel);
   if (!result.valid) return { state, valid: false as const, reason: result.reason };
   return {
-    state: { ...state, profession: { ...state.profession, rangerCombo: result.state.combo, rangerLastAction: result.state.lastAction, rangerPendingAttackMultiplier: result.state.pendingAttackMultiplier, rangerPendingArmorPenetration: result.state.pendingArmorPenetration }, updatedAt: now },
+    state: {
+      ...state,
+      profession: {
+        ...state.profession,
+        rangerCombo: result.state.combo,
+        rangerLastAction: result.state.lastAction,
+        rangerPendingAttackMultiplier: result.state.pendingAttackMultiplier,
+        rangerPendingArmorPenetration: result.state.pendingArmorPenetration,
+        rangerFreeMoveSteps: Math.max(0, result.freeMoveRange),
+      },
+      updatedAt: now,
+    },
     valid: true as const,
     freeMoveRange: result.freeMoveRange,
     shieldMaxHpRatio: result.shieldMaxHpRatio,
@@ -126,6 +154,7 @@ export function endProfessionTurn<T>(state: FloorChallengeRuntimeState<T>, nextT
   }
   if (state.config.professionId === 'RANGER') {
     profession.rangerCombo = 0; profession.rangerLastAction = null; profession.rangerPendingAttackMultiplier = 1; profession.rangerPendingArmorPenetration = 0;
+    profession.rangerFreeMoveSteps = 0;
     profession.spiritBurstActive = false; profession.spiritBurstExpiresAtTurn = null; profession.rangerBurstActionsLeft = 0; profession.rangerBurstRepeatUsed = false;
   }
   if (state.config.professionId === 'WARRIOR' && profession.spiritBurstActive && profession.spiritBurstExpiresAtTurn !== null && state.turn >= profession.spiritBurstExpiresAtTurn) {

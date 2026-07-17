@@ -97,7 +97,7 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
       expect(result.state.player.anima).toBe(state.player.anima + (expectedDrop.anima ?? 0));
     });
 
-    it('灵气掉落经 AnimaSystem 累积进度，不 emit 强化事件', () => {
+    it('灵气掉落经 AnimaSystem 累积进度', () => {
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 3, y: 3 },
@@ -112,7 +112,6 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
 
       expect(result.events[0]?.type).toBe('OPEN_CHEST');
       expect(result.events.some((e) => e.type === 'LOOT')).toBe(true);
-      expect(result.events.every((e) => (e.type as string) !== 'ANIMA_STRENGTHEN')).toBe(true);
       if (expectedDrop.anima !== undefined) {
         expect(result.state.player.animaProgress).toBe(95 + expectedDrop.anima);
       }
@@ -222,28 +221,6 @@ describe('LootSystem — 掉落与宝箱（AC-6）', () => {
         expect(loot.equip).toBeDefined();
         expect(loot.equip!.quality).toBe('RARE');
         expect(['哥布林酋长战斧', '战争号角', '破旧王冠']).toContain(loot.equip!.name);
-      }
-    });
-
-    it('稀有掉落：多次击杀不再产生旧碎片、卷轴或遗物', () => {
-      const goblinChiefSlotBlockers = {
-        WEAPON: { id: 'stub_w', name: '铁制长剑', slot: 'WEAPON' as const, quality: 'COMMON' as const, baseStat: 10 },
-        HELMET: { id: 'stub_h', name: '皮革头盔', slot: 'HELMET' as const, quality: 'COMMON' as const, baseStat: 10 },
-        TRINKET: { id: 'stub_t', name: '幸运铜币', slot: 'TRINKET' as const, quality: 'COMMON' as const, baseStat: 5 },
-      };
-      for (let seed = 1; seed <= 100; seed++) {
-        const state = makeExpeditionState({
-          seed,
-          chapter: 1,
-          playerOverrides: { equipment: goblinChiefSlotBlockers },
-          floorOverrides: {
-            monsters: [makeMonster('boss1', { x: 1, y: 1 }, { type: 'BOSS', bossId: 'GOBLIN_CHIEF', aiState: 'DEAD' })],
-          },
-        });
-        const result = applyMonsterKillDrop(state, 'boss1');
-        expect(result.events.every((e) => (e.type as string) !== 'SHARDS_PICKUP')).toBe(true);
-        expect(result.events.every((e) => (e.type as string) !== 'SCROLL_PICKUP')).toBe(true);
-        expect(result.events.every((e) => (e.type as string) !== 'RELIC_PICKUP')).toBe(true);
       }
     });
 

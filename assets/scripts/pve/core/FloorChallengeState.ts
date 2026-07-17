@@ -6,7 +6,7 @@ import type {
   PveProfessionId,
 } from './PveProgressionTypes';
 
-export const FLOOR_RUNTIME_VERSION = 1 as const;
+export const FLOOR_RUNTIME_VERSION = 2 as const;
 export const SPIRIT_MAX = 100 as const;
 
 export type FloorRuntimeStatus = 'ACTIVE' | 'CLEAR' | 'DEAD' | 'WITHDRAW';
@@ -43,6 +43,8 @@ export interface FloorProfessionRuntimeState {
   rangerLastAction: 'MOVE' | 'ATTACK' | null;
   rangerPendingAttackMultiplier: number;
   rangerPendingArmorPenetration: number;
+  /** 疾收·步 / 无踪撤步：剩余免费主动移动格数（不耗 AP、不增加连击）。 */
+  rangerFreeMoveSteps: number;
   spiritBurstActive: boolean;
   spiritBurstExpiresAtTurn: number | null;
   archerBurstMoveGuard: boolean;
@@ -107,6 +109,7 @@ export function createFreshProfessionState(): FloorProfessionRuntimeState {
     rangerLastAction: null,
     rangerPendingAttackMultiplier: 1,
     rangerPendingArmorPenetration: 0,
+    rangerFreeMoveSteps: 0,
     spiritBurstActive: false,
     spiritBurstExpiresAtTurn: null,
     archerBurstMoveGuard: false,

@@ -1,6 +1,6 @@
 # CALL_FLOW.md
 
-> 当前调用链速查。本文只记录当前有效主链；旧命运树、旧 runSeed 远征存档、旧 `PersistentFloorBattle*` 平行战斗链不再作为当前流程。
+> 当前调用链速查。本文只记录永久逐层挑战主链。
 
 ---
 
@@ -90,7 +90,7 @@ HUD 右上「目标」按钮：
 PveHudView「目标」
   -> 默认 _toggleObjectivePopup()
   -> 文案来自 Chapter1Objectives / Chapter2Objectives（本层通关条件；不含可选目标）
-  -> 不是灵气/职业强化词条弹窗（该入口已退役）
+  -> 展示当前楼层目标与战斗状态
 ```
 
 ---
@@ -166,7 +166,7 @@ PveHudView「目标」
 
 火药桶 / 爆破点图标：`pve/map/icon_gunpowder_barrel`、`pve/map/icon_blast_target`（`UiAssets` UUID + `PVE_MAP_KEYS` + FogMapView artMap）。
 
-> 永久逐层：`addAnima` 仅累加灵气资源，不再 emit `ANIMA_STRENGTHEN`；`AffixSystem` / `ScrollSystem` / 铁匠 `equip_*` 洗炼已从代码删除（非 gate）。
+> 永久逐层：`addAnima` 仅累加灵气资源；铁匠只处理当前装备目录与换装流程。
 
 传送门/红方块/图标问题分两层查：
 
@@ -235,7 +235,7 @@ PersistentExpeditionRuntime.status != ACTIVE
   -> 用户选择继续下一层或返回营地
 ```
 
-> 说明：战内不再扫描/上传成就与图鉴（无正式内容与独立 UI）；`updatePveMeta` 仅保留教学完成等必要局外标记。装备由击杀掉落自动穿戴，结算入永久背包；继续远征按更新后的 loadout 带装。
+> 说明：`updatePveMeta` 负责教学完成等账户标记。装备由击杀掉落自动穿戴，结算入永久背包；继续远征按更新后的 loadout 带装。
 > 章节预热：进入 Boss 前一层 / Boss 层时即 `preloadChapter(chapter+1)`，避免「通关后才开始下分包」。
 
 跨章继续下一层：
@@ -294,5 +294,3 @@ gm-web
   -> 同事务更新 pveProfile.highestClearedFloor / highestClearedAt
   -> db.listPveLeaderboard 只按 pveProfile 排行
 ```
-
-旧职业成长、遗物、成就、图鉴和旧 PVE 广告奖励均无调用链；数据库中的历史根字段不再参与当前玩法判断。

@@ -264,30 +264,6 @@ PVE_P0_JOBS = [
         "size": [220, 120],
         "requirement": "Generate one compact rounded end-turn button for mobile game HUD, dark gray stone, centered hourglass symbol, muted blue glow, designer-toy cartoon UI, transparent background, no text.",
     },
-    {
-        "name": "card_strengthen_choice_9s",
-        "endpoint": "hd-gen",
-        "template_name": "modern_minimal_icon",
-        "out": "card_strengthen_choice_9s.png",
-        "project": "popup/card_strengthen_choice_9s.png",
-        "size": [360, 480],
-        "requirement": (
-            "Generate one vertical magic card frame for mobile RPG upgrade choices. Dark violet stone frame, cyan rune border, "
-            "empty center for UI text, 9-slice friendly frame, designer-toy cartoon UI, transparent background, no text."
-        ),
-    },
-    {
-        "name": "panel_strengthen_9s",
-        "endpoint": "hd-gen",
-        "template_name": "modern_minimal_icon",
-        "out": "panel_strengthen_9s.png",
-        "project": "popup/panel_strengthen_9s.png",
-        "size": [1240, 1280],
-        "requirement": (
-            "Generate one large dark fantasy modal panel for mobile RPG upgrade choices. Chunky rounded stone frame, smoky glass interior, "
-            "deep violet-gray, cyan rune trim, empty center, 9-slice friendly, designer-toy cartoon UI, transparent background, no text."
-        ),
-    },
 ]
 
 

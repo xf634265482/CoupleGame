@@ -1,7 +1,7 @@
 # PROJECT_NAVIGATION.md
 
 > 当前项目导航。排查 Bug / 实现功能时，先从这里定位入口，再打开具体代码。
-> 当前 PVE 目标态以 `specs/260712-pve-persistent-floor-progression/design.md` 为准；旧命运树、旧 runSeed 远征存档链、旧 `PersistentFloorBattle*` 平行战斗链均不得作为新开发入口。
+> 当前 PVE 总边界以 `specs/260608-pve-destiny-expedition/design.md` 为准，1–14 层细节见 `specs/260712-pve-persistent-floor-progression/`。
 
 ---
 
@@ -73,27 +73,6 @@
 
 ---
 
-## 已删除或历史实现：不要作为入口
-
-这些名字可能还存在于历史文档、旧计划或测试注释里，但不再是当前开发入口：
-
-| 历史项 | 当前状态 |
-| --- | --- |
-| `assets/scripts/pve/controllers/PersistentFloorBattleController.ts` | 已删除；禁止恢复第二套移动/攻击/回合/表现链 |
-| `assets/scripts/pve/core/PersistentFloorBattle.ts` | 已删除 |
-| `assets/scripts/pve/views/PersistentFloorBattleView.ts` | 已删除 |
-| `assets/scripts/pve/core/PersistentFloorBattleState.ts` | 已删除 |
-| `assets/scripts/pve/core/chapter1/Chapter1Runtime.ts` | 已删除；正式运行使用 `Chapter1ExpeditionFactory` + `PersistentExpeditionRuntime` |
-| `assets/scripts/pve/controllers/DestinyTreeController.ts` | 已删除；命运树入口已被营地替代 |
-| `assets/scripts/pve/views/DestinyTreeView.ts` | 已删除 |
-| `assets/scripts/ui/OptionListUi.ts` | 已删除；选择类弹窗走 `PveToastView` |
-| `assets/scripts/platform/wechat/WxGameNameInput.ts` | 已删除 |
-| `assets/scripts/network/PveService.ts` 的旧 `startRun/loadPveSave/savePveFloor/settlePveRun` | 历史旧远征链；云端 action 已移除，不得调用 |
-| `cloudfunctions/common/pve/PveSave.js` 的旧 runSeed 存档链 | 仅保留未路由的历史兼容源码；当前逐层挑战与体力只以 `PveChallenge/PveProfile` 为准 |
-| 命运树 UI / 命运树解锁 / 命运树重置 | 历史系统；当前大厅原入口为营地 |
-
----
-
 ## 常见问题从哪里查
 
 | 问题 | 先看 |
@@ -114,12 +93,11 @@
 2. 当前 PVE 总设计入口：`specs/260608-pve-destiny-expedition/design.md`
 3. 代码导航：本文件
 4. 调用链：`CALL_FLOW.md`
-5. 历史资料：`specs/game-design/**`、`specs/260610-destiny-tree-ui/**`、`specs/260628-destiny-tree-v2/**` 等。历史资料只供追溯，不作为当前实现依据。
 
 ## 2026-07-17 当前系统边界
 
 - 正式 PVE 内容仅开放全局第 1–14 层；客户端入口为 `chapterRouting.ts`，云端校验入口为 `cloudfunctions/common/pve/PveChallengeValidate.js`。
-- 职业只保留战士、弓手、游侠三套当前机制与熟练度；旧晋升、觉醒、职业碎片不是有效入口。
-- 遗物、成就、图鉴业务已删除；历史源码说明和数据库旧字段不得作为运行时入口。
+- 职业入口为战士、射手、游侠三套机制、熟练度和灵气爆发。
+- 装备只引用 85 件固定目录；命痕是唯一被动构筑系统。
 - 排行榜只读取 `users.pveProfile.highestClearedFloor`，同层按 `highestClearedAt` 先到先得。
 - 广告只保留通用平台层与未接线的 `restore_stamina` 协议；当前没有广告 UI 或体力发放路由。

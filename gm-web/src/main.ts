@@ -27,7 +27,7 @@ type FeedbackType = 'info' | 'error';
 
 const loginForm = { username: '', password: '' };
 const searchForm = { keyword: '' };
-const resourceForm = { resourceType: 'runGold' as ResourceType, amount: '', reason: '' };
+const resourceForm = { resourceType: 'diamond' as ResourceType, amount: '', reason: '' };
 const resetForm = { reason: '', leaderboardConfirm: '' };
 const balanceForm = {
   scopeType: 'global' as BalanceScopeType,
@@ -37,7 +37,6 @@ const balanceForm = {
   monster: {} as Record<string, string>,
   boss: {} as Record<string, string>,
   equipment: {} as Record<string, string>,
-  relic: {} as Record<string, string>,
 };
 
 let session = loadSession();
@@ -46,6 +45,9 @@ let currentLogs: AdminLogItem[] = [];
 let playerList: PlayerListItem[] = [];
 let balanceCatalog: BalanceCatalog | null = null;
 let balanceConfigs: BalanceConfigDoc[] = [];
+let balanceOverrideValues: BalanceConfigValues = {};
+let balanceEffectiveValues: BalanceConfigValues = {};
+let balanceCodeDefaultValues: BalanceConfigValues = {};
 let feedback = '';
 let feedbackType: FeedbackType = 'info';
 const canSyncDocsLocally = import.meta.env.DEV;
@@ -128,16 +130,6 @@ const FALLBACK_BALANCE_CATALOG: BalanceCatalog = {
       helmetBaseMultiplier: { type: 'number', min: 0, max: 100 },
       shoesBaseMultiplier: { type: 'number', min: 0, max: 100 },
       trinketBaseMultiplier: { type: 'number', min: 0, max: 100 },
-    },
-    relic: {
-      chiefRoarDamageMultiplier: { type: 'number', min: 0, max: 100 },
-      quicksandPitCount: { type: 'integer', min: 0, max: 99 },
-      quicksandPitDuration: { type: 'integer', min: 1, max: 999 },
-      quicksandAttackBonus: { type: 'integer', min: 0, max: 999999 },
-      permafrostChargeSteps: { type: 'integer', min: 1, max: 999 },
-      permafrostFreezeRounds: { type: 'integer', min: 0, max: 999 },
-      magmaReflectPercent: { type: 'number', min: 0, max: 100 },
-      fateEchoRevivePercent: { type: 'number', min: 0, max: 100 },
     },
   },
 };
@@ -223,23 +215,13 @@ const BALANCE_FIELD_META: Record<BalanceUnitType, Record<string, { label: string
     shoesBaseMultiplier: { label: '鞋子强度倍率', help: '影响新掉落与新发放鞋子的基础数值' },
     trinketBaseMultiplier: { label: '饰品强度倍率', help: '影响新掉落与新发放饰品的基础数值' },
   },
-  relic: {
-    chiefRoarDamageMultiplier: { label: '酋长怒吼伤害倍率', help: '击杀后下一次攻击的倍率' },
-    quicksandPitCount: { label: '流沙生成格数', help: '进入新层时生成的流沙数量' },
-    quicksandPitDuration: { label: '流沙持续回合', help: '流沙存在多少回合后消失' },
-    quicksandAttackBonus: { label: '流沙站位攻击加成', help: '站在流沙格上攻击时额外增加的攻击值' },
-    permafrostChargeSteps: { label: '永冻充能步数', help: '累计移动多少步后触发下次攻击冻结' },
-    permafrostFreezeRounds: { label: '永冻冻结回合', help: '永冻之核冻结目标的回合数' },
-    magmaReflectPercent: { label: '熔火反伤比例', help: '受到伤害后反弹给怪物的比例' },
-    fateEchoRevivePercent: { label: '命运回响复活比例', help: '触发复活时按最大生命恢复的比例' },
-  },
 };
 
-const BALANCE_SECTIONS: BalanceUnitType[] = ['player', 'monster', 'boss', 'equipment', 'relic'];
+const BALANCE_SECTIONS: BalanceUnitType[] = ['player', 'monster', 'boss', 'equipment'];
 
 const DEFAULT_EFFECTIVE_BALANCE: Required<BalanceConfigValues> = {
   player: {
-    initialHp: 230,
+    initialHp: 280,
     initialGold: 0,
     initialAnima: 0,
     baseAttack: 10,
@@ -274,16 +256,6 @@ const DEFAULT_EFFECTIVE_BALANCE: Required<BalanceConfigValues> = {
     shoesBaseMultiplier: 1,
     trinketBaseMultiplier: 1,
   },
-  relic: {
-    chiefRoarDamageMultiplier: 1.5,
-    quicksandPitCount: 2,
-    quicksandPitDuration: 6,
-    quicksandAttackBonus: 10,
-    permafrostChargeSteps: 3,
-    permafrostFreezeRounds: 1,
-    magmaReflectPercent: 0.3,
-    fateEchoRevivePercent: 0.3,
-  },
 };
 
 const UNIT_SCOPE_CHAPTER_MAP: Record<string, string> = {
@@ -315,14 +287,15 @@ const UNIT_SCOPE_CHAPTER_MAP: Record<string, string> = {
   'monster:SPIRIT_MIRAGE': 'chapter_5',
 };
 
+balanceEffectiveValues = mergeBalanceConfigValues({}, DEFAULT_EFFECTIVE_BALANCE);
+balanceCodeDefaultValues = mergeBalanceConfigValues({}, DEFAULT_EFFECTIVE_BALANCE);
+
 const ADMIN_ACTION_LABELS: Record<string, string> = {
   getPlayer: '查询玩家',
   listPlayers: '读取玩家列表',
   adjustResources: '资源调整',
   resetExpedition: '重置远征',
   resetTutorial: '重置新手教程',
-  resetDestinyTreeOnly: '重置命运树（不返还）',
-  resetDestinyTreeAndRefund: '重置命运树并返还',
   resetLeaderboardGlobal: '全服重置排行榜',
   listLogs: '查看日志',
   listBalanceConfigs: '读取数值配置列表',
@@ -334,9 +307,7 @@ const ADMIN_ACTION_LABELS: Record<string, string> = {
 };
 
 const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
-  runGold: '局内金币',
   diamond: '钻石',
-  destinyShards: '命运碎片',
   stamina: '体力',
 };
 
@@ -444,7 +415,6 @@ function getBalanceSectionTitle(section: BalanceUnitType): string {
     monster: '怪物基础数值',
     boss: 'Boss 基础数值',
     equipment: '装备数值倍率',
-    relic: '遗物效果数值',
   } satisfies Record<BalanceUnitType, string>)[section];
 }
 
@@ -474,6 +444,42 @@ function mergeBalanceConfigValues(base?: BalanceConfigValues | null, patch?: Bal
     }
   }
   return result;
+}
+
+function removeBalanceFieldFromConfig(config: BalanceConfigValues | null | undefined, section: BalanceUnitType, field: string): BalanceConfigValues {
+  const next = mergeBalanceConfigValues({}, config || {});
+  const sectionValues = { ...((next[section] || {}) as Record<string, number>) };
+  delete sectionValues[field];
+  if (Object.keys(sectionValues).length > 0) {
+    next[section] = sectionValues;
+  } else {
+    delete next[section];
+  }
+  return next;
+}
+
+function setBalanceDetail(result: ToolResponse): void {
+  balanceCatalog = result.catalog || balanceCatalog || FALLBACK_BALANCE_CATALOG;
+  balanceConfigs = result.configs || balanceConfigs;
+  balanceOverrideValues = result.balanceDetail?.overrideConfig || result.configDoc?.config || {};
+  balanceEffectiveValues = result.balanceDetail?.effectiveConfig || resolveEffectiveBalanceConfig();
+  balanceCodeDefaultValues = result.balanceDetail?.codeDefaultConfig || DEFAULT_EFFECTIVE_BALANCE;
+  const nextUnitScopeChapterMap = result.balanceDetail?.unitScopeChapterMap || null;
+  if (nextUnitScopeChapterMap) {
+    for (const [unitId, chapterId] of Object.entries(nextUnitScopeChapterMap)) {
+      UNIT_SCOPE_CHAPTER_MAP[unitId] = chapterId;
+    }
+  }
+}
+
+function getBalanceDisplayValue(config: BalanceConfigValues | null | undefined, section: BalanceUnitType, field: string): string {
+  const value = config?.[section]?.[field];
+  if (value === undefined || value === null) return '未覆盖';
+  return String(value);
+}
+
+function getBalanceInputPlaceholder(rule: { type: 'integer' | 'number'; min: number; max: number }): string {
+  return `${rule.type === 'integer' ? '整数' : '数字'}，范围 ${rule.min} ~ ${rule.max}`;
 }
 
 function getCurrentScopeConfigDoc(): BalanceConfigDoc | null {
@@ -556,11 +562,14 @@ async function withTool<T>(
       throw new Error(`云函数 ${action} 返回为空`);
     }
     if (!result.ok) throw new Error(result.message || result.code || '请求失败');
-    if (result.player) currentPlayer = result.player;
+    if (result.player) {
+      currentPlayer = result.player;
+    }
     if (result.logs) currentLogs = result.logs;
     if (result.players) playerList = result.players;
     if (result.catalog) balanceCatalog = result.catalog;
     if (result.configs) balanceConfigs = result.configs;
+    if (result.balanceDetail) setBalanceDetail(result);
     await onSuccess(result);
     if (refreshLogsAfter && action !== 'listLogs') {
       await refreshLogs(false);
@@ -586,19 +595,6 @@ async function refreshBalanceConfigs(showMessage = false): Promise<void> {
     ensureScopeId();
     if (showMessage) setFeedback('PVE 数值配置已刷新', 'info');
   }, false);
-}
-
-async function loadBalanceConfig(section?: BalanceUnitType): Promise<void> {
-  ensureScopeId();
-  await refreshBalanceConfigs(false);
-  applyEffectiveBalanceToForm(section);
-  setFeedback(
-    section
-      ? `${getBalanceSectionTitle(section)}已读取当前生效值`
-      : `已读取 ${getScopeTypeLabel(balanceForm.scopeType)} / ${getScopeIdLabel(balanceForm.scopeId)} 的当前生效值`,
-    'info',
-  );
-  render();
 }
 
 async function syncRepoDocs(): Promise<void> {
@@ -658,34 +654,49 @@ async function fetchPlayer(keyword: string): Promise<void> {
   });
 }
 
-function renderFieldGroup(section: BalanceUnitType): string {
-  const rules = (balanceCatalog || FALLBACK_BALANCE_CATALOG).fieldRules[section];
-  if (!rules) return '';
-  const title = getBalanceSectionTitle(section);
-  const inputs = Object.entries(rules).map(([field, rule]) => `
-    <div class="compact-field">
-      <label for="balance-${section}-${field}">${escapeHtml(BALANCE_FIELD_META[section]?.[field]?.label || field)}</label>
-      <input
-        id="balance-${section}-${field}"
-        data-balance-section="${section}"
-        data-balance-field="${field}"
-        value="${escapeHtml(balanceForm[section][field] || '')}"
-        placeholder="${rule.type === 'integer' ? '整数' : '数字'}，范围 ${rule.min} ~ ${rule.max}"
-      />
-      <p class="inline-help">${escapeHtml(BALANCE_FIELD_META[section]?.[field]?.help || '')}</p>
-    </div>
-  `).join('');
-  return `
-    <div class="panel panel-subsection">
-      <h3>${title}</h3>
-      <div class="compact-grid">${inputs}</div>
-      <div class="button-row" style="margin-top:14px;">
-        <button class="secondary" data-read-balance-section="${section}">读取当前生效值</button>
-        <button data-save-balance-section="${section}">保存本块配置</button>
-      </div>
-      <p class="muted">本块保存后会写入操作日志，并在当前作用域下对之后新开的远征生效。</p>
-    </div>
-  `;
+function assertResetInventoryCleared(result: ToolResponse, action: string): string {
+  if (action !== 'resetExpedition' && action !== 'resetCampInventory') {
+    return '重置操作成功';
+  }
+  const verification = result.verification || {};
+  const checks = [
+    ['命痕库存', Number(verification.minghenCount ?? 0)],
+    ['命痕装配', Number(verification.minghenLoadoutCount ?? 0)],
+    ['命痕方案', Number(verification.minghenPresetCount ?? 0)],
+    ['装备库存', Number(verification.equipmentCount ?? 0)],
+    ['装备装配', Number(verification.equipmentLoadoutCount ?? 0)],
+  ] as const;
+  const remains = checks.filter(([, count]) => Number.isFinite(count) && count !== 0);
+  const activeChallengeId = String(verification.activeChallengeId ?? '');
+  if (remains.length > 0 || activeChallengeId) {
+    const remainText = remains.map(([label, count]) => `${label}=${count}`).join('，');
+    const staleDocs = Array.isArray(verification.staleUserDocs) ? verification.staleUserDocs : [];
+    const staleText = staleDocs
+      .map((doc) => {
+        const docId = String(doc?.docId ?? '').slice(0, 8);
+        const userId = String(doc?.userId ?? '');
+        const openId = String(doc?.openId ?? '').slice(0, 10);
+        const mh = Number(doc?.minghenCount ?? 0);
+        const eq = Number(doc?.equipmentCount ?? 0);
+        const challenge = String(doc?.activeChallengeId ?? '');
+        return `${docId || 'unknown'} user=${userId} openid=${openId} 命痕=${mh} 装备=${eq}${challenge ? ` challenge=${challenge}` : ''}`;
+      })
+      .join('；');
+    const matched = Number(verification.matchedUserDocCount ?? 0);
+    const overwritten = Array.isArray(verification.overwrittenUserDocIds)
+      ? verification.overwrittenUserDocIds.length
+      : 0;
+    throw new Error(`GM_RESET_VERIFY_FAILED：重置后仍有残留${remainText ? `（${remainText}）` : ''}${activeChallengeId ? `，activeChallengeId=${activeChallengeId}` : ''}；匹配用户文档=${matched}，已覆盖=${overwritten}${staleText ? `；残留文档：${staleText}` : ''}`);
+  }
+  const removed = Array.isArray(verification.removedChallengeIds)
+    ? verification.removedChallengeIds.length
+    : 0;
+  const rewriteText = verification.forcedRewrite ? '，已执行二次强制覆盖' : '';
+  const matched = Number(verification.matchedUserDocCount ?? 0);
+  const overwritten = Array.isArray(verification.overwrittenUserDocIds)
+    ? verification.overwrittenUserDocIds.length
+    : 0;
+  return `重置已校验：命痕/装备/装配/方案均为空，已清理挑战 ${removed} 个，匹配用户文档 ${matched} 条，覆盖 ${overwritten} 条${rewriteText}`;
 }
 
 function renderPlayerList(): string {
@@ -707,7 +718,6 @@ function renderPlayerList(): string {
           </div>
           <div class="player-card-stats">
             <span>钻石 ${player.diamond}</span>
-            <span>命运碎片 ${player.destinyShards}</span>
             <span>最高层 ${player.highestFloor}</span>
             <span>${player.hasActiveExpedition ? `远征 ${player.chapter}-${player.floor}` : '无进行中远征'}</span>
             <span>${escapeHtml(getClassLabel(player.classId))}</span>
@@ -730,7 +740,6 @@ function renderPlayerDetail(): string {
         <div class="stat"><span>userId</span><strong>${escapeHtml(currentPlayer.userId)}</strong></div>
         <div class="stat"><span>openid</span><strong style="font-size:14px">${escapeHtml(currentPlayer.openId)}</strong></div>
         <div class="stat"><span>钻石</span><strong>${currentPlayer.diamond}</strong></div>
-        <div class="stat"><span>命运碎片</span><strong>${currentPlayer.destinyShards}</strong></div>
         <div class="stat"><span>排行榜最高层</span><strong>${currentPlayer.highestFloor}</strong></div>
         <div class="stat"><span>新手教程</span><strong>${currentPlayer.tutorialCompleted ? '已完成' : '未完成'}</strong></div>
         <div class="stat"><span>体力</span><strong>${currentPlayer.stamina}</strong></div>
@@ -738,27 +747,15 @@ function renderPlayerDetail(): string {
       <div class="split-two" style="margin-top:16px;">
         <div class="panel panel-subsection">
           <h3>当前远征</h3>
-          ${currentPlayer.activeExpedition ? `
-            <div class="stats">
-              <div class="stat"><span>章节</span><strong>${currentPlayer.activeExpedition.chapter}</strong></div>
-              <div class="stat"><span>层数</span><strong>${currentPlayer.activeExpedition.floor}</strong></div>
-              <div class="stat"><span>职业</span><strong>${escapeHtml(getClassLabel(currentPlayer.activeExpedition.classId))}</strong></div>
-              <div class="stat"><span>局内金币</span><strong>${currentPlayer.activeExpedition.runGold}</strong></div>
-              <div class="stat"><span>背包数量</span><strong>${currentPlayer.activeExpedition.bagCount}</strong></div>
-              <div class="stat"><span>卷轴数量</span><strong>${currentPlayer.activeExpedition.scrolls}</strong></div>
-            </div>
-            <p class="muted">存档更新时间：${escapeHtml(formatTime(currentPlayer.activeExpedition.saveUpdatedAt))}</p>
-          ` : '<p class="muted">当前没有活动远征存档，下次进入会从第 1 层重新开始。</p>'}
+          ${currentPlayer.activeExpedition
+            ? `<p>挑战 ID：${escapeHtml(currentPlayer.activeExpedition.challengeId)}</p>`
+            : '<p class="muted">当前没有活动楼层挑战。</p>'}
         </div>
         <div class="panel panel-subsection">
-          <h3>命运树与图鉴</h3>
-          <p>命运树：${currentPlayer.destinyTreeProgress.unlockedCount} / ${currentPlayer.destinyTreeProgress.totalNodes}</p>
-          <div class="capsule-list">
-            ${currentPlayer.destinyTreeProgress.unlockedNodes.length > 0
-              ? currentPlayer.destinyTreeProgress.unlockedNodes.map((node) => `<span class="capsule">${escapeHtml(node)}</span>`).join('')
-              : '<span class="capsule">暂无已解锁节点</span>'}
-          </div>
-          <p style="margin-top:12px;">图鉴：怪物 ${currentPlayer.codexCounts.monsters} / 装备 ${currentPlayer.codexCounts.equipment} / 遗物 ${currentPlayer.codexCounts.relics}</p>
+          <h3>营地库存</h3>
+          <p>命痕 ${currentPlayer.campInventory?.minghen ?? 0} / 装配 ${currentPlayer.campInventory?.minghenLoadout ?? 0} / 方案 ${currentPlayer.campInventory?.minghenPresets ?? 0}</p>
+          <p>装备 ${currentPlayer.campInventory?.equipment ?? 0} / 穿戴 ${currentPlayer.campInventory?.equipmentLoadout ?? 0}</p>
+          <p class="muted">活跃挑战：${escapeHtml(currentPlayer.campInventory?.activeChallengeId || '无')}</p>
           <p class="muted">最近活跃：${escapeHtml(formatTime(currentPlayer.lastActiveAt))}</p>
         </div>
       </div>
@@ -841,11 +838,7 @@ function renderLogin(): void {
       saveSession(session);
       feedback = '';
       loginForm.password = '';
-      await Promise.all([refreshLogs(false), loadPlayerList(''), refreshBalanceConfigs(false)]);
-      if (balanceCatalog) {
-        ensureScopeId();
-        applyEffectiveBalanceToForm();
-      }
+      await Promise.all([refreshLogs(false), loadPlayerList(''), loadBalanceConfig()]);
       render();
     } catch (error) {
       setFeedback(extractErrorMessage(error), 'error');
@@ -922,7 +915,6 @@ function renderDashboard(): void {
               ${renderFieldGroup('monster')}
               ${renderFieldGroup('boss')}
               ${renderFieldGroup('equipment')}
-              ${renderFieldGroup('relic')}
             </div>
             <div class="button-row">
               <button class="danger" id="resetBalanceConfigBtn">删除当前作用域全部自定义配置</button>
@@ -941,9 +933,7 @@ function renderDashboard(): void {
               <div>
                 <label for="resourceType">资源类型</label>
                 <select id="resourceType">
-                  <option value="runGold" ${resourceForm.resourceType === 'runGold' ? 'selected' : ''}>局内金币</option>
                   <option value="diamond" ${resourceForm.resourceType === 'diamond' ? 'selected' : ''}>钻石</option>
-                  <option value="destinyShards" ${resourceForm.resourceType === 'destinyShards' ? 'selected' : ''}>命运碎片</option>
                   <option value="stamina" ${resourceForm.resourceType === 'stamina' ? 'selected' : ''}>体力</option>
                 </select>
               </div>
@@ -975,9 +965,8 @@ function renderDashboard(): void {
               </div>
               <div class="button-row">
                 <button class="danger" id="resetExpeditionBtn" ${currentPlayer ? '' : 'disabled'}>重置当前远征</button>
+                <button class="danger" id="resetCampInventoryBtn" ${currentPlayer ? '' : 'disabled'}>重置命痕与装备</button>
                 <button class="danger" id="resetTutorialBtn" ${currentPlayer ? '' : 'disabled'}>重置新手教程</button>
-                <button class="danger" id="resetTreeOnlyBtn" ${currentPlayer ? '' : 'disabled'}>重置命运树（不返还）</button>
-                <button class="danger" id="resetTreeRefundBtn" ${currentPlayer ? '' : 'disabled'}>重置命运树并返还</button>
                 <button class="danger" id="resetLeaderboardBtn">全服重置排行榜</button>
               </div>
               <p class="help">重置远征的含义：直接删除该玩家当前远征存档，所以下次进入会从第 1 层重新开始。</p>
@@ -1009,13 +998,80 @@ function renderDashboard(): void {
   bindDashboardEvents();
 }
 
+async function loadBalanceConfig(section?: BalanceUnitType): Promise<void> {
+  ensureScopeId();
+  await withTool('getBalanceConfigDetail', {
+    scopeType: balanceForm.scopeType,
+    scopeId: balanceForm.scopeId,
+  }, async () => {
+    if (section) {
+      resetBalanceSection(section, (balanceEffectiveValues[section] || null) as Record<string, number> | null);
+    } else {
+      resetBalanceInputs(balanceEffectiveValues);
+    }
+    setFeedback(
+      section
+        ? `${getBalanceSectionTitle(section)}已读取当前生效值`
+        : `已读取 ${getScopeTypeLabel(balanceForm.scopeType)} / ${getScopeIdLabel(balanceForm.scopeId)} 的当前生效值`,
+      'info',
+    );
+  }, false);
+}
+
+function renderFieldGroup(section: BalanceUnitType): string {
+  const rules = (balanceCatalog || FALLBACK_BALANCE_CATALOG).fieldRules[section];
+  if (!rules) return '';
+  const title = getBalanceSectionTitle(section);
+  const inputs = Object.entries(rules).map(([field, rule]) => `
+    <div class="compact-field">
+      <label for="balance-${section}-${field}">${escapeHtml(BALANCE_FIELD_META[section]?.[field]?.label || field)}</label>
+      <input
+        id="balance-${section}-${field}"
+        data-balance-section="${section}"
+        data-balance-field="${field}"
+        value="${escapeHtml(balanceForm[section][field] || '')}"
+        placeholder="${escapeHtml(getBalanceInputPlaceholder(rule))}"
+      />
+      <div class="muted">当前生效值：${escapeHtml(getBalanceDisplayValue(balanceEffectiveValues, section, field))}</div>
+      <div class="muted">代码原值：${escapeHtml(getBalanceDisplayValue(balanceCodeDefaultValues, section, field))}</div>
+      <div class="muted">当前层覆盖：${escapeHtml(getBalanceDisplayValue(balanceOverrideValues, section, field))}</div>
+      <div class="button-row" style="margin-top:8px;">
+        <button
+          class="secondary"
+          type="button"
+          data-restore-balance-field="${section}:${field}"
+        >恢复代码值</button>
+        <button
+          class="secondary"
+          type="button"
+          data-remove-balance-field="${section}:${field}"
+        >删除覆盖</button>
+      </div>
+      <p class="inline-help">${escapeHtml(BALANCE_FIELD_META[section]?.[field]?.help || '')}</p>
+    </div>
+  `).join('');
+  return `
+    <div class="panel panel-subsection">
+      <h3>${title}</h3>
+      <div class="compact-grid">${inputs}</div>
+      <div class="button-row" style="margin-top:14px;">
+        <button class="secondary" type="button" data-read-balance-section="${section}">读取当前生效值</button>
+        <button type="button" data-save-balance-section="${section}">保存本块配置</button>
+        <button class="secondary" type="button" data-restore-balance-section="${section}">本块恢复代码值</button>
+        <button class="secondary" type="button" data-remove-balance-section="${section}">本块删除覆盖</button>
+      </div>
+      <p class="muted">恢复代码值：在当前作用域写入一份和代码默认值一致的覆盖。删除覆盖：移除当前作用域这一块的覆盖，改为继承上层生效值。</p>
+    </div>
+  `;
+}
+
 function bindDashboardEvents(): void {
   document.querySelector<HTMLInputElement>('#playerKeyword')?.addEventListener('input', (event) => {
     searchForm.keyword = (event.target as HTMLInputElement).value;
   });
   document.querySelector<HTMLButtonElement>('#searchBtn')?.addEventListener('click', async () => {
     const keyword = searchForm.keyword.trim();
-    if (!keyword) return setFeedback('请输入昵称关键字、userId 或 openid', 'error');
+    if (!keyword) return setFeedback('请输入昵称关键词、userId 或 openid', 'error');
     await loadPlayerList(keyword);
     if (playerList.length === 1) await fetchPlayer(playerList[0].userId);
   });
@@ -1039,9 +1095,10 @@ function bindDashboardEvents(): void {
     setFeedback('已退出登录', 'info');
   });
   document.querySelector<HTMLButtonElement>('#refreshLogsBtn')?.addEventListener('click', async () => refreshLogs(true));
-  document.querySelector<HTMLButtonElement>('#refreshBalanceBtn')?.addEventListener('click', async () => refreshBalanceConfigs(true));
+  document.querySelector<HTMLButtonElement>('#refreshBalanceBtn')?.addEventListener('click', async () => {
+    await loadBalanceConfig();
+  });
   document.querySelector<HTMLButtonElement>('#syncDocsBtn')?.addEventListener('click', async () => syncRepoDocs());
-
   document.querySelector<HTMLSelectElement>('#resourceType')?.addEventListener('change', (event) => {
     resourceForm.resourceType = (event.target as HTMLSelectElement).value as ResourceType;
   });
@@ -1080,16 +1137,18 @@ function bindDashboardEvents(): void {
       if (!currentPlayer) return setFeedback('请先查询玩家', 'error');
       if (!resetForm.reason.trim()) return setFeedback('请填写重置原因', 'error');
       if (!window.confirm(`${confirmText}\n\n玩家：${currentPlayer.nickname}（${currentPlayer.userId}）`)) return;
-      await withTool(action, { userId: currentPlayer.userId, reason: resetForm.reason.trim() }, async () => {
-        setFeedback('重置操作成功', 'info');
-      });
+      const userId = currentPlayer.userId;
+      await withTool(action, { userId, reason: resetForm.reason.trim() }, async (result) => {
+        const message = assertResetInventoryCleared(result, action);
+        await fetchPlayer(userId);
+        setFeedback(message, 'info');
+      }, false);
     });
   };
 
-  bindReset('#resetExpeditionBtn', 'resetExpedition', '确认删除当前远征存档？该玩家下次会从第 1 层重新开始。');
+  bindReset('#resetExpeditionBtn', 'resetExpedition', '确认重置当前远征？将清除活跃挑战、楼层进度、永久命痕、装备和职业熟练度，恢复为全新 PVE 档案。');
+  bindReset('#resetCampInventoryBtn', 'resetCampInventory', '确认清空该玩家的全部命痕、命痕方案和装备，并结束当前活跃挑战？已通关楼层与职业熟练度不会变化。');
   bindReset('#resetTutorialBtn', 'resetTutorial', '确认重置新手教程？');
-  bindReset('#resetTreeOnlyBtn', 'resetDestinyTreeOnly', '确认重置命运树且不返还碎片？');
-  bindReset('#resetTreeRefundBtn', 'resetDestinyTreeAndRefund', '确认重置命运树并返还碎片？');
 
   document.querySelector<HTMLButtonElement>('#resetLeaderboardBtn')?.addEventListener('click', async () => {
     if (!resetForm.reason.trim()) return setFeedback('请填写重置原因', 'error');
@@ -1123,12 +1182,14 @@ function bindDashboardEvents(): void {
       balanceForm[section][field] = target.value;
     });
   });
+
   document.querySelectorAll<HTMLButtonElement>('[data-read-balance-section]').forEach((button) => {
     button.addEventListener('click', async () => {
       const section = button.dataset.readBalanceSection as BalanceUnitType;
       await loadBalanceConfig(section);
     });
   });
+
   document.querySelectorAll<HTMLButtonElement>('[data-save-balance-section]').forEach((button) => {
     button.addEventListener('click', async () => {
       const section = button.dataset.saveBalanceSection as BalanceUnitType;
@@ -1148,30 +1209,125 @@ function bindDashboardEvents(): void {
         config: nextConfig,
         reason: balanceForm.reason.trim(),
       }, async (result) => {
-        if (!result.verification?.configPersisted) {
-          throw new Error('数值配置保存后未在 pve_balance_configs 集合中查到记录，请检查 adminTool 云函数是否已重新部署。');
-        }
         if (!result.verification?.logWritten) {
-          throw new Error('数值配置保存后未写入 admin_logs，请检查 adminTool 云函数是否已重新部署。');
+          throw new Error('数值配置保存后未写入操作日志，请检查云函数部署。');
         }
-        applyEffectiveBalanceToForm(section);
-        setFeedback(`${getBalanceSectionTitle(section)}保存成功，已落库并写入操作日志。日志ID：${result.verification.logId}`, 'info');
-        scrollToTopSafe();
-      });
+        await loadBalanceConfig(section);
+        setFeedback(`${getBalanceSectionTitle(section)}保存成功，日志 ID：${result.verification.logId}`, 'info');
+      }, false);
     });
   });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-restore-balance-field]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const raw = button.dataset.restoreBalanceField || '';
+      const splitIndex = raw.indexOf(':');
+      if (splitIndex <= 0) return;
+      const section = raw.slice(0, splitIndex) as BalanceUnitType;
+      const field = raw.slice(splitIndex + 1);
+      if (!balanceForm.reason.trim()) return setFeedback('请填写数值配置原因', 'error');
+      const codeValue = balanceCodeDefaultValues?.[section]?.[field];
+      if (codeValue === undefined) return setFeedback('未找到代码原值', 'error');
+      const currentConfig = getCurrentScopeConfigDoc()?.config || {};
+      const nextConfig = mergeBalanceConfigValues(currentConfig, { [section]: { [field]: codeValue } });
+      if (!window.confirm(`确认把 ${BALANCE_FIELD_META[section]?.[field]?.label || field} 恢复成代码原值 ${codeValue}？`)) return;
+      await withTool('saveBalanceConfig', {
+        scopeType: balanceForm.scopeType,
+        scopeId: balanceForm.scopeId,
+        config: nextConfig,
+        reason: balanceForm.reason.trim(),
+      }, async (result) => {
+        if (!result.verification?.logWritten) {
+          throw new Error('恢复代码值后未写入操作日志，请检查云函数部署。');
+        }
+        await loadBalanceConfig(section);
+        setFeedback('已恢复成代码原值', 'info');
+      }, false);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-remove-balance-field]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const raw = button.dataset.removeBalanceField || '';
+      const splitIndex = raw.indexOf(':');
+      if (splitIndex <= 0) return;
+      const section = raw.slice(0, splitIndex) as BalanceUnitType;
+      const field = raw.slice(splitIndex + 1);
+      if (!balanceForm.reason.trim()) return setFeedback('请填写数值配置原因', 'error');
+      if (!window.confirm(`确认删除 ${BALANCE_FIELD_META[section]?.[field]?.label || field} 的当前层覆盖？删除后将继承上层生效值。`)) return;
+      await withTool('removeBalanceFieldOverride', {
+        scopeType: balanceForm.scopeType,
+        scopeId: balanceForm.scopeId,
+        section,
+        field,
+        reason: balanceForm.reason.trim(),
+      }, async (result) => {
+        if (!result.verification?.logWritten) {
+          throw new Error('删除覆盖后未写入操作日志，请检查云函数部署。');
+        }
+        await loadBalanceConfig(section);
+        setFeedback('字段覆盖已删除', 'info');
+      }, false);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-restore-balance-section]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const section = button.dataset.restoreBalanceSection as BalanceUnitType;
+      if (!balanceForm.reason.trim()) return setFeedback('请填写数值配置原因', 'error');
+      const codeSection = (balanceCodeDefaultValues?.[section] || {}) as Record<string, number>;
+      if (Object.keys(codeSection).length === 0) return setFeedback('未找到代码原值', 'error');
+      const currentConfig = getCurrentScopeConfigDoc()?.config || {};
+      const nextConfig = mergeBalanceConfigValues(currentConfig, { [section]: codeSection });
+      if (!window.confirm(`确认把 ${getBalanceSectionTitle(section)} 整块恢复成代码原值？`)) return;
+      await withTool('saveBalanceConfig', {
+        scopeType: balanceForm.scopeType,
+        scopeId: balanceForm.scopeId,
+        config: nextConfig,
+        reason: balanceForm.reason.trim(),
+      }, async (result) => {
+        if (!result.verification?.logWritten) {
+          throw new Error('恢复代码值后未写入操作日志，请检查云函数部署。');
+        }
+        await loadBalanceConfig(section);
+        setFeedback(`${getBalanceSectionTitle(section)}已恢复成代码原值`, 'info');
+      }, false);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-remove-balance-section]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const section = button.dataset.removeBalanceSection as BalanceUnitType;
+      if (!balanceForm.reason.trim()) return setFeedback('请填写数值配置原因', 'error');
+      if (!window.confirm(`确认删除 ${getBalanceSectionTitle(section)} 的当前层覆盖？删除后将继承上层生效值。`)) return;
+      await withTool('removeBalanceSectionOverride', {
+        scopeType: balanceForm.scopeType,
+        scopeId: balanceForm.scopeId,
+        section,
+        reason: balanceForm.reason.trim(),
+      }, async (result) => {
+        if (!result.verification?.logWritten) {
+          throw new Error('删除覆盖后未写入操作日志，请检查云函数部署。');
+        }
+        await loadBalanceConfig(section);
+        setFeedback(`${getBalanceSectionTitle(section)}覆盖已删除`, 'info');
+      }, false);
+    });
+  });
+
   document.querySelector<HTMLButtonElement>('#resetBalanceConfigBtn')?.addEventListener('click', async () => {
     if (!balanceForm.reason.trim()) return setFeedback('请填写数值配置原因', 'error');
-    if (!window.confirm(`确认删除 ${getScopeTypeLabel(balanceForm.scopeType)} / ${getScopeIdLabel(balanceForm.scopeId)} 的数值配置？删除后会恢复继承上层默认值。`)) return;
+    if (!window.confirm(`确认删除 ${getScopeTypeLabel(balanceForm.scopeType)} / ${getScopeIdLabel(balanceForm.scopeId)} 的全部覆盖？删除后会恢复继承上层默认值。`)) return;
     await withTool('resetBalanceConfig', {
       scopeType: balanceForm.scopeType,
       scopeId: balanceForm.scopeId,
       reason: balanceForm.reason.trim(),
     }, async () => {
-      applyEffectiveBalanceToForm();
-      setFeedback('当前作用域自定义配置已删除，已恢复当前生效值', 'info');
-    });
+      await loadBalanceConfig();
+      setFeedback('当前作用域全部覆盖已删除', 'info');
+    }, false);
   });
+
   document.querySelectorAll<HTMLButtonElement>('[data-load-config]').forEach((button) => {
     button.addEventListener('click', async () => {
       const id = button.dataset.loadConfig || '';
@@ -1195,11 +1351,7 @@ function render(): void {
 void (async () => {
   render();
   if (session) {
-    await Promise.all([refreshLogs(false), loadPlayerList(''), refreshBalanceConfigs(false)]);
-    if (balanceCatalog) {
-      ensureScopeId();
-      applyEffectiveBalanceToForm();
-      render();
-    }
+    await Promise.all([refreshLogs(false), loadPlayerList(''), loadBalanceConfig()]);
+    render();
   }
 })();

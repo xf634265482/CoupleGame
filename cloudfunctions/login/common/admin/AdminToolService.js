@@ -2,17 +2,10 @@
   getDb,
   getUserById,
   getUserByOpenId,
-  getPveSaveByUserId,
-  putPveSave,
-  deletePveSave,
-  clearPendingPveRun,
   serverDate,
 } = require('../db');
 const {
   COLLECTIONS,
-  PVE_DIFFICULTY_ORDER,
-  PVE_FLOORS_PER_CHAPTER,
-  PVE_TOTAL_FLOORS,
 } = require('../constants');
 const { STAMINA_MAX } = require('../pve/PveStamina');
 const { normalizeProfile, resetCampInventory, resetExpeditionProgress } = require('../pve/PveProfile');
@@ -59,20 +52,6 @@ const UNIT_SCOPE_CHAPTER_MAP = {
   'monster:SPIRIT_MIRAGE': 'chapter_5',
 };
 
-const PLAYER_CLASS_IDS = new Set(['ADVENTURER', 'BERSERKER', 'ARCHER', 'ROGUE']);
-const AWAKEN_FORM_DEFS = {
-  BERSERKER_1: { classId: 'BERSERKER', name: '鐙傛垬澹风牬闃靛瀷', statTrait: 'eagle_eye', traitId: 'awakened_cleave' },
-  BERSERKER_2: { classId: 'BERSERKER', name: '鐙傛垬澹峰棞鏉€鍨?, statTrait: 'swift', traitId: 'awakened_frenzy' },
-  ARCHER_1: { classId: 'ARCHER', name: '灏勬墜路寮哄嚮鍨?, statTrait: 'strengthen_attack_up', traitId: 'awakened_power_shot' },
-  ARCHER_2: { classId: 'ARCHER', name: '灏勬墜路娓稿嚮鍨?, statTrait: 'swift', traitId: 'awakened_volley' },
-  ROGUE_1: { classId: 'ROGUE', name: '闅愬尶鑰吢峰鍐冲瀷', statTrait: 'strengthen_attack_up', traitId: 'awakened_execute' },
-  ROGUE_2: { classId: 'ROGUE', name: '闅愬尶鑰吢峰奖琚瀷', statTrait: 'eagle_eye', traitId: 'awakened_shadow_strike' },
-};
-const AWAKEN_FORM_IDS = new Set(Object.keys(AWAKEN_FORM_DEFS));
-const AWAKEN_TRAIT_IDS = new Set(
-  Object.values(AWAKEN_FORM_DEFS).flatMap((form) => [form.statTrait, form.traitId]),
-);
-
 function ensureReason(reason) {
   const value = String(reason || '').trim();
   if (!value) {
@@ -103,101 +82,6 @@ function ensureResourceLimit(resourceType, amount) {
     err.code = 'ADMIN_AMOUNT_EXCEEDS_LIMIT';
     throw err;
   }
-}
-
-function ensureActiveSave(save) {
-  if (save) return save;
-  const err = new Error('GM_ACTIVE_SAVE_REQUIRED');
-  err.code = 'GM_ACTIVE_SAVE_REQUIRED';
-  throw err;
-}
-
-function ensurePlayerClassId(classId) {
-  const value = String(classId || '').trim();
-  if (!PLAYER_CLASS_IDS.has(value)) {
-    const err = new Error('GM_INVALID_CLASS_ID');
-    err.code = 'GM_INVALID_CLASS_ID';
-    throw err;
-  }
-  return value;
-}
-
-function ensureTargetFloor(targetFloor) {
-  const value = Number(targetFloor);
-  if (!Number.isInteger(value)) {
-    const err = new Error('GM_TARGET_FLOOR_MUST_BE_INTEGER');
-    err.code = 'GM_TARGET_FLOOR_MUST_BE_INTEGER';
-    throw err;
-  }
-  if (value < 1 || value > PVE_TOTAL_FLOORS) {
-    const err = new Error(`GM_TARGET_FLOOR_OUT_OF_RANGE:${PVE_TOTAL_FLOORS}`);
-    err.code = 'GM_TARGET_FLOOR_OUT_OF_RANGE';
-    throw err;
-  }
-  return value;
-}
-
-function ensureDifficultyTier(difficultyTier) {
-  const value = String(difficultyTier || '').trim().toUpperCase();
-  if (!PVE_DIFFICULTY_ORDER.includes(value)) {
-    const err = new Error('GM_INVALID_DIFFICULTY_TIER');
-    err.code = 'GM_INVALID_DIFFICULTY_TIER';
-    throw err;
-  }
-  return value;
-}
-
-function chapterOfFloor(floor) {
-  if (!Number.isInteger(floor) || floor <= 0) return 1;
-  return Math.floor((floor - 1) / PVE_FLOORS_PER_CHAPTER) + 1;
-}
-
-function getDisplayedFloor(save) {
-  if (!save) return 0;
-  const baseFloor = Number(save.floor || 0);
-  if (save.floorState) return Math.max(1, Math.min(PVE_TOTAL_FLOORS, baseFloor));
-  return Math.max(1, Math.min(PVE_TOTAL_FLOORS, baseFloor + 1));
-}
-
-function getDisplayedChapter(save) {
-  if (!save) return 0;
-  return chapterOfFloor(getDisplayedFloor(save));
-}
-
-function ensureAwakenForm(classId, awakenForm) {
-  const value = String(awakenForm || '').trim();
-  if (!value) return '';
-  if (!AWAKEN_FORM_IDS.has(value)) {
-    const err = new Error('GM_INVALID_AWAKEN_FORM');
-    err.code = 'GM_INVALID_AWAKEN_FORM';
-    throw err;
-  }
-  if (AWAKEN_FORM_DEFS[value].classId !== classId) {
-    const err = new Error('GM_AWAKEN_FORM_CLASS_MISMATCH');
-    err.code = 'GM_AWAKEN_FORM_CLASS_MISMATCH';
-    throw err;
-  }
-  return value;
-}
-
-function buildNextClassStatePlayer(player, classId, awakenForm) {
-  const nextAwakenForm = classId === 'ADVENTURER' ? '' : ensureAwakenForm(classId, awakenForm);
-  const currentTraits = Array.isArray(player?.classTraits) ? player.classTraits : [];
-  const cleanedTraits = currentTraits.filter((traitId) => !AWAKEN_TRAIT_IDS.has(traitId));
-  const nextTraits = [...cleanedTraits];
-
-  if (nextAwakenForm) {
-    const form = AWAKEN_FORM_DEFS[nextAwakenForm];
-    if (!nextTraits.includes(form.statTrait)) nextTraits.push(form.statTrait);
-    if (!nextTraits.includes(form.traitId)) nextTraits.push(form.traitId);
-  }
-
-  return {
-    ...(player || {}),
-    classId,
-    awakenForm: nextAwakenForm || undefined,
-    classTraits: nextTraits,
-  };
 }
 
 async function getTargetUser({ userId, openId, keyword }) {
@@ -321,50 +205,24 @@ async function verifyUserDocsResetByIds(docIds) {
   return buildUserDocsResetVerification(await getUserDocsByDocIds(docIds));
 }
 
-function toSaveSummary(save) {
-  if (!save) return null;
-  return {
-    runSeed: save.runSeed,
-    status: save.status,
-    chapter: getDisplayedChapter(save),
-    floor: getDisplayedFloor(save),
-    persistedChapter: Number(save.chapter || 0),
-    persistedFloor: Number(save.floor || 0),
-    difficultyTier: String(save.difficultyTier || ''),
-    floorStatePresent: Boolean(save.floorState),
-    updatedAt: save.updatedAt,
-    classId: save.player?.classId || '',
-    awakenForm: save.player?.awakenForm || '',
-    classTraits: Array.isArray(save.player?.classTraits) ? save.player.classTraits : [],
-    classFragments: save.player?.classFragments || {},
-    runGold: Number(save.player?.gold || 0),
-    bagCount: Array.isArray(save.player?.bag) ? save.player.bag.length : 0,
-    scrolls: Number(save.player?.scrolls || 0),
-    relicCount: Array.isArray(save.player?.relics) ? save.player.relics.length : 0,
-  };
-}
-
 function getLastActiveAt(user) {
   return user.updatedDate || user.createdDate || user.updatedAt || user.createdAt || null;
 }
 
-function toPlayerListItem(user, save) {
+function toPlayerListItem(user) {
+  const profile = normalizeProfile(user.pveProfile);
   return {
     nickname: user.nickname || '鐜╁',
     openId: user._openid || '',
     userId: user.id,
     lastActiveAt: getLastActiveAt(user),
     diamond: Number(user.diamond || 0),
-    destinyShards: Number(user.destinyShards || 0),
-    highestFloor: Number(user.pveHighestFloor || 0),
-    hasActiveExpedition: Boolean(save),
-    chapter: getDisplayedChapter(save),
-    floor: getDisplayedFloor(save),
-    classId: save?.player?.classId || '',
+    highestFloor: Number(profile.highestClearedFloor || 0),
+    hasActiveExpedition: Boolean(profile.activeChallengeId),
   };
 }
 
-function toPlayerView(user, save) {
+function toPlayerView(user) {
   const profile = normalizeProfile(user.pveProfile);
   return {
     nickname: user.nickname || '鐜╁',
@@ -373,10 +231,9 @@ function toPlayerView(user, save) {
     userId: user.id,
     lastActiveAt: getLastActiveAt(user),
     diamond: Number(user.diamond || 0),
-    highestFloor: Number(user.pveHighestFloor || 0),
+    highestFloor: Number(profile.highestClearedFloor || 0),
     tutorialCompleted: user.pveTutorialCompleted === true,
     stamina: Number(user.pveStamina || 0),
-    hasPendingRun: Number.isInteger(user.pvePendingRunSeed) && user.pvePendingRunSeed > 0,
     campInventory: {
       minghen: Object.keys(profile.minghenCollection || {}).length,
       minghenLoadout: Array.isArray(profile.minghenLoadout) ? profile.minghenLoadout.length : 0,
@@ -385,19 +242,7 @@ function toPlayerView(user, save) {
       equipmentLoadout: Object.keys(profile.equipmentLoadout || {}).length,
       activeChallengeId: profile.activeChallengeId || '',
     },
-    activeExpedition: save ? {
-      chapter: getDisplayedChapter(save),
-      floor: getDisplayedFloor(save),
-      classId: save.player?.classId || '',
-      awakenForm: save.player?.awakenForm || '',
-      classFragments: save.player?.classFragments || {},
-      difficultyTier: String(save.difficultyTier || ''),
-      runGold: Number(save.player?.gold || 0),
-      bagCount: Array.isArray(save.player?.bag) ? save.player.bag.length : 0,
-      scrolls: Number(save.player?.scrolls || 0),
-      relicCount: Array.isArray(save.player?.relics) ? save.player.relics.length : 0,
-      saveUpdatedAt: save.updatedAt || null,
-    } : null,
+    activeExpedition: profile.activeChallengeId ? { challengeId: profile.activeChallengeId } : null,
   };
 }
 
@@ -463,10 +308,9 @@ async function removeActivePveChallengesForUser(userId, explicitChallengeId = ''
 
 async function getPlayerAction(payload) {
   const user = await getTargetUser(payload || {});
-  const save = await getPveSaveByUserId(user.id);
   return {
     ok: true,
-    player: toPlayerView(user, save),
+    player: toPlayerView(user),
   };
 }
 
@@ -509,11 +353,7 @@ async function listPlayersAction(payload) {
     users = recentUsers.data || [];
   }
 
-  const players = [];
-  for (const user of users) {
-    const save = await getPveSaveByUserId(user.id);
-    players.push(toPlayerListItem(user, save));
-  }
+  const players = users.map(toPlayerListItem);
 
   players.sort((a, b) => {
     const left = Number(a.lastActiveAt || 0);
@@ -535,41 +375,11 @@ async function adjustResourcesAction(account, payload, requestSource) {
   ensureResourceLimit(resourceType, amount);
 
   const user = await getTargetUser(payload || {});
-  const save = await getPveSaveByUserId(user.id);
 
   let before = null;
   let after = null;
 
-  if (resourceType === RESOURCE_TYPES.RUN_GOLD) {
-    if (!save) {
-      const err = new Error('GM_ACTIVE_SAVE_REQUIRED');
-      err.code = 'GM_ACTIVE_SAVE_REQUIRED';
-      throw err;
-    }
-
-    const currentGold = Number(save.player?.gold || 0);
-    const nextGold = currentGold + amount;
-    if (nextGold < 0) {
-      const err = new Error('GM_RUN_GOLD_NEGATIVE_NOT_ALLOWED');
-      err.code = 'GM_RUN_GOLD_NEGATIVE_NOT_ALLOWED';
-      throw err;
-    }
-
-    const nextPlayer = { ...(save.player || {}), gold: nextGold };
-    const saved = await putPveSave(user.id, {
-      openId: save.openId,
-      runSeed: save.runSeed,
-      status: save.status,
-      chapter: save.chapter,
-      floor: save.floor,
-      player: nextPlayer,
-      floorState: save.floorState || null,
-      balanceSnapshot: save.balanceSnapshot || null,
-    }, save.version);
-
-    before = { runGold: currentGold };
-    after = { runGold: Number(saved.player?.gold || 0) };
-  } else if (resourceType === RESOURCE_TYPES.DIAMOND) {
+  if (resourceType === RESOURCE_TYPES.DIAMOND) {
     const fieldName = 'diamond';
     const currentValue = Number(user[fieldName] || 0);
     const nextValue = currentValue + amount;
@@ -614,7 +424,6 @@ async function adjustResourcesAction(account, payload, requestSource) {
   }
 
   const userAfter = await getUserById(user.id);
-  const saveAfter = await getPveSaveByUserId(user.id);
   await writeAdminLog({
     account,
     targetUser: user,
@@ -632,109 +441,7 @@ async function adjustResourcesAction(account, payload, requestSource) {
 
   return {
     ok: true,
-    player: toPlayerView(userAfter, saveAfter),
-  };
-}
-
-async function updatePlayerClassStateAction(account, payload, requestSource) {
-  const reason = ensureReason(payload?.reason);
-  const classId = ensurePlayerClassId(payload?.classId);
-  const user = await getTargetUser(payload || {});
-  const save = ensureActiveSave(await getPveSaveByUserId(user.id));
-  const nextPlayer = buildNextClassStatePlayer(save.player, classId, payload?.awakenForm);
-
-  const before = {
-    save: toSaveSummary(save),
-  };
-
-  await putPveSave(user.id, {
-    openId: save.openId,
-    runSeed: save.runSeed,
-    status: save.status,
-    chapter: save.chapter,
-    floor: save.floor,
-    player: nextPlayer,
-    floorState: save.floorState || null,
-    balanceSnapshot: save.balanceSnapshot || null,
-    difficultyTier: save.difficultyTier || null,
-  }, save.version);
-
-  const userAfter = await getUserById(user.id);
-  const saveAfter = await getPveSaveByUserId(user.id);
-  await writeAdminLog({
-    account,
-    targetUser: user,
-    action: ADMIN_ACTIONS.UPDATE_PLAYER_CLASS_STATE,
-    payload: {
-      classId,
-      awakenForm: nextPlayer.awakenForm || '',
-    },
-    before,
-    after: {
-      save: toSaveSummary(saveAfter),
-    },
-    reason,
-    requestSource,
-    success: true,
-  });
-
-  return {
-    ok: true,
-    player: toPlayerView(userAfter, saveAfter),
-  };
-}
-
-async function jumpExpeditionFloorAction(account, payload, requestSource) {
-  const reason = ensureReason(payload?.reason);
-  const targetFloor = ensureTargetFloor(payload?.targetFloor);
-  const difficultyTier = ensureDifficultyTier(payload?.difficultyTier);
-  const user = await getTargetUser(payload || {});
-  const save = ensureActiveSave(await getPveSaveByUserId(user.id));
-  const targetChapter = chapterOfFloor(targetFloor);
-  const persistedFloor = Math.max(0, targetFloor - 1);
-  const nextPlayer = {
-    ...(save.player || {}),
-    maxChapterCleared: Math.max(Number(save.player?.maxChapterCleared || 0), Math.max(0, targetChapter - 1)),
-  };
-
-  const before = {
-    save: toSaveSummary(save),
-  };
-
-  await putPveSave(user.id, {
-    openId: save.openId,
-    runSeed: save.runSeed,
-    status: 'ACTIVE',
-    chapter: persistedFloor > 0 ? chapterOfFloor(persistedFloor) : 1,
-    floor: persistedFloor,
-    player: nextPlayer,
-    floorState: null,
-    balanceSnapshot: save.balanceSnapshot || null,
-    difficultyTier,
-  }, save.version);
-
-  const userAfter = await getUserById(user.id);
-  const saveAfter = await getPveSaveByUserId(user.id);
-  await writeAdminLog({
-    account,
-    targetUser: user,
-    action: ADMIN_ACTIONS.JUMP_EXPEDITION_FLOOR,
-    payload: {
-      targetFloor,
-      difficultyTier,
-    },
-    before,
-    after: {
-      save: toSaveSummary(saveAfter),
-    },
-    reason,
-    requestSource,
-    success: true,
-  });
-
-  return {
-    ok: true,
-    player: toPlayerView(userAfter, saveAfter),
+    player: toPlayerView(userAfter),
   };
 }
 
@@ -1003,7 +710,7 @@ async function syncBalanceDocsPreviewAction() {
 }
 
 async function syncBalanceDocsLogAction(account, payload, requestSource) {
-  const reason = ensureReason(payload?.reason || '鍚屾浠撳簱鏁板€兼枃妗?);
+  const reason = ensureReason(payload?.reason || '同步平衡配置文档');
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const summary = payload?.summary && typeof payload.summary === 'object' ? payload.summary : {};
   const syncedAt = payload?.syncedAt || null;
@@ -1064,12 +771,6 @@ async function forceVerifyPveProfileReset(user, desiredProfile, options = {}) {
     updatedDate: serverDate(),
   };
   const removeFields = [];
-  if (options.clearLegacyPveGrowth) {
-    removeFields.push('unlockedTreeNodes', 'destinyShards');
-  }
-  if (options.clearPendingRun) {
-    removeFields.push('pvePendingRunSeed');
-  }
   const overwrittenUserDocIds = await overwriteUserDocsWithPveProfile(targetDocIds, desiredProfile, resetExtra, removeFields);
   let verifiedDocs = await getUserDocsByDocIds(overwrittenUserDocIds);
   let allDocsVerification = buildUserDocsResetVerification(verifiedDocs);
@@ -1115,17 +816,10 @@ async function resetExpeditionAction(account, payload, requestSource) {
     targetOpenId: user._openid || '',
     requestSource,
   });
-  const save = await getPveSaveByUserId(user.id);
   const before = {
-    save: toSaveSummary(save),
-    hasPendingRun: Number.isInteger(user.pvePendingRunSeed) && user.pvePendingRunSeed > 0,
     profile: normalizeProfile(user.pveProfile),
   };
 
-  if (save) {
-    await deletePveSave(save._id);
-  }
-  await clearPendingPveRun(user.id);
   const previousChallengeId = before.profile.activeChallengeId;
   const removedChallengeIds = await removeActivePveChallengesForUser(user.id, previousChallengeId);
   const resetProfile = resetExpeditionProgress(before.profile);
@@ -1133,12 +827,10 @@ async function resetExpeditionAction(account, payload, requestSource) {
     userAfter,
     verifiedProfile,
     verification,
-  } = await forceVerifyPveProfileReset(user, resetProfile, { clearLegacyPveGrowth: true, clearPendingRun: true });
+  } = await forceVerifyPveProfileReset(user, resetProfile);
   const resetDiagnostic = {
     ...verification,
     removedChallengeIds,
-    pendingRunCleared: !(Number.isInteger(userAfter?.pvePendingRunSeed) && userAfter.pvePendingRunSeed > 0),
-    activeSaveCleared: Boolean(save),
   };
   console.info('[GM][resetExpedition] verified', {
     targetDocId: user._id || '',
@@ -1153,8 +845,6 @@ async function resetExpeditionAction(account, payload, requestSource) {
     payload: {},
     before,
     after: {
-      save: null,
-      hasPendingRun: Number.isInteger(userAfter?.pvePendingRunSeed) && userAfter.pvePendingRunSeed > 0,
       profile: verifiedProfile,
       removedChallengeIds,
       verification: resetDiagnostic,
@@ -1166,7 +856,7 @@ async function resetExpeditionAction(account, payload, requestSource) {
 
   return {
     ok: true,
-    player: toPlayerView(userAfter, null),
+    player: toPlayerView(userAfter),
     verification: resetDiagnostic,
   };
 }
@@ -1189,18 +879,14 @@ async function resetCampInventoryAction(account, payload, requestSource) {
   const before = normalizeProfile(currentUser.pveProfile);
   const profile = resetCampInventory(before);
   const removedChallengeIds = await removeActivePveChallengesForUser(user.id, before.activeChallengeId);
-  const saveAfter = await getPveSaveByUserId(user.id);
-  if (saveAfter) await deletePveSave(saveAfter._id);
-  await clearPendingPveRun(user.id);
   const {
     userAfter,
     verifiedProfile,
     verification,
-  } = await forceVerifyPveProfileReset(user, profile, { clearPendingRun: true });
+  } = await forceVerifyPveProfileReset(user, profile);
   const resetDiagnostic = {
     ...verification,
     removedChallengeIds,
-    activeSaveCleared: Boolean(saveAfter),
   };
   console.info('[GM][resetCampInventory] verified', {
     targetDocId: user._id || '',
@@ -1213,15 +899,15 @@ async function resetCampInventoryAction(account, payload, requestSource) {
     targetUser: user,
     action: ADMIN_ACTIONS.RESET_CAMP_INVENTORY,
     payload: {},
-    before: { profile: before, activeSaveId: saveAfter?._id || null },
-    after: { profile: verifiedProfile, activeSaveId: null, removedChallengeIds, verification: resetDiagnostic },
+    before: { profile: before },
+    after: { profile: verifiedProfile, removedChallengeIds, verification: resetDiagnostic },
     reason,
     requestSource,
     success: true,
   });
   return {
     ok: true,
-    player: toPlayerView(userAfter || { ...user, pveProfile: verifiedProfile }, null),
+    player: toPlayerView(userAfter || { ...user, pveProfile: verifiedProfile }),
     verification: resetDiagnostic,
   };
 }
@@ -1239,7 +925,6 @@ async function resetTutorialAction(account, payload, requestSource) {
   });
 
   const userAfter = await getUserById(user.id);
-  const saveAfter = await getPveSaveByUserId(user.id);
   await writeAdminLog({
     account,
     targetUser: user,
@@ -1254,7 +939,7 @@ async function resetTutorialAction(account, payload, requestSource) {
 
   return {
     ok: true,
-    player: toPlayerView(userAfter, saveAfter),
+    player: toPlayerView(userAfter),
   };
 }
 
@@ -1335,10 +1020,6 @@ async function handleAdminAction({ account, action, payload, requestSource }) {
     return syncBalanceDocsLogAction(account, payload, requestSource);
   case ADMIN_ACTIONS.ADJUST_RESOURCES:
     return adjustResourcesAction(account, payload, requestSource);
-  case ADMIN_ACTIONS.JUMP_EXPEDITION_FLOOR:
-    return jumpExpeditionFloorAction(account, payload, requestSource);
-  case ADMIN_ACTIONS.UPDATE_PLAYER_CLASS_STATE:
-    return updatePlayerClassStateAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_EXPEDITION:
     return resetExpeditionAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_CAMP_INVENTORY:

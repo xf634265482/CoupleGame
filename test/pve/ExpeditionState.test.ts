@@ -9,12 +9,8 @@
 } from '../../assets/scripts/pve/core/ExpeditionState';
 import { applyMove } from '../../assets/scripts/pve/core/MovementSystem';
 import {
-  ANIMA_PER_STRENGTHEN,
   AP_BASE,
   AP_CARRY_CAP,
-  AWAKEN_REQUIRED_CHAPTER,
-  AWAKEN_SECONDARY_TOTAL,
-  CLASS_FRAGMENTS_TO_AWAKEN,
   FLOORS_PER_CHAPTER,
   INITIAL_ANIMA,
   INITIAL_GOLD,
@@ -26,7 +22,6 @@ import type { Direction } from '../../assets/scripts/pve/core/MovementSystem';
 
 function makeMeta(overrides: Partial<PveMeta> = {}): PveMeta {
   return {
-    destinyShards: 1000,
     diamond: 0,
     ...overrides,
   };
@@ -41,7 +36,6 @@ describe('ExpeditionState 鈥?杩滃緛鐢熷懡鍛ㄦ湡锛圓C-3, AC-11, AC-12
       expect(state.floor).toBe(1);
       expect(state.status).toBe('ACTIVE');
       expect(state.player.classId).toBe('ADVENTURER');
-      expect(state.player.classTraits).toEqual([]);
       expect(state.floorState.floor).toBe(1);
       expect(state.floorState.turn).toBe(1);
       expect(state.floorState.ap).toBe(state.floorState.maxAp);
@@ -228,38 +222,6 @@ describe('ExpeditionState 鈥?杩滃緛鐢熷懡鍛ㄦ湡锛圓C-3, AC-11, AC-12
       expect(result.state.player.maxChapterCleared).toBeUndefined();
     });
 
-    it('鍑昏触绗笁绔?Boss 鍚庤嫢宸叉弧瓒冲叾浣欒閱掓潯浠讹紝emit CLASS_CAN_AWAKEN', () => {
-      const ch3BossFloor = FLOORS_PER_CHAPTER * AWAKEN_REQUIRED_CHAPTER; // 绗?绔?Boss 灞傦紙15锛?
-      const state = makeExpeditionState({
-        floor: ch3BossFloor,
-        floorOverrides: { floor: ch3BossFloor, status: 'CLEARED' },
-        playerOverrides: {
-          classId: 'BERSERKER',
-          classFragments: { BERSERKER: CLASS_FRAGMENTS_TO_AWAKEN, ARCHER: AWAKEN_SECONDARY_TOTAL },
-          maxChapterCleared: AWAKEN_REQUIRED_CHAPTER - 1,
-        },
-      });
-
-      const result = advanceFloor(state);
-      expect(result.state.player.maxChapterCleared).toBe(AWAKEN_REQUIRED_CHAPTER);
-      expect(result.events.find((e) => e.type === 'CLASS_CAN_AWAKEN')).toEqual({
-        type: 'CLASS_CAN_AWAKEN',
-        classId: 'BERSERKER',
-      });
-    });
-
-    it('鍙犲姞 2 涓?strengthen_ap_up 鍚庯紝鏂版ゼ灞?maxAp 涓?dice + 2锛堜笌 endTurn 鐨?traitCount 閫昏緫涓€鑷达級', () => {
-      const state = makeExpeditionState({
-        floor: 1,
-        floorOverrides: { floor: 1, status: 'CLEARED' },
-        playerOverrides: { classTraits: ['strengthen_ap_up', 'strengthen_ap_up'] },
-      });
-
-      const result = advanceFloor(state);
-      const expectedAp = result.state.floorState.dice + AP_BASE + 2;
-      expect(result.state.floorState.maxAp).toBe(expectedAp);
-      expect(result.state.floorState.ap).toBe(expectedAp);
-    });
   });
 
   describe('resumeExpedition', () => {
@@ -341,52 +303,9 @@ describe('ExpeditionState 鈥?杩滃緛鐢熷懡鍛ㄦ湡锛圓C-3, AC-11, AC-12
   });
 
   describe('applyDeath', () => {
-    it('娓呯┖灞€鍐呰繘搴︼紙瑁呭/鑱屼笟/璇嶆潯/閲戝竵/鐏垫皵/鑱屼笟纰庣墖锛夛紝淇濈暀 HP 绛夊叾浣欏瓧娈?', () => {
-      const state = makeExpeditionState({
-        playerOverrides: {
-          hp: 0,
-          maxHp: 20,
-          gold: 999,
-          anima: 88,
-          animaProgress: 40,
-          classId: 'BERSERKER',
-          classTraits: ['strengthen_hp_up'],
-          equipment: { WEAPON: { id: 'w1', slot: 'WEAPON', quality: 'RARE', name: '鎴樻枾', baseStat: 3 } },
-          classFragments: { BERSERKER: 2 },
-        },
-      });
-      const dead = { ...state, status: 'DEAD' as const, floorState: { ...state.floorState, status: 'DEAD' as const } };
-
-      const result = applyDeath(dead);
-      expect(result.state.player.gold).toBe(0);
-      expect(result.state.player.anima).toBe(0);
-      expect(result.state.player.animaProgress).toBe(0);
-      expect(result.state.player.classId).toBe('ADVENTURER');
-      expect(result.state.player.classTraits).toEqual([]);
-      expect(result.state.player.equipment).toEqual({});
-      expect(result.state.player.classFragments).toEqual({});
-      expect(result.state.player.hp).toBe(280);
-      expect(result.state.player.maxHp).toBe(280);
-    });
-
     it('闈?DEAD 鐘舵€佹椂涓?no-op', () => {
       const state = makeExpeditionState({ playerOverrides: { gold: 50 } });
       expect(applyDeath(state)).toEqual({ state, events: [] });
-    });
-
-    it('閲嶇疆宸茶閱掑舰鎬侊紙awakenForm锛?', () => {
-      const state = makeExpeditionState({
-        playerOverrides: {
-          hp: 0,
-          classId: 'BERSERKER',
-          awakenForm: 'BERSERKER_1',
-          classFragments: { BERSERKER: 5 },
-        },
-      });
-      const dead = { ...state, status: 'DEAD' as const, floorState: { ...state.floorState, status: 'DEAD' as const } };
-
-      const result = applyDeath(dead);
-      expect(result.state.player.awakenForm).toBeUndefined();
     });
   });
 
@@ -395,21 +314,6 @@ describe('ExpeditionState 鈥?杩滃緛鐢熷懡鍛ㄦ湡锛圓C-3, AC-11, AC-12
       const state = startExpedition(424242);
       const restored = deserialize(serialize(state));
       expect(restored).toEqual(state);
-    });
-
-    it('鏃ц閱掑瓨妗ｈ縼绉绘椂鍙Щ闄や竴灞傝嚜鍔ㄩ檮璧犺瘝鏉″苟鍐欏叆V2鏍囪', () => {
-      const legacy = makeExpeditionState({
-        playerOverrides: {
-          classId: 'ARCHER',
-          awakenForm: 'ARCHER_1',
-          classTraits: ['strengthen_attack_up', 'strengthen_attack_up', 'awakened_power_shot'],
-        },
-      });
-      const restored = deserialize(JSON.stringify(legacy));
-      expect(restored.player.classTraits).toEqual(['strengthen_attack_up', 'awakened_power_shot']);
-      expect(restored.player.awakenVersion).toBe(2);
-      expect(restored.player.awakenFirstOfferPending).toBe(true);
-      expect(deserialize(serialize(restored))).toEqual(restored);
     });
 
     it('浠庡瓨妗ｈ繕鍘熷悗鍙户缁帹杩涳紙鍥炲悎/妤煎眰锛変笖琛屼负涓庡師鐘舵€佷竴鑷?', () => {
