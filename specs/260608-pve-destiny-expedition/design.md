@@ -6,6 +6,13 @@ created: 2026-06-08
 updated: 2026-06-29
 ---
 
+## 2026-07-16 新手教程：蓄力与破阵
+
+- 第一次远征第 1 层在 `tutorialCompleted !== true` 时走脚本关（永久逐层启动链注入），强制战士。
+- 教学步骤：短移动/普攻 → 蓄力击杀 → 靠近第二怪 → 系统灌满灵气 → 破阵 → 再蓄力击杀 → 钥匙/传送门。
+- 不教攒灵气实操、高级蓄力、撞碎、三职；通关写回 `PveMeta.tutorialCompleted`。
+- 详情：`docs/superpowers/specs/2026-07-16-newbie-tutorial-charge-burst-design.md`
+
 ## 2026-06-30 装备系统改造 + 掉率重做（Phase 1-6，AC-EQ-1~12）
 
 详见 `specs/260629-equipment-loot-rework/`。本次改动涉及：
