@@ -16,9 +16,16 @@ async function loadProfile(user) {
   }
 
   const now = Date.now();
-  const shouldReset = latest.pveProfile?.version !== PROFILE_VERSION;
-  const profile = normalizeProfile(latest.pveProfile, now);
-  if (shouldReset) {
+  const current = latest.pveProfile;
+  const profile = normalizeProfile(current, now, latest);
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(current ?? {}, key);
+  const shouldPersist = current?.version !== PROFILE_VERSION
+    || !Number.isFinite(current?.stamina)
+    || !Number.isFinite(current?.staminaUpdatedAt)
+    || !hasOwn('staminaNextRecoveryAt')
+    || typeof current?.tutorialFreeChallengeConsumed !== 'boolean'
+    || current.stamina !== profile.stamina;
+  if (shouldPersist) {
     await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
       data: {
         pveProfile: profile,
@@ -49,7 +56,8 @@ async function updateCampConfiguration(user, request = {}) {
   const latest = await getUserById(user.id);
   if (!latest) { const err = new Error('USER_NOT_FOUND'); err.code = 'USER_NOT_FOUND'; throw err; }
   const profile = normalizeProfile(latest.pveProfile);
-  if (profile.activeChallengeId) { const err = new Error('挑战中不能调整营地配置'); err.code = 'PVE_CAMP_CONFIG_LOCKED'; throw err; }
+  // 进行中的楼层挑战使用开局快照锁定装配；营地改的是永久档案，供下一次开局/下一层使用。
+  // 允许挑战中调整命痕/装备/职业，避免回营后无法改配。
   const professionId = request.selectedProfessionId ?? profile.selectedProfessionId;
   if (!PROFESSION_IDS.includes(professionId) || profile.professions[professionId]?.unlocked !== true) { const err = new Error('职业尚未解锁'); err.code = 'PVE_PROFESSION_LOCKED'; throw err; }
   const minghenLoadout = request.minghenLoadout == null ? profile.minghenLoadout : validateMinghenLoadout(request.minghenLoadout);
