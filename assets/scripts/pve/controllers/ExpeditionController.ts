@@ -3535,11 +3535,6 @@ export class ExpeditionController extends Component {
         )
       : (canContinue ? 'continue' : 'quit');
 
-    if (choice === 'quit') {
-      SceneLoader.loadLobby();
-      return;
-    }
-
     const completedTutorialFloor = this._state.isTutorialRun && this._state.floor === 1;
     if (completedTutorialFloor) {
       this._meta = {
@@ -3557,6 +3552,11 @@ export class ExpeditionController extends Component {
       } catch (err) {
         this._toast?.toast(`教学完成标记保存失败：${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+
+    if (choice === 'quit') {
+      SceneLoader.loadLobby();
+      return;
     }
 
     const nextChapter = oldChapter + (isBossFloor(clearedFloor) ? 1 : 0);
