@@ -1,4 +1,4 @@
-declare const wx: unknown;
+﻿declare const wx: unknown;
 
 type WxAdError = {
   errCode?: number;
@@ -73,11 +73,7 @@ type WxLike = {
   getSystemInfoSync?: () => WxSystemInfo;
 };
 
-export type RewardAdType =
-  | 'restore_stamina'
-  | 'destiny_tree_reset'
-  | 'reroll_strengthen_once'
-  | 'revive_half_hp_once';
+export type RewardAdType = 'restore_stamina';
 
 export interface RewardAdOptions {
   rewardCallback?: () => void | Promise<void>;
@@ -113,9 +109,6 @@ type ActiveRewardRequest = {
 
 export const REWARD_DESCRIPTIONS: Record<RewardAdType, string> = {
   restore_stamina: '观看完整广告后恢复一定体力',
-  destiny_tree_reset: '每日可通过广告免费重置命运树 1 次',
-  reroll_strengthen_once: '本局远征内可通过广告重抽强化词条 1 次',
-  revive_half_hp_once: '本局死亡后可通过广告原地复活 1 次，并恢复 50% 最大生命',
 };
 
 const DEFAULT_CONFIG = {
