@@ -33,10 +33,13 @@ export interface MinghenLoadoutPreset {
 
 export interface PveEquipmentInstance {
   instanceId: string;
+  /** 旧装备库中文名称，如「皮革轻甲」。 */
   definitionId: string;
   quality: 'COMMON' | 'FINE' | 'RARE' | 'EPIC' | 'LEGENDARY';
   enhanceLevel: number;
   locked: boolean;
+  /** 掉落时 roll 的主属性，品质/强化在此基础上缩放。 */
+  baseStat?: number;
 }
 
 export interface PveEquipmentLoadout {
@@ -79,12 +82,21 @@ export interface PveProfile {
   minghenPresets: MinghenLoadoutPreset[];
   equipmentInventory: PveEquipmentInstance[];
   equipmentLoadout: PveEquipmentLoadout;
+  /**
+   * 营地唯一货币「星尘」余额（存档字段名沿用 gold，UI 显示为星尘）。
+   * 读档时会把旧 minghenDust 合并进来。
+   */
   gold: number;
+  /** @deprecated 已并入 gold（星尘）；归一化后恒为 0。 */
   minghenDust: number;
   professions: Record<PveProfessionId, ProfessionMasteryProgress>;
   selectedProfessionId: PveProfessionId;
   tracking: MinghenTrackingProgress | null;
   activeChallengeId: string | null;
+  stamina: number;
+  staminaUpdatedAt: number;
+  staminaNextRecoveryAt: number | null;
+  tutorialFreeChallengeConsumed: boolean;
   updatedAt: number;
 }
 
@@ -124,6 +136,7 @@ export interface StartFloorChallengeRequest {
   equipmentLoadout: PveEquipmentLoadout;
   minghenLoadout: MinghenLoadoutEntry[];
   trackedMinghenId?: string | null;
+  abandonActive?: boolean;
 }
 
 export interface SettleFloorChallengeRequest {
@@ -133,7 +146,14 @@ export interface SettleFloorChallengeRequest {
   completedOptionalObjectiveIds?: string[];
   professionHighlightCount?: number;
   selectedMinghenId?: string;
+  /** @deprecated 通关选装已退役；装备改由击杀掉落 lootedEquipment 入账。 */
   selectedEquipmentDefinitionId?: string;
+  /** 本层击杀掉落的固定装备实例（结算入永久背包，非通关选装）。 */
+  lootedEquipment?: PveEquipmentInstance[];
+  /** 本层局内拾取的星尘（RunPlayer.gold），CLEAR/DEAD/WITHDRAW 均入账。 */
+  lootedStardust?: number;
+  /** 局内最终穿戴；结算后写回 profile.equipmentLoadout，供继续远征带装。 */
+  equipmentLoadout?: PveEquipmentLoadout;
   huntBonusAchieved?: boolean;
   trialCompleted?: boolean;
   trialEvidence?: Record<string, number>;

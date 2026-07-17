@@ -17,7 +17,12 @@ import type {
 export interface PersistentFloorFlowApi {
   loadProfile(): Promise<{ profile: PveProfile }>;
   loadActive(): Promise<{ challenge: FloorChallengeSnapshot | null }>;
-  start(request: StartFloorChallengeRequest): Promise<{ challenge: FloorChallengeSnapshot; resume: boolean }>;
+  start(request: StartFloorChallengeRequest): Promise<{
+    challenge: FloorChallengeSnapshot;
+    profile: PveProfile;
+    resume: boolean;
+    charged: number;
+  }>;
   save(request: SaveFloorChallengeRuntimeRequest): Promise<unknown>;
   settle(request: SettleFloorChallengeRequest): Promise<{ profile: PveProfile; rewards?: Record<string, unknown> }>;
 }
@@ -77,20 +82,22 @@ export class PersistentFloorFlow {
       && selectedFloor! <= profile.highestUnlockedFloor;
     const requestedFloor = hasExplicitFloor ? selectedFloor! : profile.highestUnlockedFloor;
     let challenge = active;
+    let authoritativeProfile = profile;
     let resumed = false;
     if (!challenge || (hasExplicitFloor && challenge.floor !== requestedFloor)) {
       const started = await this._api.start(progressionRequest(profile, requestedFloor, Boolean(challenge)));
       challenge = started.challenge;
+      authoritativeProfile = started.profile;
       resumed = started.resume;
     } else {
       resumed = true;
     }
     const runtime = challenge.runtimeSave
-      ? resumeOrRebuildPersistentRuntime(challenge, challenge.runtimeSave, profile)
-      : createPersistentFloorRuntime(challenge, profile, {
+      ? resumeOrRebuildPersistentRuntime(challenge, challenge.runtimeSave, authoritativeProfile)
+      : createPersistentFloorRuntime(challenge, authoritativeProfile, {
         tutorialCompleted: options?.tutorialCompleted,
       });
-    this._state = { profile, challenge, runtime, resumed };
+    this._state = { profile: authoritativeProfile, challenge, runtime, resumed };
     return this._state;
   }
 
@@ -172,11 +179,11 @@ export class PersistentFloorFlow {
     }
     const started = await this._api.start(progressionRequest(this._state.profile));
     // 次层永不重放教学：即便结算跳回第一层（异常路径），也不重新注入引导脚本。
-    const runtime = createPersistentFloorRuntime(started.challenge, this._state.profile, {
+    const runtime = createPersistentFloorRuntime(started.challenge, started.profile, {
       tutorialCompleted: true,
     });
     this._state = {
-      profile: this._state.profile,
+      profile: started.profile,
       challenge: started.challenge,
       runtime,
       resumed: false,

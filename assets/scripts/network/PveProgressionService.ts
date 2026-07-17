@@ -28,7 +28,9 @@ export interface LoadPveProfileResponse extends CloudOk {
 
 export interface StartFloorChallengeResponse extends CloudOk {
   challenge: FloorChallengeSnapshot;
+  profile: PveProfile;
   resume: boolean;
+  charged: number;
 }
 
 export interface LoadActiveFloorChallengeResponse extends CloudOk {
