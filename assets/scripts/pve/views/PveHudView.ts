@@ -420,6 +420,9 @@ export class PveHudView {
   private _spiritBurstButtonLabel: Label | null = null;
   private _spiritBurstBlinking = false;
   private _spiritFull = false;
+  private _tutorialChargeHighlight = false;
+  private _tutorialSpiritBurstHighlight = false;
+  private _chargeHighlighting = false;
 
   constructor(parent: Node, screenW: number, screenH: number, callbacks: PveHudCallbacks) {
     this._root = new Node('PveHudView');
@@ -891,11 +894,55 @@ export class PveHudView {
     if (this._spiritBurstButtonLabel) this._spiritBurstButtonLabel.string = full ? '灵气爆发！' : '灵气爆发';
     if (this._spiritBurstButton) {
       this._spiritBurstButton.getComponent(Button)!.interactable = full;
-      this._setSpiritBurstBlink(full);
+      this._setSpiritBurstBlink(full || this._tutorialSpiritBurstHighlight);
     }
     this._animaLabel.string = `灵气 ${spirit}/100`;
     const width = this._animaG.node.getComponent(UITransform)?.width ?? 120;
     this._drawBar(this._animaG, width, 28, spirit / 100, new Color(170, 120, 255, 255));
+  }
+
+  /** 教学引导用的轻量按钮高亮；不改变按钮的正常可交互状态判断。 */
+  setTutorialButtonHighlight(opts: { charge?: boolean; spiritBurst?: boolean }): void {
+    if (opts.charge !== undefined && opts.charge !== this._tutorialChargeHighlight) {
+      this._tutorialChargeHighlight = opts.charge;
+      this._setChargeHighlight(this._tutorialChargeHighlight);
+    }
+    if (opts.spiritBurst !== undefined && opts.spiritBurst !== this._tutorialSpiritBurstHighlight) {
+      this._tutorialSpiritBurstHighlight = opts.spiritBurst;
+      this._setSpiritBurstBlink(this._spiritFull || this._tutorialSpiritBurstHighlight);
+    }
+  }
+
+  private _setChargeHighlight(active: boolean): void {
+    const button = this._chargeButton;
+    if (!button) return;
+    const opacity = button.getComponent(UIOpacity) || button.addComponent(UIOpacity);
+    if (active) {
+      if (this._chargeHighlighting) return;
+      this._chargeHighlighting = true;
+      Tween.stopAllByTarget(button);
+      Tween.stopAllByTarget(opacity);
+      button.setScale(1, 1, 1);
+      opacity.opacity = 255;
+      tween(button)
+        .repeatForever(
+          tween()
+            .to(0.34, { scale: new Vec3(1.08, 1.08, 1) }, { easing: 'sineOut' })
+            .to(0.34, { scale: new Vec3(1, 1, 1) }, { easing: 'sineIn' }),
+        )
+        .start();
+      return;
+    }
+    if (!this._chargeHighlighting) {
+      opacity.opacity = 255;
+      button.setScale(1, 1, 1);
+      return;
+    }
+    this._chargeHighlighting = false;
+    Tween.stopAllByTarget(button);
+    Tween.stopAllByTarget(opacity);
+    button.setScale(1, 1, 1);
+    opacity.opacity = 255;
   }
 
   private _setSpiritBurstBlink(active: boolean): void {

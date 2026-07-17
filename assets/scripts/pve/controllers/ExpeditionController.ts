@@ -85,6 +85,7 @@ import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
 import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefinition';
 import type { SettleFloorChallengeRequest } from '../core/PveProgressionTypes';
 import { TutorialGuideManager } from '../tutorial/TutorialGuideManager';
+import type { TutorialAdvanceContext } from '../tutorial/TutorialTypes';
 
 const { ccclass } = _decorator;
 
@@ -1586,7 +1587,9 @@ export class ExpeditionController extends Component {
         hint: '正在生成或恢复楼层',
         progress: 0.48,
       });
-      const flowState = await this._floorFlow.bootstrap(selectedFloor);
+      const flowState = await this._floorFlow.bootstrap(selectedFloor, {
+        tutorialCompleted: this._meta?.tutorialCompleted === true,
+      });
       this._runtime = flowState.runtime;
       this._state = flowState.runtime.battleState.expedition;
       this._balanceSnapshot = this._state.balanceSnapshot ?? this._balanceSnapshot;
@@ -1732,7 +1735,7 @@ export class ExpeditionController extends Component {
     return Math.min(WARRIOR_MAX_CHARGE_AP, Math.max(0, this._state.floorState.ap - 1));
   }
 
-  private _syncTutorialGuide(events: PveEvent[]): void {
+  private _syncTutorialGuide(events: PveEvent[], ctx?: TutorialAdvanceContext): void {
     if (!this._state) return;
     this._tutorialGuide ??= new TutorialGuideManager();
     this._tutorialGuide.bind(this._state);
@@ -1741,8 +1744,21 @@ export class ExpeditionController extends Component {
       this._map?.clearTutorialFocus();
       return;
     }
-    if (events.length > 0 && this._tutorialGuide.advanceIfNeeded(this._state, events)) {
+    if ((events.length > 0 || ctx) && this._tutorialGuide.advanceIfNeeded(this._state, events, {
+      selectedChargeAp: this._selectedChargeAp,
+      spiritBurstActive: !!this._runtime?.profession.spiritBurstActive,
+      ...ctx,
+    })) {
       this._tutorialGuide.bind(this._state);
+    }
+    const step = this._tutorialGuide.currentStep();
+    if (step?.onEnterFillSpirit && this._runtime && this._runtime.resources.spirit < 100) {
+      this._runtime = {
+        ...this._runtime,
+        resources: { ...this._runtime.resources, spirit: 100 },
+      };
+      this._floorFlow?.updateRuntime(this._runtime);
+      this._refreshPersistentHud();
     }
     const message = this._tutorialGuide.getMessage();
     if (message) this._toast?.showGuideBubble(message);
@@ -1750,10 +1766,18 @@ export class ExpeditionController extends Component {
     const allowedCells = this._tutorialGuide.getAllowedCells();
     if (allowedCells.length > 0) this._map?.showTutorialFocus(allowedCells);
     else this._map?.clearTutorialFocus();
+    this._refreshTutorialHudHighlights();
+  }
+
+  private _refreshTutorialHudHighlights(): void {
+    this._hud?.setTutorialButtonHighlight({
+      charge: !!this._tutorialGuide?.shouldHighlightCharge(),
+      spiritBurst: !!this._tutorialGuide?.shouldHighlightSpiritBurst(),
+    });
   }
 
   private _isTutorialBlocked(
-    action: 'MOVE' | 'ATTACK' | 'INTERACT' | 'TAP_CELL',
+    action: 'MOVE' | 'ATTACK' | 'INTERACT' | 'TAP_CELL' | 'CHARGE' | 'SPIRIT_BURST',
     coord?: Coord,
   ): boolean {
     if (!this._state || !this._tutorialGuide || !this._tutorialGuide.isActive(this._state)) return false;
@@ -1980,10 +2004,11 @@ export class ExpeditionController extends Component {
     void this._apply(result);
   }
 
-  private _onCharge(): void {
+  private _onCharge(tutorialBypass = false): void {
     // 蓄力只改本地选档 UI，不走 _apply；怪物回合动画占 _busy 时仍应可调，
     // 否则第 10 层等多怪回放期间会表现为「蓄力也延迟」。
     if (!this._state || !this._runtime || this._runtime.config.professionId !== 'WARRIOR') return;
+    if (!tutorialBypass && this._isTutorialBlocked('CHARGE')) return;
     const max = this._maxSelectableChargeAp();
     if (max <= 0) {
       this._selectedChargeAp = 0;
@@ -1993,6 +2018,10 @@ export class ExpeditionController extends Component {
     }
     this._selectedChargeAp = (this._selectedChargeAp + 1) % (max + 1);
     this._refreshPersistentHud();
+    this._syncTutorialGuide([], {
+      selectedChargeAp: this._selectedChargeAp,
+      spiritBurstActive: !!this._runtime?.profession.spiritBurstActive,
+    });
   }
 
   private async _onProfessionMechanic(): Promise<void> {
@@ -2050,8 +2079,9 @@ export class ExpeditionController extends Component {
     }
   }
 
-  private _onSpiritBurst(): void {
+  private _onSpiritBurst(tutorialBypass = false): void {
     if (this._busy || !this._runtime || !this._floorFlow) return;
+    if (!tutorialBypass && this._isTutorialBlocked('SPIRIT_BURST')) return;
     try {
       this._runtime = activateSpiritBurst(this._runtime);
       this._state = this._runtime.battleState.expedition;
@@ -2060,6 +2090,10 @@ export class ExpeditionController extends Component {
       this._refreshAll();
       this._toast?.toastImportant('灵气爆发！本次强化已生效', 1600);
       this._queuePersistentSave(300);
+      this._syncTutorialGuide([], {
+        selectedChargeAp: this._selectedChargeAp,
+        spiritBurstActive: !!this._runtime?.profession.spiritBurstActive,
+      });
     } catch (err) {
       this._toast?.toast(err instanceof Error && err.message === 'SPIRIT_NOT_FULL' ? '灵气未满' : `灵气爆发失败：${err instanceof Error ? err.message : String(err)}`);
     }
