@@ -1,7 +1,6 @@
 const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
-const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
 const { loadProfile, manageCamp, startMinghenTracking, updateCampConfiguration } = require('./common/pve/PveProgression');
 const {
   loadActiveFloorChallenge,
@@ -12,8 +11,6 @@ const {
 const {
   loadMeta,
   updateMeta,
-  unlockTreeNode,
-  resetTreeNodes,
   loadLeaderboard,
 } = require('./common/pve/PveMeta');
 
@@ -70,26 +67,6 @@ exports.main = async (event = {}) => {
       return { ok: true, ...result };
     }
 
-    if (action === 'loadSave') {
-      const { save } = await loadActiveSave(user);
-      return { ok: true, save };
-    }
-
-    if (action === 'startRun') {
-      const result = await startRun(user);
-      return { ok: true, ...result };
-    }
-
-    if (action === 'saveFloor') {
-      const { save } = await saveFloorProgress(user, event.report || {});
-      return { ok: true, save };
-    }
-
-    if (action === 'settleRun') {
-      const { rewards } = await settleExpedition(user, event.report || {});
-      return { ok: true, rewards };
-    }
-
     if (action === 'loadMeta') {
       const { meta, balanceSnapshot } = await loadMeta(user);
       return { ok: true, meta, balanceSnapshot };
@@ -98,16 +75,6 @@ exports.main = async (event = {}) => {
     if (action === 'updateMeta') {
       await updateMeta(user, event.report || {});
       return { ok: true };
-    }
-
-    if (action === 'unlockTreeNode') {
-      const { meta } = await unlockTreeNode(user, event.nodeId);
-      return { ok: true, meta };
-    }
-
-    if (action === 'resetTreeNodes') {
-      const { meta } = await resetTreeNodes(user);
-      return { ok: true, meta };
     }
 
     if (action === 'loadLeaderboard') {

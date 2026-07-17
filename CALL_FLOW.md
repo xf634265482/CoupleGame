@@ -39,7 +39,7 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
   -> PveProgressionService.updateCampConfiguration()
   -> [Cloud] PveProgression.updateCampConfiguration()
   -> 校验职业已解锁、装备/命痕归属、无非法槽位
-  -> 写回 users.pveProfile
+  -> 写回 users.pveProfile（允许挑战进行中改档；当前层仍用开局快照）
 ```
 
 ---
@@ -62,17 +62,26 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
 ## 4. 战斗场景初始化
 
 ```text
-ExpeditionController._bootstrap()
-  -> 读取 GameSession.pendingPveFloor
-  -> PersistentFloorFlow.bootstrap(selectedFloor)
-    -> PveProgressionService.loadPveProfile()
-    -> PveProgressionService.loadActiveFloorChallenge()
-    -> 必要时 startFloorChallenge()
-    -> create/resume PersistentExpeditionRuntime
-    -> Chapter1ExpeditionFactory 生成正式 ExpeditionState/FloorState
-  -> ExpeditionController._state = runtime.battleState.expedition
-  -> FogMapView / PveHudView / PveMessageLog / PveToastView 刷新
-  -> 播放 initialPersistentPresentationEvents()
+ExpeditionController.onLoad()
+  -> _buildUi()（空 HUD/地图先建好，但被 LoadingOverlay 盖住）
+  -> LoadingOverlay.show「正在进入远征…」
+  -> _bootstrap()
+       -> 读取 GameSession.pendingPveFloor
+       -> PersistentFloorFlow.bootstrap(selectedFloor)
+         -> PveProgressionService.loadPveProfile()
+         -> PveProgressionService.loadActiveFloorChallenge()
+         -> 必要时 startFloorChallenge()
+           -> [Cloud transaction] 恢复同一 ACTIVE 挑战：返回原挑战，扣费 0
+           -> [Cloud transaction] 新挑战：首次第 1 层教程免费，否则从 pveProfile 扣 5 体力
+           -> 体力不足：保持原 ACTIVE 挑战不变并返回 PVE_STAMINA_INSUFFICIENT
+           -> 返回扣费后的权威 profile，客户端据此创建 runtime
+         -> create/resume PersistentExpeditionRuntime
+         -> chapterRouting.chapterIdForFloor(selectedFloor)
+         -> Chapter1ExpeditionFactory 或 Chapter2ExpeditionFactory 生成 ExpeditionState/FloorState
+       -> _ensureChapterReady（章节资源；成功不关 overlay）
+       -> _refreshAll() 画出真实 HUD/地图
+       -> LoadingOverlay.hide()
+       -> 播放 initialPersistentPresentationEvents()
 ```
 
 HUD 右上「目标」按钮：
@@ -80,7 +89,7 @@ HUD 右上「目标」按钮：
 ```text
 PveHudView「目标」
   -> 默认 _toggleObjectivePopup()
-  -> 文案来自 Chapter1Objectives（主目标）+ Chapter1OptionalObjectives（可选目标）
+  -> 文案来自 Chapter1Objectives / Chapter2Objectives（本层通关条件；不含可选目标）
   -> 不是灵气/职业强化词条弹窗（该入口已退役）
 ```
 
@@ -111,8 +120,16 @@ PveHudView「目标」
 ## 6. 玩家攻击
 
 ```text
-攻击按钮 / 目标选择
+点击棋盘格子
+  -> FogMapView onCellTap
+  -> ExpeditionController._onTapCell()
+     - 已揭示格上有怪物/实体：focusMonster / focusEntity，刷新左上角目标卡（不直接攻击/互动）
+     - 教学「点怪普攻」步骤例外：点怪仍直接攻击
+     - 空地 / 迷雾格：朝该方向移动一步（不清除选中）
+
+攻击按钮
   -> ExpeditionController._onAttack()
+  -> 优先已点选且在攻击范围内的怪物/冰墙；否则取最近可攻击目标
   -> PersistentCombatRules.applyPersistentAttack()
     -> 固定武器 / 职业 / 命痕上下文
   -> CombatSystem.playerAttack(state, target, context)
@@ -120,7 +137,8 @@ PveHudView「目标」
   -> MinghenCombatBridge / PersistentExpeditionRuntime 同步目标与命痕状态
   -> _playEvents(ATTACK/KILL/LOOT/PLAYER_DAMAGED...)
      ATTACK：按受击格（若同批有目标 MOVE，用 MOVE.from）判定近战/远程；
-             await 近战/远程动画结束后再回放后续 MOVE（哨兵受击逃跑等）
+             远程 → 箭矢 `_playRangedShot`；有武器近战 → 剑弧 `_playMeleeSlash`；
+             空装近战 → lunge `_playMeleeLunge`；await 结束后再回放后续 MOVE
   -> _queuePersistentSave()
 ```
 
@@ -131,22 +149,24 @@ PveHudView「目标」
 ```text
 交互按钮
   -> ExpeditionController._onInteract()
-  -> 根据当前位置/邻近实体选择交互对象
+  -> 根据当前位置/邻近实体选择交互对象（同格优先 PORTAL）
   -> FloorRules 或 NeutralEntities:
      - pickKey()
      - openExit()
-     - interactPortal()
+     - interactPortal()   // 不耗 AP；真正 FLOOR_CLEARED / 通关弹窗
      - activateGunpowderBarrel()  // 永久狂暴 + rushMonstersTowardPlayer(2)：冲锋后射程内立刻攻击
      - detonateBlastTarget()
      - useAltar()/useIdol()/useHotSpring()
-       // 永久逐层：useAltar 不发旧灵气、不触发 ANIMA_STRENGTHEN；第 6 层 WAVE_ALTAR_* 禁止交互
+       // 永久逐层：useAltar 不发旧灵气；第 6 层 WAVE_SPAWN_MARKER（旧 WAVE_ALTAR_*）禁止交互
   -> ExpeditionController._apply(result)
   -> PersistentExpeditionRuntime 更新目标状态
 ```
 
+永久第一层：取得钥匙即完成目标并刷通关门（`PORTAL_SPAWNED` 与门同时出现在钥匙格）。他层同理——击杀精英/清波等目标完成当下刷门。**不**自动踏门；玩家再点「互动」才 `interactPortal` 弹通关/命痕。刚刷门的那次 apply 会丢弃排队互动，避免连点立刻通关。
+
 火药桶 / 爆破点图标：`pve/map/icon_gunpowder_barrel`、`pve/map/icon_blast_target`（`UiAssets` UUID + `PVE_MAP_KEYS` + FogMapView artMap）。
 
-> 永久逐层：`addAnima` 对 `persistentFloorMode` no-op；Controller 丢弃 `ANIMA_STRENGTHEN`，不得再弹「灵气满溢·选择一项强化」。
+> 永久逐层：`addAnima` 仅累加灵气资源，不再 emit `ANIMA_STRENGTHEN`；`AffixSystem` / `ScrollSystem` / 铁匠 `equip_*` 洗炼已从代码删除（非 gate）。
 
 传送门/红方块/图标问题分两层查：
 
@@ -163,9 +183,13 @@ PveHudView「目标」
   -> ExpeditionState.endTurn(state)
     -> 怪物 AI / 状态 tick / 新 AP
   -> ExpeditionController._apply(result)
+  -> _playEvents：连续 MOVE/ATTACK 跨实体并行回放（同实体多步仍串行）
   -> PersistentExpeditionRuntime 同步目标、命痕、职业资源
-  -> _queuePersistentSave()
+  -> _queuePersistentSave()（动画/_busy 结束后再 stringify + 云存档，避免抢帧）
 ```
+
+> 第 10 层等无迷雾多怪层：串行 await 每步移动会长时间占住 `_busy`，表现为移动/交互/蓄力全延迟。战士蓄力仅改本地 UI，动画期间仍可点。
+> 第 7 层 Boss：增援后同帧大量攻击 SFX / 云存档序列化易打断 tween；SFX 同帧封顶，存档避开 `_busy`。
 
 ---
 
@@ -195,23 +219,39 @@ ExpeditionController._onQuitRequested()
 
 ```text
 PersistentExpeditionRuntime.status != ACTIVE
-  -> ExpeditionController._prepareCloudSettlement()
-     （flush ACTIVE runtime 存档，避免与 settle 抢写）
-  -> ExpeditionController._settlePersistentFloor() / _handleFloorCleared()
-  -> 如 CLEAR：弹出命痕选择（首通主题池三选一）
+  -> ExpeditionController._apply：传门通关前 flush ACTIVE runtime
+  -> ExpeditionController._handleFloorCleared()
+     -> Boss 通关：立刻 preloadChapter(next)（不等云端 flush）
+     -> 先弹命痕三选一，再 settle；busy 期间互动会排队补执行
   -> PersistentFloorFlow.settle(selection)
+     （附带局内 lootedEquipment + equipmentLoadout；非通关选装）
   -> PveProgressionService.settleFloorChallenge()
   -> [Cloud] PveChallenge.settle()
     -> 幂等处理终态
+    -> 击杀掉落入账 equipmentInventory，并写回 equipmentLoadout（CLEAR/DEAD/WITHDRAW 均保留）
     -> CLEAR 写入 floorRecords / 解锁下一层 / 发命痕与金币奖励
     -> DEAD/WITHDRAW 清 activeChallengeId
     -> 临时 TransactionBusy/Conflict 最多同请求重试 4 次
   -> 用户选择继续下一层或返回营地
 ```
 
-> 说明：战内不再扫描/上传成就与图鉴（无正式内容与独立 UI）；`updatePveMeta` 仅保留教学完成等必要局外标记。
+> 说明：战内不再扫描/上传成就与图鉴（无正式内容与独立 UI）；`updatePveMeta` 仅保留教学完成等必要局外标记。装备由击杀掉落自动穿戴，结算入永久背包；继续远征按更新后的 loadout 带装。
+> 章节预热：进入 Boss 前一层 / Boss 层时即 `preloadChapter(chapter+1)`，避免「通关后才开始下分包」。
 
-继续下一层：
+跨章继续下一层：
+
+```text
+用户点「继续远征」且 clearedFloor 为章末 Boss
+  -> LoadingOverlay.show「正在进入第N章…」
+  -> Promise.all([
+       ensureChapterAssets(nextChapter),   // 分包+背景+地图图（可命中预热）
+       PersistentFloorFlow.continueNextFloor()  // 云端开下一层
+     ])
+  -> _ensureChapterReady 兜底（已就绪则瞬时返回）
+  -> 刷新 runtime/state/UI，hide overlay
+```
+
+同章继续下一层：
 
 ```text
 PersistentFloorFlow.continueNextFloor()
