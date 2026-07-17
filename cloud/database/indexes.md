@@ -1,11 +1,21 @@
 # 云数据库索引创建清单
 
+## pve_challenges（永久逐层 PVE）
+
+| 索引名称 | 字段 | 排序 | 唯一 |
+|----------|------|------|------|
+| user_status_updated | `userId` 升序 + `status` 升序 + `updatedAt` 降序 | 复合 | 否 |
+
+> 首次测试永久逐层 PVE 前必须先创建 `pve_challenges` 集合；索引可随后补充。
+
 > 环境 ID：`cloud1-d9gsn7mh609335539`  
 > 在微信开发者工具 → **云开发** → **数据库** → 对应集合 → **索引管理** → **添加**
 
 ---
 
 ## users
+
+PVE 排行榜需为 `pveProfile.highestClearedFloor` 创建降序索引；同层玩家由应用层按 `pveProfile.highestClearedAt` 升序排序。
 
 | 索引名称 | 字段 | 排序 | 唯一 |
 |----------|------|------|------|

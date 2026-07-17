@@ -12,6 +12,7 @@ describe('PveProfile', () => {
     expect(profile.version).toBe(PROFILE_VERSION);
     expect(profile.highestUnlockedFloor).toBe(1);
     expect(profile.highestClearedFloor).toBe(0);
+    expect(profile.highestClearedAt).toBeNull();
     expect(profile.selectedProfessionId).toBe('WARRIOR');
     expect(profile.professions.WARRIOR.unlocked).toBe(true);
     expect(profile.professions.ARCHER.unlocked).toBe(false);
@@ -27,6 +28,15 @@ describe('PveProfile', () => {
       staminaNextRecoveryAt: null,
       tutorialFreeChallengeConsumed: false,
     });
+  });
+
+  test('normalizes the first-clear timestamp', () => {
+    const source = createDefaultProfile(100);
+    source.highestClearedFloor = 3;
+    source.highestClearedAt = 1234.9;
+    expect(normalizeProfile(source, 200).highestClearedAt).toBe(1234);
+    source.highestClearedAt = 'legacy';
+    expect(normalizeProfile(source, 200).highestClearedAt).toBeNull();
   });
 
   test('migrates legacy root stamina fields once', () => {

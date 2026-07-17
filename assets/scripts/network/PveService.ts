@@ -115,9 +115,6 @@ export interface PveLeaderboardEntry {
   nickname: string;
   avatarUrl: string;
   highestFloor: number;
-  highestTier?: string;
-  highestClassId?: string;
-  highestAwakenForm?: string;
 }
 
 export interface LoadPveLeaderboardResponse extends CloudOk {

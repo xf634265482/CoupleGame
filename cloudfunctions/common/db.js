@@ -167,7 +167,7 @@ async function getUserPveMeta(userId) {
     nextRunCost: Number.isInteger(user?.pvePendingRunSeed) && user.pvePendingRunSeed > 0
       ? 0
       : user?.pveFirstRunStarted === true ? 20 : 0,
-    highestFloor: user?.pveHighestFloor ?? 0,
+    highestFloor: user?.pveProfile?.highestClearedFloor ?? 0,
     unlockedTreeNodes: user?.unlockedTreeNodes ?? [],
     tutorialCompleted: user?.pveTutorialCompleted === true,
   };
@@ -384,20 +384,17 @@ async function listPveLeaderboard(userId, limit = 50) {
 
   const { data } = await db
     .collection(COLLECTIONS.USERS)
-    .where({ pveHighestFloor: _.gt(0) })
-    .orderBy('pveHighestFloor', 'desc')
+    .where({ 'pveProfile.highestClearedFloor': _.gt(0) })
+    .orderBy('pveProfile.highestClearedFloor', 'desc')
     .limit(LEADERBOARD_FETCH_CAP)
     .get();
 
   data.sort((a, b) => {
-    const ta = a.pveHighestTierLevel ?? 0;
-    const tb = b.pveHighestTierLevel ?? 0;
-    if (tb !== ta) return tb - ta;
-    const fa = a.pveHighestFloor ?? 0;
-    const fb = b.pveHighestFloor ?? 0;
+    const fa = a.pveProfile?.highestClearedFloor ?? 0;
+    const fb = b.pveProfile?.highestClearedFloor ?? 0;
     if (fb !== fa) return fb - fa;
-    const da = a.pveHighestFloorUpdatedAt != null ? new Date(a.pveHighestFloorUpdatedAt).getTime() : Infinity;
-    const db2 = b.pveHighestFloorUpdatedAt != null ? new Date(b.pveHighestFloorUpdatedAt).getTime() : Infinity;
+    const da = a.pveProfile?.highestClearedAt ?? Infinity;
+    const db2 = b.pveProfile?.highestClearedAt ?? Infinity;
     return da - db2;
   });
 
@@ -408,35 +405,13 @@ async function listPveLeaderboard(userId, limit = 50) {
   }
 
   const topUsers = data.slice(0, safeLimit);
-  const saveClassByUserId = new Map();
-  const savePairs = await Promise.all(
-    topUsers.map(async (user) => {
-      if (typeof user.id !== 'string' || user.id.length === 0) return null;
-      const save = await getPveSaveByUserId(user.id);
-      if (!save) return null;
-      return [user.id, {
-        classId: save.player?.classId || '',
-        awakenForm: save.player?.awakenForm || '',
-      }];
-    }),
-  );
-  for (const pair of savePairs) {
-    if (pair) {
-      saveClassByUserId.set(pair[0], pair[1]);
-    }
-  }
-
   const entries = topUsers.map((user, index) => {
-    const saveClass = saveClassByUserId.get(user.id);
     return {
       rank: index + 1,
       userId: user.id,
       nickname: (user.nickname || '鐜╁').slice(0, 12),
       avatarUrl: user.avatarUrl || '',
-      highestFloor: user.pveHighestFloor ?? 0,
-      highestTier: user.pveHighestTier ?? 'NORMAL',
-      highestClassId: saveClass?.classId || user.pveCurrentClassId || user.pveHighestClassId || 'ADVENTURER',
-      highestAwakenForm: saveClass?.awakenForm || user.pveCurrentAwakenForm || user.pveHighestAwakenForm || '',
+      highestFloor: user.pveProfile?.highestClearedFloor ?? 0,
     };
   });
 

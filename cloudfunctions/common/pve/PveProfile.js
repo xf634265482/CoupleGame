@@ -22,6 +22,7 @@ function createDefaultProfile(now = Date.now(), legacy = {}) {
     version: PROFILE_VERSION,
     highestUnlockedFloor: 1,
     highestClearedFloor: 0,
+    highestClearedAt: null,
     floorRecords: {},
     minghenCollection: {},
     minghenLoadout: [],
@@ -89,6 +90,9 @@ function normalizeProfile(value, now = Date.now(), legacy = {}) {
     : 'WARRIOR';
 
   const highestClearedFloor = Math.min(35, nonNegativeInt(value.highestClearedFloor));
+  const highestClearedAt = Number.isFinite(value.highestClearedAt)
+    ? Math.max(0, Math.trunc(value.highestClearedAt))
+    : null;
   const highestUnlockedFloor = Math.max(
     1,
     Math.min(35, nonNegativeInt(value.highestUnlockedFloor, highestClearedFloor + 1)),
@@ -107,6 +111,7 @@ function normalizeProfile(value, now = Date.now(), legacy = {}) {
     ...defaults,
     highestUnlockedFloor: Math.max(highestUnlockedFloor, Math.min(35, highestClearedFloor + 1)),
     highestClearedFloor,
+    highestClearedAt,
     floorRecords: isPlainObject(value.floorRecords) ? value.floorRecords : {},
     minghenCollection: isPlainObject(value.minghenCollection) ? value.minghenCollection : {},
     minghenLoadout: Array.isArray(value.minghenLoadout) ? value.minghenLoadout : [],

@@ -76,6 +76,7 @@ export interface PveProfile {
   version: typeof PVE_PROFILE_VERSION;
   highestUnlockedFloor: number;
   highestClearedFloor: number;
+  highestClearedAt: number | null;
   floorRecords: Record<string, FloorProgressRecord>;
   minghenCollection: Record<string, MinghenCollectionEntry>;
   minghenLoadout: MinghenLoadoutEntry[];

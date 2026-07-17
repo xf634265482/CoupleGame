@@ -188,6 +188,9 @@ describe('PveChallenge service', () => {
     expect(retry.idempotent).toBe(true);
     expect(retry.challenge.status).toBe('CLEAR');
     expect(mockStores.users.get('doc1').pveProfile.highestUnlockedFloor).toBe(2);
+    expect(mockStores.users.get('doc1').pveProfile.highestClearedFloor).toBe(1);
+    expect(mockStores.users.get('doc1').pveProfile.highestClearedAt).toEqual(expect.any(Number));
+    expect(retry.profile.highestClearedAt).toBe(first.profile.highestClearedAt);
     expect(mockStores.users.get('doc1').pveProfile.floorRecords['1'].clearCount).toBe(1);
     expect(first.rewards).toMatchObject({ gold: 20, firstClear: true });
     expect(retry.rewards).toEqual(first.rewards);
