@@ -93,10 +93,10 @@ export interface PveProfile {
   selectedProfessionId: PveProfessionId;
   tracking: MinghenTrackingProgress | null;
   activeChallengeId: string | null;
-  stamina: number;
-  staminaUpdatedAt: number;
-  staminaNextRecoveryAt: number | null;
-  tutorialFreeChallengeConsumed: boolean;
+  stamina?: number;
+  staminaUpdatedAt?: number;
+  staminaNextRecoveryAt?: number | null;
+  tutorialFreeChallengeConsumed?: boolean;
   updatedAt: number;
 }
 

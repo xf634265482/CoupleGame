@@ -19,9 +19,9 @@ export interface PersistentFloorFlowApi {
   loadActive(): Promise<{ challenge: FloorChallengeSnapshot | null }>;
   start(request: StartFloorChallengeRequest): Promise<{
     challenge: FloorChallengeSnapshot;
-    profile: PveProfile;
+    profile?: PveProfile;
     resume: boolean;
-    charged: number;
+    charged?: number;
   }>;
   save(request: SaveFloorChallengeRuntimeRequest): Promise<unknown>;
   settle(request: SettleFloorChallengeRequest): Promise<{ profile: PveProfile; rewards?: Record<string, unknown> }>;
@@ -87,7 +87,7 @@ export class PersistentFloorFlow {
     if (!challenge || (hasExplicitFloor && challenge.floor !== requestedFloor)) {
       const started = await this._api.start(progressionRequest(profile, requestedFloor, Boolean(challenge)));
       challenge = started.challenge;
-      authoritativeProfile = started.profile;
+      authoritativeProfile = started.profile ?? profile;
       resumed = started.resume;
     } else {
       resumed = true;
@@ -179,11 +179,12 @@ export class PersistentFloorFlow {
     }
     const started = await this._api.start(progressionRequest(this._state.profile));
     // 次层永不重放教学：即便结算跳回第一层（异常路径），也不重新注入引导脚本。
-    const runtime = createPersistentFloorRuntime(started.challenge, started.profile, {
+    const nextProfile = started.profile ?? this._state.profile;
+    const runtime = createPersistentFloorRuntime(started.challenge, nextProfile, {
       tutorialCompleted: true,
     });
     this._state = {
-      profile: started.profile,
+      profile: nextProfile,
       challenge: started.challenge,
       runtime,
       resumed: false,

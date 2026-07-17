@@ -1646,9 +1646,12 @@ export class PveLobbyController extends Component {
   }
 
   private _applyProfileStamina(profile: PveProfile): void {
-    this._stamina = Math.max(0, Math.min(PVE_STAMINA_MAX, Math.floor(profile.stamina)));
+    this._stamina = Math.max(0, Math.min(
+      PVE_STAMINA_MAX,
+      Math.floor(profile.stamina ?? PVE_STAMINA_MAX),
+    ));
     this._staminaMax = PVE_STAMINA_MAX;
-    this._staminaNextRecoveryAt = profile.staminaNextRecoveryAt;
+    this._staminaNextRecoveryAt = profile.staminaNextRecoveryAt ?? null;
     this._updateStaminaLabels();
   }
 
