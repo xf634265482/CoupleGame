@@ -52,12 +52,14 @@ import {
 } from '../platform/wechat/ViewAdapt';
 import { lockPortrait } from '../platform/wechat/WxLandscape';
 import {
+  PVE_STAMINA_CHALLENGE_COST,
   PVE_STAMINA_MAX,
   PVE_STAMINA_RECOVERY_MS,
 } from '../pve/core/PveConstants';
 import { RELIC_DEFS } from '../pve/core/RelicSystem';
 import type { PveMeta, RelicId } from '../pve/core/PveTypes';
 import type { PveProfile } from '../pve/core/PveProgressionTypes';
+import { CHAPTER_SIZE, chapterFloorOf, chapterIdForFloor, MAX_READY_FLOOR } from '../pve/core/chapterRouting';
 
 const { ccclass } = _decorator;
 
@@ -421,6 +423,8 @@ export class PveLobbyController extends Component {
       try {
         const res = await loadPveProfile();
         this._warmedProfile = res.profile;
+        this._applyStardust(res.profile.gold);
+        this._applyProfileStamina(res.profile);
       } catch (err: unknown) {
         console.warn('[PveLobby] camp profile warm failed', err);
       }
@@ -478,7 +482,10 @@ export class PveLobbyController extends Component {
       ]);
       const { meta } = metaRes;
       this._hasActiveChallenge = Boolean(activeRes.challenge ?? profileRes.profile.activeChallengeId);
+      this._warmedProfile = profileRes.profile;
       this._applyMetaSnapshot(meta);
+      this._applyStardust(profileRes.profile.gold);
+      this._applyProfileStamina(profileRes.profile);
       this._metaFloor = Math.max(this._metaFloor, profileRes.profile.highestClearedFloor ?? 0);
       this._updateMetaLine();
       if (this._expeditionCostLabel) {
@@ -500,6 +507,7 @@ export class PveLobbyController extends Component {
         loadPveProfile(),
         loadActiveFloorChallenge(),
       ]);
+      this._applyProfileStamina(profileRes.profile);
       this._buildFloorSelectModal(profileRes.profile, activeRes);
       this._setStatus('');
     } catch (err: unknown) {
@@ -527,11 +535,11 @@ export class PveLobbyController extends Component {
     const panel = new Node('Panel');
     panel.setParent(overlay);
     panel.setPosition(0, 8, 0);
-    panel.addComponent(UITransform).setContentSize(620, 650);
+    panel.addComponent(UITransform).setContentSize(620, 780);
     this._drawRoundedRect(
       panel,
       620,
-      650,
+      780,
       28,
       new Color(12, 42, 86, 214),
       new Color(255, 205, 85, 240),
@@ -540,47 +548,136 @@ export class PveLobbyController extends Component {
       event.propagationStopped = true;
     });
 
-    const title = this._makeLabel(panel, 'Title', 270, 34, 520, 52);
+    const title = this._makeLabel(panel, 'Title', 325, 34, 520, 52);
     title.string = '选择远征楼层';
     title.color = new Color(255, 226, 130, 255);
     title.isBold = true;
 
     const activeFloor = activeRes.challenge?.floor ?? null;
-    const subtitle = this._makeLabel(panel, 'Subtitle', 220, 22, 540, 42);
-    subtitle.string = activeFloor
-      ? `当前有第 ${activeFloor} 层挑战进度；选择其他楼层会放弃该进度`
-      : `已解锁到第 ${profile.highestUnlockedFloor} 层`;
+    const subtitle = this._makeLabel(panel, 'Subtitle', 268, 22, 540, 42);
     subtitle.color = new Color(190, 225, 255, 226);
 
-    const maxFloor = Math.max(1, Math.min(7, profile.highestUnlockedFloor || 1));
-    const cols = 4;
-    const btnW = 126;
-    const btnH = 78;
-    const gapX = 22;
-    const gapY = 22;
-    const startX = -((cols - 1) * (btnW + gapX)) / 2;
-    const startY = 130;
-    for (let floor = 1; floor <= 7; floor++) {
-      const col = (floor - 1) % cols;
-      const row = Math.floor((floor - 1) / cols);
-      const x = startX + col * (btnW + gapX);
-      const y = startY - row * (btnH + gapY);
-      const unlocked = floor <= maxFloor;
-      const label = activeFloor === floor
-        ? `继续\n第${floor}层`
-        : unlocked
-          ? `挑战\n第${floor}层`
-          : `未解锁\n第${floor}层`;
-      this._makeFloorButton(panel, label, x, y, btnW, btnH, unlocked, () => {
-        void this._confirmFloorAndEnter(floor);
-      });
-    }
+    const chapterRowY = 195;
+    const chapterTitle = this._makeLabel(panel, 'ChapterTitle', chapterRowY, 30, 220, 42);
+    chapterTitle.color = new Color(255, 226, 130, 255);
+    chapterTitle.isBold = true;
 
-    const tip = this._makeLabel(panel, 'Tip', -142, 20, 540, 72);
-    tip.string = '当前远征以第一章 1-7 层逐层挑战为准；楼层进度由云端挑战档案保存。';
+    const prevChapterBtn = new Node('PrevChapter');
+    prevChapterBtn.setParent(panel);
+    prevChapterBtn.setPosition(-210, chapterRowY, 0);
+    prevChapterBtn.addComponent(UITransform).setContentSize(74, 54);
+    const prevChapterLabel = this._makeLabel(prevChapterBtn, 'Label', 0, 24, 62, 46);
+    prevChapterLabel.string = '◀';
+    prevChapterLabel.isBold = true;
+
+    const nextChapterBtn = new Node('NextChapter');
+    nextChapterBtn.setParent(panel);
+    nextChapterBtn.setPosition(210, chapterRowY, 0);
+    nextChapterBtn.addComponent(UITransform).setContentSize(74, 54);
+    const nextChapterLabel = this._makeLabel(nextChapterBtn, 'Label', 0, 24, 62, 46);
+    nextChapterLabel.string = '▶';
+    nextChapterLabel.isBold = true;
+
+    const floorGrid = new Node('FloorGrid');
+    floorGrid.setParent(panel);
+
+    const tip = this._makeLabel(panel, 'Tip', -120, 20, 540, 72);
     tip.color = new Color(210, 235, 255, 218);
 
-    this._makeTransparentButton(panel, '取消', 0, -260, 180, 58, () => this._closeFloorSelectModal());
+    const chapterTwoUnlocked = (profile.highestUnlockedFloor || 1) > CHAPTER_SIZE;
+    let currentChapter: 1 | 2 = activeFloor
+      ? chapterIdForFloor(activeFloor)
+      : (chapterTwoUnlocked ? 2 : 1);
+
+    const renderChapterArrow = (node: Node, label: Label, enabled: boolean, onClick: (() => void) | null): void => {
+      this._drawRoundedRect(
+        node,
+        74,
+        54,
+        16,
+        enabled ? new Color(20, 82, 150, 220) : new Color(42, 52, 70, 148),
+        enabled ? new Color(255, 218, 110, 240) : new Color(120, 140, 160, 150),
+      );
+      label.color = enabled ? new Color(245, 250, 255, 255) : new Color(170, 180, 190, 190);
+      let button = node.getComponent(Button);
+      if (!button) {
+        button = node.addComponent(Button);
+        button.transition = Button.Transition.SCALE;
+        button.zoomScale = 0.96;
+        button.target = node;
+      }
+      button.enabled = enabled;
+      node.off(Button.EventType.CLICK);
+      node.off(Node.EventType.TOUCH_END);
+      if (enabled && onClick) {
+        node.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+          event.propagationStopped = true;
+        });
+        node.on(Button.EventType.CLICK, () => {
+          playSfx(SFX_IDS.UI_CLICK);
+          onClick();
+        }, this);
+      }
+    };
+
+    const renderChapter = (): void => {
+      floorGrid.destroyAllChildren();
+
+      const maxUnlockedFloor = Math.max(1, Math.min(MAX_READY_FLOOR, profile.highestUnlockedFloor || 1));
+      const chapterStart = currentChapter === 1 ? 1 : CHAPTER_SIZE + 1;
+      const chapterEnd = Math.min(chapterStart + CHAPTER_SIZE - 1, MAX_READY_FLOOR);
+      const highestUnlockedChapterFloor = Math.max(1, chapterFloorOf(maxUnlockedFloor));
+
+      chapterTitle.string = currentChapter === 1 ? '第一章' : '第二章';
+      subtitle.string = activeFloor
+        ? `当前有第 ${activeFloor} 层挑战进度；选择其他楼层会放弃该进度`
+        : currentChapter === 1
+          ? `已解锁到第一章第 ${Math.min(CHAPTER_SIZE, highestUnlockedChapterFloor)} 层`
+          : `已解锁到第二章第 ${highestUnlockedChapterFloor} 层`;
+      tip.string = currentChapter === 1
+        ? '第一章共 7 层；完成第一章后解锁第二章。'
+        : '第二章共 7 层；未开放的新章节暂不可进入。';
+      renderChapterArrow(prevChapterBtn, prevChapterLabel, currentChapter > 1, () => {
+        currentChapter = 1;
+        renderChapter();
+      });
+      renderChapterArrow(nextChapterBtn, nextChapterLabel, currentChapter < 2 && chapterTwoUnlocked, () => {
+        currentChapter = 2;
+        renderChapter();
+      });
+
+      const cols = 4;
+      const btnW = 126;
+      const btnH = 78;
+      const gapX = 22;
+      const gapY = 22;
+      const startX = -((cols - 1) * (btnW + gapX)) / 2;
+      const startY = 90;
+      for (let floor = chapterStart; floor <= chapterEnd; floor += 1) {
+        const chapterFloor = chapterFloorOf(floor);
+        const index = floor - chapterStart;
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const x = startX + col * (btnW + gapX);
+        const y = startY - row * (btnH + gapY);
+        const unlocked = floor <= maxUnlockedFloor;
+        const resume = activeFloor === floor;
+        const tutorialFree = floor === 1 && profile.tutorialFreeChallengeConsumed !== true;
+        const label = resume
+          ? `继续\n第${chapterFloor}层`
+          : unlocked
+            ? `挑战\n第${chapterFloor}层\n${tutorialFree ? '首次免费' : `${PVE_STAMINA_CHALLENGE_COST}体力`}`
+            : `未解锁\n第${chapterFloor}层`;
+        this._makeFloorButton(floorGrid, label, x, y, btnW, btnH, unlocked, () => {
+          void this._confirmFloorAndEnter(floor, resume, tutorialFree);
+        });
+      }
+    };
+
+    if (currentChapter === 2 && !chapterTwoUnlocked) currentChapter = 1;
+    renderChapter();
+
+    this._makeTransparentButton(panel, '取消', 0, -310, 180, 58, () => this._closeFloorSelectModal());
     applyUiLayerTree(overlay, this.node.layer);
   }
 
@@ -618,8 +715,16 @@ export class PveLobbyController extends Component {
     }
   }
 
-  private async _confirmFloorAndEnter(floor: number): Promise<void> {
+  private async _confirmFloorAndEnter(
+    floor: number,
+    resume: boolean,
+    tutorialFree: boolean,
+  ): Promise<void> {
     if (this._busy) return;
+    if (!resume && !tutorialFree && this._stamina < PVE_STAMINA_CHALLENGE_COST) {
+      this._setStatus(`体力不足：挑战需要 ${PVE_STAMINA_CHALLENGE_COST} 点体力`);
+      return;
+    }
     this._busy = true;
     try {
       const ok = await this._ensureWarmReady('正在进入远征…');
@@ -692,7 +797,7 @@ export class PveLobbyController extends Component {
       const ok = await this._ensureWarmReady('正在加载营地资源…');
       if (!ok) return;
       const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
-      controller.open(this.node, undefined, this._warmedProfile);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
     } finally {
       this._busy = false;
     }
@@ -1534,13 +1639,21 @@ export class PveLobbyController extends Component {
 
   private _applyMetaSnapshot(meta: PveMeta): void {
     this._metaCodexRelics = meta.codex.relics ?? [];
-    this._stamina = meta.stamina ?? this._stamina;
-    this._staminaMax = meta.staminaMax ?? this._staminaMax;
-    this._staminaNextRecoveryAt = meta.staminaNextRecoveryAt ?? null;
-    if (this._diamondLabel) this._diamondLabel.string = String(meta.diamond);
+    // 顶部货币芯片展示档案星尘（profile.gold），不再用 meta.diamond
     this._metaFloor = meta.highestFloor ?? 0;
     this._updateMetaLine();
     this._updateStaminaLabels();
+  }
+
+  private _applyProfileStamina(profile: PveProfile): void {
+    this._stamina = Math.max(0, Math.min(PVE_STAMINA_MAX, Math.floor(profile.stamina)));
+    this._staminaMax = PVE_STAMINA_MAX;
+    this._staminaNextRecoveryAt = profile.staminaNextRecoveryAt;
+    this._updateStaminaLabels();
+  }
+
+  private _applyStardust(amount: number): void {
+    if (this._diamondLabel) this._diamondLabel.string = String(Math.max(0, Math.floor(amount)));
   }
 
   private _tickStamina = (): void => {
