@@ -1,15 +1,107 @@
-const FIRST_CLEAR_GOLD={1:20,2:30,3:40,4:50,5:60,6:75,7:120};
-const OPTIONAL_GOLD={F1_FULL_SEARCH:10,F2_DECAPITATE:15,F3_HOLD_GROUND:20,F4_CUT_ESCAPE:20,F5_FRONTAL_BREAK:25,F6_SILENCE:30,F7_STONE_WEAPON:40};
-const OPTIONAL_BY_FLOOR={1:['F1_FULL_SEARCH','F1_STEADY_START'],2:['F2_DECAPITATE','F2_SUPPRESS_FIRE'],3:['F3_HOLD_GROUND','F3_LAST_WAVE'],4:['F4_CUT_ESCAPE','F4_WALK_FIRE'],5:['F5_FRONTAL_BREAK','F5_STONE_BREAK'],6:['F6_SILENCE','F6_WALL_COVER'],7:['F7_STONE_WEAPON','F7_SILENT_HORN']};
-const EQUIPMENT_POOLS={1:['W01','A01','S01'],2:['W03','W04','H01'],3:['W05','W07','A02','H02'],4:['W06','S03','T01','T02'],5:['W02','A03','S02'],6:['H03','T03','W01','A01','S01','W03','W04','H01','W05','W07','A02','H02','W06','S03','T01','T02','W02','A03','S02'],7:['B01','B02','B03']};
-const QUALITY_TABLE={1:[['COMMON',100]],2:[['COMMON',70],['FINE',30]],3:[['COMMON',40],['FINE',60]],4:[['FINE',80],['RARE',20]],5:[['FINE',60],['RARE',40]],6:[['FINE',30],['RARE',70]],7:[['RARE',100]]};
-const MASTERY_XP=[0,150,350,600,900,1250,1650,2100,2600,3200];
-const TECHNIQUES={WARRIOR:['ARMOR_BREAK','KNOCKBACK','SWEEP'],ARCHER:['PIERCING','WEAK_POINT','SUPPRESSING'],RANGER:['SHADOW_END','WHIRLWIND','VANISH_STEP']};
-function levelForXp(xp){let level=1;for(let i=1;i<MASTERY_XP.length;i+=1)if(xp>=MASTERY_XP[i])level=i+1;return level;}
-function qualityFor(floor,seed){const roll=Math.abs(seed)%100;let cursor=0;for(const [quality,weight] of QUALITY_TABLE[floor]??QUALITY_TABLE[1]){cursor+=weight;if(roll<cursor)return quality;}return'COMMON';}
-function masteryGain(profile,challenge,firstProgression,firstOptionalCount,highlightCount){if(challenge.mode==='PRACTICE')return 0;const floor=challenge.floor;let base=firstProgression?120+floor*10:50+floor*5;let decay=1;if(!firstProgression){const gap=Math.max(0,profile.highestUnlockedFloor-floor);decay=gap<=1?1:gap<=3?.5:gap<=6?.2:.05;}const current=profile.professions[challenge.config.professionId];const highest=Math.max(...Object.values(profile.professions).map(x=>x.level));const gap=highest-current.level;const catchup=gap>=4?2:gap===3?1.5:gap===2?1.25:1;return Math.floor((base+firstOptionalCount*20+Math.min(3,highlightCount)*10)*decay*catchup);}
-function applyMastery(profile,professionId,gain){const current=profile.professions[professionId];const xp=Math.min(3200,current.xp+gain);const level=levelForXp(xp);return{...profile.professions,[professionId]:{...current,xp,level,unlockedTechniqueIds:TECHNIQUES[professionId].filter((_,i)=>level>=[3,5,7][i])}};}
-function unlockProfessions(professions,floor,firstClear){let next={...professions};if(firstClear&&floor===2&&!next.ARCHER.unlocked)next={...next,ARCHER:{...next.ARCHER,unlocked:true,xp:150,level:2}};if(firstClear&&floor===4&&!next.RANGER.unlocked)next={...next,RANGER:{...next.RANGER,unlocked:true,xp:150,level:2}};return next;}
-function createEquipmentReward(challenge,definitionId){const pool=EQUIPMENT_POOLS[challenge.floor]??[];if(!pool.includes(definitionId)){const e=new Error('装备不属于当前楼层奖励池');e.code='PVE_INVALID_EQUIPMENT_REWARD';throw e;}return{instanceId:`${challenge.challengeId}_${definitionId}`,definitionId,quality:qualityFor(challenge.floor,challenge.seed),enhanceLevel:0,locked:false};}
-function calculateRewards(profile,challenge,result,previous){const allowed=OPTIONAL_BY_FLOOR[challenge.floor]??[];if(result.completedOptionalObjectiveIds.some(id=>!allowed.includes(id))){const e=new Error('可选目标不属于当前楼层');e.code='PVE_INVALID_OPTIONAL_OBJECTIVE';throw e;}const firstClear=!previous.firstClearedAt;const firstProgression=firstClear&&challenge.mode==='PROGRESSION';const newOptional=result.completedOptionalObjectiveIds.filter(id=>!previous.completedOptionalObjectiveIds.includes(id));const gold=challenge.mode==='TRIAL'||challenge.mode==='PRACTICE'?0:(firstClear?(FIRST_CLEAR_GOLD[challenge.floor]??0):Math.floor((FIRST_CLEAR_GOLD[challenge.floor]??0)*.35))+newOptional.reduce((s,id)=>s+(OPTIONAL_GOLD[id]??0),0);const masteryXp=challenge.mode==='TRIAL'?0:masteryGain(profile,challenge,firstProgression,newOptional.length,result.professionHighlightCount??0);let equipment=null;if(result.selectedEquipmentDefinitionId&&challenge.mode!=='TRIAL'&&challenge.mode!=='PRACTICE')equipment=createEquipmentReward(challenge,result.selectedEquipmentDefinitionId);return{gold,masteryXp,equipment,firstClear,newOptionalObjectiveIds:newOptional};}
-module.exports={FIRST_CLEAR_GOLD,OPTIONAL_GOLD,OPTIONAL_BY_FLOOR,EQUIPMENT_POOLS,calculateRewards,applyMastery,unlockProfessions,createEquipmentReward,levelForXp};
+const FIRST_CLEAR_GOLD = {
+  1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 75, 7: 120,
+  8: 35, 9: 45, 10: 55, 11: 65, 12: 75, 13: 90, 14: 140,
+};
+const OPTIONAL_GOLD = {};
+const OPTIONAL_BY_FLOOR = {
+  1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [],
+  8: [], 9: [], 10: [], 11: [], 12: [], 13: [], 14: [],
+};
+const TECHNIQUES = {
+  WARRIOR: ['ARMOR_BREAK', 'KNOCKBACK', 'SWEEP'],
+  ARCHER: ['PIERCING', 'WEAK_POINT', 'SUPPRESSING'],
+  RANGER: ['SHADOW_END', 'WHIRLWIND', 'VANISH_STEP'],
+};
+const MASTERY_XP = [0, 150, 350, 600, 900, 1250, 1650, 2100, 2600, 3200];
+
+function levelForXp(xp) {
+  let level = 1;
+  for (let index = 1; index < MASTERY_XP.length; index += 1) {
+    if (xp >= MASTERY_XP[index]) level = index + 1;
+  }
+  return level;
+}
+
+function masteryGain(profile, challenge, firstProgression, firstOptionalCount, highlightCount) {
+  if (challenge.mode === 'PRACTICE') return 0;
+  const floor = challenge.floor;
+  const base = firstProgression ? 120 + floor * 10 : 50 + floor * 5;
+  let decay = 1;
+  if (!firstProgression) {
+    const floorGap = Math.max(0, profile.highestUnlockedFloor - floor);
+    decay = floorGap <= 1 ? 1 : floorGap <= 3 ? 0.5 : floorGap <= 6 ? 0.2 : 0.05;
+  }
+  const current = profile.professions[challenge.config.professionId];
+  const highest = Math.max(...Object.values(profile.professions).map((entry) => entry.level));
+  const levelGap = highest - current.level;
+  const catchup = levelGap >= 4 ? 2 : levelGap === 3 ? 1.5 : levelGap === 2 ? 1.25 : 1;
+  return Math.floor(
+    (base + firstOptionalCount * 20 + Math.min(3, highlightCount) * 10) * decay * catchup,
+  );
+}
+
+function applyMastery(profile, professionId, gain) {
+  const current = profile.professions[professionId];
+  const xp = Math.min(3200, current.xp + gain);
+  const level = levelForXp(xp);
+  return {
+    ...profile.professions,
+    [professionId]: {
+      ...current,
+      xp,
+      level,
+      unlockedTechniqueIds: TECHNIQUES[professionId].filter((_, index) => level >= [3, 5, 7][index]),
+    },
+  };
+}
+
+function unlockProfessions(professions, floor, firstClear) {
+  let next = { ...professions };
+  if (firstClear && floor === 2 && !next.ARCHER.unlocked) {
+    next = { ...next, ARCHER: { ...next.ARCHER, unlocked: true, xp: 150, level: 2 } };
+  }
+  if (firstClear && floor === 4 && !next.RANGER.unlocked) {
+    next = { ...next, RANGER: { ...next.RANGER, unlocked: true, xp: 150, level: 2 } };
+  }
+  return next;
+}
+
+function calculateRewards(profile, challenge, result, previous) {
+  const allowed = OPTIONAL_BY_FLOOR[challenge.floor] ?? [];
+  if (result.completedOptionalObjectiveIds.some((id) => !allowed.includes(id))) {
+    const error = new Error('可选目标不属于当前楼层');
+    error.code = 'PVE_INVALID_OPTIONAL_OBJECTIVE';
+    throw error;
+  }
+  const firstClear = !previous.firstClearedAt;
+  const firstProgression = firstClear && challenge.mode === 'PROGRESSION';
+  const newOptionalObjectiveIds = result.completedOptionalObjectiveIds.filter(
+    (id) => !previous.completedOptionalObjectiveIds.includes(id),
+  );
+  const gold = challenge.mode === 'TRIAL' || challenge.mode === 'PRACTICE'
+    ? 0
+    : (firstClear
+      ? (FIRST_CLEAR_GOLD[challenge.floor] ?? 0)
+      : Math.floor((FIRST_CLEAR_GOLD[challenge.floor] ?? 0) * 0.35))
+      + newOptionalObjectiveIds.reduce((sum, id) => sum + (OPTIONAL_GOLD[id] ?? 0), 0);
+  const masteryXp = challenge.mode === 'TRIAL'
+    ? 0
+    : masteryGain(
+      profile,
+      challenge,
+      firstProgression,
+      newOptionalObjectiveIds.length,
+      result.professionHighlightCount ?? 0,
+    );
+  return { gold, masteryXp, firstClear, newOptionalObjectiveIds };
+}
+
+module.exports = {
+  FIRST_CLEAR_GOLD,
+  OPTIONAL_GOLD,
+  OPTIONAL_BY_FLOOR,
+  calculateRewards,
+  applyMastery,
+  unlockProfessions,
+  levelForXp,
+};

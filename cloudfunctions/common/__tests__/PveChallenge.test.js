@@ -196,16 +196,16 @@ describe('PveChallenge service', () => {
     expect(retry.rewards).toEqual(first.rewards);
   });
 
-  test('atomically grants selected fixed equipment and Minghen only once', async () => {
+  test('atomically grants selected Minghen only once', async () => {
     const user = { _id: 'doc1', id: 'u1' };
     const started = await startFloorChallenge(user, startRequest());
-    const request = { challengeId: started.challenge.challengeId, status: 'CLEAR', clearTurns: 8, completedOptionalObjectiveIds: [], selectedMinghenId: 'M05', selectedEquipmentDefinitionId: '生锈短刃', professionHighlightCount: 2 };
+    const request = { challengeId: started.challenge.challengeId, status: 'CLEAR', clearTurns: 8, completedOptionalObjectiveIds: [], selectedMinghenId: 'M05', professionHighlightCount: 2 };
     const first = await settleFloorChallenge(user, request);
     const retry = await settleFloorChallenge(user, request);
     expect(first.profile.minghenCollection.M05).toMatchObject({ copies: 1, level: 1 });
-    expect(first.profile.equipmentInventory).toHaveLength(1);
+    expect(first.profile.equipmentInventory).toHaveLength(0);
     expect(first.profile.professions.WARRIOR.xp).toBe(150);
-    expect(retry.profile.equipmentInventory).toHaveLength(1);
+    expect(retry.profile.equipmentInventory).toHaveLength(0);
   });
 
   test('saves runtime idempotently and rejects turn rollback', async () => {
@@ -283,7 +283,6 @@ describe('PveChallenge service', () => {
       clearTurns: 8,
       completedOptionalObjectiveIds: [],
       selectedMinghenId: 'M05',
-      selectedEquipmentDefinitionId: '生锈短刃',
     });
     const second = await startFloorChallenge(user, { ...startRequest(), floor: 2 });
     const settledSecond = await settleFloorChallenge(user, {
@@ -292,7 +291,6 @@ describe('PveChallenge service', () => {
       clearTurns: 10,
       completedOptionalObjectiveIds: [],
       selectedMinghenId: 'M01',
-      selectedEquipmentDefinitionId: '铁制长矛',
     });
     expect(settledSecond.profile.activeChallengeId).toBeNull();
     expect(settledSecond.profile.highestUnlockedFloor).toBe(3);

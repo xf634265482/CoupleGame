@@ -156,7 +156,7 @@ function validateSettleFloorChallengeRequest(request) {
   if (!Number.isInteger(professionHighlightCount) || professionHighlightCount < 0 || professionHighlightCount > 3) {
     fail('PVE_INVALID_HIGHLIGHT_COUNT', '职业高光次数不合法');
   }
-  for (const key of ['selectedMinghenId', 'selectedEquipmentDefinitionId']) {
+  for (const key of ['selectedMinghenId']) {
     if (request[key] != null && (typeof request[key] !== 'string' || !request[key])) {
       fail('PVE_INVALID_REWARD_SELECTION', `${key} 不合法`);
     }
@@ -188,7 +188,6 @@ function validateSettleFloorChallengeRequest(request) {
     completedOptionalObjectiveIds: [...new Set(completedOptionalObjectiveIds)],
     ...(request.professionHighlightCount == null ? {} : { professionHighlightCount }),
     ...(request.selectedMinghenId == null ? {} : { selectedMinghenId: request.selectedMinghenId }),
-    ...(request.selectedEquipmentDefinitionId == null ? {} : { selectedEquipmentDefinitionId: request.selectedEquipmentDefinitionId }),
     ...(lootedEquipment === undefined ? {} : { lootedEquipment }),
     ...(equipmentLoadout === undefined ? {} : { equipmentLoadout }),
     ...(lootedStardust === undefined ? {} : { lootedStardust }),

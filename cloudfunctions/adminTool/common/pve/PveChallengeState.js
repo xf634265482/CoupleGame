@@ -1,5 +1,5 @@
 const { generateId } = require('../id');
-const { calculateRewards, applyMastery, unlockProfessions, EQUIPMENT_POOLS, BOSS_SPOIL_DEFINITION_IDS } = require('./PveRewardV2');
+const { calculateRewards, applyMastery, unlockProfessions } = require('./PveRewardV2');
 const { settleMinghen } = require('./PveMinghen');
 const { MAX_READY_FLOOR } = require('./PveProfile');
 
@@ -90,19 +90,11 @@ function applyChallengeStart(profile, challenge, now = Date.now()) {
  * 死亡/撤退也保留掉落，保证「怪物身上拿到的装备永久存放」。
  */
 function applyCombatEquipmentGrants(profile, challenge, result) {
-  const pool = EQUIPMENT_POOLS[challenge.floor] ?? [];
   const looted = result.lootedEquipment ?? [];
   const ownedIds = new Set(profile.equipmentInventory.map((item) => item.instanceId));
   const added = [];
   for (const item of looted) {
     if (ownedIds.has(item.instanceId)) continue;
-    if (challenge.mode !== 'TRIAL' && challenge.mode !== 'PRACTICE'
-      && !pool.includes(item.definitionId)
-      && !BOSS_SPOIL_DEFINITION_IDS.includes(item.definitionId)) {
-      const err = new Error(`掉落装备不属于当前楼层池: ${item.definitionId}`);
-      err.code = 'PVE_INVALID_LOOTED_EQUIPMENT';
-      throw err;
-    }
     added.push(item);
     ownedIds.add(item.instanceId);
   }
@@ -147,7 +139,6 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       completedOptionalObjectiveIds: result.completedOptionalObjectiveIds,
       professionHighlightCount: result.professionHighlightCount,
       selectedMinghenId: result.selectedMinghenId,
-      selectedEquipmentDefinitionId: result.selectedEquipmentDefinitionId,
       lootedEquipment: result.lootedEquipment,
       lootedStardust: result.lootedStardust,
       equipmentLoadout: result.equipmentLoadout,
@@ -190,17 +181,8 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
     completedOptionalObjectiveIds: [],
     graduatedMinghenIds: [],
   };
-  // 通关选装已退役；若客户端仍带 selectedEquipmentDefinitionId 且无击杀掉落，保留旧路径兼容。
-  const settleForRewards = combatLoot.added.length > 0
-    ? { ...result, selectedEquipmentDefinitionId: undefined }
-    : result;
-  const rewards = calculateRewards(profile, challenge, settleForRewards, previous);
+  const rewards = calculateRewards(profile, challenge, result, previous);
   const minghen = settleMinghen(profile, challenge, result, previous);
-  if (rewards.equipment && nextProfile.equipmentInventory.length >= 60) {
-    const err = new Error('装备背包已满，请先出售装备');
-    err.code = 'PVE_EQUIPMENT_INVENTORY_FULL';
-    throw err;
-  }
   const firstClearedAt = previous.firstClearedAt ?? now;
   const bestClearTurns = result.clearTurns === undefined
     ? previous.bestClearTurns
@@ -240,9 +222,7 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
     minghenDust: 0,
     minghenCollection: minghen.collection,
     tracking: minghen.tracking,
-    equipmentInventory: rewards.equipment
-      ? [...nextProfile.equipmentInventory, rewards.equipment]
-      : nextProfile.equipmentInventory,
+    equipmentInventory: nextProfile.equipmentInventory,
     professions: unlockProfessions(
       applyMastery(profile, challenge.config.professionId, rewards.masteryXp),
       challenge.floor,
