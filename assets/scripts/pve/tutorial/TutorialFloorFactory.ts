@@ -37,7 +37,6 @@ function createTutorialPlayer(profile: PveProfile): RunPlayer {
     classId: 'BERSERKER',
     classTraits: [],
     equipment,
-    classFragments: {},
     bag: [],
     relics: [],
     ownedRelics: [],

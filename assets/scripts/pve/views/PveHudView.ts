@@ -17,7 +17,7 @@ import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
 import { applySpriteInsideFixedBox } from '../../ui/UiSprite';
 import { playSfx, SFX_IDS } from '../../audio/AudioManager';
 import { playerArmorPower, playerAttackPower } from '../core/CombatSystem';
-import { AWAKEN_FORMS, CHAPTER3_ICE_WALL_HP, isBossFloor, ROCK_HP } from '../core/PveConstants';
+import { CHAPTER3_ICE_WALL_HP, isBossFloor, ROCK_HP } from '../core/PveConstants';
 import type { Direction } from '../core/MovementSystem';
 import type { ExpeditionState, FixedEntity, Monster } from '../core/PveTypes';
 import { getChapter1Objective } from '../core/objectives/Chapter1Objectives';
@@ -194,7 +194,6 @@ function entityName(entity: FixedEntity): string {
     BLAST_TARGET: '爆破点',
     ESCAPE_MARKER: '逃离点',
     WAVE_SPAWN_MARKER: '刷怪点',
-    FRAGMENT: '职业碎片',
     ROCK: '石墙',
     SAND_PIT: '流沙坑',
     ICE_WALL: '冰墙',
@@ -216,7 +215,8 @@ function entityArtKey(entity: FixedEntity): string {
     KEY: 'pve/map/icon_key',
     EXIT: 'pve/map/icon_exit',
     PORTAL: 'pve/map/icon_portal',
-    FRAGMENT: 'pve/map/icon_fragment',
+    GUNPOWDER_BARREL: 'pve/map/icon_gunpowder_barrel',
+    BLAST_TARGET: 'pve/map/icon_blast_target',
     ROCK: 'pve/map/terrain_rock',
     SAND_PIT: 'pve/map/icon_sand_pit_permanent',
     ICE_WALL: 'pve/map/terrain_ice_wall',
@@ -254,8 +254,10 @@ function entityInfo(entity: FixedEntity): { type: string; detail: string; action
       return { type: '逃离点', detail: '目标到达此处即逃脱', action: '尽快拦截' };
     case 'BLACKSMITH':
       return { type: '交互物', detail: '站到同格后可互动', action: '强化装备' };
-    case 'FRAGMENT':
-      return { type: '职业碎片', detail: '站到同格后自动拾取', action: '用于职业进阶' };
+    case 'GUNPOWDER_BARREL':
+      return { type: '交互物', detail: '站到同格后可激活', action: '激怒周围敌人' };
+    case 'BLAST_TARGET':
+      return { type: '交互物', detail: '激活火药桶后可引爆', action: '引爆完成目标' };
     case 'SAND_PIT':
       return { type: '危险地形', detail: '经过时额外消耗行动力', action: '注意绕行' };
     case 'ICE_TILE':
@@ -1056,7 +1058,12 @@ export class PveHudView {
       this._targetPortrait.active = true;
 
       const key = entityArtKey(entity);
-      if (!key || key === this._targetArtKey) return;
+      if (!key) {
+        this._targetArtKey = '';
+        this._targetPortrait.active = false;
+        return;
+      }
+      if (key === this._targetArtKey) return;
       this._targetArtKey = key;
       const frame = getCachedSprite(key);
       if (frame) {
@@ -1156,9 +1163,7 @@ export class PveHudView {
       new Color(170, 120, 255, 255),
     );
     this._keyBadge.active = floorState.hasKey;
-    this._classLabel.string = player.awakenForm
-      ? (AWAKEN_FORMS[player.awakenForm]?.name ?? CLASS_LABEL[player.classId] ?? player.classId)
-      : (CLASS_LABEL[player.classId] ?? player.classId);
+    this._classLabel.string = CLASS_LABEL[player.classId] ?? player.classId;
     this._objectiveLines = this._buildObjectiveLines(floor, floorState.hasKey);
     this._refreshObjectivePopup();
 

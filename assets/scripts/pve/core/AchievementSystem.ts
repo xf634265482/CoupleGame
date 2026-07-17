@@ -69,9 +69,6 @@ export function checkNewAchievements(
       case 'LOOT':
         if (ev.equip) toUnlock.add('FIRST_EQUIPMENT');
         break;
-      case 'CLASS_ADVANCED':
-        toUnlock.add('CLASS_ADVANCED');
-        break;
       case 'FLOOR_CLEARED':
         if (ev.floor === 7)  toUnlock.add('CHAPTER_1_CLEARED');
         if (ev.floor === 35) toUnlock.add('FULL_CLEAR');

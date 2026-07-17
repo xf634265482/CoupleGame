@@ -1,36 +1,42 @@
-// PVE「命运远征」核心数据模型与事件类型。
-// 纯类型/数据，零框架依赖。不用 enum，统一字面量联合类型。
+﻿// PVE銆屽懡杩愯繙寰併€嶆牳蹇冩暟鎹ā鍨嬩笌浜嬩欢绫诲瀷銆?
+// 绾被鍨?鏁版嵁锛岄浂妗嗘灦渚濊禆銆備笉鐢?enum锛岀粺涓€瀛楅潰閲忚仈鍚堢被鍨嬨€?
 
-import type { AdvancableClass, AwakenForm, ClassId } from './PveConstants';
+import type { ClassId } from './PveConstants';
 
-// ── 几何 ───────────────────────────────────────────────
+// 鈹€鈹€ 鍑犱綍 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export interface Coord {
   x: number;
   y: number;
 }
 
-// ── 实体 ───────────────────────────────────────────────
+// 鈹€鈹€ 瀹炰綋 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type MonsterType = 'NORMAL' | 'ANIMA' | 'ELITE' | 'BOSS';
 
 export type FixedEntityType =
-  | 'CHEST' // 宝箱
-  | 'BLACKSMITH' // 铁匠
-  | 'IDOL' // 神像
-  | 'HOT_SPRING' // 温泉
-  | 'ALTAR' // 祭坛
-  | 'KEY' // 钥匙
-  | 'EXIT' // 出口门
-  | 'PORTAL' // 传送门（Boss 击败后生成）
-  | 'FRAGMENT' // 职业碎片（AC-15 M2）
-  | 'ROCK' // 石块地形（Boss 房障碍，可挡一次 AOE 后消失）
-  | 'SAND_PIT' // 沙坑地形（第2章 Boss 房：移动 AP+2，Boss 钻出优先沙坑；潜地时动态扩张，带 remaining 的为动态坑）
-  | 'ICE_WALL' // 冰墙地形（第3章 Boss 房：阻挡移动，HP=10 可被攻击破坏）
-  | 'ICE_TILE' // 冰面地块（第3章 FrostGiant 冰冻回合铺出，玩家踩上滑行，remaining 倒计时融化）
-  | 'FREEZE_WALL' // 冰冻状态墙（第3章 FrostGiant：玩家被冻结时在周围生成，按攻击次数而非HP移除）
-  | 'SHATTERED_ICE' // 碎冰地块（第3章 FrostGiant：冰墙/冻结墙被击碎后生成，remaining 倒计时；玩家踩入扣固定伤害并立即消耗，不阻挡移动）
-  | 'LAVA_TILE'; // 熔岩地块（第4章 LavaLord phase2 周期性刷出，玩家踩入扣 HP）
+  | 'CHEST' // 瀹濈
+  | 'BLACKSMITH' // 閾佸尃
+  | 'IDOL' // 绁炲儚
+  | 'HOT_SPRING' // 娓╂硥
+  | 'ALTAR' // 绁潧
+  | 'KEY' // 閽ュ寵
+  | 'EXIT' // 鍑哄彛闂?
+  | 'PORTAL' // 浼犻€侀棬锛圔oss 鍑昏触鍚庣敓鎴愶級
+  | 'GUNPOWDER_BARREL'
+  | 'BLAST_TARGET'
+  | 'ESCAPE_MARKER'
+  | 'WAVE_SPAWN_MARKER' // 第 6 层夜袭刷怪点（闪烁格，不可交互）
+  | 'ROCK' // 鐭冲潡鍦板舰锛圔oss 鎴块殰纰嶏紝鍙尅涓€娆?AOE 鍚庢秷澶憋級
+  | 'SAND_PIT' // 娌欏潙鍦板舰锛堢2绔?Boss 鎴匡細绉诲姩 AP+2锛孊oss 閽诲嚭浼樺厛娌欏潙锛涙綔鍦版椂鍔ㄦ€佹墿寮狅紝甯?remaining 鐨勪负鍔ㄦ€佸潙锛?
+  | 'ICE_WALL' // 鍐板鍦板舰锛堢3绔?Boss 鎴匡細闃绘尅绉诲姩锛孒P=10 鍙鏀诲嚮鐮村潖锛?
+  | 'ICE_TILE' // 鍐伴潰鍦板潡锛堢3绔?FrostGiant 鍐板喕鍥炲悎閾哄嚭锛岀帺瀹惰俯涓婃粦琛岋紝remaining 鍊掕鏃惰瀺鍖栵級
+  | 'FREEZE_WALL' // 鍐板喕鐘舵€佸锛堢3绔?FrostGiant锛氱帺瀹惰鍐荤粨鏃跺湪鍛ㄥ洿鐢熸垚锛屾寜鏀诲嚮娆℃暟鑰岄潪HP绉婚櫎锛?
+  | 'SHATTERED_ICE' // 纰庡啺鍦板潡锛堢3绔?FrostGiant锛氬啺澧?鍐荤粨澧欒鍑荤鍚庣敓鎴愶紝remaining 鍊掕鏃讹紱鐜╁韪╁叆鎵ｅ浐瀹氫激瀹冲苟绔嬪嵆娑堣€楋紝涓嶉樆鎸＄Щ鍔級
+  | 'LAVA_TILE'; // 鐔斿博鍦板潡锛堢4绔?LavaLord phase2 鍛ㄦ湡鎬у埛鍑猴紝鐜╁韪╁叆鎵?HP锛?
+
+export type FixedEntitySource = 'GLACIER_SHAPER';
 
 export type MonsterAiState = 'IDLE' | 'PATROL' | 'CHASE' | 'FLEE' | 'DEAD';
+export type MonsterSide = 'ENEMY' | 'ALLY';
 
 export interface Monster {
   id: string;
@@ -42,42 +48,65 @@ export interface Monster {
   range: number;
   aggroRadius: number;
   aiState: MonsterAiState;
-  /** Boss 专属机制 id（type==='BOSS' 时有效）。 */
+  /** Boss 涓撳睘鏈哄埗 id锛坱ype==='BOSS' 鏃舵湁鏁堬級銆?*/
   bossId?: string;
-  /** 流沙巨蝎潜地状态：true 时免疫玩家攻击，下一回合冒出并双倍伤害（bossId=QUICKSAND_SCORPION）。 */
+  /** 娴佹矙宸ㄨ潕娼滃湴鐘舵€侊細true 鏃跺厤鐤帺瀹舵敾鍑伙紝涓嬩竴鍥炲悎鍐掑嚭骞跺弻鍊嶄激瀹筹紙bossId=QUICKSAND_SCORPION锛夈€?*/
   isBurrowed?: boolean;
-  /** 怪物变体 id（NORMAL/ANIMA/ELITE 专属行为差异，如 'GOBLIN_ARCHER'/'FROST_GOBLIN'/'SPIRIT_RAT'）。 */
+  /** 鎬墿鍙樹綋 id锛圢ORMAL/ANIMA/ELITE 涓撳睘琛屼负宸紓锛屽 'GOBLIN_ARCHER'/'FROST_GOBLIN'/'SPIRIT_RAT'锛夈€?*/
   variantId?: string;
-  /** Boss 增援技能召唤出的怪物：击杀时不产生任何掉落（金币/灵气/装备），避免刷增援白嫖收益。 */
+  /** 每章特殊怪是否已触发过一次性的半血撤退。 */
+  specialRetreatUsed?: boolean;
+  /** 被射手在距离至少 2 格命中后，下一怪物回合额外追击 1 格。 */
+  archerPursuitPending?: boolean;
+  /** Chapter 1 floor 5 gunpowder alarm: +1 move step and doubled attack until clear. */
+  frenzied?: boolean;
+  /** Boss 澧炴彺鎶€鑳藉彫鍞ゅ嚭鐨勬€墿锛氬嚮鏉€鏃朵笉浜х敓浠讳綍鎺夎惤锛堥噾甯?鐏垫皵/瑁呭锛夛紝閬垮厤鍒峰鎻寸櫧瀚栨敹鐩娿€?*/
   summoned?: boolean;
-  /** 冰冻剩余回合数（PERMAFROST_CORE 遗物 / boss_slow_on_hit / boss_stun_on_hurt 触发）：>0 时 stepOneMonsterCore 跳过本怪物回合并 -1。 */
+  side?: MonsterSide;
+  /** 鍐板喕鍓╀綑鍥炲悎鏁帮紙PERMAFROST_CORE 閬楃墿 / boss_slow_on_hit / boss_stun_on_hurt 瑙﹀彂锛夛細>0 鏃?stepOneMonsterCore 璺宠繃鏈€墿鍥炲悎骞?-1銆?*/
   frozenRounds?: number;
-  /** 流血剩余回合数（boss_bleed_on_hit 装备 trait 触发）：每怪物回合开始扣 BLEED_DAMAGE HP，递减至 0。 */
+  /** 娴佽鍓╀綑鍥炲悎鏁帮紙boss_bleed_on_hit 瑁呭 trait 瑙﹀彂锛夛細姣忔€墿鍥炲悎寮€濮嬫墸 BLEED_DAMAGE HP锛岄€掑噺鑷?0銆?*/
   bleedRounds?: number;
-  /** 灼烧剩余 tick 数（boss_burn_on_hit 装备 trait 触发）：每怪物回合开始扣 BURN_TICK_DAMAGE HP，递减至 0。 */
+  /** 鐏肩儳鍓╀綑 tick 鏁帮紙boss_burn_on_hit 瑁呭 trait 瑙﹀彂锛夛細姣忔€墿鍥炲悎寮€濮嬫墸 BURN_TICK_DAMAGE HP锛岄€掑噺鑷?0銆?*/
   burnRounds?: number;
   /** Rogue poison: damage is stored with the application for deterministic ticks. */
   poisonRounds?: number;
   poisonDamage?: number;
-  /** 冰霜巨人狂暴冲锋预警方向（bossId=FROST_GIANT）：上一回合预警时记录，本回合沿此方向执行冲锋后清除。 */
+  /** 鍐伴湝宸ㄤ汉鐙傛毚鍐查攱棰勮鏂瑰悜锛坆ossId=FROST_GIANT锛夛細涓婁竴鍥炲悎棰勮鏃惰褰曪紝鏈洖鍚堟部姝ゆ柟鍚戞墽琛屽啿閿嬪悗娓呴櫎銆?*/
   frostChargeDir?: Coord;
-  /** 命运守卫行为镜像（bossId=FATE_MIRROR）专属：玩家上一回合行为，下个怪物回合执行后清空。 */
+  /** 冰霜巨人反远程冰墙最近触发回合；用于限制射手/远程命中时的生成频率。 */
+  frostRangedWallTurn?: number;
+  /** 鍛借繍瀹堝崼琛屼负闀滃儚锛坆ossId=FATE_MIRROR锛変笓灞烇細鐜╁涓婁竴鍥炲悎琛屼负锛屼笅涓€墿鍥炲悎鎵ц鍚庢竻绌恒€?*/
   pendingBehavior?: { action: 'ATTACK' | 'MOVE' | 'IDLE'; distance: number };
-  /** 命运守卫行为镜像专属：护盾层数（0/1，不叠加；吸收一次伤害后归零）。 */
+  /** 鍛借繍瀹堝崼琛屼负闀滃儚涓撳睘锛氭姢鐩惧眰鏁帮紙0/1锛屼笉鍙犲姞锛涘惛鏀朵竴娆′激瀹冲悗褰掗浂锛夈€?*/
   shieldStacks?: 0 | 1;
-  /** 命运守卫本体（bossId=FATE_GUARDIAN）专属：改写命运 E2 加伤百分比，普攻 / 镜像攻击 / 5×5 都吃。 */
+  /** 鍛借繍瀹堝崼鏈綋锛坆ossId=FATE_GUARDIAN锛変笓灞烇細鏀瑰啓鍛借繍 E2 鍔犱激鐧惧垎姣旓紝鏅敾 / 闀滃儚鏀诲嚮 / 5脳5 閮藉悆銆?*/
   attackBuffPct?: number;
-  /** 命运守卫本体专属：attackBuffPct 失效的怪物回合（floor.turn >= 此值时清零）。 */
+  /** 鍛借繍瀹堝崼鏈綋涓撳睘锛歛ttackBuffPct 澶辨晥鐨勬€墿鍥炲悎锛坒loor.turn >= 姝ゅ€兼椂娓呴浂锛夈€?*/
   attackBuffExpiresAtTurn?: number;
-  /** 命运守卫本体专属：HP 是否已跨过 50% 阈值生成过行为镜像（true 后不再生成，即使镜像死亡）。 */
+  /** 鍛借繍瀹堝崼鏈綋涓撳睘锛欻P 鏄惁宸茶法杩?50% 闃堝€肩敓鎴愯繃琛屼负闀滃儚锛坱rue 鍚庝笉鍐嶇敓鎴愶紝鍗充娇闀滃儚姝讳骸锛夈€?*/
   mirrorSpawned?: boolean;
-  /** 命运守卫本体专属：是否已进入狂暴态（HP 跨 30% 后 true，不可逆）。 */
+  /** 鍛借繍瀹堝崼鏈綋涓撳睘锛氭槸鍚﹀凡杩涘叆鐙傛毚鎬侊紙HP 璺?30% 鍚?true锛屼笉鍙€嗭級銆?*/
   enraged?: boolean;
-  /** 命运守卫本体专属：狂暴起始 floor.turn（计算改写命运周期用）。 */
+  /** 鍛借繍瀹堝崼鏈綋涓撳睘锛氱媯鏆磋捣濮?floor.turn锛堣绠楁敼鍐欏懡杩愬懆鏈熺敤锛夈€?*/
   enrageTurn?: number;
-  /** VOID_WORM 双生复活：首次被击杀时以 50% maxHp 原地复活；true 后不再触发。 */
+  /** 鍛借疆鍏藉懡杞洖婧細棣栨琚嚮鏉€鏃朵互 50% maxHp 鍘熷湴澶嶆椿锛泃rue 鍚庝笉鍐嶈Е鍙戙€?*/
   revivedOnce?: boolean;
-  /** 护甲值（Chapter 2+ 怪物/Boss 专有）：玩家普攻前先扣减此值，最低造成 1 伤害。 */
+  /** 娌欐紶璺冭湧鏄惁宸茶Е鍙戣繃涓€娆℃€х殑鏂熬鐙傝穬銆?*/
+  hopperFrenzyUsed?: boolean;
+  /** 鏂熬鐙傝穬鍚庣殑涓嬩竴娆℃垚鍔熸敾鍑绘槸鍚﹀簲閫犳垚鍙屽€嶄激瀹炽€?*/
+  hopperDoubleAttackReady?: boolean;
+  /** 娌欐紶璺冭湧鏈洖鍚堟槸鍚﹀凡鍥犺繙绋嬪彈鍑绘墽琛屽弽搴旀帹杩涳紝闃叉杩藉姞鏀诲嚮閲嶅瑙﹀彂銆?*/
+  hopperReactionTurn?: number;
+  /** 鏈€杩戜竴娆＄敓鎴愪复鏃舵帶鍦哄浣撶殑鍥炲悎锛堝啺闇滅簿鐏?/ 绛戝鑰呭叡鐢級銆?*/
+  frostWallTurn?: number;
+  /** 鍐板窛绛戝鑰呭凡閿佸畾銆佸皢鍦ㄤ笅娆℃€墿鍥炲悎灏濊瘯灏佷綇鐨勬牸瀛愩€?*/
+  glacierWallTarget?: Coord;
+  /** 冰川塑形者已预告、下个怪物回合会尝试升起的多个冰墙格。 */
+  glacierWallTargets?: Coord[];
+  /** 鐏劙鍏冪礌宸查攣瀹氥€佸皢鍦ㄤ笅娆℃€墿鍥炲悎寮曠噧鐨勪腑蹇冩牸銆?*/
+  lavaTelegraphTarget?: Coord;
+  /** 鎶ょ敳鍊硷紙Chapter 2+ 鎬墿/Boss 涓撴湁锛夛細鐜╁鏅敾鍓嶅厛鎵ｅ噺姝ゅ€硷紝鏈€浣庨€犳垚 1 浼ゅ銆?*/
   armor?: number;
   tutorialDrop?: { gold?: number; anima?: number; equip?: EquipItem };
 }
@@ -86,29 +115,19 @@ export interface FixedEntity {
   id: string;
   type: FixedEntityType;
   pos: Coord;
-  /** 是否已被消耗（宝箱已开 / 钥匙已拾 / 出口已开）。 */
+  /** 鏄惁宸茶娑堣€楋紙瀹濈宸插紑 / 閽ュ寵宸叉嬀 / 鍑哄彛宸插紑锛夈€?*/
   consumed: boolean;
-  /** 职业碎片专属：碎片所属职业（type==='FRAGMENT' 时有值）。 */
-  fragmentClass?: ClassId;
-  /** 冰墙剩余 HP（type==='ICE_WALL' 时有值），0 时 consumed=true。 */
+  /** 鍐板鍓╀綑 HP锛坱ype==='ICE_WALL' 鏃舵湁鍊硷級锛? 鏃?consumed=true銆?*/
   hp?: number;
-  /** 熔岩地块剩余存在回合数（type==='LAVA_TILE' 时有值），0 时移除。 */
+  /** 涓存椂瀹炰綋鍓╀綑瀛樺湪鍥炲悎鏁帮紙濡?LAVA_TILE / ICE_TILE / 涓存椂 ICE_WALL锛夛紝0 鏃剁Щ闄ゃ€?*/
   remaining?: number;
+  /** 生成来源；用于区分同类型地形的专属奖励/副作用。 */
+  source?: FixedEntitySource;
 }
 
-// ── 装备（M1 仅占位，M2 展开 design §11） ──────────────
+// 鈹€鈹€ 瑁呭锛圡1 浠呭崰浣嶏紝M2 灞曞紑 design 搂11锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type EquipSlot = 'WEAPON' | 'HELMET' | 'ARMOR' | 'SHOES' | 'TRINKET';
 export type EquipQuality = 'COMMON' | 'FINE' | 'RARE' | 'EPIC' | 'LEGENDARY';
-
-/** 词条强度档（design §3）：minor=副词缀 / major=主词缀，掉落时随机。 */
-export type AffixTier = 'minor' | 'major';
-
-/** 装备词条实例（Phase 2 AC-EQ-4/5）：id 对应词条池条目，tier 为强度档，value 为该档数值。 */
-export interface EquipAffix {
-  id: string;
-  tier: AffixTier;
-  value: number;
-}
 
 export interface EquipItem {
   id: string;
@@ -116,165 +135,92 @@ export interface EquipItem {
   quality: EquipQuality;
   name: string;
   baseStat: number;
-  /** 该件装备的 baseStat 区间上限（掉落时 roll，UI 展示「当前值/上限」，AC-EQ-2）。 */
+  /** 该件装备的 baseStat 区间上限（掉落时 roll，UI 展示「当前/上限」，AC-EQ-2）。 */
   baseStatMax?: number;
   /** 基础款优缺点效果 id（'weapon_axe'/'weapon_spear'/'armor_plate'/'helmet_heavy' 等，AC-EQ-3）。 */
   implicit?: string;
-  trait?: string; // 铁匠洗炼词条 id（旧系统，EPIC+ 洗炼用）
-  /** 条件触发词条列表（Phase 2 AC-EQ-4/5：蓝1/紫2/橙2）。 */
-  affixes?: EquipAffix[];
-  /** 传奇独特效果 id（Phase 3 传奇系统占位）。 */
+  /** Boss 专属等效果 id（旧铁匠 equip_* 洗炼已删除；残留字段忽略）。 */
+  trait?: string;
+  /** 旧随机词条残留（AffixSystem 已删除；读档可忽略，战斗不再生效）。 */
+  affixes?: ReadonlyArray<{ id: string; tier: string; value: number }>;
+  /** 传奇独特效果 id。 */
   legendaryId?: string;
-  /** 已强化次数（0 = 未强化，显示为 +N 后缀）。 */
+  /** 宸插己鍖栨鏁帮紙0 = 鏈己鍖栵紝鏄剧ず涓?+N 鍚庣紑锛夈€?*/
   enhanceLevel?: number;
+  /** 永久逐层模式的固定装备定义；账随机装备不设置此字段。 */
+  fixedDefinitionId?: string;
 }
 
 export type Equipment = Partial<Record<EquipSlot, EquipItem>>;
 
-// ── 遗物（Boss 遗物 / 局内被动 buff，死亡时清空） ────────
-/** Boss 遗物 id（每章 1 件，掉落规则见 BOSS_DROP_TABLE）。 */
+// 鈹€鈹€ 閬楃墿锛圔oss 閬楃墿 / 灞€鍐呰鍔?buff锛屾浜℃椂娓呯┖锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** Boss 閬楃墿 id锛堟瘡绔?1 浠讹紝鎺夎惤瑙勫垯瑙?BOSS_DROP_TABLE锛夈€?*/
 export type RelicId =
-  | 'CHIEF_ROAR' // 第1章 酋长怒吼
-  | 'QUICKSAND_HEART' // 第2章 流沙之心
-  | 'PERMAFROST_CORE' // 第3章 永冻之核
-  | 'MAGMA_HEART' // 第4章 熔火之心
-  | 'FATE_ECHO'; // 第5章 命运回响
+  | 'CHIEF_ROAR' // 绗?绔?閰嬮暱鎬掑惣
+  | 'QUICKSAND_HEART' // 绗?绔?娴佹矙涔嬪績
+  | 'PERMAFROST_CORE' // 绗?绔?姘稿喕涔嬫牳
+  | 'MAGMA_HEART' // 绗?绔?鐔旂伀涔嬪績
+  | 'FATE_ECHO'; // 绗?绔?鍛借繍鍥炲搷
 
-// ── 远征玩家（跨层持久态） ─────────────────────────────
+// 鈹€鈹€ 杩滃緛鐜╁锛堣法灞傛寔涔呮€侊級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export interface RunPlayer {
   hp: number;
   maxHp: number;
   gold: number;
   anima: number;
-  /** 灵气强化进度（累计到 animaThreshold 触发一次强化后归零）。 */
+  /** 鐏垫皵寮哄寲杩涘害锛堢疮璁″埌 animaThreshold 瑙﹀彂涓€娆″己鍖栧悗褰掗浂锛夈€?*/
   animaProgress: number;
-  /** 灵气强化触发阈值（初始 100，每次强化后 × 1.5 递增，存档字段）。 */
+  /** 鐏垫皵寮哄寲瑙﹀彂闃堝€硷紙鍒濆 100锛屾瘡娆″己鍖栧悗 脳 1.5 閫掑锛屽瓨妗ｅ瓧娈碉級銆?*/
   animaThreshold?: number;
   classId: ClassId;
-  /** 已选职业词条 id 列表。 */
+  /** 宸查€夎亴涓氳瘝鏉?id 鍒楄〃銆?*/
   classTraits: string[];
   equipment: Equipment;
-  /** 各职业已收集碎片数。 */
-  classFragments: Partial<Record<ClassId, number>>;
-  /** 二阶觉醒形态（已觉醒时有值，一局内最多觉醒一次）。 */
-  awakenForm?: AwakenForm;
-  /** 觉醒数据版本；2 表示已迁移到主动分流与专属词条规则。 */
-  awakenVersion?: 2;
-  /** 觉醒后的下一次强化至少出现一条当前形态专属词条。 */
-  awakenFirstOfferPending?: boolean;
-  /** 已通关的最大章节号（每章 Boss 击败后更新，用于觉醒条件判定）。 */
+  /** 宸查€氬叧鐨勬渶澶х珷鑺傚彿锛堟瘡绔?Boss 鍑昏触鍚庢洿鏂帮紝鐢ㄤ簬瑙夐啋鏉′欢鍒ゅ畾锛夈€?*/
   maxChapterCleared?: number;
-  /** 命运碎片成长树效果快照（由 startExpedition 时根据 PveMeta.unlockedTreeNodes 计算并固化，
-   *  随存档持久化，保证云端复算时无需重新读取 PveMeta，AC-13）。 */
-  treeBonuses?: DestinyTreeBonuses;
-  /** 最近一次强化候选，用于 V2 候选防重复；随存档持久化。 */
+  /** 鏈€杩戜竴娆″己鍖栧€欓€夛紝鐢ㄤ簬 V2 鍊欓€夐槻閲嶅锛涢殢瀛樻。鎸佷箙鍖栥€?*/
   recentStrengthenOffers?: string[];
   /** Chapter number in which Berserker's Undying has already triggered. */
   undyingUsedChapter?: number;
-  /** 本场远征拾取的 Boss 遗物列表（死亡清空，不跨远征保留；图鉴解锁记录见 PveMeta.codex.relics）。
-   *  Phase 5 起含义变为「激活槽内遗物」（最多 3 个），ownedRelics 为全部已持有遗物。 */
+  /** 鏈満杩滃緛鎷惧彇鐨?Boss 閬楃墿鍒楄〃锛堟浜℃竻绌猴紝涓嶈法杩滃緛淇濈暀锛涘浘閴磋В閿佽褰曡 PveMeta.codex.relics锛夈€?
+   *  Phase 5 璧峰惈涔夊彉涓恒€屾縺娲绘Ы鍐呴仐鐗┿€嶏紙鏈€澶?3 涓級锛宱wnedRelics 涓哄叏閮ㄥ凡鎸佹湁閬楃墿銆?*/
   relics?: RelicId[];
-  /** Phase 5：本场远征所有已拾取的 Boss 遗物（含未激活的）。relics 只是其中激活的最多 3 个。
-   *  向后兼容：若 ownedRelics 未初始化则视同 relics（旧存档所有已拾 = 全部激活）。 */
+  /** Phase 5锛氭湰鍦鸿繙寰佹墍鏈夊凡鎷惧彇鐨?Boss 閬楃墿锛堝惈鏈縺娲荤殑锛夈€俽elics 鍙槸鍏朵腑婵€娲荤殑鏈€澶?3 涓€?
+   *  鍚戝悗鍏煎锛氳嫢 ownedRelics 鏈垵濮嬪寲鍒欒鍚?relics锛堟棫瀛樻。鎵€鏈夊凡鎷?= 鍏ㄩ儴婵€娲伙級銆?*/
   ownedRelics?: RelicId[];
-  /** 遗物图鉴快照（开局时从 PveMeta.codex.relics 复制 + 本场远征首次拾取时同步追加）。
-   *  用于 Boss 掉落「图鉴已解锁 +10%」判定。运行结束后由 Controller 同步回云端 codex.relics。 */
+  /** 閬楃墿鍥鹃壌蹇収锛堝紑灞€鏃朵粠 PveMeta.codex.relics 澶嶅埗 + 鏈満杩滃緛棣栨鎷惧彇鏃跺悓姝ヨ拷鍔狅級銆?
+   *  鐢ㄤ簬 Boss 鎺夎惤銆屽浘閴村凡瑙ｉ攣 +10%銆嶅垽瀹氥€傝繍琛岀粨鏉熷悗鐢?Controller 鍚屾鍥炰簯绔?codex.relics銆?*/
   codexRelics?: RelicId[];
-  /** 本场远征持有的命运词条卷轴数量（拾取后可使用，使用时三选一附加 strengthen_* 词条到 classTraits）。 */
-  scrolls?: number;
-  /** 背包（槽位已占时装备入包，可手动装备 / 置换）。 */
+  /** 本场远征内 Boss 遗物未掉落补偿概率；Boss 掉出遗物后重置，远征结束清空。 */
+  relicPityBonus?: number;
+  /** 鑳屽寘锛堟Ы浣嶅凡鍗犳椂瑁呭鍏ュ寘锛屽彲鎵嬪姩瑁呭 / 缃崲锛夈€?*/
   bag?: EquipItem[];
-  /** 神像祝福累计攻击加成（永久，跨层保留）。 */
+  /** 钀ュ湴銆屽己鍖栦綋榄勩€嶅凡璐拱娆℃暟锛涚敤浜庢湰娆¤繙寰佸唴閫掑浠锋牸锛岃繙寰佺粨鏉熷悗閲嶇疆銆?*/
+  campMaxHpBuys?: number;
+  /** 绁炲儚绁濈绱鏀诲嚮鍔犳垚锛堟案涔咃紝璺ㄥ眰淇濈暀锛夈€?*/
   idolAttackBonus?: number;
-  /** 神像祝福累计护甲加成（永久，减少怪物伤害，跨层保留）。 */
+  /** 绁炲儚绁濈绱鎶ょ敳鍔犳垚锛堟案涔咃紝鍑忓皯鎬墿浼ゅ锛岃法灞備繚鐣欙級銆?*/
   idolArmorBonus?: number;
-  /** 传奇装备跨层状态（Phase 3）：Boss 击杀叠层、灵气强化叠层等跨层持续效果。 */
+  /** 浼犲瑁呭璺ㄥ眰鐘舵€侊紙Phase 3锛夛細Boss 鍑绘潃鍙犲眰銆佺伒姘斿己鍖栧彔灞傜瓑璺ㄥ眰鎸佺画鏁堟灉銆?*/
   legendaryState?: {
-    /** 命运王冠：远征内 Boss 击杀叠层（最多 3 叠，每叠 +10 攻击）。 */
+    /** 鍛借繍鐜嬪啝锛氳繙寰佸唴 Boss 鍑绘潃鍙犲眰锛堟渶澶?3 鍙狅紝姣忓彔 +10 鏀诲嚮锛夈€?*/
     fateCrownStacks?: number;
-    /** 命运护符：灵气强化叠层（最多 5 叠，每叠 +5 攻击）。 */
+    /** 鍛借繍鎶ょ锛氱伒姘斿己鍖栧彔灞傦紙鏈€澶?5 鍙狅紝姣忓彔 +5 鏀诲嚮锛夈€?*/
     fateAmuletStacks?: number;
   };
-  /** 遗物运行态：CHIEF_ROAR/PERMAFROST_CORE 累计与待触发标记；FATE_ECHO 一次性消耗标记。 */
+  /** 閬楃墿杩愯鎬侊細CHIEF_ROAR/PERMAFROST_CORE 绱涓庡緟瑙﹀彂鏍囪锛汧ATE_ECHO 涓€娆℃€ф秷鑰楁爣璁般€?*/
   relicState?: {
-    /** CHIEF_ROAR：上次击杀后下一次普攻 +50%，触发后置 false。 */
+    /** CHIEF_ROAR锛氫笂娆″嚮鏉€鍚庝笅涓€娆℃櫘鏀?+50%锛岃Е鍙戝悗缃?false銆?*/
     chiefRoarPending?: boolean;
-    /** PERMAFROST_CORE：累计移动步数（每 3 步触发一次冰冻并归零）。 */
+    /** PERMAFROST_CORE锛氱疮璁＄Щ鍔ㄦ鏁帮紙姣?3 姝ヨЕ鍙戜竴娆″啺鍐诲苟褰掗浂锛夈€?*/
     permafrostSteps?: number;
-    /** PERMAFROST_CORE：步数达 3 后置 true，下次命中怪物时消费并冰冻目标。 */
+    /** PERMAFROST_CORE锛氭鏁拌揪 3 鍚庣疆 true锛屼笅娆″懡涓€墿鏃舵秷璐瑰苟鍐板喕鐩爣銆?*/
     permafrostPending?: boolean;
-    /** FATE_ECHO：本场远征已触发过致死兜底则为 true（每场远征仅一次）。 */
+    /** FATE_ECHO锛氭湰鍦鸿繙寰佸凡瑙﹀彂杩囪嚧姝诲厹搴曞垯涓?true锛堟瘡鍦鸿繙寰佷粎涓€娆★級銆?*/
     fateEchoUsed?: boolean;
-    /** boss_revive_50（守卫圣盾）：本场远征已触发过装备级致死兜底则为 true（每场远征仅一次）。 */
+    /** boss_revive_50锛堝畧鍗湥鐩撅級锛氭湰鍦鸿繙寰佸凡瑙﹀彂杩囪澶囩骇鑷存鍏滃簳鍒欎负 true锛堟瘡鍦鸿繙寰佷粎涓€娆★級銆?*/
     shieldUsed?: boolean;
   };
-}
-
-/** 命运碎片成长树效果快照（DestinyTreeSystem.getTreeBonuses 的返回类型）。 */
-export interface DestinyTreeBonuses {
-  // Phase 1（已接入游戏逻辑）
-  maxHpBonus: number;
-  deathGoldRetentionPct: number;
-  attackBonus: number;
-  apDiceBonus: number;
-  apCarryCapBonus: number;
-  fragmentBonus: number;
-  startGoldBonus: number;
-  chestGoldBonusPct: number;
-  blacksmithDiscount: number;
-  campShopDiscountPct: number;
-  startAnimaBonus: number;
-  strengthenThresholdMult: number;
-  animaGainBonusPct: number;
-  hasEquipChoice: boolean;
-  hasTraitChoice: boolean;
-
-  // Phase 2+: 守护线（A4-A9，hooks 待接入）
-  hasLowHpHeal: boolean;            // A4: 止血意志 - 首次低血回复 10% 最大生命
-  bigDamageMitPct: number;          // A5: 险境韧性 - 单次超 25% 最大生命伤害减免比例
-  bossFloorHealPct: number;         // A6: 守护回响 - 每章首次进入 Boss 层回复比例
-  hasPostEliteHitMit: boolean;      // A7: 稳固阵脚 - 被精英/Boss 命中后下次受伤减免
-  hasChapterLowHpHeal: boolean;     // A8: 余生火种 - 每章首次通关时低血额外回复
-  hasDeathShield: boolean;          // A9: 不灭誓约 - 首次致死保留 1HP 并回复 15%
-
-  // Phase 2+: 征伐线（B5-B9，hooks 待接入）
-  firstHitEliteBonusPct: number;   // B5: 破甲手感 - 首击精英/Boss 伤害加成
-  killEliteAttackBonus: number;    // B6: 猎首本能 - 击杀精英后本层攻击力加成
-  normalMonsterDamageBonusPct: number; // B7: 战斗熟稔 - 对普通怪伤害加成
-  executeThresholdBonusPct: number;    // B8: 临门一击 - 攻击低血怪伤害加成
-  killChainBonusPct: number;           // B9: 破阵时刻 - 击杀精英/Boss 后下一击加成
-
-  // Phase 2+: 富集线（C5-C9，hooks 待接入）
-  eliteEquipRateBonusPct: number;       // C5: 装备鉴赏 - 精英装备掉落率加成
-  hasChapterFirstSmithRefund: boolean;  // C6: 锻造余温 - 每章首次强化失败返还 50% 金币
-  normalMonsterGoldBonusPct: number;    // C7: 淘金路线 - 普通怪金币加成
-  hasChapterFirstSmithBonus: boolean;   // C8: 精炼手艺 - 每章首次强化成功额外 +1
-  hasBossEconomyChoice: boolean;        // C9: 命运宝库 - Boss 后三选一经济奖励
-
-  // Phase 2+: 灵脉线（D4-D9，hooks 待接入）
-  hasFirstStrengthenReroll: boolean;          // D4: 专注冥想 - 首次强化可免费重抽
-  hasReduceFullStackTraits: boolean;          // D5: 灵性筛选 - 满层词条在候选中降权
-  strengthenAnimaRefundPct: number;           // D6: 共振余波 - 强化后返还阈值比例灵气
-  animaMonsterAnimaBonusPct: number;          // D7: 灵气牵引 - 灵气怪灵气掉落加成
-  hasChapterFirstStrengthenAnimaBonus: boolean; // D8: 深层悟道 - 每章首次强化后赠灵气
-  hasFirstStrengthen4Choice: boolean;         // D9: 灵脉贯通 - 首次强化改为 4 选 1
-
-  // Phase 3+: 天命线（E4-E9，选择队列扩展待接入）
-  hasEquipChoiceUpgrade: boolean;   // E4: 星盘校准 - 馈赠装备升品为精良
-  hasChoiceReroll: boolean;         // E5: 命运偏转 - 首次命运树三选一可整组重抽
-  hasBossChoiceReward: boolean;     // E6: 星辉馈赠 - 每章 Boss 后构筑三选一
-  hasBossPreview: boolean;          // E7: 预兆感知 - 章节开始时显示 Boss 提示
-  scrollChoiceBonus: number;        // E8: 命轮余辉 - 首次卷轴候选数量加成
-  hasAdvancedChoiceReroll: boolean; // E9: 改命之刻 - 高阶重抽（重抽后品质提升）
-}
-
-/** 命运树「三选一」待选项（E2 装备 / E3 强化词条），由 startExpedition 生成，
- *  待玩家通过 resolveTreeChoice 选定后从队列中移除。 */
-export interface PendingTreeChoice {
-  source: 'E2' | 'E3';
-  kind: 'EQUIP' | 'TRAIT';
-  equipOptions?: EquipItem[];
-  traitOptions?: string[];
 }
 
 export interface PveBalancePlayerConfig {
@@ -334,103 +280,115 @@ export interface PveBalanceSnapshot {
   unitConfigs: Record<string, PveBalanceConfig>;
 }
 
-// ── 楼层运行态（每层一份，可序列化存档） ───────────────
+// 鈹€鈹€ 妤煎眰杩愯鎬侊紙姣忓眰涓€浠斤紝鍙簭鍒楀寲瀛樻。锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type FloorStatus = 'EXPLORING' | 'CLEARED' | 'DEAD';
 
 export interface FloorState {
+  relicChestOpened?: boolean;
   floor: number; // 1-based
-  size: number; // 边长（8/9/10）
-  seed: number; // 本层地图生成种子
-  rngState: number; // 当前 RNG 内部状态（续算用）
-  player: Coord; // 玩家在网格中的位置
-  ap: number; // 当前行动点
-  maxAp: number; // 本回合上限（8 + 骰子）
-  dice: number; // 本回合骰子点数
-  turn: number; // 回合数（1-based）
-  hasKey: boolean; // 是否已拾取钥匙
-  /** 已揭示格子：revealed[y][x]。 */
+  size: number; // 杈归暱锛?/9/10锛?
+  seed: number; // 鏈眰鍦板浘鐢熸垚绉嶅瓙
+  rngState: number; // 褰撳墠 RNG 鍐呴儴鐘舵€侊紙缁畻鐢級
+  player: Coord; // 鐜╁鍦ㄧ綉鏍间腑鐨勪綅缃?
+  ap: number; // 褰撳墠琛屽姩鐐?
+  maxAp: number; // 鏈洖鍚堜笂闄愶紙8 + 楠板瓙锛?
+  dice: number; // 鏈洖鍚堥瀛愮偣鏁?
+  turn: number; // 鍥炲悎鏁帮紙1-based锛?
+  hasKey: boolean; // 鏄惁宸叉嬀鍙栭挜鍖?
+  /** 宸叉彮绀烘牸瀛愶細revealed[y][x]銆?*/
   revealed: boolean[][];
   monsters: Monster[];
   entities: FixedEntity[];
   status: FloorStatus;
-  /** ROGUE 背刺：本回合移动后下次攻击双倍（移动时置 true，首次命中后置 false，默认 false）。 */
+  /** ROGUE 鑳屽埡锛氭湰鍥炲悎绉诲姩鍚庝笅娆℃敾鍑诲弻鍊嶏紙绉诲姩鏃剁疆 true锛岄娆″懡涓悗缃?false锛岄粯璁?false锛夈€?*/
   backstabAvailable?: boolean;
-  /** BERSERKER 不屈：本层首次将死时保留 1 HP（触发后置 false，默认 true）。 */
+  /** BERSERKER 涓嶅眻锛氭湰灞傞娆″皢姝绘椂淇濈暀 1 HP锛堣Е鍙戝悗缃?false锛岄粯璁?true锛夈€?*/
   undyingAvailable?: boolean;
-  /** ROGUE 残影：本层首次被攻击时闪避（触发后置 false，默认 true）。 */
+  /** ROGUE 娈嬪奖锛氭湰灞傞娆¤鏀诲嚮鏃堕棯閬匡紙瑙﹀彂鍚庣疆 false锛岄粯璁?true锛夈€?*/
   hasAfterimage?: boolean;
-  /** 熔岩领主灼烧剩余伤害（每回合开始 -10 HP，直至归零）。 */
+  /** 鐔斿博棰嗕富鐏肩儳鍓╀綑浼ゅ锛堟瘡鍥炲悎寮€濮?-10 HP锛岀洿鑷冲綊闆讹級銆?*/
   playerBurnRemaining?: number;
-  /** 靴子首步免费标记：RARE+ 靴子每回合首次移动免费；本回合已用过则为 true，回合结束时重置。 */
+  /** 闈村瓙棣栨鍏嶈垂鏍囪锛歊ARE+ 闈村瓙姣忓洖鍚堥娆＄Щ鍔ㄥ厤璐癸紱鏈洖鍚堝凡鐢ㄨ繃鍒欎负 true锛屽洖鍚堢粨鏉熸椂閲嶇疆銆?*/
   shoesFirstMoveDone?: boolean;
-  /** 移动AP惩罚剩余回合数（冰霜哥布林/重击余波：>0 时每次移动额外消耗 1AP）。 */
+  /** 绉诲姩AP鎯╃綒鍓╀綑鍥炲悎鏁帮紙鍐伴湝鍝ュ竷鏋?閲嶅嚮浣欐尝锛?0 鏃舵瘡娆＄Щ鍔ㄩ澶栨秷鑰?1AP锛夈€?*/
   playerMoveApPenaltyRounds?: number;
-  /** 赤炎哥布林灼烧剩余回合数（每回合累计 5HP 伤害）。 */
+  /** 璧ょ値鍝ュ竷鏋楃伡鐑у墿浣欏洖鍚堟暟锛堟瘡鍥炲悎绱 5HP 浼ゅ锛夈€?*/
   playerFireBurnRounds?: number;
-  /** 赤炎哥布林灼烧伤害累计（每回合 +5，≥10 时扣 10HP 并 -10）。 */
+  /** 璧ょ値鍝ュ竷鏋楃伡鐑т激瀹崇疮璁★紙姣忓洖鍚?+5锛屸墺10 鏃舵墸 10HP 骞?-10锛夈€?*/
   playerFireBurnAccum?: number;
-  /** 毒蝎中毒剩余回合数（每回合 8HP，不叠加，刷新计时）。 */
+  /** 姣掕潕涓瘨鍓╀綑鍥炲悎鏁帮紙姣忓洖鍚?8HP锛屼笉鍙犲姞锛屽埛鏂拌鏃讹級銆?*/
   playerPoisonRounds?: number;
-  /** 杀意沸腾：击杀后下一次主动攻击增伤，触发后消费。 */
+  /** 鏉€鎰忔哺鑵撅細鍑绘潃鍚庝笅涓€娆′富鍔ㄦ敾鍑诲浼わ紝瑙﹀彂鍚庢秷璐广€?*/
   frenzyPending?: boolean;
-  /** 无尽杀意层数（最多3层，强化攻击未击杀时清空）。 */
+  /** 鏃犲敖鏉€鎰忓眰鏁帮紙鏈€澶?灞傦紝寮哄寲鏀诲嚮鏈嚮鏉€鏃舵竻绌猴級銆?*/
   awakenSlayerIntentStacks?: number;
-  /** 双重影袭可消费层数（最多2层，新回合清空）。 */
+  /** 鍙岄噸褰辫鍙秷璐瑰眰鏁帮紙鏈€澶?灞傦紝鏂板洖鍚堟竻绌猴級銆?*/
   awakenShadowCharges?: number;
-  /** 双重影袭本回合是否已经由主动移动授予过层数。 */
+  /** 鍙岄噸褰辫鏈洖鍚堟槸鍚﹀凡缁忕敱涓诲姩绉诲姩鎺堜簣杩囧眰鏁般€?*/
   awakenShadowGrantedThisTurn?: boolean;
-  /** 破绽锁定目标。 */
+  /** 鐮寸唤閿佸畾鐩爣銆?*/
   awakenSniperExposedTargetId?: string;
-  /** 精确校准：下一次蓄势强弓必定暴击。 */
+  /** 绮剧‘鏍″噯锛氫笅涓€娆¤搫鍔垮己寮撳繀瀹氭毚鍑汇€?*/
   awakenSniperGuaranteedCrit?: boolean;
-  /** 震慑余波：怪物下一次行动伤害降低。 */
+  /** 闇囨厬浣欐尝锛氭€墿涓嬩竴娆¤鍔ㄤ激瀹抽檷浣庛€?*/
   awakenWeakenedMonsterIds?: string[];
-  /** 死亡宣告标记目标。 */
+  /** 姝讳骸瀹ｅ憡鏍囪鐩爣銆?*/
   awakenExecutionMarkId?: string;
-  /** 各觉醒专属词条每回合一次的触发标记。 */
+  /** 鍚勮閱掍笓灞炶瘝鏉℃瘡鍥炲悎涓€娆＄殑瑙﹀彂鏍囪銆?*/
   awakenBreakerShieldUsed?: boolean;
   awakenSniperDecisiveUsed?: boolean;
   awakenExecutionStealthUsed?: boolean;
   awakenShadowTradeUsed?: boolean;
-  /** 熔岩领主第二阶段标记（Boss HP/maxHp ≤ CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO 后置 true，不可逆）。 */
+  /** 鐔斿博棰嗕富绗簩闃舵鏍囪锛圔oss HP/maxHp 鈮?CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO 鍚庣疆 true锛屼笉鍙€嗭級銆?*/
   lavaLordPhase2?: boolean;
-  /** 熔岩潮汐回合计数器：phase2 期间每回合 +1，达到 CHAPTER4_LAVA_TIDE_INTERVAL 时推进下一排并归零。 */
+  /** 鐔斿博娼睈鍥炲悎璁℃暟鍣細phase2 鏈熼棿姣忓洖鍚?+1锛岃揪鍒?CHAPTER4_LAVA_TIDE_INTERVAL 鏃舵帹杩涗笅涓€鎺掑苟褰掗浂銆?*/
   lavaTideCounter?: number;
-  /** 熔岩领主阶段一「喷发预警」待结算标记：下个 Boss 回合在 cells 上生成临时 LAVA_TILE。 */
+  /** 鐔斿博棰嗕富闃舵涓€銆屽柗鍙戦璀︺€嶅緟缁撶畻鏍囪锛氫笅涓?Boss 鍥炲悎鍦?cells 涓婄敓鎴愪复鏃?LAVA_TILE銆?*/
   lavaEruptionMark?: { cells: Coord[] };
-  /** 熔岩领主「熔岩锁链」远离计数器：每 Boss 回合曼哈顿距离 >1 时 +1，<=1 时归零。 */
+  /** 鐔斿博棰嗕富銆岀啍宀╅攣閾俱€嶈繙绂昏鏁板櫒锛氭瘡 Boss 鍥炲悎鏇煎搱椤胯窛绂?>1 鏃?+1锛?=1 鏃跺綊闆躲€?*/
   lavaLordChainCounter?: number;
-  /** 熔岩领主阶段二定向熔岩潮汐推进方向（进入阶段二时由 Boss 所在边确定，不可变）。 */
+  /** 鐔斿博棰嗕富闃舵浜屽畾鍚戠啍宀╂疆姹愭帹杩涙柟鍚戯紙杩涘叆闃舵浜屾椂鐢?Boss 鎵€鍦ㄨ竟纭畾锛屼笉鍙彉锛夈€?*/
   lavaTideDirection?: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
-  /** 熔岩领主阶段二定向熔岩潮汐已推进的排数（上限 CHAPTER4_LAVA_TIDE_ROW_MAX）。 */
+  /** 鐔斿博棰嗕富闃舵浜屽畾鍚戠啍宀╂疆姹愬凡鎺ㄨ繘鐨勬帓鏁帮紙涓婇檺 CHAPTER4_LAVA_TIDE_ROW_MAX锛夈€?*/
   lavaTideRowsAdvanced?: number;
-  /** 复仇类词条（vengeance/retreat_shot/retribution）：受到怪物攻击后置 true，下次主动攻击消耗并 +5 伤害。 */
+  /** 澶嶄粐绫昏瘝鏉★紙vengeance/retreat_shot/retribution锛夛細鍙楀埌鎬墿鏀诲嚮鍚庣疆 true锛屼笅娆′富鍔ㄦ敾鍑绘秷鑰楀苟 +5 浼ゅ銆?*/
   vengeanceReady?: boolean;
-  /** 进阶 oneShot（final_charge/last_arrow/desperate_gambit）：本层首次 HP≤30% 时触发 AP+3，触发后置 false（默认 true）。 */
+  /** 杩涢樁 oneShot锛坒inal_charge/last_arrow/desperate_gambit锛夛細鏈眰棣栨 HP鈮?0% 鏃惰Е鍙?AP+3锛岃Е鍙戝悗缃?false锛堥粯璁?true锛夈€?*/
   finalChargeAvailable?: boolean;
-  /** 命运守卫待结算预言：标记回合记录中心格，下个 Boss 回合该 3×3 区域爆炸后清空。 */
+  /** 鍛借繍瀹堝崼寰呯粨绠楅瑷€锛氭爣璁板洖鍚堣褰曚腑蹇冩牸锛屼笅涓?Boss 鍥炲悎璇?3脳3 鍖哄煙鐖嗙偢鍚庢竻绌恒€?*/
   fateProphecy?: { center: Coord };
-  /** 冰霜巨人寒气层数：普通攻击命中玩家时 +1，达到 FROST_GIANT_CHILL_STACKS_TO_FREEZE 时触发冻结并归零。 */
+  /** 鍐伴湝宸ㄤ汉瀵掓皵灞傛暟锛氭櫘閫氭敾鍑诲懡涓帺瀹舵椂 +1锛岃揪鍒?FROST_GIANT_CHILL_STACKS_TO_FREEZE 鏃惰Е鍙戝喕缁撳苟褰掗浂銆?*/
   playerChillStacks?: number;
-  /** 玩家是否处于冰霜巨人冻结状态：MOVE 行为被完全阻断（no-op），ATTACK 等其余行动正常。 */
+  /** 鐜╁鏄惁澶勪簬鍐伴湝宸ㄤ汉鍐荤粨鐘舵€侊細MOVE 琛屼负琚畬鍏ㄩ樆鏂紙no-op锛夛紝ATTACK 绛夊叾浣欒鍔ㄦ甯搞€?*/
   playerFrozen?: boolean;
-  /** 冻结状态下玩家还需主动攻击（playerAttack/attackIceWall）多少次才能解除：归零时解除冻结并移除 FREEZE_WALL。 */
+  /** 鍐荤粨鐘舵€佷笅鐜╁杩橀渶涓诲姩鏀诲嚮锛坧layerAttack/attackIceWall锛夊灏戞鎵嶈兘瑙ｉ櫎锛氬綊闆舵椂瑙ｉ櫎鍐荤粨骞剁Щ闄?FREEZE_WALL銆?*/
   playerFreezeAttacksRemaining?: number;
-  /** 命运守卫狂暴态「改写命运」待结算：5 抽 3 + 玩家弃 1 的中间状态。 */
+  /** 鍛借繍瀹堝崼鐙傛毚鎬併€屾敼鍐欏懡杩愩€嶅緟缁撶畻锛? 鎶?3 + 鐜╁寮?1 鐨勪腑闂寸姸鎬併€?*/
   pendingDestinyRewrite?: {
-    /** 抽到的 3 个事件编号（1-5，不重复，按抽取顺序）。 */
+    /** 鎶藉埌鐨?3 涓簨浠剁紪鍙凤紙1-5锛屼笉閲嶅锛屾寜鎶藉彇椤哄簭锛夈€?*/
     drawn: [number, number, number];
-    /** 玩家弃掉的索引（0/1/2），null 表示尚未选择。 */
+    /** 鐜╁寮冩帀鐨勭储寮曪紙0/1/2锛夛紝null 琛ㄧず灏氭湭閫夋嫨銆?*/
     removed: 0 | 1 | 2 | null;
-    /** 预告所在的怪物回合（用于周期判定）。 */
+    /** 棰勫憡鎵€鍦ㄧ殑鎬墿鍥炲悎锛堢敤浜庡懆鏈熷垽瀹氾級銆?*/
     offeredAtTurn: number;
   };
-  /** 命运守卫 E5 命运封锁：下个玩家回合 AP 减半（floor(ap/2)，最少 1）。AP 系统结算后清空。 */
+  /** 鍛借繍瀹堝崼 E5 鍛借繍灏侀攣锛氫笅涓帺瀹跺洖鍚?AP 鍑忓崐锛坒loor(ap/2)锛屾渶灏?1锛夈€侫P 绯荤粺缁撶畻鍚庢竻绌恒€?*/
   destinyLockNextTurn?: boolean;
-  /** 命运守卫行为镜像：玩家本回合是否至少一次命中（CombatSystem.playerAttack 设置，endTurn 重置）。 */
+  /** 鍛借繍瀹堝崼琛屼负闀滃儚锛氱帺瀹舵湰鍥炲悎鏄惁鑷冲皯涓€娆″懡涓紙CombatSystem.playerAttack 璁剧疆锛宔ndTurn 閲嶇疆锛夈€?*/
   playerAttackedThisTurn?: boolean;
-  /** 命运守卫行为镜像：玩家本回合的累计移动格数（MovementSystem.applyMove 自增，endTurn 重置）。 */
+  /** 鍛借繍瀹堝崼琛屼负闀滃儚锛氱帺瀹舵湰鍥炲悎鐨勭疮璁＄Щ鍔ㄦ牸鏁帮紙MovementSystem.applyMove 鑷锛宔ndTurn 閲嶇疆锛夈€?*/
   playerStepsThisTurn?: number;
+  /** 连续完整玩家回合未移动形成的被围攻层数；移动一步立即清零，最多 3 层。 */
+  stationaryPressureStacks?: number;
+  /** 本层通过击碎冰墙已获得的灵气。 */
+  iceWallAnimaGained?: number;
+  /** 本层通过击碎冰川塑形者冰墙已获得的灵气。 */
+  glacierShaperWallAnimaGained?: number;
+  playerExposedTurns?: number;
+  goblinSentinelAlertIds?: string[];
+  duneSentinelAlertIds?: string[];
+  /** 鏈洖鍚堝凡閫氳繃鍑绘潃杩旇繕鐨?AP锛屾€婚鍙楀崟鍥炲悎涓婇檺绾︽潫锛宔ndTurn 閲嶇疆銆?*/
+  killApRefundedThisTurn?: number;
   /** V2 general traits: floor/turn-scoped combat state. */
   generalFirstAttackUsed?: boolean;
   generalSetbackReady?: boolean;
@@ -456,21 +414,21 @@ export interface FloorState {
   rogueChainBackstabReady?: boolean;
   rogueVanishStrikeReady?: boolean;
   rogueSmokeUsed?: boolean;
-  /** 词条：连杀本层击杀计数（aff_kill_chain 攻击加成；新层自动归零）。 */
+  /** 璇嶆潯锛氳繛鏉€鏈眰鍑绘潃璁℃暟锛坅ff_kill_chain 鏀诲嚮鍔犳垚锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
   affixKillChainStacks?: number;
-  /** 词条：先发制人本层首攻已触发（aff_preemptive；新层自动归零）。 */
+  /** 璇嶆潯锛氬厛鍙戝埗浜烘湰灞傞鏀诲凡瑙﹀彂锛坅ff_preemptive锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
   affixPreemptiveUsed?: boolean;
-  /** 词条：疾袭本回合移动后待触发（aff_swift_strike；endTurn 重置）。 */
+  /** 璇嶆潯锛氱柧琚湰鍥炲悎绉诲姩鍚庡緟瑙﹀彂锛坅ff_swift_strike锛沞ndTurn 閲嶇疆锛夈€?*/
   affixSwiftStrikeReady?: boolean;
-  /** 传奇：命运之刃本层击杀叠层计数（leg_fate_blade；新层自动归零）。 */
+  /** 浼犲锛氬懡杩愪箣鍒冩湰灞傚嚮鏉€鍙犲眰璁℃暟锛坙eg_fate_blade锛涙柊灞傝嚜鍔ㄥ綊闆讹級銆?*/
   legFateBladeStacks?: number;
-  /** 传奇：噬魂战斧下次攻击必暴击标记（leg_soul_axe；击杀后置 true，首次攻击消耗）。 */
+  /** 浼犲锛氬櫖榄傛垬鏂т笅娆℃敾鍑诲繀鏆村嚮鏍囪锛坙eg_soul_axe锛涘嚮鏉€鍚庣疆 true锛岄娆℃敾鍑绘秷鑰楋級銆?*/
   legSoulAxePending?: boolean;
-  /** 传奇：永恒板甲本层首次致死兜底已用（leg_eternal_plate；新层重置）。 */
+  /** 浼犲锛氭案鎭掓澘鐢叉湰灞傞娆¤嚧姝诲厹搴曞凡鐢紙leg_eternal_plate锛涙柊灞傞噸缃級銆?*/
   legEternalPlateUsed?: boolean;
-  /** 传奇：疾风幻影甲下次受击伤害减半（leg_phantom_armor；受击 30% 概率置 true，触发后消耗）。 */
+  /** 浼犲锛氱柧椋庡够褰辩敳涓嬫鍙楀嚮浼ゅ鍑忓崐锛坙eg_phantom_armor锛涘彈鍑?30% 姒傜巼缃?true锛岃Е鍙戝悗娑堣€楋級銆?*/
   legPhantomDodgeReady?: boolean;
-  /** 传奇：疾风之靴首步后首击+25%待触发（leg_gale_boots；首步成功后置 true，首次攻击消耗）。 */
+  /** 浼犲锛氱柧椋庝箣闈撮姝ュ悗棣栧嚮+25%寰呰Е鍙戯紙leg_gale_boots锛涢姝ユ垚鍔熷悗缃?true锛岄娆℃敾鍑绘秷鑰楋級銆?*/
   legGaleBootsAttackReady?: boolean;
   tutorialScenarioId?: string;
   tutorialGuide?: {
@@ -480,268 +438,286 @@ export interface FloorState {
   };
 }
 
-// ── 远征总状态（存档根对象） ───────────────────────────
+// 鈹€鈹€ 杩滃緛鎬荤姸鎬侊紙瀛樻。鏍瑰璞★級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type ExpeditionStatus = 'ACTIVE' | 'DEAD' | 'COMPLETED';
 
 export interface ExpeditionState {
-  runSeed: number; // 整次远征种子（派生每层种子）
+  runSeed: number; // 鏁存杩滃緛绉嶅瓙锛堟淳鐢熸瘡灞傜瀛愶級
   chapter: number; // 1-based
-  floor: number; // 1-based 当前层
+  floor: number; // 1-based 褰撳墠灞?
   status: ExpeditionStatus;
   player: RunPlayer;
   floorState: FloorState;
   balanceSnapshot?: PveBalanceSnapshot | null;
-  /** 难度快照（开局冻结，续档不变，→ AC-P3-9）。缺省视为 NORMAL。 */
+  /** 闅惧害蹇収锛堝紑灞€鍐荤粨锛岀画妗ｄ笉鍙橈紝鈫?AC-P3-9锛夈€傜己鐪佽涓?NORMAL銆?*/
   difficultySnapshot?: import('./PveConstants').DifficultySnapshot | null;
   isTutorialRun?: boolean;
-  /** 命运树「三选一」待选队列（E2/E3 解锁后产生，先进先出，UI 弹窗逐个处理）。 */
-  pendingTreeChoices?: PendingTreeChoice[];
+  /** 仅关闭已退役的随机掉落/强化；原移动、攻击、AI 与事件链仍保持不变。 */
+  persistentFloorMode?: true;
+  /** 本层固定装备掉落池（来自楼层目录 equipmentIds）。 */
+  equipmentDropPool?: readonly string[];
+  /** 本层掉落实例序号，保证 loot_* instanceId 确定性。 */
+  lootSeq?: number;
 }
 
-// ── 事件（core 纯函数返回，供 Controller 回放动画） ────
+// 鈹€鈹€ 浜嬩欢锛坈ore 绾嚱鏁拌繑鍥烇紝渚?Controller 鍥炴斁鍔ㄧ敾锛?鈹€鈹€鈹€鈹€
 export type PveEvent =
   | { type: 'MOVE'; entityId: 'PLAYER' | string; from: Coord; to: Coord; apLeft: number }
   | { type: 'REVEAL'; cells: Coord[] }
-  | { type: 'ATTACK'; attackerId: string; targetId: string; damage: number; targetHp: number }
+  | { type: 'ATTACK'; attackerId: string; targetId: string; damage: number; targetHp: number; cause?: 'DIRECT' | 'COLLISION' }
+  | { type: 'WAR_HORN_SUMMONED'; pos: Coord; allyId: string }
+  | { type: 'ALLY_KILLED'; allyId: string; pos: Coord }
   | { type: 'KILL'; monsterId: string; monsterType: MonsterType }
-  | { type: 'LOOT'; gold?: number; anima?: number; equip?: EquipItem; fragmentPair?: AdvancableClass[]; source: string; bagged?: boolean }
-  /** 营地变卖装备（AC-19 装备整理）。 */
+  | { type: 'LOOT'; gold?: number; anima?: number; equip?: EquipItem; source: string; bagged?: boolean }
+  /** 钀ュ湴鍙樺崠瑁呭锛圓C-19 瑁呭鏁寸悊锛夈€?*/
   | { type: 'SELL_EQUIP'; slot: EquipSlot; itemName: string; gold: number }
   | { type: 'PICK_KEY'; entityId: string }
   | { type: 'OPEN_CHEST'; entityId: string }
-  | { type: 'ANIMA_STRENGTHEN'; choices: string[] } // 触发 3 选 1（待玩家选择）
   | { type: 'PLAYER_DAMAGED'; damage: number; hp: number; sourceId: string; rawDamage?: number }
+  | { type: 'STATIONARY_PRESSURE_CHANGED'; stacks: number }
   | { type: 'TURN_END'; turn: number }
-  /** 新回合开始掷骰 → AP（AC-2）：dice ∈ [1,6]，ap = 8 + dice ∈ [9,14]（已包含结转，见 AP_CARRIED）。 */
+  /** 鏂板洖鍚堝紑濮嬫幏楠?鈫?AP锛圓C-2锛夛細dice 鈭?[1,6]锛宎p = 8 + dice 鈭?[9,14]锛堝凡鍖呭惈缁撹浆锛岃 AP_CARRIED锛夈€?*/
   | { type: 'AP_ROLLED'; turn: number; dice: number; ap: number }
-  /** 上回合剩余 AP 按 AP_CARRY_CAP 结转到本回合：amount 为本次结转值（已计入 AP_ROLLED.ap）。 */
+  /** 涓婂洖鍚堝墿浣?AP 鎸?AP_CARRY_CAP 缁撹浆鍒版湰鍥炲悎锛歛mount 涓烘湰娆＄粨杞€硷紙宸茶鍏?AP_ROLLED.ap锛夈€?*/
   | { type: 'AP_CARRIED'; amount: number }
-  /** Boss 阵亡 + 持有钥匙时在 Boss 位置浮现传送门（玩家需踏入并交互才通关，design AC-9）。 */
+  /** 鐜╁鍑绘潃鍚庤繑杩?AP锛沘mount 涓烘湰娆¤繑杩樺€硷紝ap 涓鸿繑杩樺悗鐨勫綋鍓?AP銆?*/
+  | { type: 'KILL_AP_GAINED'; amount: number; ap: number; monsterId: string }
+  | { type: 'PLAYER_EXPOSED'; source: 'INTERACTION' | 'GOBLIN_SENTINEL' | 'DUNE_SENTINEL'; turns?: number; permanent?: boolean; monsterId?: string }
+  | { type: 'PLAYER_EXPOSURE_ENDED'; source: 'INTERACTION' | 'GOBLIN_SENTINEL' | 'DUNE_SENTINEL' }
+  /** Boss 闃典骸 + 鎸佹湁閽ュ寵鏃跺湪 Boss 浣嶇疆娴幇浼犻€侀棬锛堢帺瀹堕渶韪忓叆骞朵氦浜掓墠閫氬叧锛宒esign AC-9锛夈€?*/
   | { type: 'PORTAL_SPAWNED'; entityId: string; pos: Coord }
-  /** 神像祝福：三选一随机，仅携带本次命中的那项加成。 */
+  /** 第 6 层夜袭：下一波即将出现（先提示再刷怪）。 */
+  | { type: 'WAVE_INCOMING'; wave: number }
+  | { type: 'GUNPOWDER_BARREL_ACTIVATED'; entityId: string; pos: Coord }
+  | { type: 'BLAST_TARGET_DETONATED'; entityId: string; pos: Coord }
+  | { type: 'TARGET_ESCAPED'; entityId: string; pos: Coord }
+  /** 绁炲儚绁濈锛氫笁閫変竴闅忔満锛屼粎鎼哄甫鏈鍛戒腑鐨勯偅椤瑰姞鎴愩€?*/
   | { type: 'IDOL_BLESSING'; entityId: string; effect: 'MAX_HP'; maxHpBonus: number }
   | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ATTACK'; attackBonus: number }
   | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ARMOR'; armorBonus: number }
-  /** 温泉治疗：当次回满 HP（M1 占位规则，design.md 未详述）。 */
+  /** 娓╂硥娌荤枟锛氬綋娆″洖婊?HP锛圡1 鍗犱綅瑙勫垯锛宒esign.md 鏈杩帮級銆?*/
   | { type: 'HOT_SPRING_HEAL'; entityId: string; healed: number }
-  /** 拾取职业碎片（AC-15 M2）：totalFragments 为该职业当前累计数。 */
-  | { type: 'FRAGMENT_PICKED'; entityId: string; classId: ClassId; totalFragments: number }
-  /** 满足进阶条件：available 为可选进阶职业列表，触发 Controller 弹出选择 UI（阻塞式）。 */
-  | { type: 'CLASS_CAN_ADVANCE'; available: ClassId[] }
-  /** 职业进阶完成：hpCost 为本次扣除的 HP（仅 BERSERKER 有值）。 */
-  | { type: 'CLASS_ADVANCED'; classId: ClassId; hpCost: number }
-  /** 满足二阶觉醒条件，触发 Controller 弹出确认 UI（阻塞式）。 */
-  | { type: 'CLASS_CAN_AWAKEN'; classId: ClassId }
-  /** 二阶觉醒完成：form 为最终判定的觉醒形态。 */
-  | { type: 'CLASS_AWAKENED'; classId: ClassId; form: AwakenForm }
-  /** 觉醒核心或专属机制触发，供 Controller 组合程序动画与战报。 */
-  | { type: 'AWAKEN_EFFECT_TRIGGERED'; effectId: string; sourceId?: string; targetIds?: string[]; amount?: number }
   | { type: 'SHOP_BUY'; itemId: string; cost: number; effect: string }
-  /** 成就解锁（Controller 合成，不由 core 纯函数产生；供 _playEvents 展示 toast）。 */
+  /** 鎴愬氨瑙ｉ攣锛圕ontroller 鍚堟垚锛屼笉鐢?core 绾嚱鏁颁骇鐢燂紱渚?_playEvents 灞曠ず toast锛夈€?*/
   | { type: 'ACHIEVEMENT_UNLOCKED'; achievementId: string; name: string }
   | { type: 'FLOOR_CLEARED'; floor: number }
   | { type: 'PLAYER_DEAD' }
-  /** 流沙巨蝎潜入地下（免疫攻击，下回合冒出）。 */
+  /** 娴佹矙宸ㄨ潕娼滃叆鍦颁笅锛堝厤鐤敾鍑伙紝涓嬪洖鍚堝啋鍑猴級銆?*/
   | { type: 'BOSS_BURROWED'; bossId: string }
-  /** 流沙巨蝎从地下冒出（pos 为落点，落点处会留下一个永久沙坑）。 */
-  | { type: 'BOSS_EMERGED'; bossId: string; pos: Coord }
-  /** 熔岩领主施加灼烧：totalRemaining 为剩余总灼烧伤害点数。 */
+  /** 娴佹矙宸ㄨ潕浠庡湴涓嬪啋鍑猴紙pos 涓鸿惤鐐癸紝钀界偣澶勪細鐣欎笅涓€涓案涔呮矙鍧戯紱attackRadius 涓烘湰娆＄牬鍦熺獊琚疄闄呬激瀹宠寖鍥达級銆?*/
+  | { type: 'BOSS_EMERGED'; bossId: string; pos: Coord; attackRadius: number }
+  /** 鐔斿博棰嗕富鏂藉姞鐏肩儳锛歵otalRemaining 涓哄墿浣欐€荤伡鐑т激瀹崇偣鏁般€?*/
   | { type: 'BURN_APPLIED'; bossId: string; totalRemaining: number }
-  /** 移动AP惩罚施加（冰霜哥布林命中 / 哥布林酋长重击AOE）：rounds 为本次叠加的持续回合数。 */
+  /** 绉诲姩AP鎯╃綒鏂藉姞锛堝啺闇滃摜甯冩灄鍛戒腑 / 鍝ュ竷鏋楅厠闀块噸鍑籄OE锛夛細rounds 涓烘湰娆″彔鍔犵殑鎸佺画鍥炲悎鏁般€?*/
   | { type: 'MOVE_PENALTY_APPLIED'; rounds: number }
-  /** 灼烧状态施加（赤炎哥布林命中）：rounds 为本次叠加的持续回合数。 */
+  /** 鐏肩儳鐘舵€佹柦鍔狅紙璧ょ値鍝ュ竷鏋楀懡涓級锛歳ounds 涓烘湰娆″彔鍔犵殑鎸佺画鍥炲悎鏁般€?*/
   | { type: 'FIRE_BURN_APPLIED'; rounds: number }
-  /** 中毒状态施加（毒蝎命中）：rounds 为持续回合数（不叠加，刷新计时）。 */
+  /** 涓瘨鐘舵€佹柦鍔狅紙姣掕潕鍛戒腑锛夛細rounds 涓烘寔缁洖鍚堟暟锛堜笉鍙犲姞锛屽埛鏂拌鏃讹級銆?*/
   | { type: 'POISON_APPLIED'; rounds: number }
-  /** 中毒 tick：每回合开始时 -8 HP。 */
+  /** 涓瘨 tick锛氭瘡鍥炲悎寮€濮嬫椂 -8 HP銆?*/
   | { type: 'POISON_TICK'; damage: number; hp: number }
-  /** 灼烧 tick：每回合开始时 -1 HP。 */
+  /** 鐏肩儳 tick锛氭瘡鍥炲悎寮€濮嬫椂 -1 HP銆?*/
   | { type: 'BURN_TICK'; damage: number; hp: number }
-  /** 祭坛使用：消耗后随机获得灵气。 */
+  /** 绁潧浣跨敤锛氭秷鑰楀悗闅忔満鑾峰緱鐏垫皵銆?*/
   | { type: 'ALTAR_USED'; entityId: string; anima: number }
-  /** 铁匠强化成功：baseStat 提升，enhanceLevel +1，显示新的强化等级与属性值。 */
+  /** 閾佸尃寮哄寲鎴愬姛锛歜aseStat 鎻愬崌锛宔nhanceLevel +1锛屾樉绀烘柊鐨勫己鍖栫瓑绾т笌灞炴€у€笺€?*/
   | { type: 'BLACKSMITH_UPGRADE'; entityId: string; slot: EquipSlot; newStat: number; newEnhanceLevel: number }
-  /** 铁匠强化失败：扣费但属性不变（概率失败）。 */
+  /** 閾佸尃寮哄寲澶辫触锛氭墸璐逛絾灞炴€т笉鍙橈紙姒傜巼澶辫触锛夈€?*/
   | { type: 'BLACKSMITH_UPGRADE_FAIL'; entityId: string; slot: EquipSlot; failChance: number }
-  /** 铁匠洗炼：随机替换装备词条（消耗金币，不消耗实体）。 */
-  | { type: 'BLACKSMITH_REROLL'; entityId: string; slot: EquipSlot; newTrait: string }
   /** 哥布林酋长蓄力重击实际结算：center 为本次重击结算时 boss 所在格（用于 UI 标识实际命中区域）。 */
   | { type: 'HEAVY_STRIKE_RESOLVED'; bossId: string; center: Coord }
-  /** 哥布林酋长蓄力重击预警（2026-06-15 恢复 → 最终「先释放后追击」方案）：本回合非重击回合，
-   *  但下个怪物回合将触发重击；center 为 boss **当前实际位置**，radius = HEAVY_STRIKE_RANGE。
-   *  重击回合 boss 先在原地释放（中心 = center）、再追击移动，故红圈（以 center 为心半径 radius）
-   *  与下回合实际命中橙圈完全重合，玩家跑出红圈即绝对安全、不会多走位浪费 AP。 */
+  /** 鍝ュ竷鏋楅厠闀胯搫鍔涢噸鍑婚璀︼紙2026-06-15 鎭㈠ 鈫?鏈€缁堛€屽厛閲婃斁鍚庤拷鍑汇€嶆柟妗堬級锛氭湰鍥炲悎闈為噸鍑诲洖鍚堬紝
+   *  浣嗕笅涓€墿鍥炲悎灏嗚Е鍙戦噸鍑伙紱center 涓?boss **褰撳墠瀹為檯浣嶇疆**锛宺adius = HEAVY_STRIKE_RANGE銆?
+   *  閲嶅嚮鍥炲悎 boss 鍏堝湪鍘熷湴閲婃斁锛堜腑蹇?= center锛夈€佸啀杩藉嚮绉诲姩锛屾晠绾㈠湀锛堜互 center 涓哄績鍗婂緞 radius锛?
+   *  涓庝笅鍥炲悎瀹為檯鍛戒腑姗欏湀瀹屽叏閲嶅悎锛岀帺瀹惰窇鍑虹孩鍦堝嵆缁濆瀹夊叏銆佷笉浼氬璧颁綅娴垂 AP銆?*/
   | { type: 'HEAVY_STRIKE_WARNING'; bossId: string; center: Coord; radius: number }
-  /** Boss 首次进入狂暴状态（HP 跨过狂暴阈值，当前仅哥布林酋长）：用于战报提示玩家 Boss 强化。 */
+  /** Boss 棣栨杩涘叆鐙傛毚鐘舵€侊紙HP 璺ㄨ繃鐙傛毚闃堝€硷紝褰撳墠浠呭摜甯冩灄閰嬮暱锛夛細鐢ㄤ簬鎴樻姤鎻愮ず鐜╁ Boss 寮哄寲銆?*/
   | { type: 'BOSS_ENRAGED'; bossId: string }
-  /** 石块被 Boss AOE 摧毁。 */
+  /** 鐭冲潡琚?Boss AOE 鎽ф瘉銆?*/
   | { type: 'ROCK_DESTROYED'; entityId: string }
-  /** 怪物被 Boss 增援号角召唤。 */
+  /** 鎬墿琚?Boss 澧炴彺鍙疯鍙敜銆?*/
   | { type: 'MONSTER_SPAWNED'; monsterId: string; pos: Coord }
-  /** 命运树节点效果生效汇总（远征开局时产生，供 UI 提示展示）。 */
-  | { type: 'TREE_BONUSES_APPLIED'; bonuses: DestinyTreeBonuses }
-  /** 命运树「三选一」弹窗触发（E2 装备 / E3 强化词条）。 */
-  | { type: 'TREE_CHOICE_OFFERED'; source: 'E2' | 'E3'; kind: 'EQUIP' | 'TRAIT' }
-  /** 命运树「三选一」已选定。 */
-  | { type: 'TREE_CHOICE_RESOLVED'; source: 'E2' | 'E3'; kind: 'EQUIP' | 'TRAIT'; selected: string }
-  /** 装备变化：装备/替换/强化时统一触发，供 HUD 刷新装备面板。 */
+  /** 瑁呭鍙樺寲锛氳澶?鏇挎崲/寮哄寲鏃剁粺涓€瑙﹀彂锛屼緵 HUD 鍒锋柊瑁呭闈㈡澘銆?*/
   | { type: 'EQUIP_CHANGED'; slot: EquipSlot; item: EquipItem; prevBaseStat?: number }
-  /** 玩家踩入沙坑（第2章 Boss 房）：当前格 entityId，移动 AP 已加 1。 */
+  /** 鐜╁韪╁叆娌欏潙锛堢2绔?Boss 鎴匡級锛氬綋鍓嶆牸 entityId锛岀Щ鍔?AP 宸插姞 1銆?*/
   | { type: 'SAND_PIT_STEPPED'; entityId: string }
-  /** 灵气怪逃跑后在离开的原格留下陷阱（CH2 沙坑 / CH3 冰面）：variantId 用于战报展示。 */
+  /** 鐏垫皵鎬€冭窇鍚庡湪绂诲紑鐨勫師鏍肩暀涓嬮櫡闃憋紙CH2 娌欏潙 / CH3 鍐伴潰锛夛細variantId 鐢ㄤ簬鎴樻姤灞曠ず銆?*/
   | { type: 'ANIMA_TRAP_SPAWNED'; entityId: string; entityType: 'SAND_PIT' | 'ICE_TILE'; pos: Coord; variantId: string; duration: number }
-  /** 灵气炎魂（CH4）被击杀时在十字 4 格生成熔岩（跳过被占格）。 */
+  /** 鐏垫皵鐐庨瓊锛圕H4锛夎鍑绘潃鏃跺湪鍗佸瓧 4 鏍肩敓鎴愮啍宀╋紙璺宠繃琚崰鏍硷級銆?*/
   | { type: 'ANIMA_DEATH_LAVA'; tiles: Coord[]; duration: number }
-  /** 灵气幻象（CH5）被击杀时给玩家随机 Buff。 */
+  /** 鐏垫皵骞昏薄锛圕H5锛夎鍑绘潃鏃剁粰鐜╁闅忔満 Buff銆?*/
   | { type: 'ANIMA_BUFF_GRANTED'; buffId: string }
-  /** 灵气幻象（CH5）被击杀时给玩家随机 Debuff。 */
+  /** 鐏垫皵骞昏薄锛圕H5锛夎鍑绘潃鏃剁粰鐜╁闅忔満 Debuff銆?*/
   | { type: 'ANIMA_DEBUFF_APPLIED'; debuffId: string }
-  /** 冰墙被玩家攻击破坏（第3章 Boss 房）：emit 后玩家 +anima。 */
+  /** 鍐板琚帺瀹舵敾鍑荤牬鍧忥紙绗?绔?Boss 鎴匡級锛歟mit 鍚庣帺瀹?+anima銆?*/
   | { type: 'ICE_WALL_BROKEN'; entityId: string; anima: number }
-  /** 玩家踩入熔岩地块受伤（每回合开始结算）。 */
+  /** 鐜╁韪╁叆鐔斿博鍦板潡鍙椾激锛堟瘡鍥炲悎寮€濮嬬粨绠楋級銆?*/
   | { type: 'LAVA_TILE_DAMAGED'; entityId: string; damage: number }
-  /** 熔岩领主阶段一喷发预警：以玩家当前格为中心的 4×4 区域，下个 Boss 回合将生成熔岩。 */
+  /** 鐔斿博棰嗕富闃舵涓€鍠峰彂棰勮锛氫互鐜╁褰撳墠鏍间负涓績鐨?4脳4 鍖哄煙锛屼笅涓?Boss 鍥炲悎灏嗙敓鎴愮啍宀┿€?*/
   | { type: 'ERUPTION_TELEGRAPHED'; cells: Coord[] }
-  /** 熔岩领主阶段一喷发结算：在上回合标记的 cells 上生成 LAVA_TILE（存续 duration 回合）。 */
+  /** 鐔斿博棰嗕富闃舵涓€鍠峰彂缁撶畻锛氬湪涓婂洖鍚堟爣璁扮殑 cells 涓婄敓鎴?LAVA_TILE锛堝瓨缁?duration 鍥炲悎锛夈€?*/
   | { type: 'ERUPTION_RESOLVED'; tiles: Coord[]; duration: number }
-  /** 熔岩领主熔核爆裂：灼烧层数达阈值时清空灼烧并造成真实伤害，周围生成 LAVA_TILE。 */
+  /** 鐔斿博棰嗕富鐔旀牳鐖嗚锛氱伡鐑у眰鏁拌揪闃堝€兼椂娓呯┖鐏肩儳骞堕€犳垚鐪熷疄浼ゅ锛屽懆鍥寸敓鎴?LAVA_TILE銆?*/
   | { type: 'BURN_BURST'; damage: number; hp: number; tiles: Coord[] }
-  /** 熔岩领主阶段二定向熔岩潮汐：沿 direction 推进第 rowIndex 排永久 LAVA_TILE。 */
+  /** 鐔斿博棰嗕富闃舵浜屽畾鍚戠啍宀╂疆姹愶細娌?direction 鎺ㄨ繘绗?rowIndex 鎺掓案涔?LAVA_TILE銆?*/
   | { type: 'LAVA_TIDE_ROW_SPAWNED'; tiles: Coord[]; direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'; rowIndex: number }
-  /** 熔岩领主熔岩锁链：玩家被拉近一格并附加灼烧（burnTotal 为叠加后的总灼烧层数）。 */
+  /** 鐔斿博棰嗕富鐔斿博閿侀摼锛氱帺瀹惰鎷夎繎涓€鏍煎苟闄勫姞鐏肩儳锛坆urnTotal 涓哄彔鍔犲悗鐨勬€荤伡鐑у眰鏁帮級銆?*/
   | { type: 'LAVA_CHAIN_PULL'; from: Coord; to: Coord; burnTotal: number }
-  /** 命运守卫行为镜像生成（第5章 FateGuardian HP≤50%，hp=玩家HP×0.5、attack=玩家attack×0.5）。 */
+  /** 鍛借繍瀹堝崼琛屼负闀滃儚鐢熸垚锛堢5绔?FateGuardian HP鈮?0%锛宧p=鐜╁HP脳0.5銆乤ttack=鐜╁attack脳0.5锛夈€?*/
   | { type: 'MIRROR_SPAWNED'; mirrorId: string; pos: Coord }
-  /** 命运镜像被击杀（不掉落，不影响传送门生成判定）。 */
+  /** 鍛借繍闀滃儚琚嚮鏉€锛堜笉鎺夎惤锛屼笉褰卞搷浼犻€侀棬鐢熸垚鍒ゅ畾锛夈€?*/
   | { type: 'MIRROR_KILLED'; mirrorId: string }
-  /** 行为镜像：记录玩家本回合行为，下个怪物回合执行。 */
+  /** 琛屼负闀滃儚锛氳褰曠帺瀹舵湰鍥炲悎琛屼负锛屼笅涓€墿鍥炲悎鎵ц銆?*/
   | { type: 'MIRROR_BEHAVIOR_QUEUED'; mirrorId: string; action: 'ATTACK' | 'MOVE' | 'IDLE'; distance: number }
-  /** 行为镜像：复制玩家移动（朝玩家方向最短路径推进 distance 格）。 */
+  /** 琛屼负闀滃儚锛氬鍒剁帺瀹剁Щ鍔紙鏈濈帺瀹舵柟鍚戞渶鐭矾寰勬帹杩?distance 鏍硷級銆?*/
   | { type: 'MIRROR_MOVED'; mirrorId: string; from: Coord; to: Coord }
-  /** 行为镜像：复制玩家攻击（hit=false 时为曼哈顿 > 2 的空挥）。 */
+  /** 琛屼负闀滃儚锛氬鍒剁帺瀹舵敾鍑伙紙hit=false 鏃朵负鏇煎搱椤?> 2 鐨勭┖鎸ワ級銆?*/
   | { type: 'MIRROR_ATTACKED'; mirrorId: string; hit: boolean; damage: number; hp: number }
-  /** 行为镜像：玩家上回合待机 → 镜像本回合获得 1 层护盾。 */
+  /** 琛屼负闀滃儚锛氱帺瀹朵笂鍥炲悎寰呮満 鈫?闀滃儚鏈洖鍚堣幏寰?1 灞傛姢鐩俱€?*/
   | { type: 'MIRROR_SHIELDED'; mirrorId: string }
-  /** 行为镜像：护盾吸收一次伤害（damage=0 不扣 HP）。 */
+  /** 琛屼负闀滃儚锛氭姢鐩惧惛鏀朵竴娆′激瀹筹紙damage=0 涓嶆墸 HP锛夈€?*/
   | { type: 'MIRROR_SHIELD_ABSORBED'; mirrorId: string }
-  /** 命运守卫狂暴态「改写命运」预告：从 5 池抽 3 个事件供玩家弃 1。 */
+  /** 鍛借繍瀹堝崼鐙傛毚鎬併€屾敼鍐欏懡杩愩€嶉鍛婏細浠?5 姹犳娊 3 涓簨浠朵緵鐜╁寮?1銆?*/
   | { type: 'DESTINY_REWRITE_OFFERED'; drawn: [number, number, number] }
-  /** 改写命运：玩家选定弃掉的索引（0/1/2）。 */
+  /** 鏀瑰啓鍛借繍锛氱帺瀹堕€夊畾寮冩帀鐨勭储寮曪紙0/1/2锛夈€?*/
   | { type: 'DESTINY_REWRITE_CHOSEN'; removedIndex: 0 | 1 | 2 }
-  /** 改写命运结算汇总：本次实际执行的事件编号（按 E5→E4→E3→E1→E2 顺序）。 */
+  /** 鏀瑰啓鍛借繍缁撶畻姹囨€伙細鏈瀹為檯鎵ц鐨勪簨浠剁紪鍙凤紙鎸?E5鈫扙4鈫扙3鈫扙1鈫扙2 椤哄簭锛夈€?*/
   | { type: 'DESTINY_REWRITE_RESOLVED'; executed: number[] }
-  /** 改写命运 E1：Boss 回血 amount，结算后 boss.hp。 */
+  /** 鏀瑰啓鍛借繍 E1锛欱oss 鍥炶 amount锛岀粨绠楀悗 boss.hp銆?*/
   | { type: 'DESTINY_HEAL'; amount: number; bossHp: number }
-  /** 改写命运 E2：Boss 加伤害 pct%，buff 失效的怪物回合。 */
+  /** 鏀瑰啓鍛借繍 E2锛欱oss 鍔犱激瀹?pct%锛宐uff 澶辨晥鐨勬€墿鍥炲悎銆?*/
   | { type: 'DESTINY_ATK_BUFF'; pct: number; expiresAtTurn: number }
-  /** 改写命运 E3：直接对玩家造成 damage 真实伤害，hp 为结算后玩家 HP。 */
+  /** 鏀瑰啓鍛借繍 E3锛氱洿鎺ュ鐜╁閫犳垚 damage 鐪熷疄浼ゅ锛宧p 涓虹粨绠楀悗鐜╁ HP銆?*/
   | { type: 'DESTINY_DIRECT_DAMAGE'; damage: number; hp: number }
-  /** 改写命运 E4：以 Boss 当前格为中心 5×5 爆炸；damage>0 时命中玩家、=0 时玩家在范围外（仅供渲染）。 */
+  /** 鏀瑰啓鍛借繍 E4锛氫互 Boss 褰撳墠鏍间负涓績 5脳5 鐖嗙偢锛沝amage>0 鏃跺懡涓帺瀹躲€?0 鏃剁帺瀹跺湪鑼冨洿澶栵紙浠呬緵娓叉煋锛夈€?*/
   | { type: 'DESTINY_5X5_EXPLODED'; center: Coord; damage: number; hp: number }
-  /** 改写命运 E5：下个玩家回合 AP 减半，nextTurnAp 为实际生效后的 AP。 */
+  /** 鏀瑰啓鍛借繍 E5锛氫笅涓帺瀹跺洖鍚?AP 鍑忓崐锛宯extTurnAp 涓哄疄闄呯敓鏁堝悗鐨?AP銆?*/
   | { type: 'DESTINY_AP_LOCKED'; nextTurnAp: number }
-  /** 命运守卫预言标记（第5章）：center 为标记的玩家当前格，下个 Boss 回合该 3×3 爆炸。 */
+  /** 鍛借繍瀹堝崼棰勮█鏍囪锛堢5绔狅級锛歝enter 涓烘爣璁扮殑鐜╁褰撳墠鏍硷紝涓嬩釜 Boss 鍥炲悎璇?3脳3 鐖嗙偢銆?*/
   | { type: 'PROPHECY_MARKED'; center: Coord }
-  /** 命运守卫预言结算（第5章）：center 为爆炸中心（3×3），无论是否命中均 emit 供渲染。 */
+  /** 鍛借繍瀹堝崼棰勮█缁撶畻锛堢5绔狅級锛歝enter 涓虹垎鐐镐腑蹇冿紙3脳3锛夛紝鏃犺鏄惁鍛戒腑鍧?emit 渚涙覆鏌撱€?*/
   | { type: 'PROPHECY_RESOLVED'; center: Coord }
-  /** 冰霜巨人冰面生成（第3章）：本次铺出的冰面格子 + 存在回合数。 */
+  /** 鍐伴湝宸ㄤ汉鍐伴潰鐢熸垚锛堢3绔狅級锛氭湰娆￠摵鍑虹殑鍐伴潰鏍煎瓙 + 瀛樺湪鍥炲悎鏁般€?*/
   | { type: 'ICE_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
-  /** 冰霜巨人寒气层数变化（第3章）：普通攻击命中玩家后 emit；stacks 为本次叠加后的层数（触发冻结时归零为 0）。 */
+  /** 鍐伴湝宸ㄤ汉瀵掓皵灞傛暟鍙樺寲锛堢3绔狅級锛氭櫘閫氭敾鍑诲懡涓帺瀹跺悗 emit锛泂tacks 涓烘湰娆″彔鍔犲悗鐨勫眰鏁帮紙瑙﹀彂鍐荤粨鏃跺綊闆朵负 0锛夈€?*/
   | { type: 'CHILL_STACK_APPLIED'; stacks: number }
-  /** 冰霜巨人冻结玩家（第3章，寒气叠满）：wallEntityIds 为同时生成的 FREEZE_WALL 实体 id。MOVE 被阻断直至解除。 */
+  /** 鍐伴湝宸ㄤ汉鍐荤粨鐜╁锛堢3绔狅紝瀵掓皵鍙犳弧锛夛細wallEntityIds 涓哄悓鏃剁敓鎴愮殑 FREEZE_WALL 瀹炰綋 id銆侻OVE 琚樆鏂洿鑷宠В闄ゃ€?*/
   | { type: 'PLAYER_FROZEN'; wallEntityIds: string[] }
-  /** 冰霜巨人解除冻结（第3章，玩家主动攻击 FROST_GIANT_FREEZE_ATTACKS_TO_BREAK 次后）：FREEZE_WALL 同步移除。 */
+  /** 鍐伴湝宸ㄤ汉瑙ｉ櫎鍐荤粨锛堢3绔狅紝鐜╁涓诲姩鏀诲嚮 FROST_GIANT_FREEZE_ATTACKS_TO_BREAK 娆″悗锛夛細FREEZE_WALL 鍚屾绉婚櫎銆?*/
   | { type: 'PLAYER_UNFROZEN' }
-  /** 冰霜巨人「冰霜重击」结算（第3章，每 FROST_GIANT_HEAVY_STRIKE_INTERVAL 回合）：以 boss 自身为中心的 AOE，半径 radius。 */
+  /** 鍐伴湝宸ㄤ汉銆屽啺闇滈噸鍑汇€嶇粨绠楋紙绗?绔狅紝姣?FROST_GIANT_HEAVY_STRIKE_INTERVAL 鍥炲悎锛夛細浠?boss 鑷韩涓轰腑蹇冪殑 AOE锛屽崐寰?radius銆?*/
   | { type: 'FROST_HEAVY_STRIKE_RESOLVED'; bossId: string; center: Coord; radius: number }
-  /** 玩家被击退（冰霜重击命中后）：to 为最终落点（若落在冰面上则已结算滑行），slid 标记是否发生了滑行。 */
+  /** 鐜╁琚嚮閫€锛堝啺闇滈噸鍑诲懡涓悗锛夛細to 涓烘渶缁堣惤鐐癸紙鑻ヨ惤鍦ㄥ啺闈笂鍒欏凡缁撶畻婊戣锛夛紝slid 鏍囪鏄惁鍙戠敓浜嗘粦琛屻€?*/
   | { type: 'KNOCKBACK'; entityId: 'PLAYER'; from: Coord; to: Coord; slid: boolean }
-  /** ICE_WALL/FREEZE_WALL 被击碎（冰霜重击或狂暴冲锋命中）：shatteredCells 为新生成的 SHATTERED_ICE 格子列表。 */
+  /** ICE_WALL/FREEZE_WALL 琚嚮纰庯紙鍐伴湝閲嶅嚮鎴栫媯鏆村啿閿嬪懡涓級锛歴hatteredCells 涓烘柊鐢熸垚鐨?SHATTERED_ICE 鏍煎瓙鍒楄〃銆?*/
   | { type: 'ICE_WALL_SHATTERED'; entityId: string; shatteredCells: Coord[] }
-  /** 冰霜巨人狂暴冲锋预警（第3章，狂暴后每 FROST_GIANT_HEAVY_STRIKE_INTERVAL 回合）：本回合不攻击不移动，
-   *  dir 为冲锋方向，path 为中心线路径（下回合沿此执行，三格宽车道 = path 格 ± 垂直方向 1 格）。 */
+  /** 冰霜巨人狂暴冲锋预警：dir 为冲锋方向，path 为中心线；执行时车道总宽 5 格。 */
   | { type: 'CHARGE_TELEGRAPHED'; bossId: string; dir: Coord; path: Coord[] }
-  /** 冰霜巨人狂暴冲锋执行结算（第3章）：result 标记本次冲锋的结果类型。 */
+  /** 鍐伴湝宸ㄤ汉鐙傛毚鍐查攱鎵ц缁撶畻锛堢3绔狅級锛歳esult 鏍囪鏈鍐查攱鐨勭粨鏋滅被鍨嬨€?*/
   | { type: 'CHARGE_EXECUTED'; bossId: string; from: Coord; to: Coord; result: 'WALL_SHATTERED' | 'PLAYER_HIT' | 'ICE_WALL_SPAWNED' | 'NONE' }
-  /** 冰霜巨人狂暴冲锋未命中时，在随机空格新生成一个 ICE_WALL（第3章）。 */
+  /** 鍐伴湝宸ㄤ汉鐙傛毚鍐查攱鏈懡涓椂锛屽湪闅忔満绌烘牸鏂扮敓鎴愪竴涓?ICE_WALL锛堢3绔狅級銆?*/
   | { type: 'ICE_WALL_SPAWNED'; entityId: string; pos: Coord }
-  /** 流沙巨蝎流沙扩张（第2章）：本次刷出的动态沙坑格子 + 存在回合数。 */
+  /** 娴佹矙宸ㄨ潕娴佹矙鎵╁紶锛堢2绔狅級锛氭湰娆″埛鍑虹殑鍔ㄦ€佹矙鍧戞牸瀛?+ 瀛樺湪鍥炲悎鏁般€?*/
   | { type: 'SAND_TIDE_SPAWNED'; tiles: Coord[]; duration: number }
-  /** 流沙巨蝎沙暴（第2章，潜地时触发）：本次随机覆盖的格子；命中玩家所在格时额外 emit SANDSTORM_HIT。 */
+  /** 娴佹矙宸ㄨ潕娌欐毚锛堢2绔狅紝娼滃湴鏃惰Е鍙戯級锛氭湰娆￠殢鏈鸿鐩栫殑鏍煎瓙锛涘懡涓帺瀹舵墍鍦ㄦ牸鏃堕澶?emit SANDSTORM_HIT銆?*/
   | { type: 'SANDSTORM_SPAWNED'; tiles: Coord[] }
-  /** 流沙巨蝎沙暴命中玩家：真实伤害（无视护甲）。 */
+  /** 娴佹矙宸ㄨ潕娌欐毚鍛戒腑鐜╁锛氱湡瀹炰激瀹筹紙鏃犺鎶ょ敳锛夈€?*/
   | { type: 'SANDSTORM_HIT'; damage: number; hp: number }
   /** Boss 击杀掉落：拾取一件 Boss 遗物（局内生效，死亡清空）。 */
   | { type: 'RELIC_PICKUP'; relicId: RelicId; source: string }
-  /** Boss 击杀掉落：拾取一张命运词条卷轴（玩家可在 HUD 主动使用）。 */
-  | { type: 'SCROLL_PICKUP'; source: string }
-  /** Boss 击杀掉落：拾取若干命运碎片（独立 10% 判定，按章节缩放）。 */
+  /** Boss 鍑绘潃鎺夎惤锛氭嬀鍙栬嫢骞插懡杩愮鐗囷紙鐙珛 10% 鍒ゅ畾锛屾寜绔犺妭缂╂斁锛夈€?*/
   | { type: 'SHARDS_PICKUP'; amount: number; source: string }
-  /** 首次解锁 Boss 遗物图鉴（写入 PveMeta.codex.relics，影响后续掉落概率）。 */
+  /** 棣栨瑙ｉ攣 Boss 閬楃墿鍥鹃壌锛堝啓鍏?PveMeta.codex.relics锛屽奖鍝嶅悗缁帀钀芥鐜囷級銆?*/
   | { type: 'CODEX_RELIC_UNLOCKED'; relicId: RelicId }
-  /** 玩家使用命运词条卷轴：三选一弹窗触发，options 为待选 strengthen_* 词条 id。 */
-  | { type: 'SCROLL_OFFER'; options: string[] }
-  /** 玩家选定卷轴词条：已 append 到 classTraits。 */
-  | { type: 'SCROLL_RESOLVED'; selected: string }
-  /** 营地遗物宝箱开启结果：success=true 表示获得遗物；false 表示未中（已扣资源）；refunded=true 表示遗物已持有自动转补偿。 */
+  /** 钀ュ湴閬楃墿瀹濈寮€鍚粨鏋滐細success=true 琛ㄧず鑾峰緱閬楃墿锛沠alse 琛ㄧず鏈腑锛堝凡鎵ｈ祫婧愶級锛況efunded=true 琛ㄧず閬楃墿宸叉寔鏈夎嚜鍔ㄨ浆琛ュ伩銆?*/
   | { type: 'RELIC_CHEST_OPENED'; success: boolean; relicId?: RelicId; refunded?: boolean; refundGold?: number; refundDiamond?: number }
-  /** 遗物 hook 触发提示（例：永冻之核冰冻、熔火之心反弹），供战报展示。 */
+  /** 閬楃墿 hook 瑙﹀彂鎻愮ず锛堜緥锛氭案鍐讳箣鏍稿啺鍐汇€佺啍鐏箣蹇冨弽寮癸級锛屼緵鎴樻姤灞曠ず銆?*/
   | { type: 'RELIC_TRIGGERED'; relicId: RelicId; detail?: string }
-  /** 传奇装备效果触发提示（Phase 3），供战报展示。 */
+  /** 浼犲瑁呭鏁堟灉瑙﹀彂鎻愮ず锛圥hase 3锛夛紝渚涙垬鎶ュ睍绀恒€?*/
   | { type: 'LEGENDARY_TRIGGERED'; legendaryId: string; detail?: string }
-  /** C4 VOID_WORM 双生复活：首次被击杀时原地复活到 50% HP，emit 供战报/UI 展示。 */
+  /** 鍛借疆鍏藉懡杞洖婧細棣栨琚嚮鏉€鏃跺師鍦板娲诲埌 50% 鐢熷懡銆?*/
   | { type: 'ELITE_REVIVE'; monsterId: string; hp: number }
-  /** C3 FIRE_ELEMENTAL 爆裂自爆：死亡时对 2 格内玩家造成等攻击力真实伤害（无视护甲）。 */
+  /** C3 FIRE_ELEMENTAL 鐖嗚鑷垎锛氭浜℃椂瀵?2 鏍煎唴鐜╁閫犳垚绛夋敾鍑诲姏鐪熷疄浼ゅ锛堟棤瑙嗘姢鐢诧級銆?*/
   | { type: 'ELITE_EXPLODE'; monsterId: string; pos: Coord; damage: number; hp: number }
-  /** C2 FROST_SPRITE 寒冰光环：存活且在玩家 3 格内时每回合开始 AP -1。 */
+  /** C2 FROST_SPRITE 瀵掑啺鍏夌幆锛氬瓨娲讳笖鍦ㄧ帺瀹?3 鏍煎唴鏃舵瘡鍥炲悎寮€濮?AP -1銆?*/
   | { type: 'FROST_AURA_DRAINED'; ap: number }
-  /** 远程攻击（range≥2）被掩体地形遮挡、打不出（Phase 2 LOS，AC-MT-4）。 */
+  /** 娌欐紶璺冭湧棣栨璺岃嚦鍗婅锛氱珛鍗宠繙绂荤帺瀹惰烦璺冿紝骞跺噯澶囦笅娆″弻鍊嶆敾鍑汇€?*/
+  | { type: 'HOPPER_FRENZY_TRIGGERED'; monsterId: string; from: Coord; to: Coord }
+  /** 娌欐紶璺冭湧鍙楀埌璺濈鈮?鐨勭帺瀹舵敾鍑诲悗鍚戠帺瀹跺弽搴旀帹杩?1 鏍笺€?*/
+  | { type: 'HOPPER_REACTION_ADVANCED'; monsterId: string; from: Coord; to: Coord }
+  /** 娌欐紶璺冭湧娑堣€楃媯韬佺姸鎬佸畬鎴愬弻鍊嶆敾鍑汇€?*/
+  | { type: 'HOPPER_FRENZY_ATTACKED'; monsterId: string; damage: number }
+  /** 姣掕潕鍛戒腑宸蹭腑姣掔帺瀹讹紝绔嬪嵆缁撶畻骞舵竻闄ゅ墿浣欐瘨浼ゃ€?*/
+  | { type: 'POISON_DETONATED'; monsterId: string; damage: number; hp: number }
+  /** 鍐板埡璞尓鍙嶅脊鐜╁鏈鐩存帴鏀诲嚮鐨勯儴鍒嗘渶缁堜激瀹炽€?*/
+  | { type: 'FROSTSPIKE_REFLECTED'; monsterId: string; damage: number; hp: number }
+  /** 鍐伴湝绮剧伒鐗虹壊鏈洖鍚堟敾鍑伙紝鍦ㄧ帺瀹跺皠绾夸笂鐢熸垚鐭椂鍐板銆?*/
+  | { type: 'FROST_SPRITE_WALL_RAISED'; monsterId: string; entityId: string; pos: Coord }
+  /** 鍐板窛绛戝鑰呴鍛婁笅涓€墿鍥炲悎灏嗗皝浣忕殑鏍煎瓙銆?*/
+  | { type: 'GLACIER_SHAPER_WALL_TELEGRAPHED'; monsterId: string; pos: Coord }
+  /** 鍐板窛绛戝鑰呬紭鍏堝皝浣忕帺瀹堕€€璺垨渚х考锛岀敓鎴愮煭鏃跺啺澧欍€?*/
+  | { type: 'GLACIER_SHAPER_WALL_RAISED'; monsterId: string; entityId: string; pos: Coord }
+  /** 鍐板窛绛戝鑰呯殑棰勫憡琚帺瀹剁牬鍧忔垨鑷劧钀界┖銆?*/
+  | { type: 'GLACIER_SHAPER_WALL_FIZZLED'; monsterId: string; pos: Coord }
+  /** 鐜╁鍦ㄩ鍛婄敓鏁堝墠鍑绘潃鍐板窛绛戝鑰咃紝鑾峰緱鍙嶅埗濂栧姳銆?*/
+  | { type: 'GLACIER_SHAPER_COUNTERED'; monsterId: string; amount: number; ap: number }
+  /** 鐏劙鍏冪礌棰勫憡涓嬩釜鎬墿鍥炲悎灏嗙偣鐕冪殑鍖哄煙銆?*/
+  | { type: 'FIRE_ELEMENTAL_LAVA_TELEGRAPHED'; monsterId: string; cells: Coord[] }
+  /** 鐏劙鍏冪礌灏嗛鍛婂尯鍩熺湡姝ｇ偣鐕冧负涓存椂鐔斿博銆?*/
+  | { type: 'FIRE_ELEMENTAL_LAVA_SPREAD'; monsterId: string; tiles: Coord[]; duration: number }
+  /** 鐏扮儸鐚庣姮绔欏湪鐔斿博鍦板潡涓婃椂鏀诲嚮鑾峰緱澧炰激銆?*/
+  | { type: 'ASH_HOUND_LAVA_EMPOWERED'; monsterId: string; damage: number }
+  /** 宀╂祮锜逛负鐩搁偦鍙嬪啗鍒嗘媴浼ゅ锛涜煿涓嶄細鍥犲垎鎷呯洿鎺ユ浜°€?*/
+  | { type: 'LAVA_CRAB_GUARDED'; crabId: string; targetId: string; damage: number; crabHp: number }
+  /** 鍛借繍瀹堟湜鑰呰鍙栫帺瀹舵湰鍥炲悎涓昏琛屼负骞跺姞閫熼€艰繎銆?*/
+  | { type: 'FATE_WATCHER_ADAPTED'; monsterId: string; action: 'ATTACK' | 'MOVE' }
+  /** 杩滅▼鏀诲嚮锛坮ange鈮?锛夎鎺╀綋鍦板舰閬尅銆佹墦涓嶅嚭锛圥hase 2 LOS锛孉C-MT-4锛夈€?*/
   | { type: 'ATTACK_BLOCKED_BY_COVER'; attackerId: string; targetId: string; blockerPos: Coord };
 
-/** core 纯函数统一返回：变更后的状态 + 本次产生的事件序列。 */
+/** core 绾嚱鏁扮粺涓€杩斿洖锛氬彉鏇村悗鐨勭姸鎬?+ 鏈浜х敓鐨勪簨浠跺簭鍒椼€?*/
 export interface ApplyResult {
   state: ExpeditionState;
   events: PveEvent[];
 }
 
-// ── 局外元进度（AC-20，远征间持久化） ────────────────────
+// 鈹€鈹€ 灞€澶栧厓杩涘害锛圓C-20锛岃繙寰侀棿鎸佷箙鍖栵級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-/** 图鉴：已见过的怪物类型 / 已获得的装备槽位 / 已解锁的 Boss 遗物。 */
+/** 鍥鹃壌锛氬凡瑙佽繃鐨勬€墿绫诲瀷 / 宸茶幏寰楃殑瑁呭妲戒綅 / 宸茶В閿佺殑 Boss 閬楃墿銆?*/
 export interface PveCodex {
-  /** MonsterType 字符串集合（'NORMAL'/'ANIMA'/'ELITE'/'BOSS'）。 */
+  /** MonsterType 瀛楃涓查泦鍚堬紙'NORMAL'/'ANIMA'/'ELITE'/'BOSS'锛夈€?*/
   monsters: string[];
-  /** EquipSlot 字符串集合（'WEAPON'/'ARMOR' 等）。 */
+  /** EquipSlot 瀛楃涓查泦鍚堬紙'WEAPON'/'ARMOR' 绛夛級銆?*/
   equipment: string[];
-  /** 已解锁过的 Boss 遗物 id 列表（首次拾取后写入，影响后续掉落概率 +RELIC_CODEX_BONUS）。 */
+  /** 宸茶В閿佽繃鐨?Boss 閬楃墿 id 鍒楄〃锛堥娆℃嬀鍙栧悗鍐欏叆锛屽奖鍝嶅悗缁帀钀芥鐜?+RELIC_CODEX_BONUS锛夈€?*/
   relics?: RelicId[];
 }
 
 /**
- * PVE 局外元进度（design §2.1：死亡后保留的局外资产）。
- * 存储于 `users` 云文档，不属于 `ExpeditionState`。
+ * PVE 灞€澶栧厓杩涘害锛坉esign 搂2.1锛氭浜″悗淇濈暀鐨勫眬澶栬祫浜э級銆?
+ * 瀛樺偍浜?`users` 浜戞枃妗ｏ紝涓嶅睘浜?`ExpeditionState`銆?
  */
 export interface PveMeta {
-  /** 当前命运碎片余额（由结算云函数累加，此处为只读快照）。 */
+  /** 褰撳墠鍛借繍纰庣墖浣欓锛堢敱缁撶畻浜戝嚱鏁扮疮鍔狅紝姝ゅ涓哄彧璇诲揩鐓э級銆?*/
   destinyShards: number;
-  /** 当前钻石余额（用户级累计货币，由结算云函数累加，此处为只读快照）。 */
+  /** 褰撳墠閽荤煶浣欓锛堢敤鎴风骇绱璐у竵锛岀敱缁撶畻浜戝嚱鏁扮疮鍔狅紝姝ゅ涓哄彧璇诲揩鐓э級銆?*/
   diamond: number;
-  /** 当前远征体力；新远征消耗 20，继续存档不消耗。 */
+  /** 褰撳墠杩滃緛浣撳姏锛涙柊杩滃緛娑堣€?20锛岀户缁瓨妗ｄ笉娑堣€椼€?*/
   stamina?: number;
-  /** 体力上限，当前固定为 60。 */
+  /** 浣撳姏涓婇檺锛屽綋鍓嶅浐瀹氫负 60銆?*/
   staminaMax?: number;
-  /** 未满体力时下一点恢复的服务端时间戳；满体力时为 null。 */
+  /** 鏈弧浣撳姏鏃朵笅涓€鐐规仮澶嶇殑鏈嶅姟绔椂闂存埑锛涙弧浣撳姏鏃朵负 null銆?*/
   staminaNextRecoveryAt?: number | null;
-  /** 下次新远征实际消耗；首次为 0，之后为 20。 */
+  /** 涓嬫鏂拌繙寰佸疄闄呮秷鑰楋紱棣栨涓?0锛屼箣鍚庝负 20銆?*/
   nextRunCost?: number;
-  /** 已扣费并预留种子、但尚未写入首层存档的远征。 */
+  /** 宸叉墸璐瑰苟棰勭暀绉嶅瓙銆佷絾灏氭湭鍐欏叆棣栧眰瀛樻。鐨勮繙寰併€?*/
   hasPendingRun?: boolean;
-  /** 历史到达的最高楼层，用于大厅身份卡与排行榜。 */
+  /** 鍘嗗彶鍒拌揪鐨勬渶楂樻ゼ灞傦紝鐢ㄤ簬澶у巺韬唤鍗′笌鎺掕姒溿€?*/
   highestFloor?: number;
-  /** 已解锁的成就 id 列表（AchievementId[]）。 */
+  /** 宸茶В閿佺殑鎴愬氨 id 鍒楄〃锛圓chievementId[]锛夈€?*/
   achievements: string[];
-  /** 图鉴：已见过的怪物/装备类型。 */
+  /** 鍥鹃壌锛氬凡瑙佽繃鐨勬€墿/瑁呭绫诲瀷銆?*/
   codex: PveCodex;
-  /** 已解锁的命运树节点 id 列表（如 'A1'/'B2'/'E3'，见 PveConstants.DESTINY_TREE_NODES）。 */
+  /** 旧账号兼容字段：已退役账号成长系统残留，仅保留给 GM/云端清理历史数据。 */
   unlockedTreeNodes: string[];
   tutorialCompleted?: boolean;
 }

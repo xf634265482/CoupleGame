@@ -1,22 +1,20 @@
-// 角色信息弹窗（design §3 / §8 / §10/§11 概览）：点击 HUD「角色」按钮弹出，展示
-// 职业 / HP / 攻击力 / 装备 / 词条 / 职业碎片 / 成就 / 图鉴。
-// 半透明遮罩 + 居中面板；点击遮罩或关闭按钮收起，期间冻结主场景输入由 Controller 负责。
+﻿// 角色信息弹窗：点击 HUD「角色」按钮弹出。
+// 展示基础属性、装备（含生效属性当前值/上限）、觉醒词条与遗物。
 
 import { Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UIOpacity, UITransform } from 'cc';
-import { findAchievement } from '../core/AchievementSystem';
-import { playerAttackPower } from '../core/CombatSystem';
-import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD, SHOES_STEALTH_THRESHOLD, shoesStealthReduction } from '../core/EquipmentSystem';
-import { affixDescription } from '../core/AffixSystem';
-import { AWAKEN_FORMS, BASE_ATTACK, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, INITIAL_HP } from '../core/PveConstants';
-import { getBalancedApBase, getPlayerBalanceConfig } from '../core/PveBalance';
+import { playerArmorPower, playerAttackPower, playerWeaponArmorPenetration } from '../core/CombatSystem';
+import { PLAYER_ARMOR_MAX_REDUCTION_RATIO } from '../core/PveConstants';
+import { getBalancedApBase } from '../core/PveBalance';
 import { RELIC_DEFS } from '../core/RelicSystem';
-import type { EquipItem, EquipSlot, ExpeditionState, PveMeta, RelicId } from '../core/PveTypes';
+import type { EquipItem, EquipSlot, ExpeditionState, RelicId } from '../core/PveTypes';
 import { loadUiSprite } from '../../ui/UiAssets';
 import { ensureArtChild } from '../../ui/UiSprite';
-import { STRENGTHEN_LABEL } from './PveToastView';
 import { makeLabel } from './pveUiKit';
 import { Effects } from '../../fx/Effects';
 import { PveDebug } from '../debug/PveDebug';
+import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
+import { professionBaseStats, professionIdFromClassId } from '../core/professions/ProfessionBaseStats';
+import { equipPrimaryStatDescription } from '../core/equipment/EquipmentProgression';
 
 const TITLE_COLOR  = new Color(255, 226, 138, 255);
 const TEXT_COLOR   = new Color(238, 244, 252, 255);
@@ -55,12 +53,7 @@ const BTN_AREA_H = 88;
 const SV_W = PANEL_W - 56;
 const SV_H = PANEL_H - TITLE_AREA_H - BTN_AREA_H;
 
-const CLASS_LABEL: Record<string, string> = {
-  ADVENTURER: '冒险者',
-  BERSERKER:  '狂战士',
-  ARCHER:     '射手',
-  ROGUE:      '隐匿者',
-};
+const CLASS_LABEL: Record<string, string> = CLASS_DISPLAY_NAMES;
 
 const QUALITY_LABEL: Record<string, string> = {
   COMMON:    '普通',
@@ -95,9 +88,6 @@ export class PveCharacterPanel {
   private _detailBodyLabel:   Label | null = null;
   private _detailGfx:         Graphics | null = null;
   private _traitsLabel:       Label;
-  private _fragmentsLabel:    Label;
-  private _achievementsLabel: Label;
-  private _codexLabel:        Label;
   private _currentRelics:     RelicId[] = [];
   private _relicPopup:        Node | null = null;
   private _relicPopupLabel:   Label | null = null;
@@ -166,15 +156,11 @@ export class PveCharacterPanel {
     viewNode.addComponent(Mask);
 
     // 各 section 的高度（顺序 = 渲染顺序，自上而下）
-    // 行高、装备槽高都放宽，避免玩家点击误触相邻槽位。
     const SEC_GAP = 18;
-    const statsH       = 260;             // 8 行 × 32 行高
-    const equipBlockH  = 36 + 5 * 42;     // 标题 36 + 5 槽位 × 42
-    const traitsH      = 108;             // 3 行 × 32 行高 + padding
-    const fragmentsH   = 44;
-    const achieveH     = 230;
-    const codexH       = 64;
-    const CONTENT_H = statsH + equipBlockH + traitsH + fragmentsH + achieveH + codexH + SEC_GAP * 5 + 28;
+    const statsH       = 280;
+    const equipBlockH  = 36 + 5 * 42;
+    const traitsH      = 72;
+    const CONTENT_H = statsH + equipBlockH + traitsH + SEC_GAP * 2 + 28;
 
     const contentNode = new Node('Content');
     contentNode.setParent(viewNode);
@@ -212,10 +198,6 @@ export class PveCharacterPanel {
       e.propagationStopped = true;
       if (this._currentRelics.length > 0) this._showRelicDetail();
     });
-    this._fragmentsLabel = place(fragmentsH, DIM_COLOR);
-    this._achievementsLabel = place(achieveH, new Color(255, 215, 100, 255));
-    this._achievementsLabel.overflow = Label.Overflow.CLAMP;
-    this._codexLabel     = place(codexH, DIM_COLOR);
 
     this._buildDetailPopup(panel);
     this._buildRelicPopup(panel);
@@ -472,20 +454,18 @@ export class PveCharacterPanel {
     gfx.stroke();
 
     // 正文内容
-    const effectLine = this._slotEffectDesc(item.slot, item.baseStat, item.baseStatMax);
+    const effectLine = equipPrimaryStatDescription(item);
     const implicitLine = item.implicit
       ? `特性：${PveCharacterPanel._IMPLICIT_CN[item.implicit] ?? item.implicit}`
       : '';
-    const affixLines = (item.affixes ?? []).map((aff) => affixDescription(aff));
     const traitLine  = item.trait
-      ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? '特殊词条'}`
-      : (affixLines.length === 0 ? '词条：(未洗炼)' : '');
+      ? `词条：${PveCharacterPanel._TRAIT_CN[item.trait] ?? item.trait}`
+      : '';
 
     this._detailBodyLabel.string = [
       `${slotStr} · ${qualityStr}`,
       `主属性：${effectLine}`,
       ...(implicitLine ? [implicitLine] : []),
-      ...affixLines,
       ...(traitLine ? [traitLine] : []),
     ].join('\n');
 
@@ -498,21 +478,14 @@ export class PveCharacterPanel {
     weapon_spear:  '攻击范围+1 / 伤略低',
     armor_plate:   '高防 / 移动AP+1',
     helmet_heavy:  '高HP / 警戒范围+1',
-    trinket_gold:  '金币获取加成',
+    trinket_gold:  '星尘获取加成',
   };
 
   /**
-   * 装备词条完整中文映射（通用词条 + Boss 专属词条）。
+   * 装备词条完整中文映射（Boss 专属词条）。
    * 补充 BossEquipTraitEffects 里的 trait id，避免详情弹窗显示英文 id。
    */
   private static readonly _TRAIT_CN: Record<string, string> = {
-    // 通用词条（与 EQUIP_TRAIT_LABEL 一致）
-    equip_atk_up:  '攻击 +10',
-    equip_def_up:  '防御 +10',
-    equip_hp_up:   '最大HP +20',
-    equip_crit_up: '暴击率 +5%',
-    equip_gold_up: '拾取金币 +10%',
-    equip_swift:   '移动AP -1',
     // Boss 专属词条（BossEquipTraitEffects.ts 命名规范）
     'on_hit_lifesteal_1': '命中吸血（回复HP）',
     'boss_stun_on_hurt':  '受击有概率眩晕攻击者',
@@ -529,24 +502,6 @@ export class PveCharacterPanel {
     'boss_revive_50':     '致死时复活（回50%HP，每场1次）',
   };
 
-  /** 按槽位 + baseStat（+ 可选上限）生成主属性效果描述。 */
-  private _slotEffectDesc(slot: EquipSlot, baseStat: number, baseStatMax?: number): string {
-    const maxSuffix = baseStatMax !== undefined && baseStatMax !== baseStat ? `/${baseStatMax}` : '';
-    switch (slot) {
-      case 'WEAPON':  return `攻击力 +${baseStat}${maxSuffix}`;
-      case 'HELMET':  return `最大HP +${baseStat}${maxSuffix}`;
-      case 'ARMOR':   return `减伤 ${baseStat}${maxSuffix} 点`;
-      case 'TRINKET': return `灵气 +${baseStat}${maxSuffix}%`;
-      case 'SHOES': {
-        const parts: string[] = [`档位 ${baseStat}${maxSuffix}`];
-        if (baseStat >= SHOES_REVEAL_BONUS_THRESHOLD) parts.push('视野+1');
-        if (baseStat >= SHOES_FIRST_MOVE_THRESHOLD)   parts.push('首步免费');
-        if (baseStat >= SHOES_STEALTH_THRESHOLD)      parts.push(`潜行-${shoesStealthReduction(baseStat)}`);
-        return parts.join(' · ');
-      }
-    }
-  }
-
   private _makeSection(parent: Node, y: number, h: number, color: Color): Label {
     const lbl = makeLabel(
       parent, 0, y - h / 2,
@@ -557,28 +512,20 @@ export class PveCharacterPanel {
     return lbl;
   }
 
-  /** 用当前 ExpeditionState（+ 可选局外元进度）刷新所有字段（show 时调用）。 */
-  update(state: ExpeditionState, meta?: PveMeta): void {
+  /** 用当前 ExpeditionState 刷新所有字段（show 时调用）。 */
+  update(state: ExpeditionState): void {
     const { player, floorState } = state;
-    const awakenDef = player.awakenForm ? AWAKEN_FORMS[player.awakenForm] : undefined;
-    const cls = awakenDef?.name ?? CLASS_LABEL[player.classId] ?? player.classId;
-    const balanceConfig = getPlayerBalanceConfig(state.balanceSnapshot, state.chapter);
-    const baseHp = balanceConfig.initialHp ?? INITIAL_HP;
-    const baseAttack = balanceConfig.baseAttack ?? BASE_ATTACK;
+    const cls = CLASS_LABEL[player.classId] ?? player.classId;
+    const profession = professionBaseStats(professionIdFromClassId(player.classId));
+    const baseHp = profession.maxHp;
+    const baseAttack = profession.attack;
     const apBase = getBalancedApBase(state.balanceSnapshot, state.chapter);
     const { damage, range } = playerAttackPower(player, state.balanceSnapshot, state.chapter);
-    const threshold = player.animaThreshold ?? 100;
 
     // ── 基础属性 ──────────────────────────────────────────────
-    const awakenLine = awakenDef ? `核心天赋：${awakenDef.coreName}` : null;
-    this._awakenIcon.active = !!awakenDef;
-    if (awakenDef) {
-      void loadUiSprite(awakenDef.iconKey).then((frame) => {
-        if (frame && this._awakenIcon.isValid) ensureArtChild(this._awakenIcon, 'Art', frame, 104, 104);
-      }).catch(() => null);
-    }
+    this._awakenIcon.active = false;
 
-    // HP/攻击力/AP 数值组成：基础值 + 装备/词条/命运树等加成，方便玩家核对来源
+    // HP/攻击力/AP 数值组成：职业基础 + 装备/词条等加成，方便玩家核对来源
     const hpBonus = player.maxHp - baseHp;
     const hpLine = hpBonus !== 0
       ? `HP：${player.hp} / ${player.maxHp}（${baseHp}+${hpBonus}）`
@@ -589,7 +536,19 @@ export class PveCharacterPanel {
       ? `攻击力：⚔️ ${damage}（${baseAttack}+${attackBonus}，攻击范围 ${range}）`
       : `攻击力：⚔️ ${damage}（攻击范围 ${range}）`;
 
-    // maxAp = 平衡配置 AP 基线 + 骰子 + 加成（强化/命运树/冰冻惩罚等），骰子之外的加成按差值反推
+    const { armor, baseArmor } = playerArmorPower(player);
+    const armorExtra = armor - baseArmor;
+    const armorCapPct = Math.round(PLAYER_ARMOR_MAX_REDUCTION_RATIO * 100);
+    const armorLine = armorExtra !== 0
+      ? `护甲：${armor}（装备${baseArmor}+${armorExtra}，单次最多减伤 ${armorCapPct}%）`
+      : `护甲：${armor}（装备${baseArmor}，单次最多减伤 ${armorCapPct}%）`;
+
+    const penetration = playerWeaponArmorPenetration(player);
+    const penetrationLine = penetration > 0
+      ? `穿透：${Math.round(penetration * 100)}%（武器固有，忽略目标等比例护甲）`
+      : '穿透：无';
+
+    // maxAp = 平衡配置 AP 基线 + 骰子 + 加成（强化/冰冻惩罚等），骰子之外的加成按差值反推
     const apBonus = floorState.maxAp - apBase - floorState.dice;
     const apLine = apBonus !== 0
       ? `当前回合 AP：${floorState.ap}/${floorState.maxAp}（${apBase}+🎲${floorState.dice}${apBonus > 0 ? '+' : ''}${apBonus}）`
@@ -597,15 +556,15 @@ export class PveCharacterPanel {
 
     this._statsLabel.string = [
       `职业：${cls}`,
-      ...(awakenLine ? [awakenLine] : []),
       hpLine,
       attackLine,
-      `金币：${player.gold}    灵气：${player.anima}（进度 ${player.animaProgress}/${threshold}）`,
+      armorLine,
+      penetrationLine,
       apLine,
       `钥匙：${floorState.hasKey ? '✅ 已持有' : '⬜ 未拾取'}`,
     ].join('\n');
 
-    // ── 装备行刷新 ────────────────────────────────────────────
+    // ── 装备行刷新：列表只显示名字 + 强化，详情点开查看 ─────
     SLOT_ORDER.forEach((slot, i) => {
       const item = player.equipment[slot];
       this._currentItems[i] = item;
@@ -616,77 +575,22 @@ export class PveCharacterPanel {
         lbl.string = `  ${SLOT_LABEL[slot]}：(空)`;
       } else {
         lbl.color = QUALITY_TEXT[item.quality] ?? TEXT_COLOR;
-        const traitMark = item.trait ? ' ★' : '';
-        const enhanceSuffix = (item.enhanceLevel ?? 0) > 0 ? `+${item.enhanceLevel}` : '';
-        lbl.string = `  ${SLOT_LABEL[slot]}：${item.name}${enhanceSuffix} +${item.baseStat}${traitMark}  ▸`;
+        const enhanceLabel = (item.enhanceLevel ?? 0) > 0 ? ` · 强化+${item.enhanceLevel}` : '';
+        lbl.string = `  ${SLOT_LABEL[slot]}：${item.name}${enhanceLabel}  ▸`;
       }
     });
 
-    // ── 词条 + 遗物 + 卷轴 ────────────────────────────────────
-    const traits = player.classTraits;
-    const traitNames = traits.map((id) => STRENGTHEN_LABEL[id]?.title ?? id);
-    const traitLine = `词条：${traitNames.length === 0 ? '(无)' : traitNames.join('、')}`;
-    const awakenState: string[] = [];
-    if (floorState.frenzyPending) awakenState.push(`杀意待发${(floorState.awakenSlayerIntentStacks ?? 0) > 0 ? `·${floorState.awakenSlayerIntentStacks}层` : ''}`);
-    if ((floorState.awakenShadowCharges ?? 0) > 0) awakenState.push(`影袭×${floorState.awakenShadowCharges}`);
-    if (floorState.awakenSniperGuaranteedCrit) awakenState.push('强弓必暴');
-    const awakenStateLine = awakenState.length > 0 ? `觉醒状态：${awakenState.join('、')}` : '';
+    // ── 遗物（旧词条已退役，不再展示）────────────────────────
     const relics = player.relics ?? [];
     this._currentRelics = relics;
     const relicLine = relics.length > 0
       ? `🏺 遗物：${relics.map((r) => RELIC_DEFS[r]?.name ?? r).join('、')}  ▸点击查看`
       : '🏺 遗物：(无)';
-    const scrolls = player.scrolls ?? 0;
-    const scrollLine = scrolls > 0 ? `📜 命运卷轴：×${scrolls}` : '';
-    this._traitsLabel.string = [traitLine, awakenStateLine, relicLine, ...(scrollLine ? [scrollLine] : [])].filter(Boolean).join('\n');
-
-    // ── 职业碎片 ──────────────────────────────────────────────
-    const fragEntries = Object.entries(player.classFragments)
-      .filter(([, n]) => (n ?? 0) > 0)
-      .map(([k, n]) => {
-        if (k === player.classId) {
-          return player.awakenForm
-            ? `${CLASS_LABEL[k] ?? k} ${n}（已觉醒）`
-            : `${CLASS_LABEL[k] ?? k} ${n}/${CLASS_FRAGMENTS_TO_AWAKEN}（觉醒）`;
-        }
-        return `${CLASS_LABEL[k] ?? k} ${n}/${CLASS_FRAGMENTS_TO_ADVANCE}`;
-      });
-    this._fragmentsLabel.string = `职业碎片：${fragEntries.length === 0 ? '(无)' : fragEntries.join('  ')}`;
-
-    // ── 成就（AC-20）─────────────────────────────────────────
-    if (meta) {
-      // 防御性过滤：确保是纯字符串数组（兼容云端脏数据或序列化异常）
-      const rawUnlocked = meta.achievements;
-      const unlocked: string[] = Array.isArray(rawUnlocked)
-        ? rawUnlocked.filter((a): a is string => typeof a === 'string')
-        : [];
-
-      if (unlocked.length === 0) {
-        this._achievementsLabel.string = '🏆 成就：(暂无)';
-      } else {
-        const lines = [`🏆 成就（${unlocked.length}/8）：`];
-        for (const id of unlocked) {
-          const def = findAchievement(id);
-          lines.push(`  ✅ ${def ? def.name : id}`);
-        }
-        this._achievementsLabel.string = lines.join('\n');
-      }
-
-      // ── 图鉴（AC-20）──────────────────────────────────────
-      const monCount = meta.codex.monsters.length;
-      const eqCount  = meta.codex.equipment.length;
-      this._codexLabel.string =
-        `📖 图鉴：` +
-        `怪物 ${monCount} 种  装备 ${eqCount} 种  ` +
-        `💎 命运碎片 ${meta.destinyShards}`;
-    } else {
-      this._achievementsLabel.string = '🏆 成就：(加载中…)';
-      this._codexLabel.string        = '📖 图鉴：(加载中…)';
-    }
+    this._traitsLabel.string = relicLine;
   }
 
-  show(state: ExpeditionState, meta?: PveMeta): void {
-    this.update(state, meta);
+  show(state: ExpeditionState): void {
+    this.update(state);
     this._root.active = true;
     this._visible = true;
     void Effects.pop(this._panel);

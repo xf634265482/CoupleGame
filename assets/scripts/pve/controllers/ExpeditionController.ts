@@ -32,7 +32,6 @@ import { applySellBagEquip, applySellEquip, applyShopBuy, getCampShopItems, open
 import type { CampItemId } from '../core/CampSystem';
 import { GameSession } from '../../core/GameSession';
 import { CHAPTER_BOSS_RELIC, RELIC_CHEST } from '../core/PveConstants';
-import { applyClassAdvance, applyClassAwaken, pickFragment } from '../core/ClassSystem';
 import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import { endTurn } from '../core/ExpeditionState';
 import { activateGunpowderBarrel, detonateBlastTarget, interactPortal, openExit, pickKey, spawnPortal } from '../core/FloorRules';
@@ -57,7 +56,7 @@ import { commitRangerFinisher } from '../core/professions/ProfessionActionSystem
 import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
 import { WARRIOR_MAX_CHARGE_AP } from '../core/professions/WarriorSystem';
 import type { Direction } from '../core/MovementSystem';
-import { AP_COST, AWAKEN_FORMS, CLASS_FRAGMENTS_TO_ADVANCE, CLASS_FRAGMENTS_TO_AWAKEN, FLOORS_PER_CHAPTER, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS } from '../core/PveConstants';
+import { AP_COST, FLOORS_PER_CHAPTER, isBossFloor, LAVA_LORD_BURN_BURST_THRESHOLD, LAVA_LORD_BURN_TICKS } from '../core/PveConstants';
 import { MAX_READY_FLOOR } from '../core/chapterRouting';
 import type { ClassId } from '../core/PveConstants';
 import type { ApplyResult, Coord, ExpeditionState, FixedEntity, Monster, MonsterType, PveEvent, PveMeta, RelicId } from '../core/PveTypes';
@@ -305,7 +304,6 @@ function describeForLog(
       if (ev.gold) parts.push(`星尘+${ev.gold}`);
       if (ev.anima) parts.push(`灵气+${ev.anima}`);
       if (ev.equip) parts.push(ev.bagged ? `入包:${ev.equip.name}` : `装备:${ev.equip.name}`);
-      if (ev.fragmentPair) parts.push(`🧩碎片对+${ev.fragmentPair.map((c) => CLASS_CN[c] ?? c).join('/')}`);
       return parts.length > 0 ? { kind: 'LOOT', text: parts.join(' ') } : null;
     }
     case 'SELL_EQUIP':
@@ -326,27 +324,6 @@ function describeForLog(
     }
     case 'HOT_SPRING_HEAL':
       return { kind: 'LOOT', text: `♨️ 温泉治疗（恢复 ${ev.healed} 血）` };
-    case 'FRAGMENT_PICKED': {
-      // 已进阶到该职业 → 显示觉醒进度（/10），否则显示进阶进度（/5）
-      const fragTarget = state?.player.classId === ev.classId
-        ? CLASS_FRAGMENTS_TO_AWAKEN
-        : CLASS_FRAGMENTS_TO_ADVANCE;
-      return { kind: 'LOOT', text: `🧩 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（${ev.totalFragments}/${fragTarget}）` };
-    }
-    case 'CLASS_CAN_ADVANCE':
-      return { kind: 'SYSTEM', text: '⭐ 职业碎片集齐！可选择进阶职业' };
-    case 'CLASS_ADVANCED': {
-      const suffix = ev.hpCost > 0 ? `（消耗 ${ev.hpCost} HP）` : '';
-      return { kind: 'SYSTEM', text: `⭐ 职业进阶 → ${CLASS_CN[ev.classId] ?? ev.classId}${suffix}` };
-    }
-    case 'CLASS_CAN_AWAKEN':
-      return { kind: 'SYSTEM', text: '🌟 二阶觉醒条件已满足！可进行觉醒' };
-    case 'CLASS_AWAKENED': {
-      const form = AWAKEN_FORMS[ev.form];
-      return { kind: 'SYSTEM', text: `🌟 觉醒成功 → ${form.name}（核心天赋「${form.coreName}」）` };
-    }
-    case 'AWAKEN_EFFECT_TRIGGERED':
-      return { kind: 'SYSTEM', text: `觉醒效果触发 · ${STRENGTHEN_LABEL[ev.effectId]?.title ?? ev.effectId}` };
     case 'TURN_END':
       return { kind: 'SYSTEM', text: '─── 本回合结束 ───' };
     case 'AP_ROLLED':
@@ -594,27 +571,6 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
     }
     case 'HOT_SPRING_HEAL':
       return `♨️ 温泉治疗 +${ev.healed} HP`;
-    case 'FRAGMENT_PICKED': {
-      const fragTarget = state?.player.classId === ev.classId
-        ? CLASS_FRAGMENTS_TO_AWAKEN
-        : CLASS_FRAGMENTS_TO_ADVANCE;
-      return `🧩 拾取 [${CLASS_CN[ev.classId] ?? ev.classId}] 碎片（已有 ${ev.totalFragments}/${fragTarget}）`;
-    }
-    case 'CLASS_CAN_ADVANCE':
-      return `⭐ 职业碎片已集齐，可选择进阶职业！`;
-    case 'CLASS_ADVANCED': {
-      return ev.hpCost > 0
-        ? `⭐ 职业进阶为 [${CLASS_CN[ev.classId] ?? ev.classId}]（损失 ${ev.hpCost} HP）`
-        : `⭐ 职业进阶为 [${CLASS_CN[ev.classId] ?? ev.classId}]`;
-    }
-    case 'CLASS_CAN_AWAKEN':
-      return `🌟 二阶觉醒条件已满足，可进行觉醒！`;
-    case 'CLASS_AWAKENED': {
-      const form = AWAKEN_FORMS[ev.form];
-      return `🌟 [${CLASS_CN[ev.classId] ?? ev.classId}] 觉醒为「${form.name}」，获得「${form.coreName}」：${form.coreDesc}`;
-    }
-    case 'AWAKEN_EFFECT_TRIGGERED':
-      return null;
     case 'SHOP_BUY':
       return `🏕️ 购买成功 · ${ev.effect}`;
     case 'ACHIEVEMENT_UNLOCKED':
@@ -791,6 +747,8 @@ export class ExpeditionController extends Component {
   private _cachedAttackTarget: Monster | undefined;
   private _cachedAttackEntityTarget: FixedEntity | undefined;
   private _tutorialGuide: TutorialGuideManager | null = null;
+  private _tutorialExplainShown = new Set<string>();
+  private _tutorialExplainPending: string | null = null;
   private _selectedChargeAp = 0;
   /** 当前 _playEvents 批次，供攻击 fx 解析受击前坐标。 */
   private _playbackEvents: readonly PveEvent[] = [];
@@ -1500,9 +1458,7 @@ export class ExpeditionController extends Component {
         {
           equipment: this._state.player.equipment,
           bag: this._state.player.bag ?? [],
-          classFragments: this._state.player.classFragments,
           classId: this._state.player.classId,
-          awakenForm: this._state.player.awakenForm,
         },
         (itemId) => {
           if (!this._state) return null;
@@ -1705,7 +1661,7 @@ export class ExpeditionController extends Component {
 
   private _refreshAll(): void {
     if (!this._state) return;
-    this._map?.refresh(this._state.floorState, this._state.player.classId, this._state.player.awakenForm);
+    this._map?.refresh(this._state.floorState, this._state.player.classId);
     this._hud?.refresh(this._state);
     this._refreshPersistentHud();
     this._map?.showMoveRange(this._cachedMoveTargets);
@@ -1742,6 +1698,7 @@ export class ExpeditionController extends Component {
     if (!this._tutorialGuide.isActive(this._state)) {
       this._toast?.hideGuideBubble();
       this._map?.clearTutorialFocus();
+      this._tutorialExplainPending = null;
       return;
     }
     if ((events.length > 0 || ctx) && this._tutorialGuide.advanceIfNeeded(this._state, events, {
@@ -1767,6 +1724,25 @@ export class ExpeditionController extends Component {
     if (allowedCells.length > 0) this._map?.showTutorialFocus(allowedCells);
     else this._map?.clearTutorialFocus();
     this._refreshTutorialHudHighlights();
+    void this._maybeShowTutorialExplain(step);
+  }
+
+  private async _maybeShowTutorialExplain(
+    step: { id: string; onEnterExplain?: string } | null,
+  ): Promise<void> {
+    if (!step?.onEnterExplain || !this._toast) return;
+    if (this._tutorialExplainShown.has(step.id)) return;
+    if (this._tutorialExplainPending === step.id) return;
+    this._tutorialExplainPending = step.id;
+    const prevBusy = this._busy;
+    this._busy = true;
+    try {
+      await this._toast.showConfirm(step.onEnterExplain, [{ label: '知道了', value: 'ok' }]);
+      this._tutorialExplainShown.add(step.id);
+    } finally {
+      if (this._tutorialExplainPending === step.id) this._tutorialExplainPending = null;
+      this._busy = prevBusy;
+    }
   }
 
   private _refreshTutorialHudHighlights(): void {
@@ -1781,6 +1757,10 @@ export class ExpeditionController extends Component {
     coord?: Coord,
   ): boolean {
     if (!this._state || !this._tutorialGuide || !this._tutorialGuide.isActive(this._state)) return false;
+    if (this._tutorialExplainPending && (action === 'CHARGE' || action === 'SPIRIT_BURST')) {
+      this._toast?.toast('先阅读机制说明');
+      return true;
+    }
     if (coord && this._tutorialGuide.shouldBlockCell(coord)) {
       this._toast?.toast('先按引导操作');
       return true;
@@ -1810,9 +1790,8 @@ export class ExpeditionController extends Component {
   }
 
   /**
-   * "攻击"按钮当前会命中的目标（与 _onAttack 选怪规则一致：曼哈顿距离最近，平局取数组靠前者）。
-   * 仅返回攻击范围内的目标——超出范围的怪物即使是"最近"，攻击也是 no-op，
-   * 高亮其所在格还可能暴露未揭示迷雾中的怪物位置（信息泄露 + 视觉上像 bug 的空框）。
+   * "攻击"按钮当前会命中的目标（与 _onAttack 选怪规则一致）。
+   * 若玩家已点选范围内怪物，优先攻击该选中目标；否则取最近可攻击者。
    */
   private _computeAttackTarget(): Monster | undefined {
     if (!this._state) return undefined;
@@ -1825,6 +1804,11 @@ export class ExpeditionController extends Component {
         isRevealed(floor.revealed, m.pos),
       )
       .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos));
+    const focusedId = this._hud?.getFocusedMonsterId();
+    if (focusedId) {
+      const focused = inRange.find((m) => m.id === focusedId);
+      if (focused) return focused;
+    }
     // 远程（range≥2）优先选 LOS 通畅的目标；若全被遮挡则退化选最近者（让玩家感受遮挡反馈）。
     if (range >= 2) {
       const visible = inRange.filter(
@@ -1837,20 +1821,26 @@ export class ExpeditionController extends Component {
 
   /**
    * "攻击"按钮在没有怪物目标时会命中的冰墙（FrostGiant 专属机制，→ attackIceWall）。
-   * 与 _currentAttackTarget 同规则：范围内最近者优先。
+   * 已点选范围内冰墙时优先该目标。
    */
   private _computeAttackTargetEntity(): FixedEntity | undefined {
     if (!this._state) return undefined;
     const floor = this._state.floorState;
     const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
-    return floor.entities
+    const walls = floor.entities
       .filter((e) =>
         e.type === 'ICE_WALL' &&
         !e.consumed &&
         manhattan(floor.player, e.pos) <= range &&
         isRevealed(floor.revealed, e.pos),
       )
-      .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos))[0];
+      .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos));
+    const focusedId = this._hud?.getFocusedEntityId();
+    if (focusedId) {
+      const focused = walls.find((e) => e.id === focusedId);
+      if (focused) return focused;
+    }
+    return walls[0];
   }
 
   private _rebuildInputHints(): void {
@@ -1927,42 +1917,46 @@ export class ExpeditionController extends Component {
       return;
     }
     if (this._isTutorialBlocked('TAP_CELL', coord)) return;
-    const monster = this._state.floorState.monsters.find(
-      (m) => m.aiState !== 'DEAD' && m.pos.x === coord.x && m.pos.y === coord.y,
-    );
-    if (monster) {
-      this._hud?.focusMonster(monster.id);
-      this._attack(monster.id, true);
-      return;
-    }
-    const wall = this._state.floorState.entities.find(
-      (e) => e.type === 'ICE_WALL' && !e.consumed && e.pos.x === coord.x && e.pos.y === coord.y,
-    );
-    if (wall) {
-      this._attackIceWall(wall.id, true);
-      return;
-    }
-    // 点玩家所在格 + 该格有可交互实体（宝箱/钥匙/出口/传送门/神像/温泉/祭坛/铁匠）→ 触发互动
-    const playerPos = this._state.floorState.player;
-    if (coord.x === playerPos.x && coord.y === playerPos.y) {
-      const INTERACTABLE_TYPES = new Set([
-        'CHEST', 'KEY', 'EXIT', 'PORTAL', 'GUNPOWDER_BARREL', 'BLAST_TARGET', 'IDOL', 'HOT_SPRING', 'ALTAR', 'BLACKSMITH',
-      ]);
-      const hasInteractable = this._state.floorState.entities.some(
-        (e) => !e.consumed
-          && e.pos.x === coord.x
-          && e.pos.y === coord.y
-          && INTERACTABLE_TYPES.has(e.type)
-          && !e.id.startsWith('WAVE_ALTAR_')
-          && !e.id.startsWith('WAVE_SPAWN_'),
+
+    const floor = this._state.floorState;
+    const cellRevealed = isRevealed(floor.revealed, coord);
+
+    // 点已揭示格上的物体：进入选中态，刷新左上角目标卡；不直接攻击/互动。
+    // 教学步骤若要求「点击怪物普攻」，仍保持点怪即攻击，避免卡引导。
+    if (cellRevealed) {
+      const monster = floor.monsters.find(
+        (m) => m.aiState !== 'DEAD' && m.pos.x === coord.x && m.pos.y === coord.y,
       );
-      if (hasInteractable) {
-        this._onInteract(true);
+      if (monster) {
+        this._hud?.focusMonster(monster.id);
+        const step = this._tutorialGuide?.isActive(this._state)
+          ? this._tutorialGuide.currentStep()
+          : null;
+        const tutorialTapAttacks = !!(step?.completeOnAttackTargetId || step?.completeOnKillMonsterId);
+        if (tutorialTapAttacks) {
+          this._attack(monster.id, true);
+          return;
+        }
+        this._hud?.refresh(this._state);
+        this._rebuildInputHints();
+        this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
+        return;
+      }
+
+      const entity = floor.entities.find(
+        (e) => !e.consumed && e.pos.x === coord.x && e.pos.y === coord.y,
+      );
+      if (entity) {
+        this._hud?.focusEntity(entity.id);
+        this._hud?.refresh(this._state);
+        this._rebuildInputHints();
+        this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
         return;
       }
     }
-    // 点空地/远处：朝玩家→目标的主轴方向走一步（Y 轴反向：UP={x:0,y:-1}）。
-    // 远距离格也支持，玩家每点一下走一格，方向选择主导轴；同距优先水平。
+
+    // 点空地 / 迷雾：朝目标方向走一步，不打断已有选中信息。
+    const playerPos = floor.player;
     const dx = coord.x - playerPos.x;
     const dy = coord.y - playerPos.y;
     if (dx === 0 && dy === 0) return;
@@ -2624,12 +2618,6 @@ export class ExpeditionController extends Component {
         if (node) void Effects.buffGain(node);
         break;
       }
-      case 'FRAGMENT_PICKED': {
-        playSfx(SFX_IDS.REWARD_GET);
-        const node = this._map.getOccupantArtAt(this._state.floorState.player);
-        if (node) void Effects.buffGain(node);
-        break;
-      }
       case 'BOSS_ENRAGED': {
         void Effects.cameraPunch({ strength: 1.4 });
         break;
@@ -2746,29 +2734,6 @@ export class ExpeditionController extends Component {
       case 'DESTINY_REWRITE_RESOLVED': {
         const node = this._map.getOccupantArtAt(this._state.floorState.player);
         if (node) void Effects.flash(node, { color: new Color(200, 130, 240, 255), times: 2 });
-        break;
-      }
-      // ── 职业进阶/觉醒：玩家位置强力 buffGain（金色 pop+flash） ──
-      case 'CLASS_ADVANCED':
-      case 'CLASS_AWAKENED': {
-        const node = this._map.getOccupantArtAt(this._state.floorState.player);
-        if (node) void Effects.buffGain(node, { strength: 1.6 });
-        void Effects.cameraPunch({ strength: 0.8 });
-        break;
-      }
-      case 'AWAKEN_EFFECT_TRIGGERED': {
-        const playerNode = this._map.getOccupantArtAt(this._state.floorState.player);
-        const isExecute = ev.effectId === 'awakened_execute';
-        const isSniper = ev.effectId === 'awakened_power_shot';
-        const isShadow = ev.effectId === 'awakened_shadow_strike' || ev.effectId === 'awaken_shadow_trade';
-        if (playerNode) {
-          const color = isShadow
-            ? new Color(180, 100, 255, 255)
-            : isExecute ? new Color(255, 80, 80, 255)
-              : new Color(255, 196, 90, 255);
-          void Effects.flash(playerNode, { color, times: isExecute ? 2 : 1 });
-        }
-        if (isSniper || isExecute) void Effects.cameraPunch({ strength: isExecute ? 1.2 : 0.7 });
         break;
       }
       // ── 传送门生成：在 pos 处 pop 浮现 ──
@@ -3343,37 +3308,6 @@ export class ExpeditionController extends Component {
         heavyStrikeResolvedThisBatch = true;
       }
 
-      // 4) 职业进阶选择（AC-15 M2）
-      if (ev.type === 'CLASS_CAN_ADVANCE' && this._toast && this._state) {
-        const tChoice = perfNow();
-        const chosen = await this._toast.showClassAdvanceChoice(ev.available);
-        perfMark('blockingChoice.classAdvance', tChoice);
-        if (chosen && this._state) {
-          const r = applyClassAdvance(this._state, chosen as ClassId);
-          if (r.events.length > 0) {
-            this._state = r.state;
-            this._rebuildInputHints();
-            this._refreshAll();
-            await this._playEvents(r.events);
-          }
-        }
-      }
-
-      // 5) 二阶觉醒确认（design §七）
-      if (ev.type === 'CLASS_CAN_AWAKEN' && this._toast && this._state) {
-        const tChoice = perfNow();
-        const formId = await this._toast.showClassAwakenChoice(ev.classId);
-        perfMark('blockingChoice.classAwaken', tChoice);
-        if (formId && this._state) {
-          const r = applyClassAwaken(this._state, formId);
-          if (r.events.length > 0) {
-            this._state = r.state;
-            this._rebuildInputHints();
-            this._refreshAll();
-            await this._playEvents(r.events);
-          }
-        }
-      }
     }
 
     // 批次以 MOVE/ATTACK 收尾时也要播完（例如结束回合后全是追击位移）。
@@ -3421,29 +3355,6 @@ export class ExpeditionController extends Component {
         this._syncTutorialGuide(r.events);
       }
       perfMark('afterApply.pickKey', tKey);
-    }
-
-    // 自动拾取职业碎片（AC-15）：踩到即获得，同步检测进阶触发条件
-    if (this._state) {
-      const fragHere = this._state.floorState.entities.find(
-        (e) =>
-          e.type === 'FRAGMENT' &&
-          !e.consumed &&
-          e.pos.x === this._state!.floorState.player.x &&
-          e.pos.y === this._state!.floorState.player.y,
-      );
-      if (fragHere) {
-        const tFrag = perfNow();
-        const r = pickFragment(this._state, fragHere.id);
-        if (r.events.length > 0) {
-          this._state = r.state;
-          this._rebuildInputHints();
-          this._refreshAll();
-          await this._playEvents(r.events);
-          this._syncTutorialGuide(r.events);
-        }
-        perfMark('afterApply.pickFragment', tFrag);
-      }
     }
 
     const deadBoss = this._state.floorState.monsters.find((m) => m.type === 'BOSS' && m.aiState === 'DEAD');
@@ -3659,9 +3570,20 @@ export class ExpeditionController extends Component {
 
   private async _drainPersistentSave(): Promise<void> {
     if (this._persistentSaveInFlight || !this._persistentSaveQueued) return;
+    // 动画/_busy 期间不要 JSON.stringify 大 runtime：真机高 RTT 下云存档触发的主线程序列化
+    // 会跟 MOVE/ATTACK tween 抢帧，表现为「动画卡一下」（第 7 层 Boss 增援后更明显）。
+    if (this._busy) {
+      this._queuePersistentSave(400);
+      return;
+    }
     this._persistentSaveQueued = false;
     this._persistentSaveInFlight = true;
     try {
+      await delay(0);
+      if (this._busy) {
+        this._persistentSaveQueued = true;
+        return;
+      }
       await this._autoSaveCurrentFloor();
     } finally {
       this._persistentSaveInFlight = false;

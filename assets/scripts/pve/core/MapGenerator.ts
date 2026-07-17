@@ -5,7 +5,6 @@ import { createRng } from './rng';
 import { createFogGrid, revealAround } from './FogSystem';
 import { generateChapterMonsters } from './ChapterMonsterRules';
 import {
-  ADVANCABLE_CLASSES,
   CHAPTER1_BOSS_ROCK_COUNT,
   CHAPTER2_SAND_PIT_COUNT,
   CHAPTER3_ICE_WALL_COUNT,
@@ -14,12 +13,10 @@ import {
   CHAPTER_BOSS,
   FLOORS_PER_CHAPTER,
   FOG_REVEAL_RADIUS,
-  FRAGMENT_ADVANCED_BIAS,
-  FRAGMENT_SECOND_CHANCE,
-  FRAGMENT_THIRD_CHANCE,
   MONSTER_BASE,
   NORMAL_FLOOR_TERRAIN_COUNT,
   NORMAL_FLOOR_TERRAIN_TYPE,
+  ROCK_HP,
   bossChapterScaling,
   chapterOfFloor,
   isBossFloor,
@@ -37,6 +34,10 @@ const CHEST_COUNT = 1;
 const IDOL_COUNT = 1;       // 神像：+1 maxHp（每普通层 1 个）
 const HOT_SPRING_COUNT = 1; // 温泉：每章第4层（精英后）和第6层（Boss前）各生成 1 个
 const ALTAR_COUNT = 1;      // 祭坛：随机 20–35 灵气（每普通层 1 个）
+const CHAPTER3_PRE_BOSS_EXTRA_ICE_WALLS = 2;
+const CHAPTER3_PRE_BOSS_EXTRA_ICE_TILES = 2;
+const CHAPTER4_PRE_BOSS_LAVA_TILES = 3;
+const CHAPTER4_PRE_BOSS_LAVA_DURATION = 4;
 
 /** 铁匠仅在章节营地（Boss 通关后）提供，楼层地图不生成铁匠实体。 */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -161,15 +162,72 @@ function makeEntity(id: string, type: FixedEntity['type'], pos: Coord): FixedEnt
   return { id, type, pos, consumed: false };
 }
 
-function makeFragment(id: string, pos: Coord, fragmentClass: ClassId): FixedEntity {
-  return { id, type: 'FRAGMENT', pos, consumed: false, fragmentClass };
+function isBlockingEntity(entity: FixedEntity): boolean {
+  return !entity.consumed && (entity.type === 'ROCK' || entity.type === 'ICE_WALL' || entity.type === 'FREEZE_WALL');
+}
+
+function addPreBossPressure(
+  chapter: number,
+  fi: number,
+  size: number,
+  player: Coord,
+  keyPos: Coord,
+  exitPos: Coord,
+  pool: Coord[],
+  entities: FixedEntity[],
+  nextEntityId: (prefix: string) => string,
+): void {
+  if (fi !== FLOORS_PER_CHAPTER - 1) return;
+
+  if (chapter === 3) {
+    const blockedSet = new Set<string>();
+    for (const entity of entities) {
+      if (!isBlockingEntity(entity)) continue;
+      blockedSet.add(`${entity.pos.x},${entity.pos.y}`);
+    }
+    let wallsPlaced = 0;
+    while (wallsPlaced < CHAPTER3_PRE_BOSS_EXTRA_ICE_WALLS && pool.length > 0) {
+      const pos = pool.shift() as Coord;
+      const key = `${pos.x},${pos.y}`;
+      blockedSet.add(key);
+      if (!bfsAllReachable(size, blockedSet, player, [keyPos, exitPos])) {
+        blockedSet.delete(key);
+        continue;
+      }
+      entities.push({
+        id: nextEntityId('preboss_icewall'),
+        type: 'ICE_WALL',
+        pos,
+        consumed: false,
+        hp: CHAPTER3_ICE_WALL_HP,
+      });
+      wallsPlaced += 1;
+    }
+    for (let i = 0; i < CHAPTER3_PRE_BOSS_EXTRA_ICE_TILES && pool.length > 0; i++) {
+      const pos = pool.shift() as Coord;
+      entities.push(makeEntity(nextEntityId('preboss_icetile'), 'ICE_TILE', pos));
+    }
+  }
+
+  if (chapter === 4) {
+    for (let i = 0; i < CHAPTER4_PRE_BOSS_LAVA_TILES && pool.length > 0; i++) {
+      const pos = pool.shift() as Coord;
+      entities.push({
+        id: nextEntityId('preboss_lava'),
+        type: 'LAVA_TILE',
+        pos,
+        consumed: false,
+        remaining: CHAPTER4_PRE_BOSS_LAVA_DURATION,
+      });
+    }
+  }
 }
 
 /**
  * 生成第 floor 层（1-based）地图。普通层：钥匙×1 + 出口门×1 + 宝箱 + 普通怪×N；
  * Boss 层：钥匙×1 + Boss×1（无出口门，Boss 死亡后由 FloorRules 在原地生成传送门）。
  *
- * @param classId 玩家当前职业（V3 §3.2 偏向规则）。缺省按冒险者等权处理。
+ * @param classId 保留给旧调用签名；地图内容不再按职业生成。
  */
 export function generateFloor(floor: number, seed: number, classId: ClassId = 'ADVENTURER'): FloorState {
   const size = mapSizeOfFloor(floor);
@@ -199,14 +257,14 @@ export function generateFloor(floor: number, seed: number, classId: ClassId = 'A
   if (isBossFloor(floor)) {
     const bossPos = takeFarFrom(pool, keyPos, spacing);
     monsters.push(makeBoss(nextMonsterId(), bossPos, floor));
-    // 第一章 Boss 房：随机生成石块地形，玩家可利用石块抵挡 AOE
+    // 第一章 Boss 房：随机生成石块地形，玩家可利用石块抵挡 AOE；HP=ROCK_HP 可被玩家击碎
     if (chapter === 1) {
       for (let i = 0; i < CHAPTER1_BOSS_ROCK_COUNT && pool.length > 0; i++) {
         const pos = pool.shift() as Coord;
-        entities.push({ id: nextEntityId('rock'), type: 'ROCK', pos, consumed: false });
+        entities.push({ id: nextEntityId('rock'), type: 'ROCK', pos, consumed: false, hp: ROCK_HP });
       }
     }
-    // 第二章 Boss 房：沙坑地形（移动 AP+1；Boss 钻出优先沙坑位）
+    // 第二章 Boss 房：8 个永久沙坑（移动 AP+2；Boss 钻出优先玩家相邻的沙坑位）
     if (chapter === 2) {
       for (let i = 0; i < CHAPTER2_SAND_PIT_COUNT && pool.length > 0; i++) {
         const pos = pool.shift() as Coord;
@@ -259,33 +317,6 @@ export function generateFloor(floor: number, seed: number, classId: ClassId = 'A
     // 按 (chapter, 章内层号) 查 CHAPTER_MONSTER_RULES 表生成怪物（260613 内容深化 P0）
     generateChapterMonsters(chapter, floorInChapter(floor), pool, nextMonsterId, monsters);
 
-    // V3 §3.1 碎片产出：保底 1 + 70% 第 2 个 + 25% 第 3 个，允许同职业重复。
-    // §3.2 偏向：冒险者期三职业等权；进阶后 70% 主职业 / 各 15% 另外两职业。
-    const fragmentCount =
-      1
-      + (rng.next() < FRAGMENT_SECOND_CHANCE ? 1 : 0)
-      + (rng.next() < FRAGMENT_THIRD_CHANCE ? 1 : 0);
-
-    for (let i = 0; i < fragmentCount && pool.length > 0; i++) {
-      const r = rng.next();
-      let fragClass: (typeof ADVANCABLE_CLASSES)[number];
-      if (classId === 'ADVENTURER') {
-        // 等权：0..1/3 → BERSERKER，1/3..2/3 → ARCHER，2/3..1 → ROGUE
-        fragClass = r < 1 / 3 ? ADVANCABLE_CLASSES[0] : r < 2 / 3 ? ADVANCABLE_CLASSES[1] : ADVANCABLE_CLASSES[2];
-      } else {
-        const main = classId as (typeof ADVANCABLE_CLASSES)[number];
-        const others = ADVANCABLE_CLASSES.filter((c) => c !== main);
-        if (r < FRAGMENT_ADVANCED_BIAS) {
-          fragClass = main;
-        } else {
-          // 剩余 30% 均分两个非主职业（各 15%）
-          fragClass = r < FRAGMENT_ADVANCED_BIAS + (1 - FRAGMENT_ADVANCED_BIAS) / 2 ? others[0] : others[1];
-        }
-      }
-      const pos = pool.shift() as Coord;
-      entities.push(makeFragment(nextEntityId('frag'), pos, fragClass));
-    }
-
     // 普通层地形生成 pass（Phase 1，AC-MT-1/2/3）：按章调色板 + 章内节拍强度铺设地形。
     // 阻挡型地形（ROCK/ICE_WALL）每放一块都做 BFS 校验，不通则跳过该格，保证可解性。
     const fi = floorInChapter(floor);
@@ -311,6 +342,8 @@ export function generateFloor(floor: number, seed: number, classId: ClassId = 'A
 
         if (primaryType === 'ICE_WALL') {
           entities.push({ id: nextEntityId('iwall'), type: 'ICE_WALL', pos: tPos, consumed: false, hp: CHAPTER3_ICE_WALL_HP });
+        } else if (primaryType === 'ROCK') {
+          entities.push({ id: nextEntityId('terrain'), type: 'ROCK', pos: tPos, consumed: false, hp: ROCK_HP });
         } else {
           entities.push(makeEntity(nextEntityId('terrain'), primaryType, tPos));
         }
@@ -324,6 +357,8 @@ export function generateFloor(floor: number, seed: number, classId: ClassId = 'A
         }
       }
     }
+
+    addPreBossPressure(chapter, fi, size, player, keyPos, exitPos, pool, entities, nextEntityId);
   }
 
   return {
