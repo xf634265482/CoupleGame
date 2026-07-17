@@ -10,5 +10,6 @@ describe('chapterRouting', () => {
     expect(chapterFloorOf(14)).toBe(7);
     expect(isFloorContentReady(14)).toBe(true);
     expect(isFloorContentReady(15)).toBe(false);
+    expect(() => chapterIdForFloor(15)).toThrow('PVE_FLOOR_CONTENT_NOT_READY');
   });
 });

@@ -279,3 +279,20 @@ gm-web
   -> node scripts/sync-cloud-common.js
   -> 部署对应云函数
 ```
+
+## 当前边界调用链（2026-07-17）
+
+```text
+大厅选择第 1–14 层
+  -> chapterRouting.isFloorContentReady
+  -> PveService.startFloorChallenge
+  -> cloudfunctions/common/pve/PveChallengeValidate.js（再次校验 ≤ 14）
+  -> PveChallenge 事务扣除 5 体力并创建挑战
+
+通关结算
+  -> PveChallengeState.applyChallengeSettlement
+  -> 同事务更新 pveProfile.highestClearedFloor / highestClearedAt
+  -> db.listPveLeaderboard 只按 pveProfile 排行
+```
+
+旧职业成长、遗物、成就、图鉴和旧 PVE 广告奖励均无调用链；数据库中的历史根字段不再参与当前玩法判断。

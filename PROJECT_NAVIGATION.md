@@ -115,3 +115,11 @@
 3. 代码导航：本文件
 4. 调用链：`CALL_FLOW.md`
 5. 历史资料：`specs/game-design/**`、`specs/260610-destiny-tree-ui/**`、`specs/260628-destiny-tree-v2/**` 等。历史资料只供追溯，不作为当前实现依据。
+
+## 2026-07-17 当前系统边界
+
+- 正式 PVE 内容仅开放全局第 1–14 层；客户端入口为 `chapterRouting.ts`，云端校验入口为 `cloudfunctions/common/pve/PveChallengeValidate.js`。
+- 职业只保留战士、弓手、游侠三套当前机制与熟练度；旧晋升、觉醒、职业碎片不是有效入口。
+- 遗物、成就、图鉴业务已删除；历史源码说明和数据库旧字段不得作为运行时入口。
+- 排行榜只读取 `users.pveProfile.highestClearedFloor`，同层按 `highestClearedAt` 先到先得。
+- 广告只保留通用平台层与未接线的 `restore_stamina` 协议；当前没有广告 UI 或体力发放路由。

@@ -1,9 +1,8 @@
-const { PROFESSION_IDS } = require('./PveProfile');
+const { MAX_READY_FLOOR, PROFESSION_IDS } = require('./PveProfile');
 
 const CHALLENGE_MODES = ['PROGRESSION', 'HUNT', 'TRIAL', 'PRACTICE'];
 const CHALLENGE_RESULT_STATUSES = ['CLEAR', 'DEAD', 'WITHDRAW'];
 const EQUIPMENT_SLOTS = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'];
-const MAX_FLOOR = 35;
 const MAX_MINGHEN_SLOTS = 8;
 
 function fail(code, message) {
@@ -58,7 +57,7 @@ function validateStartFloorChallengeRequest(profile, request) {
     fail('PVE_INVALID_CHALLENGE_REQUEST', '挑战请求不合法');
   }
   const floor = Number(request.floor);
-  if (!Number.isInteger(floor) || floor < 1 || floor > MAX_FLOOR) {
+  if (!Number.isInteger(floor) || floor < 1 || floor > MAX_READY_FLOOR) {
     fail('PVE_INVALID_FLOOR', 'floor 不合法');
   }
   if (!CHALLENGE_MODES.includes(request.mode)) {
@@ -73,9 +72,7 @@ function validateStartFloorChallengeRequest(profile, request) {
   if (floor > profile.highestUnlockedFloor) {
     fail('PVE_FLOOR_LOCKED', '楼层尚未解锁');
   }
-  if (request.mode === 'PROGRESSION' && floor !== profile.highestUnlockedFloor) {
-    fail('PVE_INVALID_PROGRESSION_FLOOR', '推进模式只能挑战当前最高解锁层');
-  }
+  // 已通关楼层允许重复挑战；下一可挑战层同样受 highestUnlockedFloor 限制。
   if (request.mode !== 'PROGRESSION' && floor > profile.highestClearedFloor) {
     fail('PVE_REPLAY_FLOOR_NOT_CLEARED', '非推进模式只能挑战已通关层');
   }
@@ -103,7 +100,40 @@ function validateStartFloorChallengeRequest(profile, request) {
     equipmentLoadout: validateEquipmentLoadout(request.equipmentLoadout ?? {}),
     minghenLoadout: validateMinghenLoadout(request.minghenLoadout ?? []),
     trackedMinghenId,
+    abandonActive: request.abandonActive === true,
   };
+}
+
+const QUALITIES = ['COMMON', 'FINE', 'RARE', 'EPIC', 'LEGENDARY'];
+
+function validateLootedEquipment(value) {
+  if (value == null) return undefined;
+  if (!Array.isArray(value) || value.length > 40) {
+    fail('PVE_INVALID_LOOTED_EQUIPMENT', '击杀掉落装备列表不合法');
+  }
+  const ids = new Set();
+  return value.map((item) => {
+    if (!isPlainObject(item)
+      || typeof item.instanceId !== 'string' || !item.instanceId || item.instanceId.length > 80
+      || typeof item.definitionId !== 'string' || !item.definitionId || item.definitionId.length > 32
+      || !QUALITIES.includes(item.quality)
+      || !Number.isInteger(item.enhanceLevel) || item.enhanceLevel < 0 || item.enhanceLevel > 5
+      || (item.locked != null && item.locked !== true && item.locked !== false)) {
+      fail('PVE_INVALID_LOOTED_EQUIPMENT', '击杀掉落装备条目不合法');
+    }
+    if (ids.has(item.instanceId)) {
+      fail('PVE_DUPLICATE_LOOTED_EQUIPMENT', `掉落装备实例重复: ${item.instanceId}`);
+    }
+    ids.add(item.instanceId);
+    return {
+      instanceId: item.instanceId,
+      definitionId: item.definitionId,
+      quality: item.quality,
+      enhanceLevel: item.enhanceLevel,
+      locked: item.locked === true,
+      ...(Number.isFinite(item.baseStat) && item.baseStat > 0 ? { baseStat: Math.floor(item.baseStat) } : {}),
+    };
+  });
 }
 
 function validateSettleFloorChallengeRequest(request) {
@@ -131,6 +161,17 @@ function validateSettleFloorChallengeRequest(request) {
       fail('PVE_INVALID_REWARD_SELECTION', `${key} 不合法`);
     }
   }
+  const lootedEquipment = validateLootedEquipment(request.lootedEquipment);
+  const equipmentLoadout = request.equipmentLoadout == null
+    ? undefined
+    : validateEquipmentLoadout(request.equipmentLoadout);
+  let lootedStardust;
+  if (request.lootedStardust != null) {
+    if (!Number.isInteger(request.lootedStardust) || request.lootedStardust < 0 || request.lootedStardust > 50000) {
+      fail('PVE_INVALID_LOOTED_STARDUST', '本层星尘入账不合法');
+    }
+    lootedStardust = request.lootedStardust;
+  }
   let trialEvidence;
   if (request.trialEvidence != null) {
     if (!isPlainObject(request.trialEvidence)) fail('PVE_INVALID_TRIAL_EVIDENCE', '试炼摘要必须为对象');
@@ -148,6 +189,9 @@ function validateSettleFloorChallengeRequest(request) {
     ...(request.professionHighlightCount == null ? {} : { professionHighlightCount }),
     ...(request.selectedMinghenId == null ? {} : { selectedMinghenId: request.selectedMinghenId }),
     ...(request.selectedEquipmentDefinitionId == null ? {} : { selectedEquipmentDefinitionId: request.selectedEquipmentDefinitionId }),
+    ...(lootedEquipment === undefined ? {} : { lootedEquipment }),
+    ...(equipmentLoadout === undefined ? {} : { equipmentLoadout }),
+    ...(lootedStardust === undefined ? {} : { lootedStardust }),
     ...(request.huntBonusAchieved == null ? {} : { huntBonusAchieved: request.huntBonusAchieved === true }),
     ...(request.trialCompleted == null ? {} : { trialCompleted: request.trialCompleted === true }),
     ...(trialEvidence === undefined ? {} : { trialEvidence }),
@@ -170,7 +214,8 @@ function validateSaveFloorChallengeRuntimeRequest(request) {
     fail('PVE_INVALID_RUNTIME_SAVE', '楼层运行态存档不是合法 JSON');
   }
   const runtime = parsed?.runtime;
-  if (parsed?.version !== 1 || runtime?.version !== 1 || runtime?.status !== 'ACTIVE') {
+  const version = Number(parsed?.version);
+  if (![1, 2].includes(version) || runtime?.version !== version || runtime?.status !== 'ACTIVE') {
     fail('PVE_INVALID_RUNTIME_SAVE', '楼层运行态版本或状态不合法');
   }
   if (!Number.isInteger(runtime.turn) || runtime.turn < 1) {
@@ -180,6 +225,7 @@ function validateSaveFloorChallengeRuntimeRequest(request) {
     challengeId: request.challengeId,
     serializedRuntime: request.serializedRuntime,
     runtime,
+    version,
     turn: runtime.turn,
   };
 }
@@ -188,7 +234,7 @@ module.exports = {
   CHALLENGE_MODES,
   CHALLENGE_RESULT_STATUSES,
   EQUIPMENT_SLOTS,
-  MAX_FLOOR,
+  MAX_READY_FLOOR,
   MAX_MINGHEN_SLOTS,
   validateMinghenLoadout,
   validateEquipmentLoadout,

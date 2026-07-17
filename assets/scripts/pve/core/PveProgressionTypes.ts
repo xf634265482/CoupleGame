@@ -76,7 +76,8 @@ export interface PveProfile {
   version: typeof PVE_PROFILE_VERSION;
   highestUnlockedFloor: number;
   highestClearedFloor: number;
-  highestClearedAt: number | null;
+  /** 云端新档案始终提供；旧本地测试/缓存快照允许缺失并按 null 处理。 */
+  highestClearedAt?: number | null;
   floorRecords: Record<string, FloorProgressRecord>;
   minghenCollection: Record<string, MinghenCollectionEntry>;
   minghenLoadout: MinghenLoadoutEntry[];

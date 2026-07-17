@@ -1,6 +1,7 @@
 const { generateId } = require('../id');
 const { calculateRewards, applyMastery, unlockProfessions, EQUIPMENT_POOLS, BOSS_SPOIL_DEFINITION_IDS } = require('./PveRewardV2');
 const { settleMinghen } = require('./PveMinghen');
+const { MAX_READY_FLOOR } = require('./PveProfile');
 
 function stableLoadoutEntries(entries) {
   return [...entries].sort((a, b) => a.id.localeCompare(b.id));
@@ -223,7 +224,7 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
   const highestClearedAt = isNewHighest ? now : profile.highestClearedAt;
   const highestUnlockedFloor = challenge.mode === 'PROGRESSION'
     && challenge.floor === profile.highestUnlockedFloor
-    ? Math.min(35, Math.max(profile.highestUnlockedFloor, challenge.floor + 1))
+    ? Math.min(MAX_READY_FLOOR, Math.max(profile.highestUnlockedFloor, challenge.floor + 1))
     : profile.highestUnlockedFloor;
 
   nextProfile = {

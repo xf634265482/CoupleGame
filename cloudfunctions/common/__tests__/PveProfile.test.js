@@ -72,7 +72,7 @@ describe('PveProfile', () => {
         ARCHER: { unlocked: false, xp: 12, level: 2 },
       },
     }, 789);
-    expect(profile.highestUnlockedFloor).toBe(35);
+    expect(profile.highestUnlockedFloor).toBe(14);
     expect(profile.highestClearedFloor).toBe(2);
     expect(profile.gold).toBe(8);
     expect(profile.minghenDust).toBe(0);

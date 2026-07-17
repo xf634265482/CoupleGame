@@ -1,6 +1,7 @@
 const { resolveStamina } = require('./PveStamina');
 
 const PROFILE_VERSION = 1;
+const MAX_READY_FLOOR = 14;
 const PROFESSION_IDS = ['WARRIOR', 'ARCHER', 'RANGER'];
 
 function defaultMastery(unlocked, xp = 0, level = 1) {
@@ -89,13 +90,13 @@ function normalizeProfile(value, now = Date.now(), legacy = {}) {
     ? value.selectedProfessionId
     : 'WARRIOR';
 
-  const highestClearedFloor = Math.min(35, nonNegativeInt(value.highestClearedFloor));
+  const highestClearedFloor = Math.min(MAX_READY_FLOOR, nonNegativeInt(value.highestClearedFloor));
   const highestClearedAt = Number.isFinite(value.highestClearedAt)
     ? Math.max(0, Math.trunc(value.highestClearedAt))
     : null;
   const highestUnlockedFloor = Math.max(
     1,
-    Math.min(35, nonNegativeInt(value.highestUnlockedFloor, highestClearedFloor + 1)),
+    Math.min(MAX_READY_FLOOR, nonNegativeInt(value.highestUnlockedFloor, highestClearedFloor + 1)),
   );
 
   const mergedStardust = nonNegativeInt(value.gold) + nonNegativeInt(value.minghenDust);
@@ -109,7 +110,7 @@ function normalizeProfile(value, now = Date.now(), legacy = {}) {
 
   return {
     ...defaults,
-    highestUnlockedFloor: Math.max(highestUnlockedFloor, Math.min(35, highestClearedFloor + 1)),
+    highestUnlockedFloor: Math.max(highestUnlockedFloor, Math.min(MAX_READY_FLOOR, highestClearedFloor + 1)),
     highestClearedFloor,
     highestClearedAt,
     floorRecords: isPlainObject(value.floorRecords) ? value.floorRecords : {},
@@ -159,6 +160,7 @@ function resetCampInventory(value, now = Date.now()) {
 
 module.exports = {
   PROFILE_VERSION,
+  MAX_READY_FLOOR,
   PROFESSION_IDS,
   createDefaultProfile,
   normalizeProfile,

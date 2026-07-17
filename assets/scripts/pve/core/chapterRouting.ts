@@ -5,7 +5,7 @@ export function chapterIdForFloor(floor: number): 1 | 2 {
   if (floor < 1 || !Number.isInteger(floor)) throw new Error('INVALID_FLOOR');
   if (floor <= 7) return 1;
   if (floor <= 14) return 2;
-  throw new Error('CHAPTER_NOT_READY');
+  throw new Error('PVE_FLOOR_CONTENT_NOT_READY');
 }
 
 export function chapterFloorOf(floor: number): number {
