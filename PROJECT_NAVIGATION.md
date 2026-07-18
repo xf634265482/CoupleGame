@@ -1,7 +1,7 @@
 # PROJECT_NAVIGATION.md
 
 > 当前项目导航。排查 Bug / 实现功能时，先从这里定位入口，再打开具体代码。
-> 当前 PVE 总边界以 `specs/260608-pve-destiny-expedition/design.md` 为准，1–14 层细节见 `specs/260712-pve-persistent-floor-progression/`。
+> 当前 PVE 总边界以 `specs/260608-pve-destiny-expedition/design.md` 为准，1–35 层细节见 `specs/260712-pve-persistent-floor-progression/`。
 
 ---
 
@@ -14,8 +14,11 @@
 | 游戏启动 | `assets/scripts/core/GameApp.ts` |
 | 场景切换 | `assets/scripts/core/SceneLoader.ts` |
 | 大厅 UI / 远征入口 / 营地入口 | `assets/scripts/lobby/PveLobbyController.ts` |
+| 大厅伙伴入口 / 养成面板 | `assets/scripts/pve/controllers/PartnerController.ts` + `views/PartnerView.ts` |
 | 远征战斗场景 | `assets/scripts/pve/controllers/ExpeditionController.ts` 挂载于 `assets/scenes/pve_expedition.scene` |
 | 营地场景 UI | `assets/scripts/pve/controllers/CampController.ts` + `assets/scripts/pve/views/CampView.ts` |
+| 大厅今日命痕商会 | `assets/scripts/pve/controllers/MinghenShopController.ts` + `assets/scripts/pve/views/MinghenShopView.ts` |
+| 伙伴技能执行 | `assets/scripts/pve/core/partner/PartnerSkillExecutor.ts` |
 
 ### 永久逐层远征
 
@@ -23,11 +26,17 @@
 | --- | --- |
 | 挑战生命周期编排 | `assets/scripts/pve/core/PersistentFloorFlow.ts` |
 | 持久化运行时 / 目标 / 命痕事件桥 | `assets/scripts/pve/core/PersistentExpeditionRuntime.ts` |
-| 章节路由（全局层 1–14） | `assets/scripts/pve/core/chapterRouting.ts` |
+| 章节路由（全局层 1–35） | `assets/scripts/pve/core/chapterRouting.ts` |
 | 第一章楼层目录 | `assets/scripts/pve/core/chapter1/Chapter1FloorCatalog.ts` |
 | 第一章确定性楼层生成 | `assets/scripts/pve/core/chapter1/Chapter1FloorGenerator.ts` |
 | 第一章正式 ExpeditionState/FloorState 工厂 | `assets/scripts/pve/core/chapter1/Chapter1ExpeditionFactory.ts` |
 | 第二章楼层目录 / 生成 / 工厂 | `assets/scripts/pve/core/chapter2/Chapter2FloorCatalog.ts` / `Chapter2FloorGenerator.ts` / `Chapter2ExpeditionFactory.ts` |
+| 第三章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter3/Chapter3FloorCatalog.ts` / `Chapter3FloorGenerator.ts` / `Chapter3ExpeditionFactory.ts` / `Chapter3Objectives.ts` |
+| 第三章机制（寒核压力 / 夺控狂暴） | `chapter3/CoreBreakPressure.ts` / `ControlPointRage.ts` |
+| 第四章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter4/Chapter4FloorCatalog.ts` / `Chapter4FloorGenerator.ts` / `Chapter4ExpeditionFactory.ts` / `Chapter4Objectives.ts` |
+| 第四章机制（vent / 安全区 / 潮汐 / 护运） | `chapter4/LavaVentPressure.ts` / `SafeZoneMigration.ts` / `LavaTideAdvance.ts` / `EscortCore.ts` |
+| 第五章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter5/Chapter5FloorCatalog.ts` / `Chapter5FloorGenerator.ts` / `Chapter5ExpeditionFactory.ts` / `Chapter5Objectives.ts` |
+| 第五章机制（预言阵眼 / 镜像桥 / 改写试炼） | `chapter5/ProphecyEyePressure.ts` / `MirrorTrialBridge.ts` / `FateRewriteTrial.ts` |
 | 装备模板库（中文名） | `assets/scripts/pve/core/EquipmentSystem.ts` |
 | 装备图标映射 / 分包加载 | `assets/scripts/pve/EquipmentCatalog.ts` / `EquipmentResourceLoader.ts` |
 | 永久层装备掉落（无词条） | `assets/scripts/pve/core/equipment/FixedEquipmentLoot.ts` |
@@ -96,7 +105,7 @@
 
 ## 2026-07-17 当前系统边界
 
-- 正式 PVE 内容仅开放全局第 1–14 层；客户端入口为 `chapterRouting.ts`，云端校验入口为 `cloudfunctions/common/pve/PveChallengeValidate.js`。
+- 正式 PVE 内容仅开放全局第 1–35 层；客户端入口为 `chapterRouting.ts`，云端校验入口为 `cloudfunctions/common/pve/PveChallengeValidate.js`。
 - 职业入口为战士、射手、游侠三套机制、熟练度和灵气爆发。
 - 装备只引用 85 件固定目录；命痕是唯一被动构筑系统。
 - 排行榜只读取 `users.pveProfile.highestClearedFloor`，同层按 `highestClearedAt` 先到先得。

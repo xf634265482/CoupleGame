@@ -1,9 +1,9 @@
 # 伙伴系统设计
 
 > 日期：2026-07-18  
-> 状态：已确认，待实现  
+> 状态：核心已落地（大厅入口/面板、档案、快照经验、六类技能执行器、HUD、战斗接线）；视觉跟随与部分阶段钩子可继续打磨  
 > 产品规格来源：`塔塔远征团-伙伴系统设计与开发规格V1.md`  
-> 对应主设计：实现时同步 `specs/260608-pve-destiny-expedition/design.md`  
+> 对应主设计：`specs/260608-pve-destiny-expedition/design.md` §7.1  
 > 架构路径：统一技能执行框架（`core/partner/` + `usePartnerSkill`）
 
 ---

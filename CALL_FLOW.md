@@ -30,6 +30,25 @@ GameApp.onLoad()
   -> [Cloud] PveProgression.loadProfile()
   -> CampView 渲染：命痕台 / 装备台 / 远征情报 / 角色区
      （角色区：已解锁职业卡调用 previewCampCombatStats 显示攻击/生命/护甲/射程预览）
+     （命痕台只负责装配/库存/方案；不含每日商会）
+```
+
+## 2.1 进入伙伴
+
+```text
+[Lobby] PveLobbyController 底栏「伙伴」（排行榜与远征之间）
+  -> PartnerController.open()
+  -> loadPveProfile / updateCampConfiguration(equippedPartnerId) / manageCamp(PARTNER EVOLVE)
+  -> PartnerView 列表/详情/装备/进化
+```
+
+### 战斗内伙伴技能
+
+```text
+[Expedition] HUD「伙伴」
+  -> ExpeditionController._onPartnerSkill
+  -> applyPartnerSkillToRuntime / usePartnerSkill
+  -> 需选格/选敌时 _partnerAim + 点地图确认
 ```
 
 ### 营地保存配置
@@ -41,6 +60,17 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
   -> [Cloud] PveProgression.updateCampConfiguration()
   -> 校验职业已解锁、装备/命痕归属、无非法槽位
   -> 写回 users.pveProfile（允许挑战进行中改档；当前层仍用开局快照）
+```
+
+### 大厅今日商会
+
+```text
+[Lobby] 右侧「商会」浮标
+  -> MinghenShopController.open()
+  -> loadPveProfile（ensureDailyShop）
+  -> MinghenShopView：星尘池 / 命痕兑换 / 广告刷新
+  -> manageCamp(MINGHEN_BUY_STARDUST | MINGHEN_EXCHANGE | MINGHEN_REFRESH_SHOP)
+  -> [Cloud] PveMinghenShop.js
 ```
 
 ---
@@ -220,20 +250,24 @@ ExpeditionController._onQuitRequested()
 
 ```text
 PersistentExpeditionRuntime.status != ACTIVE
-  -> ExpeditionController._apply：传门通关前 flush ACTIVE runtime
+  -> ExpeditionController._apply：传门通关前停掉后台 ACTIVE 存档（等在途结束，不再强制 flush）
   -> ExpeditionController._handleFloorCleared()
-     -> Boss 通关：立刻 preloadChapter(next)（不等云端 flush）
-     -> 先弹命痕三选一，再 settle；busy 期间互动会排队补执行
-  -> PersistentFloorFlow.settle(selection)
-     （附带局内 lootedEquipment + equipmentLoadout；非通关选装）
-  -> PveProgressionService.settleFloorChallenge()
-  -> [Cloud] PveChallenge.settle()
-    -> 幂等处理终态
-    -> 击杀掉落入账 equipmentInventory，并写回 equipmentLoadout（CLEAR/DEAD/WITHDRAW 均保留）
-    -> CLEAR 写入 floorRecords / 解锁下一层 / 发命痕与金币奖励
-    -> DEAD/WITHDRAW 清 activeChallengeId
-    -> 临时 TransactionBusy/Conflict 最多同请求重试 4 次
-  -> 用户选择继续下一层或返回营地
+     -> Boss 通关：立刻 preloadChapter(next)
+     -> 命痕三选一（如有）
+     -> PersistentFloorFlow.beginDeferredSettle(selection)
+        -> 本地 PendingSettlementStore 落单
+        -> 乐观清 activeChallengeId
+        -> 后台 settle（超时/Busy 可重试，幂等）
+     -> 立刻弹「继续远征 / 返回大厅」（不因云端超时卡住）
+  -> 用户点「继续远征」
+     -> LoadingOverlay「正在同步进度…」
+     -> ensureSettled()（等后台完成或补推）
+     -> continueNextFloor() → start 下一层
+     -> 长时间仍失败：遮罩外「再试一次 / 返回大厅」
+  -> 返回大厅 / 大厅 warm / bootstrap：flushPendingFloorSettlement 补推本地待结算
+  -> [Cloud] PveChallenge.settleFloorChallenge()
+    -> runTransactionWithRetry
+    -> 幂等终态；CLEAR 写 floorRecords / 解锁 / 发奖
 ```
 
 > 说明：`updatePveMeta` 负责教学完成等账户标记。装备由击杀掉落自动穿戴，结算入永久背包；继续远征按更新后的 loadout 带装。
@@ -284,10 +318,10 @@ gm-web
 ## 当前边界调用链（2026-07-17）
 
 ```text
-大厅选择第 1–14 层
+大厅选择第 1–35 层
   -> chapterRouting.isFloorContentReady
   -> PveService.startFloorChallenge
-  -> cloudfunctions/common/pve/PveChallengeValidate.js（再次校验 ≤ 14）
+  -> cloudfunctions/common/pve/PveChallengeValidate.js（再次校验 ≤ 28）
   -> PveChallenge 事务扣除 5 体力并创建挑战
 
 通关结算
