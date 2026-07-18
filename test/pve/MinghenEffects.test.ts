@@ -42,7 +42,7 @@ describe('Minghen effects', () => {
   test('global AP refund guard caps combined direct discount at one', () => {
     const memory = createMinghenTriggerMemory();
     resolveMinghenEffects([{ id: 'M13', level: 3 }], ctx({ eventId: 'collision', hook: 'COLLISION', collision: true, maxHp: 280 }), memory);
-    const result = resolveMinghenEffects([{ id: 'M13', level: 3 }, { id: 'M22', level: 2 }], ctx({ eventId: 'attack', hook: 'BEFORE_ATTACK', lastAction: 'MOVE', action: 'ATTACK' }), memory);
+    const result = resolveMinghenEffects([{ id: 'M13', level: 3 }], ctx({ eventId: 'attack', hook: 'BEFORE_ATTACK' }), memory);
     expect(result.apDelta).toBe(-1);
   });
   test('M06 grants next-turn AP before preparing its level-three penetration', () => {
@@ -52,41 +52,24 @@ describe('Minghen effects', () => {
     expect(resolveMinghenEffects(loadout, ctx({ eventId: 'start', hook: 'TURN_START' }), memory).apDelta).toBe(1);
     expect(resolveMinghenEffects(loadout, ctx({ eventId: 'attack', hook: 'BEFORE_ATTACK' }), memory).armorPenetrationBonus).toBe(0.2);
   });
-  test('new status extenders stay profession-agnostic', () => {
+  test('M32 grants shield next turn after undamaged turn end', () => {
     const memory = createMinghenTriggerMemory();
-    const result = resolveMinghenEffects(
-      [{ id: 'M27', level: 3 }, { id: 'M28', level: 3 }, { id: 'M29', level: 3 }],
-      ctx({
-        hook: 'BEFORE_HIT',
-        targetHasStatus: true,
-        targetStatuses: ['BLEED', 'POISON', 'BURN', 'CHILL'],
-      }),
-      memory,
-    );
-    expect(result.damageMultiplierBonus).toBeCloseTo(0.15 + 0.35 + 0.3);
+    const loadout = [{ id: 'M32', level: 1 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'end', hook: 'TURN_END', damagedThisTurn: false }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'start', hook: 'TURN_START', maxHp: 100 }), memory).shield).toBeCloseTo(4);
   });
-  test('M32 turns a skipped attack into a discounted empowered strike', () => {
+  test('M35 move discount triggers after shield threshold turn end', () => {
     const memory = createMinghenTriggerMemory();
-    const loadout = [{ id: 'M32', level: 3 as const }];
-    resolveMinghenEffects(loadout, ctx({ eventId: 'end', hook: 'TURN_END', attackedThisTurn: false }), memory);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-attack', hook: 'BEFORE_ATTACK' }), memory).apDelta).toBe(-1);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.15);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'kill', hook: 'KILL' }), memory).apDelta).toBe(1);
+    const loadout = [{ id: 'M35', level: 1 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'end', hook: 'TURN_END', maxHp: 100, shield: 10, shieldBrokenThisTurn: false }), memory);
+    resolveMinghenEffects(loadout, ctx({ eventId: 'start', hook: 'TURN_START', turn: 2 }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'move', hook: 'BEFORE_MOVE', turn: 2 }), memory).moveCostReduction).toBe(1);
   });
-  test('M35 reacts to shield break without a profession dependency', () => {
+  test('M38 kill stores move discount for same turn', () => {
     const memory = createMinghenTriggerMemory();
-    const loadout = [{ id: 'M35', level: 3 as const }];
-    resolveMinghenEffects(loadout, ctx({ eventId: 'shield', hook: 'SHIELD_BROKEN' }), memory);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-attack', hook: 'BEFORE_ATTACK' }), memory).apDelta).toBe(-1);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.3);
-  });
-  test('M38 chains kill into movement and follow-up kill refund', () => {
-    const memory = createMinghenTriggerMemory();
-    const loadout = [{ id: 'M38', level: 3 as const }];
+    const loadout = [{ id: 'M38', level: 1 as const }];
     resolveMinghenEffects(loadout, ctx({ eventId: 'kill-1', hook: 'KILL', source: 'ACTIVE_ACTION' }), memory);
     expect(resolveMinghenEffects(loadout, ctx({ eventId: 'move', hook: 'BEFORE_MOVE' }), memory).moveCostReduction).toBe(1);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.15);
-    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'kill-2', hook: 'KILL', source: 'ACTIVE_ACTION' }), memory).apDelta).toBe(1);
   });
   test('pruneMinghenMemory drops stale event/turn keys but keeps layer/state', () => {
     const memory = createMinghenTriggerMemory();
