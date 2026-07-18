@@ -60,7 +60,7 @@ export function evolvePartner(
   partnerIdForTrial?: import('./PartnerTypes').PartnerId,
 ): { ok: true; progress: PlayerPartnerProgress; gold: number } | { ok: false; reason: string; progress: PlayerPartnerProgress; gold: number } {
   const check = canEvolve(progress, gold, partnerIdForTrial);
-  if (!check.ok) return { ok: false, reason: check.reason, progress, gold };
+  if (check.ok === false) return { ok: false, reason: check.reason, progress, gold };
   return {
     ok: true,
     progress: { ...progress, evolutionStage: check.toStage as PartnerEvolutionStage },
