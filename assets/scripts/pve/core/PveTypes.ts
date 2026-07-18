@@ -23,13 +23,21 @@ export type FixedEntityType =
   | 'BLAST_TARGET'
   | 'ESCAPE_MARKER'
   | 'WAVE_SPAWN_MARKER' // 第 6 层夜袭刷怪点（闪烁格，不可交互）
-  | 'ROCK' // 鐭冲潡鍦板舰锛圔oss 鎴块殰纰嶏紝鍙尅涓€娆?AOE 鍚庢秷澶憋級
-  | 'SAND_PIT' // 娌欏潙鍦板舰锛堢2绔?Boss 鎴匡細绉诲姩 AP+2锛孊oss 閽诲嚭浼樺厛娌欏潙锛涙綔鍦版椂鍔ㄦ€佹墿寮狅紝甯?remaining 鐨勪负鍔ㄦ€佸潙锛?
+  | 'CONTROL_POINT' // 第 19 层霜域夺控占点（不可阻挡，站立结束回合累计进度）
+  | 'ROCK' // 石块地形
+  | 'SAND_PIT' // 沙坑地形
   | 'ICE_WALL' // 鍐板鍦板舰锛堢3绔?Boss 鎴匡細闃绘尅绉诲姩锛孒P=10 鍙鏀诲嚮鐮村潖锛?
   | 'ICE_TILE' // 鍐伴潰鍦板潡锛堢3绔?FrostGiant 鍐板喕鍥炲悎閾哄嚭锛岀帺瀹惰俯涓婃粦琛岋紝remaining 鍊掕鏃惰瀺鍖栵級
   | 'FREEZE_WALL' // 鍐板喕鐘舵€佸锛堢3绔?FrostGiant锛氱帺瀹惰鍐荤粨鏃跺湪鍛ㄥ洿鐢熸垚锛屾寜鏀诲嚮娆℃暟鑰岄潪HP绉婚櫎锛?
   | 'SHATTERED_ICE' // 纰庡啺鍦板潡锛堢3绔?FrostGiant锛氬啺澧?鍐荤粨澧欒鍑荤鍚庣敓鎴愶紝remaining 鍊掕鏃讹紱鐜╁韪╁叆鎵ｅ浐瀹氫激瀹冲苟绔嬪嵆娑堣€楋紝涓嶉樆鎸＄Щ鍔級
-  | 'LAVA_TILE'; // 鐔斿博鍦板潡锛堢4绔?LavaLord phase2 鍛ㄦ湡鎬у埛鍑猴紝鐜╁韪╁叆鎵?HP锛?
+  | 'LAVA_TILE' // 熔岩地块（第4章 LavaLord phase2 / 环境潮汐；玩家踩入扣 HP）
+  | 'LAVA_VENT' // 第 23 层熔岩 vent（相邻互动封印）
+  | 'LAVA_VENT_WARN' // vent 喷发预警标记
+  | 'ESCORT_BASE' // 第 24 层护运终点
+  | 'SAFE_ZONE' // 第 25 层安全区
+  | 'SAFE_ZONE_WARN' // 第 25 层安全区迁移预警
+  | 'FATE_SEAL' // 第 31 层命运抉择封印（互动选择试炼分支）
+  | 'PROPHECY_EYE'; // 可选静态预言之眼实体（第 32 层默认用怪物眼）
 
 export type FixedEntitySource = 'GLACIER_SHAPER';
 
@@ -105,6 +113,8 @@ export interface Monster {
   lavaTelegraphTarget?: Coord;
   /** 鎶ょ敳鍊硷紙Chapter 2+ 鎬墿/Boss 涓撴湁锛夛細鐜╁鏅敾鍓嶅厛鎵ｅ噺姝ゅ€硷紝鏈€浣庨€犳垚 1 浼ゅ銆?*/
   armor?: number;
+  /** 第 16 层霜猎悬赏：强化目标标记（同原型，仅属性倍率 + UI 放大）。 */
+  isBounty?: boolean;
   tutorialDrop?: { gold?: number; anima?: number; equip?: EquipItem };
 }
 
@@ -309,6 +319,8 @@ export interface FloorState {
   iceWallAnimaGained?: number;
   /** 本层通过击碎冰川塑形者冰墙已获得的灵气。 */
   glacierShaperWallAnimaGained?: number;
+  /** 第 19 层占点进度（pointId → 累计回合数）。 */
+  controlPointProgress?: Record<string, number>;
   playerExposedTurns?: number;
   goblinSentinelAlertIds?: string[];
   duneSentinelAlertIds?: string[];
@@ -391,6 +403,8 @@ export interface ExpeditionState {
 // 鈹€鈹€ 浜嬩欢锛坈ore 绾嚱鏁拌繑鍥烇紝渚?Controller 鍥炴斁鍔ㄧ敾锛?鈹€鈹€鈹€鈹€
 export type PveEvent =
   | { type: 'MOVE'; entityId: 'PLAYER' | string; from: Coord; to: Coord; apLeft: number }
+  | { type: 'PLAYER_TELEPORT'; from: Coord; to: Coord }
+  | { type: 'PARTNER_SKILL_USED'; partnerId: string; skillLabel?: string }
   | { type: 'REVEAL'; cells: Coord[] }
   | { type: 'ATTACK'; attackerId: string; targetId: string; damage: number; targetHp: number; cause?: 'DIRECT' | 'COLLISION' }
   | { type: 'WAR_HORN_SUMMONED'; pos: Coord; allyId: string }
@@ -482,6 +496,14 @@ export type PveEvent =
   | { type: 'BURN_BURST'; damage: number; hp: number; tiles: Coord[] }
   /** 鐔斿博棰嗕富闃舵浜屽畾鍚戠啍宀╂疆姹愶細娌?direction 鎺ㄨ繘绗?rowIndex 鎺掓案涔?LAVA_TILE銆?*/
   | { type: 'LAVA_TIDE_ROW_SPAWNED'; tiles: Coord[]; direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'; rowIndex: number }
+  | { type: 'LAVA_TIDE_WARN'; rowIndex: number; cells: Coord[] }
+  | { type: 'VENT_SEALED'; entityId: string; pos: Coord }
+  | { type: 'FATE_CHOICE_SELECTED'; sealId: string; choice: 'HUNT' | 'ESCAPE' | 'HOLD'; pos: Coord }
+  | { type: 'VENT_ERUPTION_WARN'; ventIds: string[] }
+  | { type: 'VENT_ERUPTED'; ventId: string; pos: Coord }
+  | { type: 'ESCORT_ARRIVED'; escortId: string; baseId: string; pos: Coord }
+  | { type: 'SAFE_ZONE_WARN'; pos: Coord }
+  | { type: 'SAFE_ZONE_MOVED'; pos: Coord }
   /** 鐔斿博棰嗕富鐔斿博閿侀摼锛氱帺瀹惰鎷夎繎涓€鏍煎苟闄勫姞鐏肩儳锛坆urnTotal 涓哄彔鍔犲悗鐨勬€荤伡鐑у眰鏁帮級銆?*/
   | { type: 'LAVA_CHAIN_PULL'; from: Coord; to: Coord; burnTotal: number }
   /** 鍛借繍瀹堝崼琛屼负闀滃儚鐢熸垚锛堢5绔?FateGuardian HP鈮?0%锛宧p=鐜╁HP脳0.5銆乤ttack=鐜╁attack脳0.5锛夈€?*/
