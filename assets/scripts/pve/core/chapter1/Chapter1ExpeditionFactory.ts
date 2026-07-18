@@ -9,20 +9,15 @@ import {
   makeSpiritRat,
 } from '../Chapter1Monsters';
 import { createFogGrid, revealAround } from '../FogSystem';
-import { bossChapterScaling, MONSTER_BASE, type ClassId } from '../PveConstants';
-import type { Coord, Equipment, ExpeditionState, FixedEntity, Monster, RunPlayer } from '../PveTypes';
-import type { FloorChallengeSnapshot, PveEquipmentInstance, PveProfile, PveProfessionId } from '../PveProgressionTypes';
+import { bossChapterScaling, MONSTER_BASE } from '../PveConstants';
+import type { Coord, ExpeditionState, FixedEntity, Monster, RunPlayer } from '../PveTypes';
+import type { FloorChallengeSnapshot, PveProfile } from '../PveProgressionTypes';
 import { createRng, hashSeed } from '../rng';
-import { equipmentMaxHpBonus, toFixedEquipItem } from '../equipment/EquipmentProgression';
+import { equipmentMaxHpBonus } from '../equipment/EquipmentProgression';
 import { professionBaseStats } from '../professions/ProfessionBaseStats';
+import { classIdFromProfessionId, loadoutToRunEquipment } from '../CampCombatPreview';
 import { generateChapter1Floor } from './Chapter1FloorGenerator';
 import type { Chapter1MonsterSpawn } from './Chapter1FloorCatalog';
-
-function classIdOf(professionId: PveProfessionId): ClassId {
-  if (professionId === 'ARCHER') return 'ARCHER';
-  if (professionId === 'RANGER') return 'ROGUE';
-  return 'BERSERKER';
-}
 
 /** 与 MapGenerator.makeBoss 第一章路径一致：数值/射程走 MONSTER_BASE + bossChapterScaling + GOBLIN_CHIEF_RANGE。 */
 function makeGoblinChief(id: string, pos: Coord): Monster {
@@ -82,24 +77,8 @@ export function createChapter1Monster(spawn: Chapter1MonsterSpawn): Monster {
   return monster;
 }
 
-function loadedInstance(profile: PveProfile, instanceId: string | undefined): PveEquipmentInstance | null {
-  return instanceId
-    ? profile.equipmentInventory.find((instance) => instance.instanceId === instanceId) ?? null
-    : null;
-}
-
-function toRunEquipment(profile: PveProfile): Equipment {
-  const equipment: Equipment = {};
-  for (const slot of ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'] as const) {
-    const instance = loadedInstance(profile, profile.equipmentLoadout[slot]);
-    if (!instance) continue;
-    equipment[slot] = toFixedEquipItem(instance);
-  }
-  return equipment;
-}
-
 function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): RunPlayer {
-  const equipment = toRunEquipment(profile);
+  const equipment = loadoutToRunEquipment(profile);
   const base = professionBaseStats(snapshot.config.professionId);
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
@@ -109,7 +88,7 @@ function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): Ru
     anima: 0,
     animaProgress: 0,
     animaThreshold: 100,
-    classId: classIdOf(snapshot.config.professionId),
+    classId: classIdFromProfessionId(snapshot.config.professionId),
     equipment,
     bag: [],
     campMaxHpBuys: 0,

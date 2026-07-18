@@ -1,30 +1,15 @@
 import { getChapter1Objective } from '../core/objectives/Chapter1Objectives';
-import { equipmentMaxHpBonus, toFixedEquipItem } from '../core/equipment/EquipmentProgression';
+import { equipmentMaxHpBonus } from '../core/equipment/EquipmentProgression';
 import { professionBaseStats } from '../core/professions/ProfessionBaseStats';
-import type { Equipment, ExpeditionState, RunPlayer } from '../core/PveTypes';
-import type { FloorChallengeSnapshot, PveEquipmentInstance, PveProfile } from '../core/PveProgressionTypes';
+import { loadoutToRunEquipment } from '../core/CampCombatPreview';
+import type { ExpeditionState, RunPlayer } from '../core/PveTypes';
+import type { FloorChallengeSnapshot, PveProfile } from '../core/PveProgressionTypes';
 import { buildFirstTutorialFloor } from './TutorialConfigs';
 
 export { getChapter1Objective };
 
-function loadedInstance(profile: PveProfile, instanceId: string | undefined): PveEquipmentInstance | null {
-  return instanceId
-    ? profile.equipmentInventory.find((instance) => instance.instanceId === instanceId) ?? null
-    : null;
-}
-
-function toRunEquipment(profile: PveProfile): Equipment {
-  const equipment: Equipment = {};
-  for (const slot of ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'] as const) {
-    const instance = loadedInstance(profile, profile.equipmentLoadout[slot]);
-    if (!instance) continue;
-    equipment[slot] = toFixedEquipItem(instance);
-  }
-  return equipment;
-}
-
 function createTutorialPlayer(profile: PveProfile): RunPlayer {
-  const equipment = toRunEquipment(profile);
+  const equipment = loadoutToRunEquipment(profile);
   const base = professionBaseStats('WARRIOR');
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
