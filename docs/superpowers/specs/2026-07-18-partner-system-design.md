@@ -115,7 +115,7 @@ equippedPartnerId: PartnerId | null;
 
 - `partnerId: PartnerId | null`  
 - `partnerEvolutionStage: 1 | 2 | 3 | 4`  
-- （可选）`partnerLevel`，若技能读等级表  
+- `partnerLevel: number`（冻结开局等级；技能阶段只读 `evolutionStage`，等级仅用于展示/结算经验）  
 
 进入楼层后不可更换；返回大厅可更换。伙伴不占命痕槽、不占装备槽。
 
@@ -144,7 +144,7 @@ interface PartnerBattleState {
 | 2 → 3 进化 | Lv ≥ 15 | 200 | 接口（首版恒 true） |
 | 3 → 4 觉醒 | Lv ≥ 30 | 500 | 接口（首版恒 true） |
 
-- 经验：携带通关结算写入（常量表，如固定每层 XP 或 `base + floor`；实现计划中定表）。  
+- 经验：携带通关结算写入。首版公式固定为 **`30 + clearedFloor`**（通关第 N 层得 `30+N` XP）；仅装备中的伙伴获得。  
 - 进化成功：`evolutionStage += 1`，扣星尘；外观资源 key 按 stage 切换。  
 - 首版不做：羁绊、好感、伙伴装备、洗练、多技能、升星抽卡。
 
