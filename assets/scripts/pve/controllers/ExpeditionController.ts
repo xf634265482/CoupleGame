@@ -33,22 +33,25 @@ import type { CampItemId } from '../core/CampSystem';
 import { GameSession } from '../../core/GameSession';
 import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import { endTurn } from '../core/ExpeditionState';
-import { activateGunpowderBarrel, detonateBlastTarget, interactPortal, openExit, pickKey, spawnPortal } from '../core/FloorRules';
+import { activateGunpowderBarrel, detonateBlastTarget, findAdjacentFateSeal, findAdjacentLavaVent, interactFateSeal, interactPortal, openExit, pickKey, sealLavaVent, spawnPortal } from '../core/FloorRules';
 import { isRevealed } from '../core/FogSystem';
 import { checkLos } from '../core/LosSystem';
 import { openChest } from '../core/LootSystem';
 import { applyMove } from '../core/MovementSystem';
-import { CAMP_BLACKSMITH_ID, upgradeEquip, useAltar, useHotSpring, useIdol } from '../core/NeutralEntities';
+import { useAltar, useHotSpring } from '../core/NeutralEntities';
 import { equipFromBag } from '../core/EquipHelper';
 import { getBalancedActionCost } from '../core/PveBalance';
 import { applyPersistentAttack } from '../core/PersistentCombatRules';
 import {
+  applyPartnerSkillToRuntime,
   applyPersistentBattleResult,
+  ensurePartnerBattle,
   initialPersistentPresentationEvents,
   syncRuntimeFromExpedition,
   type PersistentExpeditionRuntime,
 } from '../core/PersistentExpeditionRuntime';
 import { PersistentFloorFlow } from '../core/PersistentFloorFlow';
+import { localPendingSettlementStore } from '../PendingSettlementStore';
 import { activateSpiritBurst } from '../core/SpiritBurstSystem';
 import { commitRangerFinisher } from '../core/professions/ProfessionActionSystem';
 import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
@@ -78,8 +81,6 @@ import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { Effects } from '../../fx/Effects';
 import { playSfx, SFX_IDS } from '../../audio/AudioManager';
 import { formatMinghenChoice } from '../core/minghen/MinghenDisplay';
-import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
-import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefinition';
 import type { SettleFloorChallengeRequest } from '../core/PveProgressionTypes';
 import { TutorialGuideManager } from '../tutorial/TutorialGuideManager';
 import type { TutorialAdvanceContext } from '../tutorial/TutorialTypes';
@@ -108,25 +109,6 @@ function perfMark(label: string, startMs: number, extra?: string): void {
   console.log(`[PVE perf] ${label} ${dt}ms${extra ? ' ' + extra : ''}`);
 }
 
-/** 装备槽位中文名（用于事件描述，避免显示英文枚举值）。 */
-const SLOT_CN: Record<string, string> = {
-  WEAPON: '武器',
-  HELMET: '头盔',
-  ARMOR:  '护甲',
-  SHOES:  '靴子',
-  TRINKET:'饰品',
-};
-
-/** 铁匠强化对应提升的具体属性名（用于事件描述，让玩家清楚"+1"加在了哪里）。 */
-const SLOT_ATTR_CN: Record<string, string> = {
-  WEAPON: '攻击力',
-  HELMET: '最大HP',
-  ARMOR:  '减伤',
-  SHOES:  '靴子等级',
-  TRINKET:'灵气加成',
-};
-
-/** 职业中文名（用于事件描述，避免显示英文枚举值）。 */
 const CLASS_CN: Record<string, string> = CLASS_DISPLAY_NAMES;
 
 /** 怪物变体/Boss 中文名（用于战报「发现/击杀」描述，避免显示英文枚举值）。 */
@@ -240,6 +222,20 @@ function destinyEventCard(id: number): string {
   }
 }
 
+function hotSpringCleanseName(cleansed: 'POISON' | 'FIRE_BURN' | 'LAVA_BURN' | 'SLOW' | 'PRESSURE' | 'CHILL' | 'FREEZE' | 'DESTINY_LOCK' | undefined): string {
+  switch (cleansed) {
+    case 'POISON': return '中毒';
+    case 'FIRE_BURN':
+    case 'LAVA_BURN': return '灼烧';
+    case 'SLOW': return '减速';
+    case 'PRESSURE': return '压迫';
+    case 'CHILL': return '寒气';
+    case 'FREEZE': return '冻结';
+    case 'DESTINY_LOCK': return '命运封锁';
+    default: return '无负面状态';
+  }
+}
+
 /** 事件 → 战报栏条目（覆盖更广：MOVE/TURN_END 也产生条目，让玩家看到怪物在动）。
  *  state 用于把"怪 (5,5)→(5,4)" 这类坐标改写成"怪 靠近你/远离你"等相对描述，
  *  普通玩家更易读。
@@ -314,14 +310,10 @@ function describeForLog(
       return { kind: 'SYSTEM', text: '🌀 目标完成，传送门已出现（可继续探索，或点「互动」通关）' };
     case 'WAVE_INCOMING':
       return { kind: 'SYSTEM', text: `⚠ 第 ${ev.wave} 波夜袭来袭！` };
-    case 'IDOL_BLESSING': {
-      const idolDesc = ev.effect === 'MAX_HP' ? `HP 上限 +${ev.maxHpBonus}`
-        : ev.effect === 'ATTACK' ? `攻击 +${ev.attackBonus}`
-        : `护甲 +${ev.armorBonus}`;
-      return { kind: 'LOOT', text: `🛐 神像祝福（${idolDesc}）` };
-    }
-    case 'HOT_SPRING_HEAL':
-      return { kind: 'LOOT', text: `♨️ 温泉治疗（恢复 ${ev.healed} 血）` };
+    case 'HOT_SPRING_BLESSING':
+      return ev.effect === 'SHIELD'
+        ? { kind: 'LOOT', text: `温泉护泉（护盾 +${ev.shield}）` }
+        : { kind: 'LOOT', text: `温泉净泉（灵气 +${ev.spirit}，净化 ${hotSpringCleanseName(ev.cleansed)}）` };
     case 'TURN_END':
       return { kind: 'SYSTEM', text: '─── 本回合结束 ───' };
     case 'AP_ROLLED':
@@ -420,10 +412,6 @@ function describeForLog(
       return { kind: 'PLAYER_HURT', text: `🔥 灼烧 -${ev.damage} HP（剩余 ${ev.hp} 血）` };
     case 'ALTAR_USED':
       return { kind: 'LOOT', text: ev.anima > 0 ? `🌿 祭坛感应（灵气 +${ev.anima}）` : '🌿 祭坛已关闭' };
-    case 'BLACKSMITH_UPGRADE':
-      return { kind: 'LOOT', text: `⚒️ 铁匠强化 ${SLOT_CN[ev.slot] ?? ev.slot} +${ev.newEnhanceLevel}：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}` };
-    case 'BLACKSMITH_UPGRADE_FAIL':
-      return { kind: 'PLAYER_HURT', text: `⚒️ 铁匠强化失败！（失败率 ${Math.round(ev.failChance * 100)}%）星尘已扣除` };
     case 'HEAVY_STRIKE_RESOLVED':
       return { kind: 'ENEMY_ACT', text: '💥 蓄力重击发动！橙圈为本次实际命中范围' };
     case 'HEAVY_STRIKE_WARNING':
@@ -478,6 +466,15 @@ function describeForLog(
       return { kind: 'ENEMY_ACT', text: '💥 命运预言爆发！标记区域已轰炸' };
     case 'DESTINY_REWRITE_OFFERED':
       return { kind: 'SYSTEM', text: `🌀 改写命运 · 5 抽 3，请舍弃一个未来（${ev.drawn.map(destinyEventName).join(' / ')}）` };
+    case 'FATE_CHOICE_SELECTED': {
+      const labels: Record<string, string> = {
+        HUNT: '斩首 · 击杀强化守望者',
+        ESCAPE: '突围 · 限时抵达出口',
+        HOLD: '固守 · 存活指定回合',
+      };
+      const label = labels[ev.choice] ?? ev.choice;
+      return { kind: 'SYSTEM', text: `✨ 命运已定：${label}` };
+    }
     case 'DESTINY_REWRITE_CHOSEN':
       return { kind: 'PLAYER_ACT', text: '🌀 已做出改写命运的选择' };
     case 'DESTINY_REWRITE_RESOLVED':
@@ -534,14 +531,10 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return null;
     case 'WAVE_INCOMING':
       return `⚠ 第 ${ev.wave} 波夜袭来袭！`;
-    case 'IDOL_BLESSING': {
-      const idolToast = ev.effect === 'MAX_HP' ? `HP 上限 +${ev.maxHpBonus}`
-        : ev.effect === 'ATTACK' ? `攻击 +${ev.attackBonus}`
-        : `护甲 +${ev.armorBonus}`;
-      return `🛐 神像赐予祝福 · ${idolToast}`;
-    }
-    case 'HOT_SPRING_HEAL':
-      return `♨️ 温泉治疗 +${ev.healed} HP`;
+    case 'HOT_SPRING_BLESSING':
+      return ev.effect === 'SHIELD'
+        ? `温泉护泉：护盾 +${ev.shield}`
+        : `温泉净泉：灵气 +${ev.spirit}，净化 ${hotSpringCleanseName(ev.cleansed)}`;
     case 'SHOP_BUY':
       return `🏕️ 购买成功 · ${ev.effect}`;
     case 'FLOOR_CLEARED':
@@ -597,10 +590,6 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `🔥 灼烧 -${ev.damage} HP（剩余 ${ev.hp} 血）`;
     case 'ALTAR_USED':
       return ev.anima > 0 ? `🌿 祭坛感应：灵气 +${ev.anima}` : '🌿 祭坛已关闭';
-    case 'BLACKSMITH_UPGRADE':
-      return `⚒️ ${SLOT_CN[ev.slot] ?? ev.slot} 强化 +${ev.newEnhanceLevel} 完成：${SLOT_ATTR_CN[ev.slot] ?? '基础属性'} → ${ev.newStat}`;
-    case 'BLACKSMITH_UPGRADE_FAIL':
-      return `⚒️ 强化失败（失败率 ${Math.round(ev.failChance * 100)}%），星尘已扣除`;
     case 'SAND_PIT_STEPPED':
       return '🏜️ 陷入流沙！AP -2';
     case 'SAND_TIDE_SPAWNED':
@@ -702,6 +691,8 @@ export class ExpeditionController extends Component {
   private _tutorialGuide: TutorialGuideManager | null = null;
   private _tutorialExplainShown = new Set<string>();
   private _tutorialExplainPending: string | null = null;
+  /** _apply 回放中进入需说明的步骤时，等 busy 释放后再弹窗。 */
+  private _tutorialExplainQueued = false;
   private _selectedChargeAp = 0;
   /** 当前 _playEvents 批次，供攻击 fx 解析受击前坐标。 */
   private _playbackEvents: readonly PveEvent[] = [];
@@ -1373,6 +1364,7 @@ export class ExpeditionController extends Component {
       onOpenBag: () => void this._onOpenBag(),
       onProfessionMechanic: () => void this._onProfessionMechanic(),
       onSpiritBurst: () => this._onSpiritBurst(),
+      onPartnerSkill: () => void this._onPartnerSkill(),
     });
 
     this._toast = new PveToastView(this.node, screenW, screenH);
@@ -1488,7 +1480,7 @@ export class ExpeditionController extends Component {
         start: startFloorChallenge,
         save: saveFloorChallengeRuntime,
         settle: settleFloorChallenge,
-      });
+      }, localPendingSettlementStore);
       LoadingOverlay.update({
         text: '正在准备本层战场…',
         hint: '正在生成或恢复楼层',
@@ -1610,13 +1602,47 @@ export class ExpeditionController extends Component {
     return true;
   }
 
+  /**
+   * 选中准星位置：始终跟「当前 focus 的怪物/实体」的实时坐标，
+   * 而不是攻击按钮缓存（缓存只在 apply 开头重建，怪物回合位移后易停在旧格）。
+   */
+  private _selectionHighlightPos(): Coord | null {
+    if (!this._state) return null;
+    const floor = this._state.floorState;
+    const focusedMonsterId = this._hud?.getFocusedMonsterId();
+    if (focusedMonsterId) {
+      const monster = floor.monsters.find(
+        (entry) => entry.id === focusedMonsterId && entry.aiState !== 'DEAD',
+      );
+      if (monster && isRevealed(floor.revealed, monster.pos)) {
+        return { x: monster.pos.x, y: monster.pos.y };
+      }
+    }
+    const focusedEntityId = this._hud?.getFocusedEntityId();
+    if (focusedEntityId) {
+      const entity = floor.entities.find(
+        (entry) => entry.id === focusedEntityId && !entry.consumed,
+      );
+      if (entity && isRevealed(floor.revealed, entity.pos)) {
+        return { x: entity.pos.x, y: entity.pos.y };
+      }
+    }
+    const fallback = this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos;
+    return fallback ? { x: fallback.x, y: fallback.y } : null;
+  }
+
+  private _syncSelectionHighlight(): void {
+    this._map?.showAttackTarget(this._selectionHighlightPos());
+  }
+
   private _refreshAll(): void {
     if (!this._state) return;
+    this._rebuildInputHints();
     this._map?.refresh(this._state.floorState, this._state.player.classId);
     this._hud?.refresh(this._state);
     this._refreshPersistentHud();
     this._map?.showMoveRange(this._cachedMoveTargets);
-    this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
+    this._syncSelectionHighlight();
     this._syncTutorialGuide([]);
   }
 
@@ -1632,8 +1658,18 @@ export class ExpeditionController extends Component {
         aimLevel: profession.archerAimLevel,
         combo: profession.rangerCombo,
         canFinisher: this._runtime.config.professionId === 'RANGER' && profession.rangerCombo >= 3,
+        shield: this._runtime.resources.shield,
+        maxHp: this._runtime.resources.maxHp,
+        hp: this._runtime.resources.hp,
       },
     );
+    const pb = this._runtime.battleState.partnerBattle;
+    const hasPartner = !!this._runtime.config.partnerId;
+    this._hud?.setPartnerSkillState({
+      available: hasPartner && !pb?.skillUsed,
+      used: !!pb?.skillUsed,
+      selecting: !!this._partnerAim,
+    });
   }
 
   private _maxSelectableChargeAp(): number {
@@ -1675,7 +1711,15 @@ export class ExpeditionController extends Component {
     if (allowedCells.length > 0) this._map?.showTutorialFocus(allowedCells);
     else this._map?.clearTutorialFocus();
     this._refreshTutorialHudHighlights();
-    void this._maybeShowTutorialExplain(step);
+    // _apply 期间 busy=true：延后到 _flushTutorialExplainAfterApply，避免弹窗与回放抢态。
+    if (!this._busy) void this._maybeShowTutorialExplain(step);
+    else this._tutorialExplainQueued = true;
+  }
+
+  private _flushTutorialExplainAfterApply(): void {
+    if (!this._tutorialExplainQueued) return;
+    this._tutorialExplainQueued = false;
+    void this._maybeShowTutorialExplain(this._tutorialGuide?.currentStep() ?? null);
   }
 
   private async _maybeShowTutorialExplain(
@@ -1684,15 +1728,14 @@ export class ExpeditionController extends Component {
     if (!step?.onEnterExplain || !this._toast) return;
     if (this._tutorialExplainShown.has(step.id)) return;
     if (this._tutorialExplainPending === step.id) return;
+    // 禁止改写 _busy：说明窗若在 _apply(busy=true) 期间弹出并保存 prevBusy，
+    // _apply.finally 清 busy 后弹窗关闭会把 stale true 写回 → 点怪/攻击永久静默失败。
     this._tutorialExplainPending = step.id;
-    const prevBusy = this._busy;
-    this._busy = true;
     try {
       await this._toast.showConfirm(step.onEnterExplain, [{ label: '知道了', value: 'ok' }]);
       this._tutorialExplainShown.add(step.id);
     } finally {
       if (this._tutorialExplainPending === step.id) this._tutorialExplainPending = null;
-      this._busy = prevBusy;
     }
   }
 
@@ -1708,7 +1751,7 @@ export class ExpeditionController extends Component {
     coord?: Coord,
   ): boolean {
     if (!this._state || !this._tutorialGuide || !this._tutorialGuide.isActive(this._state)) return false;
-    if (this._tutorialExplainPending && (action === 'CHARGE' || action === 'SPIRIT_BURST')) {
+    if (this._tutorialExplainPending) {
       this._toast?.toast('先阅读机制说明');
       return true;
     }
@@ -1812,6 +1855,16 @@ export class ExpeditionController extends Component {
     if (!tutorialBypass && this._isTutorialBlocked('MOVE')) return;
     const freeMove = (this._runtime?.profession.rangerFreeMoveSteps ?? 0) > 0;
     const result = applyMove(this._state, dir, freeMove ? { freeMove: true } : undefined);
+    // 方向键虽在 TAP_CELL 步放行，落点仍须落在引导格上（避免左走/撞岩）。
+    if (
+      !tutorialBypass
+      && result.events.length > 0
+      && this._tutorialGuide?.isActive(this._state)
+      && this._tutorialGuide.shouldBlockCell(result.state.floorState.player)
+    ) {
+      this._toast?.toast('先按引导操作');
+      return;
+    }
     if (result.events.length === 0) {
       // 移动失败：给玩家明确反馈，并触发"是否卡死"检查。
       // 注意：实际 MOVE 成本会被减速 debuff/沙坑/靴子调整，仅靠 `apNow < AP_COST.MOVE`
@@ -1844,9 +1897,19 @@ export class ExpeditionController extends Component {
     if (this._busy || !this._state) return;
     if (!tutorialBypass && this._isTutorialBlocked('ATTACK')) return;
     const target = this._cachedAttackTarget;
+    if (
+      !tutorialBypass
+      && target
+      && this._tutorialGuide?.isActive(this._state)
+      && this._tutorialGuide.shouldBlockCell(target.pos)
+    ) {
+      this._toast?.toast('先按引导操作');
+      return;
+    }
     if (target) {
       this._hud?.focusMonster(target.id);
-      this._attack(target.id);
+      // 教程点格击杀步骤：按钮攻击走 bypass，避免二次 ATTACK 拦截
+      this._attack(target.id, true);
       return;
     }
     const wall = this._cachedAttackEntityTarget;
@@ -1869,6 +1932,11 @@ export class ExpeditionController extends Component {
     }
     if (this._isTutorialBlocked('TAP_CELL', coord)) return;
 
+    if (this._partnerAim?.mode === 'CELL') {
+      this._confirmPartnerAim({ cell: coord });
+      return;
+    }
+
     const floor = this._state.floorState;
     const cellRevealed = isRevealed(floor.revealed, coord);
 
@@ -1879,6 +1947,10 @@ export class ExpeditionController extends Component {
         (m) => m.aiState !== 'DEAD' && m.pos.x === coord.x && m.pos.y === coord.y,
       );
       if (monster) {
+        if (this._partnerAim?.mode === 'ENEMY') {
+          this._confirmPartnerAim({ monsterId: monster.id });
+          return;
+        }
         this._hud?.focusMonster(monster.id);
         const step = this._tutorialGuide?.isActive(this._state)
           ? this._tutorialGuide.currentStep()
@@ -1890,7 +1962,8 @@ export class ExpeditionController extends Component {
         }
         this._hud?.refresh(this._state);
         this._rebuildInputHints();
-        this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
+        // 准星跟点选目标，不跟「攻击按钮会打谁」（射程外选中也应看到框）。
+        this._map?.showAttackTarget({ x: monster.pos.x, y: monster.pos.y });
         return;
       }
 
@@ -1901,7 +1974,7 @@ export class ExpeditionController extends Component {
         this._hud?.focusEntity(entity.id);
         this._hud?.refresh(this._state);
         this._rebuildInputHints();
-        this._map?.showAttackTarget(this._cachedAttackTarget?.pos ?? this._cachedAttackEntityTarget?.pos ?? null);
+        this._map?.showAttackTarget({ x: entity.pos.x, y: entity.pos.y });
         return;
       }
     }
@@ -2044,6 +2117,73 @@ export class ExpeditionController extends Component {
     }
   }
 
+  private _partnerAim: null | { mode: 'CELL' | 'ENEMY' } = null;
+
+  private _onPartnerSkill(): void {
+    if (this._busy || !this._runtime || !this._floorFlow || !this._state) return;
+    if (this._partnerAim) {
+      this._partnerAim = null;
+      this._hud?.setPartnerSkillState({
+        available: true,
+        used: !!this._runtime.battleState.partnerBattle?.skillUsed,
+        selecting: false,
+      });
+      this._toast?.toast('已取消伙伴技能');
+      return;
+    }
+    this._runtime = ensurePartnerBattle(this._runtime);
+    const applied = applyPartnerSkillToRuntime(this._runtime);
+    if (applied.result.ok === false) {
+      const reason = applied.result.reason;
+      const msg = reason === 'PARTNER_SKILL_USED' ? '本层已使用伙伴技能'
+        : reason === 'PARTNER_NONE' ? '未携带伙伴'
+        : '当前无法使用伙伴技能';
+      this._toast?.toast(msg);
+      return;
+    }
+    if (applied.result.needCellTarget) {
+      this._partnerAim = { mode: 'CELL' };
+      this._hud?.setPartnerSkillState({ available: true, used: false, selecting: true });
+      this._toast?.toast('请选择跃迁落点');
+      return;
+    }
+    if (applied.result.needEnemyTarget) {
+      this._partnerAim = { mode: 'ENEMY' };
+      this._hud?.setPartnerSkillState({ available: true, used: false, selecting: true });
+      this._toast?.toast('请选择破阵目标');
+      return;
+    }
+    this._runtime = applied.runtime;
+    this._state = this._runtime.battleState.expedition;
+    this._floorFlow.updateRuntime(this._runtime);
+    this._partnerAim = null;
+    this._rebuildInputHints();
+    this._refreshAll();
+    this._toast?.toastImportant('伙伴技能已生效', 1400);
+    this._queuePersistentSave(300);
+  }
+
+  private _confirmPartnerAim(target: { cell?: Coord; monsterId?: string }): void {
+    if (!this._partnerAim || !this._runtime || !this._floorFlow) return;
+    const applied = applyPartnerSkillToRuntime(this._runtime, {
+      targetCell: target.cell,
+      targetMonsterId: target.monsterId,
+    });
+    if (applied.result.ok === false) {
+      this._toast?.toast('目标无效');
+      return;
+    }
+    if (applied.result.needCellTarget || applied.result.needEnemyTarget) return;
+    this._runtime = applied.runtime;
+    this._state = this._runtime.battleState.expedition;
+    this._floorFlow.updateRuntime(this._runtime);
+    this._partnerAim = null;
+    this._rebuildInputHints();
+    this._refreshAll();
+    this._toast?.toastImportant('伙伴技能已生效', 1400);
+    this._queuePersistentSave(300);
+  }
+
   /** 攻击冰墙（FrostGiant 专属机制，→ attackIceWall）。 */
   private _attackIceWall(entityId: string, tutorialBypass = false): void {
     if (!this._state) return;
@@ -2070,13 +2210,17 @@ export class ExpeditionController extends Component {
     // 多实体共格时按"可交互优先"挑选：流沙巨蝎冒出会在落点留永久 SAND_PIT，
     // Boss 死后 spawnPortal 把 PORTAL 加到同一格，SAND_PIT 先入数组导致 find 命中
     // SAND_PIT → 落到 else 分支死锁玩家。LAVA_TILE/SHATTERED_ICE 等覆盖物同理。
-    const INTERACTABLE = new Set(['BLACKSMITH', 'PORTAL', 'EXIT', 'CHEST', 'GUNPOWDER_BARREL', 'BLAST_TARGET', 'IDOL', 'HOT_SPRING', 'ALTAR']);
+    const INTERACTABLE = new Set(['PORTAL', 'EXIT', 'CHEST', 'GUNPOWDER_BARREL', 'BLAST_TARGET', 'HOT_SPRING', 'ALTAR', 'LAVA_VENT', 'FATE_SEAL']);
+    const adjacentVent = findAdjacentLavaVent(floor);
+    const adjacentSeal = findAdjacentFateSeal(floor);
     const here = floor.entities.filter(
       (e) => !e.consumed && e.pos.x === floor.player.x && e.pos.y === floor.player.y,
     );
     // 通关门优先于同格 EXIT/祭坛残留，避免先点到出口只刷「传送门浮现」。
     const entity = here.find((e) => e.type === 'PORTAL')
       ?? here.find((e) => INTERACTABLE.has(e.type))
+      ?? (adjacentVent ? adjacentVent : undefined)
+      ?? (adjacentSeal ? adjacentSeal : undefined)
       ?? here[0];
     if (!entity) {
       this._toast?.toast('这里没有可交互的物品');
@@ -2092,18 +2236,14 @@ export class ExpeditionController extends Component {
     }
 
     // 铁匠：需要 UI 弹窗，走独立异步路径（不走 _apply）
-    if (entity.type === 'BLACKSMITH') {
-      void this._applyBlacksmith(entity.id);
-      return;
-    }
-
     let result: ApplyResult | null = null;
     if (entity.type === 'CHEST') result = openChest(this._state, entity.id);
     else if (entity.type === 'EXIT') result = openExit(this._state, entity.id);
     else if (entity.type === 'PORTAL') result = interactPortal(this._state, entity.id);
     else if (entity.type === 'GUNPOWDER_BARREL') result = activateGunpowderBarrel(this._state, entity.id);
     else if (entity.type === 'BLAST_TARGET') result = detonateBlastTarget(this._state, entity.id);
-    else if (entity.type === 'IDOL') result = useIdol(this._state, entity.id);
+    else if (entity.type === 'LAVA_VENT') result = sealLavaVent(this._state, entity.id);
+    else if (entity.type === 'FATE_SEAL') result = interactFateSeal(this._state, entity.id);
     else if (entity.type === 'HOT_SPRING') result = useHotSpring(this._state, entity.id);
     else if (entity.type === 'ALTAR') result = useAltar(this._state, entity.id);
     else {
@@ -2135,48 +2275,6 @@ export class ExpeditionController extends Component {
     void this._apply(endTurn(this._state));
   }
 
-  /**
-   * 铁匠弹窗流程（独立于 _apply，无需 _afterApply）：
-   * 显示铁匠 UI → 玩家在弹窗内完成强化操作（回调直接更新 _state）→ 关闭后刷新 HUD。
-   */
-  private async _applyBlacksmith(entityId: string): Promise<void> {
-    if (!this._state || !this._toast) return;
-    console.log('[BS] enter blacksmith');
-    this._busy = true;
-    await this._toast.showBlacksmith(
-      this._state.player,
-      (slot) => {
-        if (!this._state) return null;
-        const tUp = perfNow();
-        const r = upgradeEquip(this._state, entityId, slot);
-        if (r.events.length === 0) {
-          console.log('[BS] upgrade noop slot=', slot);
-          return null;
-        }
-        this._state = r.state;
-        const t1 = perfNow();
-        this._rebuildInputHints();
-        const t2 = perfNow();
-        this._refreshAll();
-        const t3 = perfNow();
-        void this._playEvents(r.events);
-        const t4 = perfNow();
-        console.log('[BS] upgrade ok slot=', slot,
-          'hints=', (t2 - t1).toFixed(1) + 'ms',
-          'refreshAll=', (t3 - t2).toFixed(1) + 'ms',
-          'playEvents(fire)=', (t4 - t3).toFixed(1) + 'ms',
-          'total=', (t4 - tUp).toFixed(1) + 'ms');
-        return this._state.player;
-      },
-    );
-    console.log('[BS] popup closed, releasing busy');
-    this._rebuildInputHints();
-    this._refreshAll();
-    this._busy = false;
-  }
-
-  // ── 应用结果 / 事件回放 / 被动触发 ────────────────────
-
   private async _apply(result: ApplyResult): Promise<void> {
     if (!this._state) return;
     const t0 = perfNow();
@@ -2185,7 +2283,8 @@ export class ExpeditionController extends Component {
 
     try {
     // 传门通关会把 runtime 标 CLEAR，此后 save() 会 no-op。必须在 applyPersistent 前
-    // 排空 ACTIVE 存档，否则真机高 RTT 下 settle 与后台 save 抢写。
+    // 停掉后台 ACTIVE 存档（等在途请求结束，不再新开 flush），否则真机高 RTT 下
+    // 最后一次 save 与 settle 抢写同一 challenge 文档。
     if (
       this._runtime?.status === 'ACTIVE'
       && this._floorFlow
@@ -2232,6 +2331,9 @@ export class ExpeditionController extends Component {
     const tEvents = perfNow();
     await this._playEvents(result.events);
     perfMark('apply.events', tEvents);
+    // 位移回放结束后再钉一次准星：确保 focus 目标已走到新格，框不留在旧坐标。
+    this._rebuildInputHints();
+    this._syncSelectionHighlight();
     this._syncTutorialGuide(result.events);
 
     const tAfter = perfNow();
@@ -2257,6 +2359,7 @@ export class ExpeditionController extends Component {
     } finally {
       this._busy = false;
       perfMark('apply.total', t0, `events=${result.events.length}`);
+      this._flushTutorialExplainAfterApply();
     }
 
     // 刚刷出通关门时丢弃排队互动：否则「开门/目标完成」动画期间的连点会立刻踏门通关，
@@ -2326,7 +2429,6 @@ export class ExpeditionController extends Component {
     // 交互可行：对脚下的可交互实体真正 dry-run 一遍对应 core 函数，events 非空才算可行。
     // 不能只判"站在未消耗格"——会把"站在 EXIT 但没钥匙 / 站在 CHEST 但金币不足"也算成可交互，
     // 让 _maybeAutoEndTurn 永不触发，玩家陷入「点交互→缺钥匙→点交互」死循环。
-    // 铁匠不消耗 AP（弹窗式），只要站上就一定有 UI 可用，单独允许。
     const interactable = fs.entities.find(
       (e) =>
         !e.consumed &&
@@ -2342,23 +2444,33 @@ export class ExpeditionController extends Component {
           e.type === 'EXIT' ||
           e.type === 'GUNPOWDER_BARREL' ||
           e.type === 'BLAST_TARGET' ||
-          e.type === 'IDOL' ||
           e.type === 'HOT_SPRING' ||
-          e.type === 'ALTAR' ||
-          e.type === 'BLACKSMITH'),
+          e.type === 'ALTAR'),
     );
     if (interactable) {
-      if (interactable.type === 'BLACKSMITH') return true;
       let probe: ApplyResult | null = null;
       if (interactable.type === 'CHEST') probe = openChest(this._state, interactable.id);
       else if (interactable.type === 'EXIT') probe = openExit(this._state, interactable.id);
       else if (interactable.type === 'PORTAL') probe = interactPortal(this._state, interactable.id);
       else if (interactable.type === 'GUNPOWDER_BARREL') probe = activateGunpowderBarrel(this._state, interactable.id);
       else if (interactable.type === 'BLAST_TARGET') probe = detonateBlastTarget(this._state, interactable.id);
-      else if (interactable.type === 'IDOL') probe = useIdol(this._state, interactable.id);
       else if (interactable.type === 'HOT_SPRING') probe = useHotSpring(this._state, interactable.id);
       else if (interactable.type === 'ALTAR') probe = useAltar(this._state, interactable.id);
       if (probe && probe.events.length > 0) return true;
+    }
+
+    // 第 23 层 vent：相邻互动封印，不要求站在 vent 格上。
+    const adjacentVent = findAdjacentLavaVent(fs);
+    if (adjacentVent) {
+      const probe = sealLavaVent(this._state, adjacentVent.id);
+      if (probe.events.length > 0) return true;
+    }
+
+    // 第 31 层命运契印：相邻互动选择通关目标。
+    const adjacentSeal = findAdjacentFateSeal(fs);
+    if (adjacentSeal) {
+      const probe = interactFateSeal(this._state, adjacentSeal.id);
+      if (probe.events.length > 0) return true;
     }
 
     return false;
@@ -2554,19 +2666,13 @@ export class ExpeditionController extends Component {
         }
         break;
       }
-      case 'HOT_SPRING_HEAL': {
+      case 'HOT_SPRING_BLESSING': {
         playSfx(SFX_IDS.REWARD_GET);
         const node = this._map.getOccupantArtAt(this._state.floorState.player);
         if (node) {
-          if (ev.healed > 0) void Effects.healNumber(node, ev.healed);
-          void Effects.pop(node);
+          if (ev.effect === 'SHIELD') void Effects.buffGain(node);
+          else void Effects.pop(node);
         }
-        break;
-      }
-      case 'IDOL_BLESSING': {
-        playSfx(SFX_IDS.REWARD_GET);
-        const node = this._map.getOccupantArtAt(this._state.floorState.player);
-        if (node) void Effects.buffGain(node);
         break;
       }
       case 'BOSS_ENRAGED': {
@@ -2760,23 +2866,6 @@ export class ExpeditionController extends Component {
         if (node) void Effects.flash(node, { color: new Color(180, 100, 255, 255) });
         break;
       }
-      // ── 铁匠强化成功：金色双 flash + pop（装备升级感） ──
-      case 'BLACKSMITH_UPGRADE': {
-        playSfx(SFX_IDS.REWARD_GET);
-        const node = this._map.getOccupantArtAt(this._state.floorState.player);
-        if (node) {
-          void Effects.flash(node, { color: new Color(255, 215, 0, 255), times: 2 });
-          void Effects.pop(node);
-        }
-        break;
-      }
-      // ── 铁匠强化失败：灰色 flash（挫败感） ──
-      case 'BLACKSMITH_UPGRADE_FAIL': {
-        const node = this._map.getOccupantArtAt(this._state.floorState.player);
-        if (node) void Effects.flash(node, { color: new Color(130, 130, 130, 255) });
-        break;
-      }
-      // ── 营地购买：玩家 buffGain ──
       case 'SHOP_BUY': {
         const node = this._map.getOccupantArtAt(this._state.floorState.player);
         if (node) void Effects.buffGain(node);
@@ -3342,15 +3431,15 @@ export class ExpeditionController extends Component {
   private async _handleDeath(): Promise<void> {
     if (!this._state || !this._runtime) return;
     this._toast?.toast('远征失败，正在结算本次远征…');
-    await delay(1200);
-    // save() 在非 ACTIVE 时直接跳过：必须先 flush 最后一次 ACTIVE 存档，再标 DEAD。
+    await delay(800);
+    // 先停掉后台存档再标 DEAD，本地落单后回大厅；云端 settle 后台补推。
     await this._prepareCloudSettlement();
     this._runtime = { ...this._runtime, status: 'DEAD' };
     this._floorFlow?.updateRuntime(this._runtime);
-    const settled = await this._settle();
-    if (settled) {
-      SceneLoader.loadLobby();
-    }
+    this._floorFlow?.beginDeferredSettle();
+    this._toast?.toast('进度已保存，正在返回大厅…');
+    await delay(600);
+    SceneLoader.loadLobby();
   }
 
   private async _handleFloorCleared(): Promise<void> {
@@ -3360,12 +3449,10 @@ export class ExpeditionController extends Component {
     const clearedFloor = this._state.floor;
     const oldChapter = this._state.chapter;
     try {
-    // 跨章预热尽量早：不要等云端 flush/settle 才开始下 chapter_N（高 RTT 会空等数秒）。
     if (isBossFloor(clearedFloor)) {
       preloadChapter(oldChapter + 1);
     }
 
-    // ACTIVE flush 优先在 _apply 传门通关前完成；此处兜底（例如断线重连已是 CLEAR）。
     if (this._runtime.status === 'ACTIVE') {
       await this._prepareCloudSettlement();
     } else {
@@ -3374,12 +3461,11 @@ export class ExpeditionController extends Component {
     this._runtime = { ...this._runtime, status: 'CLEAR' };
     this._floorFlow.updateRuntime(this._runtime);
 
-    // 先弹命痕/通关反馈，再等云端 settle。否则高 RTT flush/settle 会让玩家以为
-    // 「第一次点传门没反应」，连点第二次才看到选择命痕。
     this._toast?.toastImportant('本层通关！', 1200);
     const selection = await this._promptClearRewardSelection();
-    const settled = await this._settle(selection);
-    if (!settled) return;
+    // 本地落单 + 后台 settle：不阻塞通关弹窗（方案 A）。
+    this._floorFlow.beginDeferredSettle(selection);
+    this._toast?.toast('进度同步中…');
 
     const canContinue = clearedFloor < MAX_READY_FLOOR;
     const choice = this._toast
@@ -3408,74 +3494,93 @@ export class ExpeditionController extends Component {
     }
 
     if (choice === 'quit') {
+      void this._floorFlow.ensureSettled(selection).catch(() => undefined);
       SceneLoader.loadLobby();
       return;
     }
 
     const nextChapter = oldChapter + (isBossFloor(clearedFloor) ? 1 : 0);
     const crossingChapter = nextChapter > oldChapter;
-    if (crossingChapter) {
-      LoadingOverlay.show(this.node, `正在进入第${nextChapter}章…`, {
-        mode: 'chapter',
-        title: `进入第${nextChapter}章`,
-        subtitle: '迷雾正在向更深处散去',
-        hint: '正在同步进度并下载章节资源',
-        progress: 0.15,
-        hideOnTimeout: false,
-        timeoutMs: 30000,
-        onTimeout: () => LoadingOverlay.update({
-          text: `第${nextChapter}章加载较慢，仍在继续准备…`,
-          subtitle: '更深处的道路仍在显现',
-        }),
-      });
-    }
-
     let next;
-    try {
-      // 云端开下一层 与 章节分包下载并行，避免「先等云再下包」串行拉长总时长。
-      const assetsP = crossingChapter
-        ? ensureChapterAssets(nextChapter, (stage) => LoadingOverlay.update(stage))
-        : Promise.resolve(true);
-      const [assetsOk, flowNext] = await Promise.all([
-        assetsP.catch(() => false),
-        this._floorFlow.continueNextFloor(),
-      ]);
-      if (crossingChapter && !assetsOk) {
-        LoadingOverlay.hide();
-        this._toast?.toast(`第${nextChapter}章资源加载失败，请返回大厅重新进入远征`);
-        await delay(1200);
-        SceneLoader.loadLobby();
-        return;
-      }
-      next = flowNext;
-    } catch (err) {
-      if (crossingChapter) LoadingOverlay.hide();
-      const message = err instanceof Error ? err.message : String(err);
-      this._toast?.toast(
-        message === 'ALL_READY_FLOORS_COMPLETE'
-          ? '当前已开放楼层已全部通关，返回大厅'
-          : `无法进入下一层：${message}`,
+    while (true) {
+      LoadingOverlay.show(
+        this.node,
+        crossingChapter ? `正在进入第${nextChapter}章…` : '正在同步进度…',
+        {
+          mode: crossingChapter ? 'chapter' : 'default',
+          title: crossingChapter ? `进入第${nextChapter}章` : '同步进度',
+          subtitle: crossingChapter ? '迷雾正在向更深处散去' : '正在确认本层结算',
+          hint: '本地进度已保留，正在与云端同步',
+          progress: 0.2,
+          hideOnTimeout: false,
+          timeoutMs: 60000,
+          onTimeout: () => LoadingOverlay.update({
+            text: crossingChapter
+              ? `第${nextChapter}章加载较慢，仍在继续准备…`
+              : '同步较慢，仍在继续…',
+            subtitle: '请稍候，不要重复点击',
+          }),
+        },
       );
-      await delay(1200);
-      SceneLoader.loadLobby();
-      return;
+      try {
+        LoadingOverlay.update({ text: '正在同步本层结算…', progress: 0.35 });
+        await this._floorFlow.ensureSettled(selection);
+        LoadingOverlay.update({
+          text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在进入下一层…',
+          progress: 0.55,
+        });
+        const assetsP = crossingChapter
+          ? ensureChapterAssets(nextChapter, (stage) => LoadingOverlay.update(stage))
+          : Promise.resolve(true);
+        const [assetsOk, flowNext] = await Promise.all([
+          assetsP.catch(() => false),
+          this._floorFlow.continueNextFloor(),
+        ]);
+        if (crossingChapter && !assetsOk) {
+          LoadingOverlay.hide();
+          this._toast?.toast(`第${nextChapter}章资源加载失败，请返回大厅重新进入远征`);
+          await delay(1200);
+          SceneLoader.loadLobby();
+          return;
+        }
+        next = flowNext;
+        break;
+      } catch (err) {
+        LoadingOverlay.hide();
+        const message = this._formatUserFacingError(err);
+        if (err instanceof Error && err.message === 'ALL_READY_FLOORS_COMPLETE') {
+          this._toast?.toast('当前已开放楼层已全部通关，返回大厅');
+          await delay(1200);
+          SceneLoader.loadLobby();
+          return;
+        }
+        const retryChoice = this._toast
+          ? await this._toast.showConfirm(
+              `同步失败\n${message}\n本地进度已保留，可重试同步或返回大厅。`,
+              [
+                { label: '再试一次', value: 'retry' },
+                { label: '返回大厅', value: 'lobby' },
+              ],
+            )
+          : 'lobby';
+        if (retryChoice !== 'retry') {
+          SceneLoader.loadLobby();
+          return;
+        }
+      }
     }
     this._runtime = next.runtime;
     this._state = next.runtime.battleState.expedition;
-    // 并行加载已覆盖跨章资源；此处仅兜底（例如非 Boss 边界进章）。
     if (this._state.chapter > oldChapter) {
       if (!(await this._ensureChapterReady(this._state.chapter))) return;
     }
-    if (crossingChapter) {
-      LoadingOverlay.update({
-        text: '战场准备完成',
-        hint: '即将进入新章节',
-        progress: 1,
-      });
-      LoadingOverlay.hide();
-    }
+    LoadingOverlay.update({
+      text: '战场准备完成',
+      hint: '即将进入',
+      progress: 1,
+    });
+    LoadingOverlay.hide();
     this._rebuildInputHints();
-    // 每层独立战报：进入新层时清空，避免历史堆积
     this._log?.clear();
     this._map?.clearAoeHit();
     this._map?.clearAoeWarning();
@@ -3484,7 +3589,6 @@ export class ExpeditionController extends Component {
     await this._playEvents(initialPersistentPresentationEvents(this._runtime));
     this._showFloorEntryAlerts();
 
-    // 章节边界提示（从营地出来后进入新章节）
     if (this._state.chapter > oldChapter) {
       this._toast?.toast(`⚔️ 开始探索第${this._state.chapter}章！`);
       this._log?.push(this._state.floorState.turn, 'SYSTEM', `⚔️ 第${this._state.chapter}章开始`);
@@ -3495,6 +3599,7 @@ export class ExpeditionController extends Component {
     } finally {
       this._handlingFloorClear = false;
       this._pendingInteract = false;
+      this._settlingCloud = false;
     }
   }
 
@@ -3547,17 +3652,18 @@ export class ExpeditionController extends Component {
   }
 
   /**
-   * 结算前串行化：排空 ACTIVE runtime 存档，避免与 settle 抢写 challenge 文档。
-   * 调用方随后再把 runtime 标为 CLEAR/DEAD（此后 save 会 no-op）。
+   * 结算前串行化：停掉排队存档、等在途 save 结束，但不再强制 flush 一次新 save。
+   * settle 请求自带终态；通关瞬间再写 ACTIVE runtime 会与 settle 抢同一 challenge 文档（TransactionBusy），
+   * 教程首通尤其容易卡死。调用方随后把 runtime 标 CLEAR/DEAD（此后 save 会 no-op）。
    */
   private async _prepareCloudSettlement(): Promise<void> {
     this._settlingCloud = true;
-    await this._flushPersistentSave();
     this._persistentSaveQueued = false;
     if (this._persistentSaveTimer) {
       clearTimeout(this._persistentSaveTimer);
       this._persistentSaveTimer = null;
     }
+    while (this._persistentSaveInFlight) await delay(120);
   }
 
   /** 每完成一层自动存档；失败不阻塞继续游玩，仅提示（→ AC-11）。 */
@@ -3586,76 +3692,6 @@ export class ExpeditionController extends Component {
       return '云函数执行失败，请稍后重试';
     }
     return raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
-  }
-
-  /** 远征结束（死亡或通关）上报结算。通关时命痕选择可预先完成再传入。 */
-  private async _settle(
-    preselected?: Partial<SettleFloorChallengeRequest>,
-  ): Promise<boolean> {
-    if (!this._floorFlow || !this._runtime) return false;
-    this._settlingCloud = true;
-    try {
-      if (this._state) this._runtime = syncRuntimeFromExpedition(this._runtime, this._state);
-      this._floorFlow.updateRuntime(this._runtime);
-      const selection = preselected ?? (this._runtime.status === 'CLEAR'
-        ? await this._promptClearRewardSelection()
-        : {});
-      const { rewards } = await this._floorFlow.settle(selection);
-
-      // 结算后更新本地钻石余额快照。
-      if (rewards && this._meta) {
-        const rewardRecord = rewards as Record<string, unknown>;
-        this._meta = {
-          ...this._meta,
-          diamond: this._meta.diamond + (Number(rewardRecord.diamond ?? 0)),
-        };
-      }
-
-      const rewardRecord = (rewards ?? {}) as Record<string, unknown>;
-      const minghenId = typeof rewardRecord.minghenId === 'string' ? rewardRecord.minghenId : null;
-      const equipment = rewardRecord.equipment as { definitionId?: string } | null | undefined;
-      const lootedList = Array.isArray(rewardRecord.lootedEquipment)
-        ? rewardRecord.lootedEquipment as Array<{ definitionId?: string }>
-        : [];
-      let minghenName: string | null = null;
-      let equipmentName: string | null = null;
-      try {
-        if (minghenId) minghenName = getMinghenDefinition(minghenId).name;
-      } catch { /* ignore unknown */ }
-      try {
-        const firstLootDef = lootedList[0]?.definitionId ?? equipment?.definitionId;
-        if (firstLootDef) equipmentName = getFixedEquipmentDefinition(firstLootDef).name;
-        if (lootedList.length > 1) equipmentName = `${equipmentName} 等${lootedList.length}件`;
-      } catch { /* ignore unknown */ }
-
-      if (this._toast) {
-        await this._toast.showSettleResult({
-          status: this._runtime.status === 'DEAD' ? 'DEAD' : 'COMPLETED',
-          floor: this._runtime.floor,
-          gold: Number(rewardRecord.stardust ?? 0)
-            || (Number(rewardRecord.gold ?? 0) + Number(rewardRecord.lootedStardust ?? 0) + Number(rewardRecord.minghenDust ?? 0)),
-          minghenName,
-          equipmentName,
-          diamond: 0,
-        });
-      } else {
-        await delay(2000);
-      }
-      return true;
-    } catch (err) {
-      const message = this._formatUserFacingError(err);
-      if (this._toast) {
-        await this._toast.showConfirm(
-          `结算失败\n${message}\n云端存档可能尚未清除，请重试或返回大厅后重新进入远征`,
-          [{ label: '知道了', value: 'ok' }],
-        );
-      } else {
-        await delay(800);
-      }
-      return false;
-    } finally {
-      this._settlingCloud = false;
-    }
   }
 
   /**

@@ -44,6 +44,8 @@ export type PveHudCallbacks = {
   onCharge?: () => void;
   /** 永久逐层模式：沿用原操作面板增加灵气爆发。 */
   onSpiritBurst?: () => void;
+  /** 伙伴主动技能（左下原角色位）。 */
+  onPartnerSkill?: () => void;
 };
 
 const WHITE = new Color(246, 250, 255, 255);
@@ -54,6 +56,7 @@ const PANEL = new Color(7, 31, 70, 170);
 const PANEL_LIGHT = new Color(16, 57, 98, 245);
 const PANEL_BORDER = new Color(84, 200, 239, 240);
 const HP_COLOR = new Color(230, 82, 100, 255);
+const SHIELD_COLOR = new Color(108, 216, 255, 215);
 const AP_COLOR = new Color(72, 174, 229, 255);
 const TYPE_BADGE_BLUE_FILL = new Color(20, 72, 120, 228);
 const TYPE_BADGE_BLUE_BORDER = new Color(126, 203, 242, 255);
@@ -69,6 +72,7 @@ const ACTION_W = 126;
 const ACTION_H = 52;
 const ACTION_GAP = 8;
 const INFO_H = 160;
+const BAR_TWEEN_SECONDS = 0.22;
 
 /** 从胶囊安全线到地图顶部所需的 HUD 高度（含顶部资源/怪物卡）。 */
 export const PVE_HUD_PANEL_H = 124;
@@ -183,10 +187,8 @@ function monsterArtKey(monster: Monster, chapter: number): string {
 function entityName(entity: FixedEntity): string {
   const names: Record<FixedEntity['type'], string> = {
     CHEST: '宝箱',
-    IDOL: '神像',
     HOT_SPRING: '温泉',
     ALTAR: '祭坛',
-    BLACKSMITH: '铁匠铺',
     KEY: '钥匙',
     EXIT: '出口',
     PORTAL: '传送门',
@@ -208,10 +210,8 @@ function entityName(entity: FixedEntity): string {
 function entityArtKey(entity: FixedEntity): string {
   const keys: Partial<Record<FixedEntity['type'], string>> = {
     CHEST: 'pve/map/icon_chest',
-    IDOL: 'pve/map/icon_idol',
     HOT_SPRING: 'pve/map/icon_hot_spring',
     ALTAR: 'pve/map/icon_altar',
-    BLACKSMITH: 'pve/map/icon_blacksmith',
     KEY: 'pve/map/icon_key',
     EXIT: 'pve/map/icon_exit',
     PORTAL: 'pve/map/icon_portal',
@@ -242,18 +242,14 @@ function entityInfo(entity: FixedEntity): { type: string; detail: string; action
       return { type: '出口', detail: '', action: '进入下一层' };
     case 'PORTAL':
       return { type: '传送门', detail: '', action: '进入营地' };
-    case 'IDOL':
-      return { type: '交互物', detail: '站到同格后可祈福', action: '获得随机祝福' };
     case 'HOT_SPRING':
-      return { type: '交互物', detail: '站到同格后可使用', action: '恢复生命' };
+      return { type: '交互物', detail: '站到同格后可使用', action: '随机获得护盾或净化' };
     case 'ALTAR':
       return { type: '交互物', detail: '站到同格后可使用', action: '获得祭坛效果' };
     case 'WAVE_SPAWN_MARKER':
       return { type: '刷怪点', detail: '夜袭敌人会在此出现', action: '不可交互，注意防守' };
     case 'ESCAPE_MARKER':
       return { type: '逃离点', detail: '目标到达此处即逃脱', action: '尽快拦截' };
-    case 'BLACKSMITH':
-      return { type: '交互物', detail: '站到同格后可互动', action: '强化装备' };
     case 'GUNPOWDER_BARREL':
       return { type: '交互物', detail: '站到同格后可激活', action: '激怒周围敌人' };
     case 'BLAST_TARGET':
@@ -403,8 +399,11 @@ export class PveHudView {
   private _targetArtKey = '';
   private _focusedMonsterId: string | null = null;
   private _focusedEntityId: string | null = null;
+  private _lastTargetBarKey: string | null = null;
+  private _barTweenState: Record<string, { pct: number }> = {};
 
   private _hpG: Graphics;
+  private _hpShieldG: Graphics;
   private _hpLabel: Label;
   private _apG: Graphics;
   private _apLabel: Label;
@@ -418,6 +417,9 @@ export class PveHudView {
   private _chargeButtonLabel: Label | null = null;
   private _spiritBurstButton: Node | null = null;
   private _spiritBurstButtonLabel: Label | null = null;
+  private _partnerSkillButton: Node | null = null;
+  private _partnerSkillButtonLabel: Label | null = null;
+  private _topCharacterButton: Node | null = null;
   private _spiritBurstBlinking = false;
   private _spiritFull = false;
   private _tutorialChargeHighlight = false;
@@ -563,13 +565,16 @@ export class PveHudView {
     animaBar.addComponent(UITransform).setContentSize(animaBarW, 28);
     this._animaG = animaBar.addComponent(Graphics);
     this._animaLabel = addText(animaBar, '灵气 0 / 100', 0, 0, animaBarW - 8, 28, 20, new Color(235, 220, 255, 255));
-    this._goldLabel = addText(resourcePanel, '星尘 0', -84, -18, resourceW - 188, 34, 22, GOLD);
+    // 远征内不展示星尘与职业标（星尘在大厅/营地消费）；原位置改放「角色」。
+    this._goldLabel = addText(resourcePanel, '', -84, -18, resourceW - 188, 34, 22, GOLD);
+    this._goldLabel.node.active = false;
     this._goldLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
     const classBox = new Node('ClassBox');
     classBox.setParent(resourcePanel);
     classBox.layer = Layers.Enum.UI_2D;
     classBox.setPosition(15, -18, 0);
     classBox.addComponent(UITransform).setContentSize(classBoxW, 32);
+    classBox.active = false;
     const classBoxG = classBox.addComponent(Graphics);
     classBoxG.fillColor = new Color(64, 57, 111, 170);
     classBoxG.roundRect(-classBoxW / 2, -16, classBoxW, 32, 12);
@@ -583,6 +588,19 @@ export class PveHudView {
     this._classLabel.lineHeight = 28;
     this._classLabel.isBold = true;
     this._classBox = classBox;
+    if (callbacks.onShowCharacter) {
+      this._topCharacterButton = addButton(
+        resourcePanel,
+        '角色',
+        -40,
+        -20,
+        72,
+        49,
+        new Color(29, 67, 102, 170),
+        new Color(226, 197, 100, 240),
+        () => callbacks.onShowCharacter?.(),
+      );
+    }
     this._traitButton = addButton(
       resourcePanel,
       '目标',
@@ -595,7 +613,6 @@ export class PveHudView {
       () => callbacks.onShowObjective ? callbacks.onShowObjective() : this._toggleObjectivePopup(),
     );
     animaBar.setPosition(animaBar.position.x + topContentShiftX, animaBar.position.y, 0);
-    this._goldLabel.node.setPosition(this._goldLabel.node.position.x + topContentShiftX, this._goldLabel.node.position.y, 0);
 
     // 钥匙图标节点：用 pve/map/icon_key（地图同款），异步加载后填入 Sprite
     this._keyBadge = new Node('KeyBadge');
@@ -633,6 +650,7 @@ export class PveHudView {
     hpBar.setPosition(barCenterX, 12, 0);
     hpBar.addComponent(UITransform).setContentSize(barW, 26);
     this._hpG = hpBar.addComponent(Graphics);
+    this._hpShieldG = hpBar.addComponent(Graphics);
     this._hpLabel = addText(hpBar, 'HP', 0, 0, barW - 4, 26, 19, WHITE);
 
     const apBar = new Node('PlayerApBar');
@@ -760,7 +778,8 @@ export class PveHudView {
         callbacks.onEndTurn,
       );
     }
-    if (callbacks.onShowCharacter) {
+    if (callbacks.onShowCharacter && !callbacks.onPartnerSkill) {
+      // 兼容旧回调：无伙伴按钮时仍保留左下角色。
       addButton(
         this._root,
         '角色',
@@ -773,10 +792,24 @@ export class PveHudView {
         () => callbacks.onShowCharacter?.(),
       );
     }
+    if (callbacks.onPartnerSkill) {
+      this._partnerSkillButton = addButton(
+        this._root,
+        '伙伴',
+        leftX + 116,
+        controlY - 35,
+        104,
+        54,
+        new Color(120, 78, 28, 170),
+        new Color(255, 214, 110, 240),
+        () => callbacks.onPartnerSkill?.(),
+      );
+      this._partnerSkillButtonLabel = this._partnerSkillButton.getChildByName('Label')?.getComponent(Label) ?? null;
+    }
     if (callbacks.onProfessionMechanic || callbacks.onCharge) {
       this._chargeButton = addButton(
         this._root,
-        '蓄力 0 AP',
+        '蓄力 0',
         leftX + 116,
         controlY + 35,
         104,
@@ -877,12 +910,12 @@ export class PveHudView {
     professionId: 'WARRIOR' | 'ARCHER' | 'RANGER',
     chargeAp: number,
     spirit: number,
-    opts?: { aimLevel?: number; combo?: number; canFinisher?: boolean },
+    opts?: { aimLevel?: number; combo?: number; canFinisher?: boolean; shield?: number; maxHp?: number; hp?: number },
   ): void {
     if (this._chargeButton) this._chargeButton.active = true;
     if (this._chargeButtonLabel) {
       if (professionId === 'WARRIOR') {
-        this._chargeButtonLabel.string = `蓄力 ${chargeAp} AP`;
+        this._chargeButtonLabel.string = `蓄力 ${chargeAp}`;
       } else if (professionId === 'ARCHER') {
         this._chargeButtonLabel.string = `瞄准 ${opts?.aimLevel ?? 0}`;
       } else {
@@ -898,10 +931,28 @@ export class PveHudView {
     }
     this._animaLabel.string = `灵气 ${spirit}/100`;
     const width = this._animaG.node.getComponent(UITransform)?.width ?? 120;
-    this._drawBar(this._animaG, width, 28, spirit / 100, new Color(170, 120, 255, 255));
+    this._drawAnimatedBar('spirit', this._animaG, width, 28, spirit / 100, new Color(170, 120, 255, 255));
+    if (opts?.shield !== undefined || opts?.maxHp !== undefined || opts?.hp !== undefined) {
+      const hpBarW = this._hpG.node.getComponent(UITransform)?.width ?? 160;
+      const maxHp = Math.max(1, opts.maxHp ?? 1);
+      const hp = Math.max(0, Math.min(maxHp, opts.hp ?? maxHp));
+      const shield = Math.max(0, Math.min(maxHp, Math.round(opts.shield ?? 0)));
+      this._drawPlayerHpBar(hpBarW, hp, maxHp, shield, true);
+    }
   }
 
   /** 教学引导用的轻量按钮高亮；不改变按钮的正常可交互状态判断。 */
+  setPartnerSkillState(opts: { available: boolean; used: boolean; selecting?: boolean }): void {
+    if (!this._partnerSkillButton) return;
+    const btn = this._partnerSkillButton.getComponent(Button);
+    if (btn) btn.interactable = opts.available && !opts.used;
+    if (this._partnerSkillButtonLabel) {
+      if (opts.selecting) this._partnerSkillButtonLabel.string = '选择目标';
+      else if (opts.used) this._partnerSkillButtonLabel.string = '已使用';
+      else this._partnerSkillButtonLabel.string = '伙伴';
+    }
+  }
+
   setTutorialButtonHighlight(opts: { charge?: boolean; spiritBurst?: boolean }): void {
     if (opts.charge !== undefined && opts.charge !== this._tutorialChargeHighlight) {
       this._tutorialChargeHighlight = opts.charge;
@@ -1001,6 +1052,80 @@ export class PveHudView {
     }
   }
 
+  private _drawAnimatedBar(
+    key: string,
+    g: Graphics,
+    width: number,
+    height: number,
+    pct: number,
+    color: Color,
+    animate = true,
+  ): void {
+    const targetPct = Math.max(0, Math.min(1, pct));
+    if (!animate || this._barTweenState[key] === undefined) {
+      this._barTweenState[key] = { pct: targetPct };
+      this._drawBar(g, width, height, targetPct, color);
+      return;
+    }
+    const state = this._barTweenState[key];
+    Tween.stopAllByTarget(state);
+    tween(state)
+      .to(BAR_TWEEN_SECONDS, { pct: targetPct }, {
+        easing: 'sineOut',
+        onUpdate: () => this._drawBar(g, width, height, state.pct, color),
+      })
+      .call(() => {
+        state.pct = targetPct;
+        this._drawBar(g, width, height, targetPct, color);
+      })
+      .start();
+  }
+
+  private _drawPlayerHpBar(width: number, hp: number, maxHp: number, shield: number, animate = true): void {
+    this._drawAnimatedBar('playerHp', this._hpG, width, 26, hp / Math.max(1, maxHp), HP_COLOR, animate);
+    this._drawAnimatedShieldOverlay(width, 26, shield / Math.max(1, maxHp), animate);
+    this._hpLabel.string = shield > 0
+      ? `HP ${hp} / ${maxHp}  护盾 ${shield}`
+      : `HP ${hp} / ${maxHp}`;
+  }
+
+  private _drawAnimatedShieldOverlay(width: number, height: number, pct: number, animate = true): void {
+    const key = 'playerShield';
+    const targetPct = Math.max(0, Math.min(1, pct));
+    if (!animate || this._barTweenState[key] === undefined) {
+      this._barTweenState[key] = { pct: targetPct };
+      this._drawShieldOverlay(this._hpShieldG, width, height, targetPct);
+      return;
+    }
+    const state = this._barTweenState[key];
+    Tween.stopAllByTarget(state);
+    tween(state)
+      .to(BAR_TWEEN_SECONDS, { pct: targetPct }, {
+        easing: 'sineOut',
+        onUpdate: () => this._drawShieldOverlay(this._hpShieldG, width, height, state.pct),
+      })
+      .call(() => {
+        state.pct = targetPct;
+        this._drawShieldOverlay(this._hpShieldG, width, height, targetPct);
+      })
+      .start();
+  }
+
+  private _drawShieldOverlay(g: Graphics, width: number, height: number, pct: number): void {
+    g.clear();
+    const shieldW = Math.max(0, (width - 4) * Math.max(0, Math.min(1, pct)));
+    if (shieldW <= 0) return;
+    g.fillColor = SHIELD_COLOR;
+    const x = width / 2 - 2 - shieldW;
+    g.roundRect(x, -height / 2 + 2, shieldW, height - 4, 5);
+    g.fill();
+    g.strokeColor = new Color(190, 246, 255, 235);
+    g.lineWidth = 1;
+    g.moveTo(x, -height / 2 + 3);
+    g.lineTo(x, height / 2 - 3);
+    g.stroke();
+  }
+
   private _pickVisibleTarget(state: ExpeditionState): Monster | undefined {
     const floor = state.floorState;
     const visible = floor.monsters
@@ -1048,10 +1173,14 @@ export class PveHudView {
       if (maxHp > 0) {
         const hp = Math.max(0, entity.hp ?? maxHp);
         this._targetHpLabel.string = `${hp} / ${maxHp}`;
-        this._drawBar(this._targetHpG, this._targetBarW, 22, hp / maxHp, HP_COLOR);
+        const targetKey = `entity:${entity.id}`;
+        const animate = this._lastTargetBarKey === targetKey;
+        this._lastTargetBarKey = targetKey;
+        this._drawAnimatedBar('targetHp', this._targetHpG, this._targetBarW, 22, hp / maxHp, HP_COLOR, animate);
       } else {
+        this._lastTargetBarKey = `entity:${entity.id}`;
         this._targetHpLabel.string = '';
-        this._drawBar(this._targetHpG, this._targetBarW, 22, 0, HP_COLOR);
+        this._drawAnimatedBar('targetHp', this._targetHpG, this._targetBarW, 22, 0, HP_COLOR, false);
       }
       this._targetPortrait.active = true;
 
@@ -1085,7 +1214,8 @@ export class PveHudView {
       this._targetHpLabel.string = '';
       this._targetPortrait.active = false;
       this._targetArtKey = '';
-      this._drawBar(this._targetHpG, this._targetBarW, 22, 0, HP_COLOR);
+      this._lastTargetBarKey = null;
+      this._drawAnimatedBar('targetHp', this._targetHpG, this._targetBarW, 22, 0, HP_COLOR);
       return;
     }
 
@@ -1100,12 +1230,17 @@ export class PveHudView {
       : `攻击 ${target.attack} · 范围 ${target.range} · 当前目标`;
     this._targetAttack.string = '';
     this._targetHpLabel.string = `${target.hp} / ${target.maxHp}`;
-    this._drawBar(
+    const targetBarKey = `monster:${target.id}`;
+    const animateTarget = this._lastTargetBarKey === targetBarKey;
+    this._lastTargetBarKey = targetBarKey;
+    this._drawAnimatedBar(
+      'targetHp',
       this._targetHpG,
       this._targetBarW,
       22,
       target.hp / Math.max(1, target.maxHp),
       HP_COLOR,
+      animateTarget,
     );
     this._targetPortrait.active = true;
 
@@ -1149,10 +1284,11 @@ export class PveHudView {
     this._floorLabel.color = bossFloor ? GOLD : WHITE;
     this._bossBadge.active = bossFloor;
     this._bossBadgeLabel.string = bossFloor ? '首领回合' : '';
-    this._goldLabel.string = `星尘 ${player.gold}`;
+    this._goldLabel.string = '';
     this._animaLabel.string = `灵气 ${player.animaProgress}/${player.animaThreshold ?? 100}`;
     const animaBarW = this._animaG.node.getComponent(UITransform)?.width ?? 120;
-    this._drawBar(
+    this._drawAnimatedBar(
+      'spirit',
       this._animaG,
       animaBarW,
       28,
@@ -1160,15 +1296,15 @@ export class PveHudView {
       new Color(170, 120, 255, 255),
     );
     this._keyBadge.active = floorState.hasKey;
-    this._classLabel.string = CLASS_LABEL[player.classId] ?? player.classId;
+    // 远征 HUD 不再展示职业标；角色入口在右上。
+    this._classLabel.string = '';
     this._objectiveLines = this._buildObjectiveLines(floor, floorState.hasKey);
     this._refreshObjectivePopup();
 
     const hpBarW = this._hpG.node.getComponent(UITransform)?.width ?? 160;
     const apBarW = this._apG.node.getComponent(UITransform)?.width ?? 160;
-    this._drawBar(this._hpG, hpBarW, 26, player.hp / Math.max(1, player.maxHp), HP_COLOR);
-    this._drawBar(this._apG, apBarW, 26, floorState.ap / Math.max(1, floorState.maxAp), AP_COLOR);
-    this._hpLabel.string = `HP ${player.hp} / ${player.maxHp}`;
+    this._drawPlayerHpBar(hpBarW, player.hp, player.maxHp, 0);
+    this._drawAnimatedBar('playerAp', this._apG, apBarW, 26, floorState.ap / Math.max(1, floorState.maxAp), AP_COLOR);
     this._apLabel.string = `AP ${floorState.ap} / ${floorState.maxAp}`;
     const atk = playerAttackPower(player, state.balanceSnapshot, state.chapter);
     const armor = playerArmorPower(player);
@@ -1211,6 +1347,7 @@ export class PveHudView {
 
   destroy(): void {
     this._clearObjectiveAutoHide();
+    Object.values(this._barTweenState).forEach((state) => Tween.stopAllByTarget(state));
     this._root.destroy();
   }
 }

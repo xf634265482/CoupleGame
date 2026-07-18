@@ -32,6 +32,7 @@ import {
   loadPveProfile,
   type LoadActiveFloorChallengeResponse,
 } from '../network/PveProgressionService';
+import { flushPendingFloorSettlement } from '../pve/flushPendingFloorSettlement';
 import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
@@ -44,6 +45,8 @@ import {
 import { ensureArtChild, ensureArtStretch } from '../ui/UiSprite';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { CampController } from '../pve/controllers/CampController';
+import { PartnerController } from '../pve/controllers/PartnerController';
+import { MinghenShopController } from '../pve/controllers/MinghenShopController';
 import {
   applyUiLayerTree,
   bindWindowResize,
@@ -113,6 +116,7 @@ export class PveLobbyController extends Component {
   private _lobbyReady = false;
   private _warmPromise: Promise<void> | null = null;
   private _warmedProfile: PveProfile | null = null;
+  private _warmedActive: LoadActiveFloorChallengeResponse | null = null;
 
   onLoad(): void {
     lockPortrait();
@@ -162,6 +166,7 @@ export class PveLobbyController extends Component {
     this._logo.setPosition(0, 265, 0);
     this._logo.addComponent(UITransform).setContentSize(LOGO_W, LOGO_H);
 
+    this._buildSideShopEntry(root);
     this._buildBottomNav(root, -h / 2 + NAV_Y_OFFSET);
 
     this._statusLabel = this._makeLabel(root, 'Status', -h / 2 + 210, 22, 500, 36);
@@ -258,6 +263,34 @@ export class PveLobbyController extends Component {
     }
   }
 
+  /** 右侧浮标：每日命痕商会（与营地命痕台职责分离）。 */
+  private _buildSideShopEntry(root: Node): void {
+    const entry = new Node('MinghenShopEntry');
+    entry.setParent(root);
+    entry.setPosition(312, 40, 0);
+    entry.addComponent(UITransform).setContentSize(88, 110);
+    this._drawRoundedRect(
+      entry,
+      88,
+      110,
+      18,
+      new Color(10, 38, 78, 200),
+      new Color(255, 214, 110, 230),
+    );
+    const icon = new Node('ShopIcon');
+    icon.setParent(entry);
+    icon.setPosition(0, 18, 0);
+    icon.addComponent(UITransform).setContentSize(56, 56);
+    this._navIconKeys.set(icon, 'pve/lobby/icon_chip_stardust');
+    const label = this._makeLabel(entry, 'ShopLabel', -36, 18, 80, 28);
+    label.string = '商会';
+    label.color = new Color(238, 248, 255, 255);
+    label.enableOutline = true;
+    label.outlineColor = new Color(7, 28, 58, 230);
+    label.outlineWidth = 2;
+    this._bindButton(entry, () => void this._showMinghenShop());
+  }
+
   private _buildBottomNav(root: Node, y: number): void {
     const dock = new Node('BottomDock');
     dock.setParent(root);
@@ -272,11 +305,11 @@ export class PveLobbyController extends Component {
       new Color(105, 180, 235, 220),
     );
 
-    const navButtonW = 160;
+    const navButtonW = 140;
     const navButtonH = 142;
-    const navGap = 16;
+    const navGap = 12;
     const navStep = navButtonW + navGap;
-    // 4 个按钮居中排列，间距 16px，总宽 4×160+3×16=688 ≤ 700
+    // 排行榜 | 伙伴 | 远征 | 营地
     this._makeNavButton(
       dock,
       '排行榜',
@@ -286,6 +319,16 @@ export class PveLobbyController extends Component {
       navButtonW,
       navButtonH,
       () => void this._showLeaderboard(),
+    );
+    this._makeNavButton(
+      dock,
+      '伙伴',
+      'pve/lobby/icon_nav_camp',
+      -navStep * 0.5,
+      -4,
+      navButtonW,
+      navButtonH,
+      () => void this._showPartnerModal(),
     );
     this._makeNavButton(
       dock,
@@ -401,20 +444,41 @@ export class PveLobbyController extends Component {
   private _warmLobbyBackground(): void {
     if (this._warmPromise) return;
     this._warmPromise = (async () => {
+      // 先补推本地待结算，避免云端仍挂着旧挑战导致无法开新层。
+      await flushPendingFloorSettlement().catch((err: unknown) => {
+        console.warn('[PveLobby] pending settlement flush failed', err);
+      });
+      // 档案/进行中挑战不依赖 resources 分包，尽早拉，点「远征」时可瞬时出选层。
+      const dataP = Promise.all([
+        loadPveProfile()
+          .then((res) => {
+            this._warmedProfile = res.profile;
+            this._applyStardust(res.profile.gold);
+            this._applyProfileStamina(res.profile);
+            this._hasActiveChallenge = Boolean(
+              this._warmedActive?.challenge ?? res.profile.activeChallengeId,
+            );
+          })
+          .catch((err: unknown) => {
+            console.warn('[PveLobby] camp profile warm failed', err);
+          }),
+        loadActiveFloorChallenge()
+          .then((res) => {
+            this._warmedActive = res;
+            this._hasActiveChallenge = Boolean(
+              res.challenge ?? this._warmedProfile?.activeChallengeId,
+            );
+          })
+          .catch((err: unknown) => {
+            console.warn('[PveLobby] active challenge warm failed', err);
+          }),
+      ]);
       const bundle = await ensureResourcesBundle();
       if (!bundle) {
         throw new Error('resources bundle not ready');
       }
       void playMainBgm(bundle);
-      await preloadPveCampUi();
-      try {
-        const res = await loadPveProfile();
-        this._warmedProfile = res.profile;
-        this._applyStardust(res.profile.gold);
-        this._applyProfileStamina(res.profile);
-      } catch (err: unknown) {
-        console.warn('[PveLobby] camp profile warm failed', err);
-      }
+      await Promise.all([preloadPveCampUi(), dataP]);
     })().catch((err: unknown) => {
       this._warmPromise = null;
       console.warn('[PveLobby] background warm failed', err);
@@ -470,6 +534,7 @@ export class PveLobbyController extends Component {
       const { meta } = metaRes;
       this._hasActiveChallenge = Boolean(activeRes.challenge ?? profileRes.profile.activeChallengeId);
       this._warmedProfile = profileRes.profile;
+      this._warmedActive = activeRes;
       this._applyMetaSnapshot(meta);
       this._applyStardust(profileRes.profile.gold);
       this._applyProfileStamina(profileRes.profile);
@@ -485,17 +550,49 @@ export class PveLobbyController extends Component {
     }
   }
 
+  private async _refreshExpeditionEntryCache(): Promise<void> {
+    const [profileRes, activeRes] = await Promise.all([
+      loadPveProfile(),
+      loadActiveFloorChallenge(),
+    ]);
+    this._warmedProfile = profileRes.profile;
+    this._warmedActive = activeRes;
+    this._hasActiveChallenge = Boolean(activeRes.challenge ?? profileRes.profile.activeChallengeId);
+    this._applyProfileStamina(profileRes.profile);
+    if (this._expeditionCostLabel) {
+      this._expeditionCostLabel.string = this._hasActiveChallenge
+        ? `继续挑战 · 第 ${activeRes.challenge?.floor ?? profileRes.profile.highestUnlockedFloor} 层`
+        : `挑战第 ${profileRes.profile.highestUnlockedFloor} 层`;
+    }
+  }
+
   private async _enterExpedition(): Promise<void> {
     if (this._busy) return;
     this._busy = true;
-    this._setStatus('正在读取可挑战楼层…');
     try {
-      const [profileRes, activeRes] = await Promise.all([
-        loadPveProfile(),
-        loadActiveFloorChallenge(),
-      ]);
-      this._applyProfileStamina(profileRes.profile);
-      this._buildFloorSelectModal(profileRes.profile, activeRes);
+      // 大厅 onLoad / 后台预热已拉过档：直接出选层，不再每次点远征空等云 RTT。
+      if (this._warmedProfile) {
+        this._buildFloorSelectModal(
+          this._warmedProfile,
+          this._warmedActive ?? { ok: true, challenge: null },
+        );
+        this._setStatus('');
+        void this._refreshExpeditionEntryCache().catch((err: unknown) => {
+          console.warn('[PveLobby] expedition cache refresh failed', err);
+        });
+        return;
+      }
+
+      this._setStatus('正在读取可挑战楼层…');
+      await this._refreshExpeditionEntryCache();
+      if (!this._warmedProfile) {
+        this._setStatus('远征入口加载失败：未获取到档案');
+        return;
+      }
+      this._buildFloorSelectModal(
+        this._warmedProfile,
+        this._warmedActive ?? { ok: true, challenge: null },
+      );
       this._setStatus('');
     } catch (err: unknown) {
       this._setStatus(`远征入口加载失败：${err instanceof Error ? err.message : String(err)}`);
@@ -576,7 +673,7 @@ export class PveLobbyController extends Component {
       ? chapterIdForFloor(activeFloor)
       : (chapterTwoUnlocked ? 2 : 1);
 
-    const renderChapterArrow = (node: Node, label: Label, enabled: boolean, onClick: (() => void) | null): void => {
+    const paintChapterArrow = (node: Node, label: Label, enabled: boolean): void => {
       this._drawRoundedRect(
         node,
         74,
@@ -586,26 +683,27 @@ export class PveLobbyController extends Component {
         enabled ? new Color(255, 218, 110, 240) : new Color(120, 140, 160, 150),
       );
       label.color = enabled ? new Color(245, 250, 255, 255) : new Color(170, 180, 190, 190);
-      let button = node.getComponent(Button);
-      if (!button) {
-        button = node.addComponent(Button);
-        button.transition = Button.Transition.SCALE;
-        button.zoomScale = 0.96;
-        button.target = node;
-      }
-      button.enabled = enabled;
-      node.off(Button.EventType.CLICK);
-      node.off(Node.EventType.TOUCH_END);
-      if (enabled && onClick) {
-        node.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-          event.propagationStopped = true;
-        });
-        node.on(Button.EventType.CLICK, () => {
-          playSfx(SFX_IDS.UI_CLICK);
-          onClick();
-        }, this);
-      }
+      const button = node.getComponent(Button);
+      if (button) button.interactable = enabled;
     };
+
+    // 箭头只绑一次：反复 off(TOUCH_END) 会清掉 Button 内部触摸，导致「看起来可点但点了没反应」
+    prevChapterBtn.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      event.propagationStopped = true;
+    });
+    nextChapterBtn.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      event.propagationStopped = true;
+    });
+    this._bindButton(prevChapterBtn, () => {
+      if (currentChapter <= 1) return;
+      currentChapter = 1;
+      renderChapter();
+    });
+    this._bindButton(nextChapterBtn, () => {
+      if (currentChapter >= 2 || !chapterTwoUnlocked) return;
+      currentChapter = 2;
+      renderChapter();
+    });
 
     const renderChapter = (): void => {
       floorGrid.destroyAllChildren();
@@ -624,14 +722,8 @@ export class PveLobbyController extends Component {
       tip.string = currentChapter === 1
         ? '第一章共 7 层；完成第一章后解锁第二章。'
         : '第二章共 7 层；未开放的新章节暂不可进入。';
-      renderChapterArrow(prevChapterBtn, prevChapterLabel, currentChapter > 1, () => {
-        currentChapter = 1;
-        renderChapter();
-      });
-      renderChapterArrow(nextChapterBtn, nextChapterLabel, currentChapter < 2 && chapterTwoUnlocked, () => {
-        currentChapter = 2;
-        renderChapter();
-      });
+      paintChapterArrow(prevChapterBtn, prevChapterLabel, currentChapter > 1);
+      paintChapterArrow(nextChapterBtn, nextChapterLabel, currentChapter < 2 && chapterTwoUnlocked);
 
       const cols = 4;
       const btnW = 126;
@@ -784,6 +876,33 @@ export class PveLobbyController extends Component {
       const ok = await this._ensureWarmReady('正在加载营地资源…');
       if (!ok) return;
       const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private async _showPartnerModal(): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const ok = await this._ensureWarmReady('正在加载伙伴…');
+      if (!ok) return;
+      const controller = this.node.getComponent(PartnerController) ?? this.node.addComponent(PartnerController);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private async _showMinghenShop(): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const ok = await this._ensureWarmReady('正在打开今日商会…');
+      if (!ok) return;
+      const controller = this.node.getComponent(MinghenShopController)
+        ?? this.node.addComponent(MinghenShopController);
       controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
     } finally {
       this._busy = false;
@@ -955,7 +1074,7 @@ export class PveLobbyController extends Component {
     });
 
     const PANEL_W = 520;
-    const PANEL_H = 440;
+    const PANEL_H = 560;
     const panel = new Node('Panel');
     panel.setParent(overlay);
     panel.addComponent(UITransform).setContentSize(PANEL_W, PANEL_H);
@@ -973,22 +1092,22 @@ export class PveLobbyController extends Component {
     });
 
     const title = this._makeLabel(panel, 'Title', 0, 32, 460, 44);
-    title.node.setPosition(0, 130, 0);
+    title.node.setPosition(0, 210, 0);
     title.string = '修改头像和昵称';
     title.color = new Color(255, 220, 105, 255);
 
     const tip = this._makeLabel(panel, 'Tip', 0, 22, 460, 28);
-    tip.node.setPosition(0, 85, 0);
+    tip.node.setPosition(0, 160, 0);
     tip.string = '当前：' + (GameSession.user?.nickname ?? '玩家');
     tip.color = new Color(170, 215, 255, 220);
 
-    this._makeTransparentButton(panel, '同步微信账号（昵称 + 头像）', 0, 20, 420, 64, () => {
+    this._makeTransparentButton(panel, '同步微信账号（昵称 + 头像）', 0, 85, 420, 64, () => {
       void this._syncWxProfile();
     });
-    this._makeTransparentButton(panel, '手动改名', 0, -60, 420, 64, () => {
+    this._makeTransparentButton(panel, '手动改名', 0, 5, 420, 64, () => {
       void this._editNicknameManually();
     });
-    this._makeTransparentButton(panel, '重新进行新手教学', 0, -140, 420, 64, () => {
+    this._makeTransparentButton(panel, '重新进行新手教学', 0, -75, 420, 64, () => {
       void updatePveMeta({ resetTutorial: true }).then(() => {
         this._setStatus('已重置教学。下次开启新远征时会进入教学层');
         this._closeProfileMenu();
@@ -996,7 +1115,7 @@ export class PveLobbyController extends Component {
         this._setStatus(`重置失败：${this._formatErr(err)}`);
       });
     });
-    this._makeTransparentButton(panel, '取消', 0, -220, 200, 56, () => this._closeProfileMenu());
+    this._makeTransparentButton(panel, '取消', 0, -170, 200, 56, () => this._closeProfileMenu());
 
     applyUiLayerTree(overlay, this.node.layer);
   }
