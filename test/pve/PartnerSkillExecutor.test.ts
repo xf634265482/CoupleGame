@@ -100,18 +100,47 @@ describe('PartnerSkillExecutor basic', () => {
     }
   });
 
-  it('asks for cell target when MOBILITY missing targetCell', () => {
+  it('ANIMA stage1 grants 25% spirit', () => {
     const expedition = makeExpeditionState({ seed: 1 });
     const result = usePartnerSkill({
       expedition,
-      partnerBattle: createPartnerBattleState('MOBILITY', 1),
+      partnerBattle: createPartnerBattleState('ANIMA', 1),
+      phase: 'PLAYER_INPUT',
+      resources: resourcesFrom(expedition, { spirit: 0 }),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.resources.spirit).toBe(25);
+  });
+
+  it('BREAKER asks for enemy then marks target', () => {
+    const expedition = makeExpeditionState({
+      seed: 1,
+      floorOverrides: {
+        monsters: [{
+          id: 'm1', type: 'NORMAL', pos: { x: 1, y: 1 }, hp: 5, maxHp: 5,
+          attack: 1, range: 1, aggroRadius: 3, aiState: 'IDLE',
+        }],
+      },
+    });
+    const ask = usePartnerSkill({
+      expedition,
+      partnerBattle: createPartnerBattleState('BREAKER', 1),
       phase: 'PLAYER_INPUT',
       resources: resourcesFrom(expedition),
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.needCellTarget).toBe(true);
-      expect(result.partnerBattle.skillUsed).toBe(false);
+    expect(ask.ok).toBe(true);
+    if (ask.ok) expect(ask.needEnemyTarget).toBe(true);
+    const marked = usePartnerSkill({
+      expedition,
+      partnerBattle: createPartnerBattleState('BREAKER', 1),
+      phase: 'PLAYER_INPUT',
+      resources: resourcesFrom(expedition),
+      targetMonsterId: 'm1',
+    });
+    expect(marked.ok).toBe(true);
+    if (marked.ok) {
+      expect(marked.partnerBattle.skillUsed).toBe(true);
+      expect(marked.partnerBattle.flags.some((f) => f.includes('m1'))).toBe(true);
     }
   });
 });

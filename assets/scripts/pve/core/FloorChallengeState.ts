@@ -58,6 +58,9 @@ export interface FrozenChallengeConfig {
   equipmentLoadout: PveEquipmentLoadout;
   minghenLoadout: MinghenLoadoutEntry[];
   trackedMinghenId: string | null;
+  partnerId?: import('./partner/PartnerTypes').PartnerId | null;
+  partnerEvolutionStage?: import('./partner/PartnerTypes').PartnerEvolutionStage;
+  partnerLevel?: number;
 }
 
 export interface FloorChallengeRuntimeState<TBattleState = unknown> {
@@ -125,5 +128,8 @@ export function freezeChallengeConfig(snapshot: FloorChallengeSnapshot): FrozenC
     equipmentLoadout: { ...snapshot.config.equipmentLoadout },
     minghenLoadout: snapshot.config.minghenLoadout.map((entry) => ({ ...entry })),
     trackedMinghenId: snapshot.config.trackedMinghenId,
+    partnerId: snapshot.config.partnerId ?? null,
+    partnerEvolutionStage: snapshot.config.partnerEvolutionStage ?? 1,
+    partnerLevel: snapshot.config.partnerLevel ?? 1,
   };
 }

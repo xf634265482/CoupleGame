@@ -15,6 +15,11 @@ import {
   resolveMinghenAttack,
 } from './minghen/MinghenCombatBridge';
 import { emptyMinghenEffectResult } from './minghen/MinghenEventContext';
+import {
+  afterPartnerBreakHit,
+  getPartnerArmorPenetrationBonus,
+} from './partner/PartnerCombatHooks';
+import { hasPartnerFlag, breakMarkFlag } from './partner/PartnerBattleFlags';
 
 export interface PersistentAttackApplyResult {
   runtime: PersistentExpeditionRuntime;
@@ -88,7 +93,15 @@ export function applyPersistentAttack(
     targetId,
     { shield: runtime.resources.shield },
   );
-  const preview = { definition, profession: minghenPreview.profession };
+  const partnerPen = getPartnerArmorPenetrationBonus(runtime.battleState.partnerBattle, targetId);
+  let attackProfession = minghenPreview.profession;
+  if (partnerPen > 0 && attackProfession.valid) {
+    attackProfession = {
+      ...attackProfession,
+      armorPenetration: Math.min(1, attackProfession.armorPenetration + partnerPen),
+    };
+  }
+  const preview = { definition, profession: attackProfession };
   if (!preview.profession.valid) {
     return { runtime, result: { state: runtime.battleState.expedition, events: [] } };
   }
@@ -109,6 +122,13 @@ export function applyPersistentAttack(
     ...emptyMinghenEffectResult(),
     shield: minghenResolved.shieldGain,
   }) ?? committed.resources;
+  let partnerBattle = runtime.battleState.partnerBattle ?? null;
+  const hitPlayerAttack = result.events.some(
+    (event) => event.type === 'ATTACK' && event.attackerId === 'PLAYER' && event.targetId === targetId,
+  );
+  if (partnerBattle && hitPlayerAttack && hasPartnerFlag(partnerBattle.flags, breakMarkFlag(targetId))) {
+    partnerBattle = afterPartnerBreakHit(partnerBattle, targetId);
+  }
   const withMinghen = {
     ...committed,
     resources: {
@@ -119,6 +139,7 @@ export function applyPersistentAttack(
       ...committed.battleState,
       minghenMemory: minghenResolved.memory,
       expedition: minghenResolved.expedition,
+      partnerBattle,
     },
   };
   const synced = syncRuntimeFromExpedition(withMinghen, minghenResolved.expedition);

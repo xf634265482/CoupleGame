@@ -9,13 +9,22 @@ import {
 import { createMinghenTriggerMemory, pruneMinghenMemory, type MinghenTriggerMemory } from './minghen/MinghenEffects';
 import { getChapter1Objective } from './objectives/Chapter1Objectives';
 import type { FloorObjectiveState, ObjectiveCommand, ObjectiveDefinition, ObjectiveEvent } from './objectives/FloorObjective';
-import type { ApplyResult, ExpeditionState, PveEvent } from './PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, PveEvent } from './PveTypes';
 import type { FloorChallengeSnapshot, PveProfile } from './PveProgressionTypes';
 import { chapterIdForFloor, isFloorContentReady } from './chapterRouting';
 import { createChapter1ExpeditionState, createChapter1Monster } from './chapter1/Chapter1ExpeditionFactory';
 import { createChapter2ExpeditionState, createChapter2Monster } from './chapter2/Chapter2ExpeditionFactory';
+import { createChapter3ExpeditionState, createChapter3Monster } from './chapter3/Chapter3ExpeditionFactory';
+import { createChapter4ExpeditionState, createChapter4Monster } from './chapter4/Chapter4ExpeditionFactory';
+import { createChapter5ExpeditionState, createChapter5Monster } from './chapter5/Chapter5ExpeditionFactory';
 import { generateChapter2Floor } from './chapter2/Chapter2FloorGenerator';
+import { generateChapter3Floor } from './chapter3/Chapter3FloorGenerator';
+import { generateChapter4Floor } from './chapter4/Chapter4FloorGenerator';
+import { generateChapter5Floor } from './chapter5/Chapter5FloorGenerator';
 import { getChapter2Objective } from './chapter2/Chapter2Objectives';
+import { getChapter3Objective } from './chapter3/Chapter3Objectives';
+import { getChapter4Objective } from './chapter4/Chapter4Objectives';
+import { getChapter5Objective } from './chapter5/Chapter5Objectives';
 import { dissolveHuntPressure } from './chapter2/HuntPressure';
 import { CHAPTER1_FLOOR3_BLOCKER_IDS } from './chapter1/Chapter1FloorCatalog';
 import { generateChapter1Floor } from './chapter1/Chapter1FloorGenerator';
@@ -27,8 +36,35 @@ import { resolveMinghenEffects } from './minghen/MinghenEffects';
 import { buildMinghenSpatialContext } from './minghen/MinghenCombatBridge';
 import type { MinghenEventContext, MinghenHook } from './minghen/MinghenEventContext';
 import { playerOnExtraMoveCostTerrain } from './minghen/SandMinghenBridge';
+import { createPartnerBattleState } from './partner/PartnerSkillExecutor';
+import {
+  usePartnerSkill,
+  type PartnerSkillResult,
+} from './partner/PartnerSkillExecutor';
+import type { PartnerBattleState } from './partner/PartnerTypes';
 import { createRng } from './rng';
 import { getChapter2FloorDefinition } from './chapter2/Chapter2FloorCatalog';
+import { applyCoreBreakPressure } from './chapter3/CoreBreakPressure';
+import { syncControlPointProgress, unfinishedControlPointAtPlayer } from './chapter3/ControlPointRage';
+import { CHAPTER3_BOUNTY_IDS, F18_CORE, F21_BOSS_ID } from './chapter3/Chapter3FloorCatalog';
+import { F23_VENT_IDS, F24_ESCORT_BASE, F24_ESCORT_CORE, F28_BOSS_ID } from './chapter4/Chapter4FloorCatalog';
+import { applyLavaVentPressure } from './chapter4/LavaVentPressure';
+import { applyLavaTideAdvance } from './chapter4/LavaTideAdvance';
+import { applySafeZoneMigration, applySafeZoneOutsideDamage } from './chapter4/SafeZoneMigration';
+import { applyProphecyEyePressure } from './chapter5/ProphecyEyePressure';
+import {
+  offerFloorDestinyRewrite,
+  resolveFloorDestinyRewrite,
+} from './chapter5/FateRewriteTrial';
+import {
+  F30_ELITE_ID,
+  F31_CHOICE_BY_SEAL,
+  F31_SEAL_IDS,
+  F32_PROPHECY_EYE_IDS,
+  F33_MIRROR_ID,
+  F35_BOSS_ID,
+} from './chapter5/Chapter5FloorCatalog';
+import { CHAPTER5_FATE_REWRITE_INTERVAL } from './PveConstants';
 import { applyLightSandstorm } from './chapter2/LightSandstorm';
 import { expandSandPits } from './chapter2/SandPitExpansion';
 import {
@@ -43,9 +79,12 @@ import { rushMonstersTowardPlayer } from './MonsterAI';
 export const WAVE_SPAWN_RUSH_STEPS = 4;
 
 function getFloorObjective(floor: number): ObjectiveDefinition {
-  return chapterIdForFloor(floor) === 1
-    ? getChapter1Objective(floor)
-    : getChapter2Objective(floor);
+  const chapter = chapterIdForFloor(floor);
+  if (chapter === 1) return getChapter1Objective(floor);
+  if (chapter === 2) return getChapter2Objective(floor);
+  if (chapter === 5) return getChapter5Objective(floor);
+  if (chapter === 4) return getChapter4Objective(floor);
+  return getChapter3Objective(floor);
 }
 
 export interface PersistentExpeditionBattleState {
@@ -54,6 +93,8 @@ export interface PersistentExpeditionBattleState {
   pendingCommands: ObjectiveCommand[];
   profession: FloorProfessionRuntimeState;
   minghenMemory: MinghenTriggerMemory;
+  /** 本层伙伴技能态；无携带时为 null。 */
+  partnerBattle?: import('./partner/PartnerTypes').PartnerBattleState | null;
   rewardCatalog: {
     minghenIds: string[];
     equipmentIds: string[];
@@ -149,11 +190,107 @@ export function createPersistentFloorRuntime(
     }, now);
     return syncRuntimeFromExpedition(runtime, expedition, now);
   }
-  let expedition = createChapter2ExpeditionState(snapshot, profile);
-  const map = generateChapter2Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
+  if (chapterId === 2) {
+    let expedition = createChapter2ExpeditionState(snapshot, profile);
+    const map = generateChapter2Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
+    const profession = createFreshProfessionState();
+    let objective = getChapter2Objective(snapshot.floor).create();
+    if (snapshot.floor === 13) {
+      const waveIds = expedition.floorState.monsters
+        .filter((monster) => monster.id.startsWith('wave1_'))
+        .map((monster) => monster.id);
+      expedition = rushMonstersTowardPlayer(expedition, WAVE_SPAWN_RUSH_STEPS, {
+        monsterIds: waveIds,
+        attackIfInRange: false,
+        collapseMoves: true,
+      }).state;
+      objective = getChapter2Objective(13).apply(objective, {
+        type: 'WAVE_SPAWNED',
+        wave: 1,
+        entityIds: waveIds,
+      }).state;
+    }
+    const runtime = startFloorRuntime(snapshot, {
+      maxHp: expedition.player.maxHp,
+      maxAp: expedition.floorState.maxAp,
+    }, {
+      expedition,
+      objective,
+      pendingCommands: [],
+      profession,
+      minghenMemory: createMinghenTriggerMemory(),
+      rewardCatalog: {
+        minghenIds: [...map.minghenIds],
+        equipmentIds: [...map.equipmentIds],
+        optionalObjectiveIds: [...map.optionalObjectiveIds],
+      },
+    }, now);
+    return syncRuntimeFromExpedition(runtime, expedition, now);
+  }
+  if (chapterId === 3) {
+    let expedition = createChapter3ExpeditionState(snapshot, profile);
+    const map = generateChapter3Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
+    const profession = createFreshProfessionState();
+    let objective = getChapter3Objective(snapshot.floor).create();
+    if (snapshot.floor === 20) {
+      const waveIds = expedition.floorState.monsters
+        .filter((monster) => monster.id.startsWith('wave1_'))
+        .map((monster) => monster.id);
+      expedition = rushMonstersTowardPlayer(expedition, WAVE_SPAWN_RUSH_STEPS, {
+        monsterIds: waveIds,
+        attackIfInRange: false,
+        collapseMoves: true,
+      }).state;
+      objective = getChapter3Objective(20).apply(objective, {
+        type: 'WAVE_SPAWNED',
+        wave: 1,
+        entityIds: waveIds,
+      }).state;
+    }
+    const runtime = startFloorRuntime(snapshot, {
+      maxHp: expedition.player.maxHp,
+      maxAp: expedition.floorState.maxAp,
+    }, {
+      expedition,
+      objective,
+      pendingCommands: [],
+      profession,
+      minghenMemory: createMinghenTriggerMemory(),
+      rewardCatalog: {
+        minghenIds: [...map.minghenIds],
+        equipmentIds: [...map.equipmentIds],
+        optionalObjectiveIds: [...map.optionalObjectiveIds],
+      },
+    }, now);
+    return syncRuntimeFromExpedition(runtime, expedition, now);
+  }
+  if (chapterId === 5) {
+    const expedition = createChapter5ExpeditionState(snapshot, profile);
+    const map = generateChapter5Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
+    const profession = createFreshProfessionState();
+    const objective = getChapter5Objective(snapshot.floor).create();
+    const runtime = startFloorRuntime(snapshot, {
+      maxHp: expedition.player.maxHp,
+      maxAp: expedition.floorState.maxAp,
+    }, {
+      expedition,
+      objective,
+      pendingCommands: [],
+      profession,
+      minghenMemory: createMinghenTriggerMemory(),
+      rewardCatalog: {
+        minghenIds: [...map.minghenIds],
+        equipmentIds: [...map.equipmentIds],
+        optionalObjectiveIds: [...map.optionalObjectiveIds],
+      },
+    }, now);
+    return syncRuntimeFromExpedition(runtime, expedition, now);
+  }
+  let expedition = createChapter4ExpeditionState(snapshot, profile);
+  const map = generateChapter4Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
   const profession = createFreshProfessionState();
-  let objective = getChapter2Objective(snapshot.floor).create();
-  if (snapshot.floor === 13) {
+  let objective = getChapter4Objective(snapshot.floor).create();
+  if (snapshot.floor === 26) {
     const waveIds = expedition.floorState.monsters
       .filter((monster) => monster.id.startsWith('wave1_'))
       .map((monster) => monster.id);
@@ -162,7 +299,7 @@ export function createPersistentFloorRuntime(
       attackIfInRange: false,
       collapseMoves: true,
     }).state;
-    objective = getChapter2Objective(13).apply(objective, {
+    objective = getChapter4Objective(26).apply(objective, {
       type: 'WAVE_SPAWNED',
       wave: 1,
       entityIds: waveIds,
@@ -306,7 +443,20 @@ function objectiveEventsFor(
     else if (event.type === 'GUNPOWDER_BARREL_ACTIVATED') events.push({ type: 'GUNPOWDER_ACTIVATED', entityId: event.entityId });
     else if (event.type === 'BLAST_TARGET_DETONATED') events.push({ type: 'BLAST_DETONATED', entityId: event.entityId });
     else if (event.type === 'TURN_END') events.push({ type: 'PLAYER_TURN_ENDED' });
+    else if (event.type === 'ICE_WALL_BROKEN') events.push({ type: 'ENTITY_DESTROYED', entityId: event.entityId });
     else if (event.type === 'PLAYER_DEAD') events.push({ type: 'PLAYER_DIED' });
+    else if (event.type === 'VENT_SEALED') events.push({ type: 'VENT_SEALED', entityId: event.entityId });
+    else if (event.type === 'FATE_CHOICE_SELECTED') {
+      events.push({
+        type: 'FATE_CHOICE_SELECTED',
+        sealId: event.sealId,
+        choice: event.choice,
+      });
+    }
+    else if (event.type === 'ESCORT_ARRIVED') events.push({ type: 'ESCORT_ARRIVED', escortId: event.escortId });
+    else if (event.type === 'ALLY_KILLED' && event.allyId === F24_ESCORT_CORE) {
+      events.push({ type: 'ESCORT_DESTROYED', escortId: event.allyId });
+    }
     else if (event.type === 'FLOOR_CLEARED') {
       events.push({ type: 'EXIT_INTERACTED', apPaid: runtime.floor === 5 ? 1 : 0 });
     }
@@ -351,6 +501,8 @@ function findChapter1Floor3Altar(state: ExpeditionState, consumed?: boolean): Ex
 function killTargetIdsForFloor(floor: number, objective?: FloorObjectiveState): string[] {
   const fromObjective = objective ? stringArray(objective.data.sentinelIds) : [];
   if (fromObjective.length > 0) return fromObjective;
+  const bountyIds = objective ? stringArray(objective.data.bountyIds) : [];
+  if (bountyIds.length > 0) return bountyIds;
   if (objective && typeof objective.data.targetId === 'string') return [objective.data.targetId];
   if (floor === 10) return ['F10_SENTINEL_1', 'F10_SENTINEL_2'];
   const targetIdByFloor: Record<number, string> = {
@@ -360,6 +512,12 @@ function killTargetIdsForFloor(floor: number, objective?: FloorObjectiveState): 
     9: 'FLOOR9_ELITE',
     11: 'CHASE_TARGET',
     14: 'QUICKSAND_SCORPION',
+    17: 'CHASE_TARGET',
+    21: F21_BOSS_ID,
+    28: F28_BOSS_ID,
+    30: F30_ELITE_ID,
+    33: F33_MIRROR_ID,
+    35: F35_BOSS_ID,
   };
   const id = targetIdByFloor[floor];
   return id ? [id] : [];
@@ -426,6 +584,38 @@ function completionPortalPos(
       ?? floor.player;
   }
   if (state.floor === 12) {
+    return floor.entities.find((entity) => entity.type === 'EXIT')?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 15) {
+    return floor.entities.find((entity) => entity.type === 'KEY')?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 22) {
+    return floor.entities.find((entity) => entity.type === 'KEY')?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 29) {
+    return floor.entities.find((entity) => entity.type === 'KEY')?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 18) {
+    return floor.entities.find((entity) => entity.id === F18_CORE)?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 19 || state.floor === 20 || state.floor === 23 || state.floor === 25 || state.floor === 26
+    || state.floor === 32 || state.floor === 34) {
+    return { x: Math.floor(floor.size / 2), y: Math.floor(floor.size / 2) };
+  }
+  if (state.floor === 31 && objective?.kind === 'FATE_CHOICE' && objective.data.chosen === 'ESCAPE') {
+    return floor.entities.find((entity) => entity.type === 'EXIT')?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 24) {
+    return floor.entities.find((entity) => entity.id === F24_ESCORT_BASE)?.pos
+      ?? floor.player;
+  }
+  if (state.floor === 27) {
     return floor.entities.find((entity) => entity.type === 'EXIT')?.pos
       ?? floor.player;
   }
@@ -571,6 +761,7 @@ function extendPersistentEvents(
       || event.type === 'BLAST_TARGET_DETONATED'
       || event.type === 'PICK_KEY'
       || event.type === 'ALTAR_USED'
+      || event.type === 'VENT_SEALED'
     ) {
       applyHook('TASK_INTERACT', event, index, undefined, { isTaskInteract: true });
       applyHook('TASK_INTERACT', event, index + 1000, undefined, { isTaskInteract: true });
@@ -625,6 +816,24 @@ function waveKindsForFloor(floor: number, wave: number): string[] {
     };
     return waves[wave] ?? [];
   }
+  if (floor === 20) {
+    const waves: Record<number, string[]> = {
+      1: ['SNOW_WOLF', 'SNOW_WOLF'],
+      2: ['SNOW_WOLF', 'FROSTSPIKE_PORCUPINE'],
+      3: ['SNOW_WOLF', 'FROSTSPIKE_PORCUPINE', 'FROST_SPRITE'],
+      4: ['FROST_SPRITE', 'GLACIER_SHAPER', 'SNOW_WOLF'],
+    };
+    return waves[wave] ?? [];
+  }
+  if (floor === 26) {
+    const waves: Record<number, string[]> = {
+      1: ['ASH_HOUND', 'ASH_HOUND'],
+      2: ['ASH_HOUND', 'LAVA_CRAB'],
+      3: ['FIRE_ELEMENTAL'],
+      4: ['SPIRIT_EMBER'],
+    };
+    return waves[wave] ?? [];
+  }
   const waves: Record<number, string[]> = {
     1: ['GOBLIN_WARRIOR', 'GOBLIN_WARRIOR'],
     2: ['GOBLIN_WARRIOR', 'GOBLIN_ARCHER'],
@@ -645,7 +854,15 @@ function spawnWave(
     .filter(isWaveSpawnMarker)
     .map((entity) => entity.pos);
   const spawnCells = markerCells.length > 0 ? markerCells : [{x:0,y:0},{x:8,y:0},{x:0,y:8},{x:8,y:8}];
-  const createMonster = current.floor >= 8 ? createChapter2Monster : createChapter1Monster;
+  const createMonster = current.floor >= 29
+    ? createChapter5Monster
+    : current.floor >= 22
+    ? createChapter4Monster
+    : current.floor >= 15
+      ? createChapter3Monster
+      : current.floor >= 8
+        ? createChapter2Monster
+        : createChapter1Monster;
   const blocked = new Set<string>([
     `${current.floorState.player.x},${current.floorState.player.y}`,
     ...current.floorState.entities
@@ -894,6 +1111,73 @@ export function applyPersistentBattleResult(
     } else {
       result = { ...result, state: extended.expedition };
     }
+  } else if (runtime.floor === 18 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    result = {
+      ...result,
+      state: applyCoreBreakPressure(extended.expedition, completedTurn),
+    };
+  } else if (runtime.floor === 23 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    const vent = applyLavaVentPressure(extended.expedition, completedTurn);
+    result = {
+      ...result,
+      state: vent.state,
+      events: [...result.events, ...vent.events],
+    };
+  } else if (runtime.floor === 25 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    const migrated = applySafeZoneMigration(extended.expedition, completedTurn);
+    const outside = applySafeZoneOutsideDamage(migrated.state);
+    result = {
+      ...result,
+      state: outside.state,
+      events: [...result.events, ...migrated.events, ...outside.events],
+    };
+  } else if (runtime.floor === 27 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    const tide = applyLavaTideAdvance(extended.expedition, completedTurn);
+    result = {
+      ...result,
+      state: tide.state,
+      events: [...result.events, ...tide.events],
+    };
+  } else if (runtime.floor === 32 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    const prophecy = applyProphecyEyePressure(extended.expedition, completedTurn);
+    result = {
+      ...result,
+      state: prophecy.state,
+      events: [...result.events, ...prophecy.events],
+    };
+  } else if (runtime.floor === 34 && result.events.some((event) => event.type === 'TURN_END')) {
+    const turnEvent = result.events.find((event) => event.type === 'TURN_END');
+    const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
+    let nextState = extended.expedition;
+    let extraEvents: PveEvent[] = [];
+    if (nextState.floorState.pendingDestinyRewrite?.removed != null) {
+      const resolved = resolveFloorDestinyRewrite(nextState);
+      nextState = resolved.state;
+      extraEvents = [...extraEvents, ...resolved.events];
+    } else if (
+      completedTurn > 0
+      && completedTurn % CHAPTER5_FATE_REWRITE_INTERVAL === 0
+      && !nextState.floorState.pendingDestinyRewrite
+    ) {
+      const offered = offerFloorDestinyRewrite(nextState);
+      nextState = offered.state;
+      extraEvents = [...extraEvents, ...offered.events];
+    }
+    result = {
+      ...result,
+      state: nextState,
+      events: [...result.events, ...extraEvents],
+    };
   } else {
     result = { ...result, state: extended.expedition };
   }
@@ -945,10 +1229,61 @@ export function applyPersistentBattleResult(
       objectiveEvents.unshift({ type: 'KEY_ACQUIRED', keyId });
     }
   }
+  if (runtime.floor === 15 && objective.kind === 'KEY_EXPLORE' && objective.status === 'ACTIVE') {
+    if (result.state.floorState.hasKey && !objective.data.hasKey
+      && !objectiveEvents.some((event) => event.type === 'KEY_ACQUIRED')) {
+      const keyId = result.state.floorState.entities.find((entity) => entity.type === 'KEY')?.id ?? 'KEY';
+      objectiveEvents.unshift({ type: 'KEY_ACQUIRED', keyId });
+    }
+  }
+  if (runtime.floor === 22 && objective.kind === 'KEY_EXPLORE' && objective.status === 'ACTIVE') {
+    if (result.state.floorState.hasKey && !objective.data.hasKey
+      && !objectiveEvents.some((event) => event.type === 'KEY_ACQUIRED')) {
+      const keyId = result.state.floorState.entities.find((entity) => entity.type === 'KEY')?.id ?? 'KEY';
+      objectiveEvents.unshift({ type: 'KEY_ACQUIRED', keyId });
+    }
+  }
+  if (runtime.floor === 29 && objective.kind === 'KEY_EXPLORE' && objective.status === 'ACTIVE') {
+    if (result.state.floorState.hasKey && !objective.data.hasKey
+      && !objectiveEvents.some((event) => event.type === 'KEY_ACQUIRED')) {
+      const keyId = result.state.floorState.entities.find((entity) => entity.type === 'KEY')?.id ?? 'KEY';
+      objectiveEvents.unshift({ type: 'KEY_ACQUIRED', keyId });
+    }
+  }
+  if (runtime.floor === 31 && objective.kind === 'FATE_CHOICE' && objective.status === 'ACTIVE') {
+    for (const sealId of F31_SEAL_IDS) {
+      const seal = result.state.floorState.entities.find((entity) => entity.id === sealId);
+      if (!seal?.consumed || objective.data.chosen) continue;
+      if (objectiveEvents.some((event) => event.type === 'FATE_CHOICE_SELECTED' && event.sealId === sealId)) continue;
+      objectiveEvents.push({
+        type: 'FATE_CHOICE_SELECTED',
+        sealId,
+        choice: F31_CHOICE_BY_SEAL[sealId],
+      });
+    }
+  }
+  if (runtime.floor === 19 && result.events.some((event) => event.type === 'TURN_END')) {
+    const pointId = unfinishedControlPointAtPlayer(result.state.floorState);
+    if (pointId && !objectiveEvents.some((event) => event.type === 'CONTROL_POINT_TICK' && event.pointId === pointId)) {
+      objectiveEvents.push({ type: 'CONTROL_POINT_TICK', pointId });
+    }
+  }
   for (const event of objectiveEvents) {
     const applied = definition.apply(objective, event);
     objective = applied.state;
     pendingCommands.push(...applied.commands);
+  }
+  if (runtime.floor === 19 && objective.data.progressByPoint) {
+    result = {
+      ...result,
+      state: {
+        ...result.state,
+        floorState: syncControlPointProgress(
+          result.state.floorState,
+          objective.data.progressByPoint as Record<string, number>,
+        ),
+      },
+    };
   }
   // 第 10 层：以战场哨卫死亡状态对账。DoT/漏事件可能导致已清哨却无 KILL，
   // 目标卡在 ACTIVE、传送门不刷。
@@ -958,6 +1293,45 @@ export function applyPersistentBattleResult(
     for (const sentinelId of ids) {
       if (!isMonsterDeadOrMissing(result.state.floorState.monsters, sentinelId)) continue;
       const applied = definition.apply(objective, { type: 'ENTITY_KILLED', entityId: sentinelId });
+      objective = applied.state;
+      pendingCommands.push(...applied.commands);
+    }
+  }
+  if (runtime.floor === 16 && objective.kind === 'BOUNTY_HUNT' && objective.status === 'ACTIVE') {
+    const bountyIds = stringArray(objective.data.bountyIds);
+    const ids = bountyIds.length > 0 ? bountyIds : [...CHAPTER3_BOUNTY_IDS];
+    for (const bountyId of ids) {
+      if (!isMonsterDeadOrMissing(result.state.floorState.monsters, bountyId)) continue;
+      const applied = definition.apply(objective, { type: 'ENTITY_KILLED', entityId: bountyId });
+      objective = applied.state;
+      pendingCommands.push(...applied.commands);
+    }
+  }
+  if (runtime.floor === 18 && objective.kind === 'CORE_BREAK' && objective.status === 'ACTIVE') {
+    const core = result.state.floorState.entities.find((entity) => entity.id === F18_CORE);
+    if (core?.consumed) {
+      const applied = definition.apply(objective, { type: 'ENTITY_DESTROYED', entityId: F18_CORE });
+      objective = applied.state;
+      pendingCommands.push(...applied.commands);
+    }
+  }
+  if (runtime.floor === 23 && objective.kind === 'VENT_SEAL' && objective.status === 'ACTIVE') {
+    const sealedIds = stringArray(objective.data.sealed);
+    for (const ventId of F23_VENT_IDS) {
+      const vent = result.state.floorState.entities.find((entity) => entity.id === ventId);
+      if (vent?.consumed && !sealedIds.includes(ventId)) {
+        const applied = definition.apply(objective, { type: 'VENT_SEALED', entityId: ventId });
+        objective = applied.state;
+        pendingCommands.push(...applied.commands);
+      }
+    }
+  }
+  if (runtime.floor === 32 && objective.kind === 'PURGE' && objective.status === 'ACTIVE') {
+    const eyeIds = stringArray(objective.data.eyeIds);
+    const ids = eyeIds.length > 0 ? eyeIds : [...F32_PROPHECY_EYE_IDS];
+    for (const eyeId of ids) {
+      if (!isMonsterDeadOrMissing(result.state.floorState.monsters, eyeId)) continue;
+      const applied = definition.apply(objective, { type: 'ENTITY_KILLED', entityId: eyeId });
       objective = applied.state;
       pendingCommands.push(...applied.commands);
     }
@@ -1022,7 +1396,7 @@ export function applyPersistentBattleResult(
       livingSummons: floor3LivingSummons,
     });
   }
-  if ((runtime.floor === 6 || runtime.floor === 13)
+  if ((runtime.floor === 6 || runtime.floor === 13 || runtime.floor === 20 || runtime.floor === 26)
     && objective.status === 'ACTIVE'
     && objective.kind === 'WAVE_SURVIVAL') {
     const reconciled = reconcileWaveSurvivalObjective(
@@ -1035,7 +1409,7 @@ export function applyPersistentBattleResult(
     objective = reconciled.objective;
     pendingCommands = reconciled.pendingCommands;
   }
-  if ((runtime.floor === 6 || runtime.floor === 13)
+  if ((runtime.floor === 6 || runtime.floor === 13 || runtime.floor === 20 || runtime.floor === 26)
     && pendingCommands.some((command) => command.type === 'WARN_WAVE')) {
     const applied = definition.apply(objective, { type: 'PLAYER_TURN_ENDED' });
     objective = applied.state;
@@ -1151,3 +1525,73 @@ export function applyPersistentBattleResult(
   nextRuntime = syncRuntimeFromExpedition(nextRuntime, expedition, now);
   return { runtime: nextRuntime, result: { state: expedition, events } };
 }
+
+export function ensurePartnerBattle(runtime: PersistentExpeditionRuntime): PersistentExpeditionRuntime {
+  if (runtime.battleState.partnerBattle) return runtime;
+  const partnerId = runtime.config.partnerId;
+  if (!partnerId) {
+    return {
+      ...runtime,
+      battleState: { ...runtime.battleState, partnerBattle: null },
+    };
+  }
+  const partnerBattle = createPartnerBattleState(
+    partnerId,
+    runtime.config.partnerEvolutionStage ?? 1,
+  );
+  return {
+    ...runtime,
+    battleState: { ...runtime.battleState, partnerBattle },
+  };
+}
+
+export function applyPartnerSkillToRuntime(
+  runtime: PersistentExpeditionRuntime,
+  opts: { targetCell?: Coord; targetMonsterId?: string; phase?: 'PLAYER_INPUT' | 'OTHER' } = {},
+): { runtime: PersistentExpeditionRuntime; result: PartnerSkillResult } {
+  const ensured = ensurePartnerBattle(runtime);
+  const partnerBattle = ensured.battleState.partnerBattle;
+  if (!partnerBattle) {
+    return { runtime: ensured, result: { ok: false, reason: 'PARTNER_NONE' } };
+  }
+  const skillResult = usePartnerSkill({
+    expedition: ensured.battleState.expedition,
+    partnerBattle,
+    phase: opts.phase ?? 'PLAYER_INPUT',
+    resources: {
+      hp: ensured.resources.hp,
+      maxHp: ensured.resources.maxHp,
+      shield: ensured.resources.shield,
+      spirit: ensured.resources.spirit,
+      ap: ensured.resources.ap,
+      maxAp: ensured.resources.maxAp,
+    },
+    targetCell: opts.targetCell,
+    targetMonsterId: opts.targetMonsterId,
+  });
+  if (skillResult.ok === false) return { runtime: ensured, result: skillResult };
+  if (skillResult.needCellTarget || skillResult.needEnemyTarget) {
+    return { runtime: ensured, result: skillResult };
+  }
+  let next: PersistentExpeditionRuntime = {
+    ...ensured,
+    resources: {
+      ...ensured.resources,
+      hp: skillResult.resources.hp,
+      maxHp: skillResult.resources.maxHp,
+      shield: skillResult.resources.shield,
+      spirit: skillResult.resources.spirit,
+      ap: skillResult.resources.ap,
+      maxAp: skillResult.resources.maxAp,
+    },
+    battleState: {
+      ...ensured.battleState,
+      expedition: skillResult.expedition,
+      partnerBattle: skillResult.partnerBattle,
+    },
+  };
+  next = syncRuntimeFromExpedition(next, skillResult.expedition);
+  return { runtime: next, result: skillResult };
+}
+
+export type { PartnerBattleState };
