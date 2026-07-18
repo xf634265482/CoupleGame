@@ -15,6 +15,7 @@ import {
   isAdjacentToAny,
   type GridPos,
 } from './MinghenSpatialQuery';
+import { resolveMinghenFloorTags } from './MinghenFloorTags';
 
 export interface MinghenAttackPreview {
   profession: ProfessionAttackResolution;
@@ -81,6 +82,7 @@ export function buildMinghenSpatialContext(
       .filter((monster) => monster.aiState !== 'DEAD' && monster.id !== target.id)
       .map((monster) => monster.pos)
     : [];
+  const tags = resolveMinghenFloorTags(floor, playerPos);
 
   return {
     adjacentEnemyCount: countAdjacentEntities(playerPos, livingPositions),
@@ -94,12 +96,12 @@ export function buildMinghenSpatialContext(
     attackerOnSandPit: playerOnSandPit(floor.entities, playerPos),
     targetHasArmor: target ? (target.armor ?? 0) > 0 : undefined,
     targetTier: target?.type,
-    inTaskObjectiveZone: false,
+    inTaskObjectiveZone: tags.inTaskObjectiveZone,
     isTaskInteract: false,
-    escortUnitInRange2: false,
-    damageTargetIsEscort: false,
-    inAttackWarningZone: false,
-    inDangerTerrain: onExtraTerrain,
+    escortUnitInRange2: tags.escortUnitInRange2,
+    damageTargetIsEscort: tags.damageTargetIsEscort,
+    inAttackWarningZone: tags.inAttackWarningZone,
+    inDangerTerrain: onExtraTerrain || tags.inAttackWarningZone,
   };
 }
 

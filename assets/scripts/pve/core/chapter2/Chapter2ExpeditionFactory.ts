@@ -211,6 +211,9 @@ export function createChapter2ExpeditionState(
       status: 'EXPLORING',
       undyingAvailable: false,
       hasAfterimage: false,
+      minghenFloorTags: {
+        objectiveZoneCells: map.objectiveCells.map((cell) => ({ ...cell })),
+      },
     },
     balanceSnapshot: null,
     persistentFloorMode: true,

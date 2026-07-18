@@ -14,8 +14,6 @@ export type MonsterType = 'NORMAL' | 'ANIMA' | 'ELITE' | 'BOSS';
 
 export type FixedEntityType =
   | 'CHEST' // 瀹濈
-  | 'BLACKSMITH' // 閾佸尃
-  | 'IDOL' // 绁炲儚
   | 'HOT_SPRING' // 娓╂硥
   | 'ALTAR' // 绁潧
   | 'KEY' // 閽ュ寵
@@ -175,10 +173,6 @@ export interface RunPlayer {
   bag?: EquipItem[];
   /** 钀ュ湴銆屽己鍖栦綋榄勩€嶅凡璐拱娆℃暟锛涚敤浜庢湰娆¤繙寰佸唴閫掑浠锋牸锛岃繙寰佺粨鏉熷悗閲嶇疆銆?*/
   campMaxHpBuys?: number;
-  /** 绁炲儚绁濈绱鏀诲嚮鍔犳垚锛堟案涔咃紝璺ㄥ眰淇濈暀锛夈€?*/
-  idolAttackBonus?: number;
-  /** 绁炲儚绁濈绱鎶ょ敳鍔犳垚锛堟案涔咃紝鍑忓皯鎬墿浼ゅ锛岃法灞備繚鐣欙級銆?*/
-  idolArmorBonus?: number;
   /** 浼犲瑁呭璺ㄥ眰鐘舵€侊紙Phase 3锛夛細Boss 鍑绘潃鍙犲眰銆佺伒姘斿己鍖栧彔灞傜瓑璺ㄥ眰鎸佺画鏁堟灉銆?*/
   legendaryState?: {
     /** 鍛借繍鐜嬪啝锛氳繙寰佸唴 Boss 鍑绘潃鍙犲眰锛堟渶澶?3 鍙狅紝姣忓彔 +10 鏀诲嚮锛夈€?*/
@@ -199,7 +193,7 @@ export interface PveBalancePlayerConfig {
   attackCost?: number;
   openChestCost?: number;
   openExitCost?: number;
-  useIdolCost?: number;
+  useInteractCost?: number;
   useHotSpringCost?: number;
   useAltarCost?: number;
 }
@@ -361,6 +355,15 @@ export interface FloorState {
     completedStepIds: string[];
     dismissedStepIds?: string[];
   };
+  /**
+   * 命痕通用楼层标签（关卡写入 / 命痕只读）。
+   * 缺省时仍可由实体类型与现有预警字段推导；显式写入可覆盖或补充。
+   */
+  minghenFloorTags?: {
+    objectiveZoneCells?: Coord[];
+    attackWarningCells?: Coord[];
+    escortMonsterIds?: string[];
+  };
 }
 
 // 鈹€鈹€ 杩滃緛鎬荤姸鎬侊紙瀛樻。鏍瑰璞★級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -399,6 +402,7 @@ export type PveEvent =
   | { type: 'PICK_KEY'; entityId: string }
   | { type: 'OPEN_CHEST'; entityId: string }
   | { type: 'PLAYER_DAMAGED'; damage: number; hp: number; sourceId: string; rawDamage?: number }
+  | { type: 'PLAYER_SHIELD_BROKEN'; absorbed: number }
   | { type: 'STATIONARY_PRESSURE_CHANGED'; stacks: number }
   | { type: 'TURN_END'; turn: number }
   /** 鏂板洖鍚堝紑濮嬫幏楠?鈫?AP锛圓C-2锛夛細dice 鈭?[1,6]锛宎p = 8 + dice 鈭?[9,14]锛堝凡鍖呭惈缁撹浆锛岃 AP_CARRIED锛夈€?*/
@@ -416,12 +420,9 @@ export type PveEvent =
   | { type: 'GUNPOWDER_BARREL_ACTIVATED'; entityId: string; pos: Coord }
   | { type: 'BLAST_TARGET_DETONATED'; entityId: string; pos: Coord }
   | { type: 'TARGET_ESCAPED'; entityId: string; pos: Coord }
-  /** 绁炲儚绁濈锛氫笁閫変竴闅忔満锛屼粎鎼哄甫鏈鍛戒腑鐨勯偅椤瑰姞鎴愩€?*/
-  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'MAX_HP'; maxHpBonus: number }
-  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ATTACK'; attackBonus: number }
-  | { type: 'IDOL_BLESSING'; entityId: string; effect: 'ARMOR'; armorBonus: number }
-  /** 娓╂硥娌荤枟锛氬綋娆″洖婊?HP锛圡1 鍗犱綅瑙勫垯锛宒esign.md 鏈杩帮級銆?*/
-  | { type: 'HOT_SPRING_HEAL'; entityId: string; healed: number }
+  /** 温泉祝福：随机获得护盾，或净化 1 个负面状态并获得灵气。 */
+  | { type: 'HOT_SPRING_BLESSING'; entityId: string; effect: 'SHIELD'; shield: number }
+  | { type: 'HOT_SPRING_BLESSING'; entityId: string; effect: 'CLEANSE'; spirit: number; cleansed?: 'POISON' | 'FIRE_BURN' | 'LAVA_BURN' | 'SLOW' | 'PRESSURE' | 'CHILL' | 'FREEZE' | 'DESTINY_LOCK' }
   | { type: 'SHOP_BUY'; itemId: string; cost: number; effect: string }
   /** 鎴愬氨瑙ｉ攣锛圕ontroller 鍚堟垚锛屼笉鐢?core 绾嚱鏁颁骇鐢燂紱渚?_playEvents 灞曠ず toast锛夈€?*/
   | { type: 'FLOOR_CLEARED'; floor: number }
@@ -444,10 +445,6 @@ export type PveEvent =
   | { type: 'BURN_TICK'; damage: number; hp: number }
   /** 绁潧浣跨敤锛氭秷鑰楀悗闅忔満鑾峰緱鐏垫皵銆?*/
   | { type: 'ALTAR_USED'; entityId: string; anima: number }
-  /** 閾佸尃寮哄寲鎴愬姛锛歜aseStat 鎻愬崌锛宔nhanceLevel +1锛屾樉绀烘柊鐨勫己鍖栫瓑绾т笌灞炴€у€笺€?*/
-  | { type: 'BLACKSMITH_UPGRADE'; entityId: string; slot: EquipSlot; newStat: number; newEnhanceLevel: number }
-  /** 閾佸尃寮哄寲澶辫触锛氭墸璐逛絾灞炴€т笉鍙橈紙姒傜巼澶辫触锛夈€?*/
-  | { type: 'BLACKSMITH_UPGRADE_FAIL'; entityId: string; slot: EquipSlot; failChance: number }
   /** 哥布林酋长蓄力重击实际结算：center 为本次重击结算时 boss 所在格（用于 UI 标识实际命中区域）。 */
   | { type: 'HEAVY_STRIKE_RESOLVED'; bossId: string; center: Coord }
   /** 鍝ュ竷鏋楅厠闀胯搫鍔涢噸鍑婚璀︼紙2026-06-15 鎭㈠ 鈫?鏈€缁堛€屽厛閲婃斁鍚庤拷鍑汇€嶆柟妗堬級锛氭湰鍥炲悎闈為噸鍑诲洖鍚堬紝

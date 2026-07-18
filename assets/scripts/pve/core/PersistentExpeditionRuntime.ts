@@ -464,17 +464,25 @@ function extendPersistentEvents(
     layerKeys: [...pruned.layerKeys],
     states: [...pruned.states],
   };
-  const applyHook = (hook: MinghenHook, event: PveEvent, index: number, targetId?: string): void => {
+  const applyHook = (
+    hook: MinghenHook,
+    event: PveEvent,
+    index: number,
+    targetId?: string,
+    overrides?: Partial<MinghenEventContext>,
+  ): void => {
     const target = targetId
       ? nextExpedition.floorState.monsters.find((monster) => monster.id === targetId)
       : undefined;
     const movePos = event.type === 'MOVE' && event.entityId === 'PLAYER' ? event.to : nextExpedition.floorState.player;
     const onExtraTerrain = playerOnExtraMoveCostTerrain(nextExpedition.floorState.entities, movePos);
+    const envSource = event.type === 'SANDSTORM_HIT'
+      || (event.type === 'PLAYER_DAMAGED' && (event.sourceId === 'SANDSTORM' || event.sourceId === 'ENVIRONMENT'));
     const context: MinghenEventContext = {
       eventId: `${nextExpedition.floorState.turn}:${index}:${event.type}:${hook}`,
       hook,
       turn: nextExpedition.floorState.turn,
-      source: event.type === 'PLAYER_DAMAGED' ? 'ENEMY' : 'ACTIVE_ACTION',
+      source: envSource ? 'ENVIRONMENT' : event.type === 'PLAYER_DAMAGED' ? 'ENEMY' : 'ACTIVE_ACTION',
       hp: nextExpedition.player.hp,
       maxHp: nextExpedition.player.maxHp,
       shield: nextRuntime.resources.shield,
@@ -484,11 +492,17 @@ function extendPersistentEvents(
       targetHasStatus: target ? Boolean(target.bleedRounds || target.poisonRounds || target.burnRounds || target.frozenRounds) : false,
       movedThisTurn: (nextExpedition.floorState.playerStepsThisTurn ?? 0) > 0,
       attackedThisTurn: Boolean(nextExpedition.floorState.playerAttackedThisTurn),
-      actualDamage: event.type === 'PLAYER_DAMAGED' ? event.damage : undefined,
+      actualDamage: event.type === 'PLAYER_DAMAGED'
+        ? event.damage
+        : event.type === 'SANDSTORM_HIT'
+          ? event.damage
+          : undefined,
+      environmentDamage: event.type === 'SANDSTORM_HIT' ? event.damage : undefined,
       action: event.type === 'MOVE' ? 'MOVE' : event.type === 'ATTACK' ? 'ATTACK' : undefined,
       enteredDangerousTerrain: event.type === 'MOVE' && event.entityId === 'PLAYER' ? onExtraTerrain : undefined,
       activeMoveStepsThisTurn: nextExpedition.floorState.playerStepsThisTurn ?? 0,
       ...buildMinghenSpatialContext(nextExpedition, targetId, movePos),
+      ...overrides,
     };
     const effect = resolveMinghenEffects(nextRuntime.config.minghenLoadout, context, memory);
     if (effect.spiritGain > 0) {
@@ -546,8 +560,20 @@ function extendPersistentEvents(
       nextRuntime = gainSpirit(nextRuntime, { type: 'PLAYER_DAMAGED', actualDamage: event.damage });
       applyHook('DAMAGED', event, index);
     }
+    if (event.type === 'SANDSTORM_HIT') {
+      applyHook('DAMAGED', event, index);
+    }
     if (event.type === 'PLAYER_SHIELD_BROKEN') {
       applyHook('SHIELD_BROKEN', event, index);
+    }
+    if (
+      event.type === 'GUNPOWDER_BARREL_ACTIVATED'
+      || event.type === 'BLAST_TARGET_DETONATED'
+      || event.type === 'PICK_KEY'
+      || event.type === 'ALTAR_USED'
+    ) {
+      applyHook('TASK_INTERACT', event, index, undefined, { isTaskInteract: true });
+      applyHook('TASK_INTERACT', event, index + 1000, undefined, { isTaskInteract: true });
     }
     if (event.type === 'HOT_SPRING_BLESSING') {
       if (event.effect === 'SHIELD') {
