@@ -9,7 +9,12 @@ import { syncRuntimeFromExpedition, type PersistentExpeditionRuntime } from './P
 import type { ApplyResult } from './PveTypes';
 import type { PveProfile } from './PveProgressionTypes';
 import { gainSpiritFromAttack } from './SpiritBurstSystem';
-import { previewMinghenAttack, resolveMinghenAttack } from './minghen/MinghenCombatBridge';
+import {
+  applyMinghenEffectToResources,
+  previewMinghenAttack,
+  resolveMinghenAttack,
+} from './minghen/MinghenCombatBridge';
+import { emptyMinghenEffectResult } from './minghen/MinghenEventContext';
 
 export interface PersistentAttackApplyResult {
   runtime: PersistentExpeditionRuntime;
@@ -57,6 +62,8 @@ export function previewPersistentAttack(
     runtime.config.minghenLoadout,
     runtime.battleState.minghenMemory,
     profession,
+    undefined,
+    { shield: runtime.resources.shield },
   );
   return { definition, profession: minghen.profession };
 }
@@ -79,6 +86,7 @@ export function applyPersistentAttack(
     runtime.battleState.minghenMemory,
     profession,
     targetId,
+    { shield: runtime.resources.shield },
   );
   const preview = { definition, profession: minghenPreview.profession };
   if (!preview.profession.valid) {
@@ -94,13 +102,17 @@ export function applyPersistentAttack(
     minghenPreview.memory,
     targetId,
     preview.profession.apCost,
+    { shield: runtime.resources.shield },
   );
   const committed = commitProfessionAttack(runtime, preview.profession);
+  const resourcesWithShield = applyMinghenEffectToResources(committed.resources, {
+    ...emptyMinghenEffectResult(),
+    shield: minghenResolved.shieldGain,
+  }) ?? committed.resources;
   const withMinghen = {
     ...committed,
     resources: {
-      ...committed.resources,
-      shield: Math.min(committed.resources.maxHp, committed.resources.shield + Math.round(minghenResolved.shieldGain)),
+      ...resourcesWithShield,
       spirit: Math.min(100, committed.resources.spirit + minghenResolved.spiritGain),
     },
     battleState: {

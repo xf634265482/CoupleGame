@@ -24,7 +24,9 @@ import { spawnObjectivePortal } from './FloorRules';
 import { commitProfessionMove, endProfessionTurn } from './professions/ProfessionActionSystem';
 import { gainSpirit } from './SpiritBurstSystem';
 import { resolveMinghenEffects } from './minghen/MinghenEffects';
+import { buildMinghenSpatialContext } from './minghen/MinghenCombatBridge';
 import type { MinghenEventContext, MinghenHook } from './minghen/MinghenEventContext';
+import { playerOnExtraMoveCostTerrain } from './minghen/SandMinghenBridge';
 import { createRng } from './rng';
 import { getChapter2FloorDefinition } from './chapter2/Chapter2FloorCatalog';
 import { applyLightSandstorm } from './chapter2/LightSandstorm';
@@ -466,6 +468,8 @@ function extendPersistentEvents(
     const target = targetId
       ? nextExpedition.floorState.monsters.find((monster) => monster.id === targetId)
       : undefined;
+    const movePos = event.type === 'MOVE' && event.entityId === 'PLAYER' ? event.to : nextExpedition.floorState.player;
+    const onExtraTerrain = playerOnExtraMoveCostTerrain(nextExpedition.floorState.entities, movePos);
     const context: MinghenEventContext = {
       eventId: `${nextExpedition.floorState.turn}:${index}:${event.type}:${hook}`,
       hook,
@@ -473,6 +477,7 @@ function extendPersistentEvents(
       source: event.type === 'PLAYER_DAMAGED' ? 'ENEMY' : 'ACTIVE_ACTION',
       hp: nextExpedition.player.hp,
       maxHp: nextExpedition.player.maxHp,
+      shield: nextRuntime.resources.shield,
       apLeft: nextExpedition.floorState.ap,
       targetId,
       targetHpRatio: target ? target.hp / Math.max(1, target.maxHp) : undefined,
@@ -481,6 +486,9 @@ function extendPersistentEvents(
       attackedThisTurn: Boolean(nextExpedition.floorState.playerAttackedThisTurn),
       actualDamage: event.type === 'PLAYER_DAMAGED' ? event.damage : undefined,
       action: event.type === 'MOVE' ? 'MOVE' : event.type === 'ATTACK' ? 'ATTACK' : undefined,
+      enteredDangerousTerrain: event.type === 'MOVE' && event.entityId === 'PLAYER' ? onExtraTerrain : undefined,
+      activeMoveStepsThisTurn: nextExpedition.floorState.playerStepsThisTurn ?? 0,
+      ...buildMinghenSpatialContext(nextExpedition, targetId, movePos),
     };
     const effect = resolveMinghenEffects(nextRuntime.config.minghenLoadout, context, memory);
     if (effect.spiritGain > 0) {
@@ -537,6 +545,28 @@ function extendPersistentEvents(
     if (event.type === 'PLAYER_DAMAGED') {
       nextRuntime = gainSpirit(nextRuntime, { type: 'PLAYER_DAMAGED', actualDamage: event.damage });
       applyHook('DAMAGED', event, index);
+    }
+    if (event.type === 'PLAYER_SHIELD_BROKEN') {
+      applyHook('SHIELD_BROKEN', event, index);
+    }
+    if (event.type === 'HOT_SPRING_BLESSING') {
+      if (event.effect === 'SHIELD') {
+        nextRuntime = {
+          ...nextRuntime,
+          resources: {
+            ...nextRuntime.resources,
+            shield: Math.min(nextRuntime.resources.maxHp, nextRuntime.resources.shield + event.shield),
+          },
+        };
+      } else {
+        nextRuntime = {
+          ...nextRuntime,
+          resources: {
+            ...nextRuntime.resources,
+            spirit: addSpiritUntilFull(nextRuntime.resources.spirit, event.spirit),
+          },
+        };
+      }
     }
     if (event.type === 'PICK_KEY') {
       nextRuntime = gainSpirit(nextRuntime, { type: 'KEY_OBJECTIVE', firstForEntity: true });
@@ -760,17 +790,21 @@ export function applyPersistentBattleResult(
   if (runtime.status !== 'ACTIVE') return { runtime, result };
   let shield = runtime.resources.shield;
   let defendedHp = result.state.player.hp;
+  let shieldAbsorbed = 0;
+  let shieldBroken = false;
   const defendedEvents = result.events.map((event): PveEvent => {
     if (event.type !== 'PLAYER_DAMAGED' || shield <= 0 || event.damage <= 0) return event;
     const absorbed = Math.min(shield, event.damage);
     shield -= absorbed;
+    shieldAbsorbed += absorbed;
+    if (shield === 0) shieldBroken = true;
     defendedHp = Math.min(result.state.player.maxHp, defendedHp + absorbed);
     return { ...event, damage: event.damage - absorbed, hp: defendedHp };
   });
   if (shield !== runtime.resources.shield) {
     result = {
       state: { ...result.state, player: { ...result.state.player, hp: defendedHp } },
-      events: defendedEvents,
+      events: shieldBroken ? [...defendedEvents, { type: 'PLAYER_SHIELD_BROKEN', absorbed: shieldAbsorbed }] : defendedEvents,
     };
     runtime = { ...runtime, resources: { ...runtime.resources, hp: defendedHp, shield } };
   }
