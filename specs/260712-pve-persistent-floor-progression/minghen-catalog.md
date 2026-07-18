@@ -26,8 +26,10 @@
 - **危险地形**：会直接造成伤害、异常、额外 AP 消耗或强制位移的地格；险击同时接受攻击预警区标签。
 - **额外移动消耗地形**：进入时产生额外移动 AP 消耗的地形（沙坑、泥地、积雪、废墟、藤蔓等）。
 - **环境伤害**：关卡周期性或区域性环境伤害（沙暴、毒雾、火雨、寒潮等），来源标记为 `ENVIRONMENT`。
-- **任务目标区域**：特殊关卡统一区域标签（占点、守点、机关操作区、爆破区等）。
-- **任务交互**：关卡目标系统统一标记的交互；命痕不得自行识别具体机关类型。
+- **任务目标区域**：特殊关卡统一区域标签（占点、守点、机关操作区、爆破区等）；运行时写入 `floorState.minghenFloorTags.objectiveZoneCells`，也可由 KEY/ALTAR/ESCAPE_MARKER/GUNPOWDER_BARREL/BLAST_TARGET/WAVE_SPAWN_MARKER/EXIT/PORTAL 等实体格自动推导。
+- **任务交互**：关卡目标系统统一标记的交互（火药桶、爆破点、祭坛、钥匙、传送门、出口等）；命痕只读 `TASK_INTERACT` + `isTaskInteract`，不得自行识别具体机关类型。
+- **攻击预警区**：显式 `minghenFloorTags.attackWarningCells`，或由现有 `fateProphecy`（3×3）/`lavaEruptionMark.cells` 推导。
+- **护送单位**：`monster.side === 'ALLY'`，或 `minghenFloorTags.escortMonsterIds`。
 - **每回合一次**：按玩家回合编号重置；怪物回合内触发仍占用其前一玩家回合的额度。
 
 ## 2. 四种异常
