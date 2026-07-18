@@ -79,7 +79,7 @@ export const MINGHEN_CATALOG: readonly MinghenDefinition[] = [
   d('M05','藏锋','STARTER','SIMPLE',1,['WAIT','BURST'],['TURN_END','BEFORE_HIT'],{1:[.25],2:[.35],3:[.35,.5]},'触发3次并造成50%剩余生命过量伤害'),
   d('M06','余力','STARTER','SIMPLE',1,['AP','NEXT_TURN'],['TURN_END','TURN_START','BEFORE_ATTACK'],{1:[3,1],2:[2,1],3:[2,1,.2]},'获得4临时AP并用3点参与攻击'),
   d('M07','逆鳞','STARTER','ADVANCED',1,['DAMAGED','RECOVER'],['DAMAGED','BEFORE_HIT','AFTER_HIT'],{1:[.2,.2],2:[.2,.3],3:[.2,.3,.1,.08]},'触发2次并在40%生命以下击杀精英'),
-  d('M08','地脉','STARTER','TRICKY',4,['TERRAIN','CONVERT'],['AFTER_MOVE','BEFORE_HIT','AFTER_HIT'],{1:[.25],2:[.25,1],3:[.25,1,.06]},'承受3次危险地形并用地脉强化攻击击杀1次'),
+  d('M08','地脉','STARTER','TRICKY',4,['TERRAIN','CONVERT'],['AFTER_MOVE','BEFORE_MOVE','BEFORE_HIT','AFTER_HIT'],{1:[.25],2:[.25,1],3:[.25,1,.06]},'承受3次危险地形并用地脉强化攻击击杀1次'),
   d('M09','追猎','CONNECTOR','SIMPLE',2,['STATUS','ATTACK'],['BEFORE_HIT','KILL'],{1:[.15],2:[.25],3:[.25,.05]},'对5个异常目标触发并击杀2个'),
   d('M10','催化','CONNECTOR','TRICKY',3,['MULTI_STATUS'],['STATUS_APPLIED'],{1:[1],2:[1,1],3:[1,1,.4]},'对3个目标触发并令目标持有3种异常'),
   d('M11','坚锋','CONNECTOR','ADVANCED',4,['SHIELD','ATTACK'],['SHIELD_BROKEN','BEFORE_HIT','AFTER_HIT'],{1:[.2],2:[.3],3:[.3,.1,.08]},'护盾击破3次并累计重建15%护盾'),

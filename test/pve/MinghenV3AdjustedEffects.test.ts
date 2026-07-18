@@ -17,6 +17,13 @@ describe('Minghen V3 adjusted effects', () => {
     expect(after.shield).toBeCloseTo(12);
   });
 
+  test('M08 II discounts next move after terrain charge', () => {
+    const memory = createMinghenTriggerMemory();
+    const loadout = [{ id: 'M08', level: 2 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'm', hook: 'AFTER_MOVE', enteredDangerousTerrain: true }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'bm', hook: 'BEFORE_MOVE' }), memory).moveCostReduction).toBe(1);
+  });
+
   test('M22 breakout discounts first move when surrounded', () => {
     const memory = createMinghenTriggerMemory();
     const loadout = [{ id: 'M22', level: 1 as const }];

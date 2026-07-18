@@ -62,6 +62,9 @@ export function resolveMinghenEffects(loadout: readonly MinghenLoadoutEntry[], c
           result.flags.push('STORE_TERRAIN_CHARGE');
           if (equipped.level >= 2) store(memory, 'M08_MOVE');
         }
+        if (context.hook === 'BEFORE_MOVE' && consume(memory, 'M08_MOVE')) {
+          result.moveCostReduction = value(1) || 1;
+        }
         if (context.hook === 'BEFORE_HIT' && consume(memory, 'M08_READY')) {
           result.damageMultiplierBonus += value(0);
           if (equipped.level === 3) store(memory, 'M08_SHIELD_HIT');
