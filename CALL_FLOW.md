@@ -29,6 +29,7 @@ GameApp.onLoad()
   -> [Cloud] cloudfunctions/pve/index.js action=loadProfile
   -> [Cloud] PveProgression.loadProfile()
   -> CampView 渲染：命痕台 / 装备台 / 远征情报 / 角色区
+     （角色区：已解锁职业卡调用 previewCampCombatStats 显示攻击/生命/护甲/射程预览）
 ```
 
 ### 营地保存配置
@@ -48,8 +49,8 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
 
 ```text
 [Lobby] PveLobbyController 点击“远征”
-  -> 加载 PveProfile（选层弹窗，不挡分包）
-  -> 展示可挑战楼层 / 可继续挑战
+  -> 优先用已缓存的 PveProfile / activeChallenge 立刻弹出选层（不空等云 RTT）
+  -> 后台静默刷新档案缓存
   -> 用户选择楼层
   -> _ensureWarmReady（现有 LoadingOverlay 短等）
   -> GameSession.pendingPveFloor = selectedFloor
