@@ -1,10 +1,25 @@
 import { createMinghenTriggerMemory, pruneMinghenMemory, resolveMinghenEffects } from '../../assets/scripts/pve/core/minghen/MinghenEffects';
-import type { MinghenEventContext } from '../../assets/scripts/pve/core/minghen/MinghenEventContext';
+import { emptyMinghenEffectResult, MINGHEN_HOOKS, type MinghenEventContext } from '../../assets/scripts/pve/core/minghen/MinghenEventContext';
 
 function ctx(overrides: Partial<MinghenEventContext>): MinghenEventContext {
   return { eventId: 'e1', hook: 'BEFORE_HIT', turn: 1, source: 'ACTIVE_ACTION', ...overrides };
 }
 describe('Minghen effects', () => {
+  test('effect result defaults include V3 mitigation fields', () => {
+    const r = emptyMinghenEffectResult();
+    expect(r.damageReductionRatio).toBe(0);
+    expect(r.forcedDisplaceReduction).toBe(0);
+    expect(r.transferDamageRatio).toBe(0);
+    expect(r.transferMaxTargets).toBe(0);
+    expect(r.consumeShieldRatioOfMaxHp).toBe(0);
+    expect(r.shieldToDamageRatio).toBe(0);
+    expect(r.refundConsumedShieldRatio).toBe(0);
+    expect(r.overflowDamageReductionRatio).toBe(0);
+  });
+  test('hooks include TASK_INTERACT', () => {
+    expect(MINGHEN_HOOKS).toContain('TASK_INTERACT');
+  });
+
   test('same event resolves once and secondary Minghen damage cannot recurse', () => {
     const memory = createMinghenTriggerMemory();
     const loadout = [{ id: 'M03', level: 2 as const }];
@@ -36,6 +51,42 @@ describe('Minghen effects', () => {
     resolveMinghenEffects(loadout, ctx({ eventId: 'end', hook: 'TURN_END', apLeft: 2 }), memory);
     expect(resolveMinghenEffects(loadout, ctx({ eventId: 'start', hook: 'TURN_START' }), memory).apDelta).toBe(1);
     expect(resolveMinghenEffects(loadout, ctx({ eventId: 'attack', hook: 'BEFORE_ATTACK' }), memory).armorPenetrationBonus).toBe(0.2);
+  });
+  test('new status extenders stay profession-agnostic', () => {
+    const memory = createMinghenTriggerMemory();
+    const result = resolveMinghenEffects(
+      [{ id: 'M27', level: 3 }, { id: 'M28', level: 3 }, { id: 'M29', level: 3 }],
+      ctx({
+        hook: 'BEFORE_HIT',
+        targetHasStatus: true,
+        targetStatuses: ['BLEED', 'POISON', 'BURN', 'CHILL'],
+      }),
+      memory,
+    );
+    expect(result.damageMultiplierBonus).toBeCloseTo(0.15 + 0.35 + 0.3);
+  });
+  test('M32 turns a skipped attack into a discounted empowered strike', () => {
+    const memory = createMinghenTriggerMemory();
+    const loadout = [{ id: 'M32', level: 3 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'end', hook: 'TURN_END', attackedThisTurn: false }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-attack', hook: 'BEFORE_ATTACK' }), memory).apDelta).toBe(-1);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.15);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'kill', hook: 'KILL' }), memory).apDelta).toBe(1);
+  });
+  test('M35 reacts to shield break without a profession dependency', () => {
+    const memory = createMinghenTriggerMemory();
+    const loadout = [{ id: 'M35', level: 3 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'shield', hook: 'SHIELD_BROKEN' }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-attack', hook: 'BEFORE_ATTACK' }), memory).apDelta).toBe(-1);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'before-hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.3);
+  });
+  test('M38 chains kill into movement and follow-up kill refund', () => {
+    const memory = createMinghenTriggerMemory();
+    const loadout = [{ id: 'M38', level: 3 as const }];
+    resolveMinghenEffects(loadout, ctx({ eventId: 'kill-1', hook: 'KILL', source: 'ACTIVE_ACTION' }), memory);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'move', hook: 'BEFORE_MOVE' }), memory).moveCostReduction).toBe(1);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'hit', hook: 'BEFORE_HIT' }), memory).damageMultiplierBonus).toBe(0.15);
+    expect(resolveMinghenEffects(loadout, ctx({ eventId: 'kill-2', hook: 'KILL', source: 'ACTIVE_ACTION' }), memory).apDelta).toBe(1);
   });
   test('pruneMinghenMemory drops stale event/turn keys but keeps layer/state', () => {
     const memory = createMinghenTriggerMemory();
