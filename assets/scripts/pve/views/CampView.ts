@@ -4,8 +4,14 @@ import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefiniti
 import { ENHANCE_COST, effectiveEquipPrimaryRange, toFixedEquipItem } from '../core/equipment/EquipmentProgression';
 import { formatMinghenCampDetail } from '../core/minghen/MinghenDisplay';
 import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
+import {
+  canSpendCopyAsExchangeMaterial,
+  MINGHEN_DAILY_AD_REFRESH_LIMIT,
+  spareCopiesForExchange,
+} from '../core/minghen/MinghenAcquire';
 import { masteryProgressForXp } from '../core/professions/ProfessionMastery';
 import { PROFESSION_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
+import { previewCampCombatStats } from '../core/CampCombatPreview';
 import { ensureEquipmentAssetsForFloor } from '../EquipmentResourceLoader';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { ensureArtChild } from '../../ui/UiSprite';
@@ -19,6 +25,9 @@ export interface CampViewCallbacks {
   onToggleMinghen(id: string): void;
   onTrackMinghen(id: string): void;
   onSavePreset(): void;
+  onBuyMinghenStardust?(slotId: string): void;
+  onExchangeMinghen?(recipeId: string): void;
+  onRefreshMinghenShop?(): void;
   onToggleEquipment(instanceId: string): void;
   onManageEquipment(action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL', instanceId: string): void;
   onSectionChanged?(section: CampSection): void;
@@ -138,21 +147,124 @@ export class CampView {
   }
 
   private _renderMinghen(profile: PveProfile): void {
-    this._summary(`已收集 ${Object.keys(profile.minghenCollection).length}/24    已装配 ${profile.minghenLoadout.length}/8    方案 ${profile.minghenPresets.length}/5\n星尘：${profile.gold}`);
+    const ownedCount = Object.keys(profile.minghenCollection).length;
+    this._summary(`已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/8    方案 ${profile.minghenPresets.length}/5\n星尘：${profile.gold}`);
     this._sectionLabel('已装配命痕', CAMP_MINGHEN_LAYOUT.equippedTitle.y);
     const equipped = new Map(profile.minghenLoadout.map((entry) => [entry.id, entry]));
     for (let index = 0; index < 8; index += 1) {
       const entry = profile.minghenLoadout[index];
-      this._gridCard(this._body, index, CAMP_MINGHEN_LAYOUT.columns, CAMP_MINGHEN_LAYOUT.cardWidth, CAMP_MINGHEN_LAYOUT.cardHeight, CAMP_MINGHEN_LAYOUT.firstRowY, entry ? `${getMinghenDefinition(entry.id).name}\nLV.${entry.level}` : '空槽', () => { if (entry) this._showMinghenDetail(entry.id, entry.level, true); }, !entry);
+      this._gridCard(
+        this._body,
+        index,
+        CAMP_MINGHEN_LAYOUT.columns,
+        CAMP_MINGHEN_LAYOUT.cardWidth,
+        CAMP_MINGHEN_LAYOUT.cardHeight,
+        CAMP_MINGHEN_LAYOUT.firstRowY,
+        entry ? `${getMinghenDefinition(entry.id).name}\nLV.${entry.level}` : '空槽',
+        () => { if (entry) this._showMinghenDetail(entry.id, entry.level, true); },
+        !entry,
+      );
     }
+    this._renderMinghenShop(profile);
     this._sectionLabel('拥有的命痕', CAMP_MINGHEN_LAYOUT.ownedTitle.y);
     const owned = Object.values(profile.minghenCollection).filter((entry) => !equipped.has(entry.id));
-    this._scrollGrid(CAMP_MINGHEN_LAYOUT.inventory.x, CAMP_MINGHEN_LAYOUT.inventory.y, CAMP_MINGHEN_LAYOUT.inventory.width, CAMP_MINGHEN_LAYOUT.inventory.height, 4, 128, 72, owned.length, (index, parent, y) => {
-      const entry = owned[index];
-      if (!entry) return;
-      this._gridCard(parent, index, 4, 128, 72, y, `${getMinghenDefinition(entry.id).name}\nLV.${entry.level}`, () => this._showMinghenDetail(entry.id, entry.level, false));
+    this._scrollGrid(
+      CAMP_MINGHEN_LAYOUT.inventory.x,
+      CAMP_MINGHEN_LAYOUT.inventory.y,
+      CAMP_MINGHEN_LAYOUT.inventory.width,
+      CAMP_MINGHEN_LAYOUT.inventory.height,
+      4,
+      128,
+      64,
+      owned.length,
+      (index, parent, y) => {
+        const entry = owned[index];
+        if (!entry) return;
+        const spare = spareCopiesForExchange(entry);
+        this._gridCard(
+          parent,
+          index,
+          4,
+          128,
+          64,
+          y,
+          `${getMinghenDefinition(entry.id).name}\nLV.${entry.level} ·×${entry.copies}${spare > 0 ? `(余${spare})` : ''}`,
+          () => this._showMinghenDetail(entry.id, entry.level, false),
+        );
+      },
+    );
+    makeFlatButton(
+      this._body,
+      '保存方案',
+      CAMP_MINGHEN_LAYOUT.saveButton.x,
+      CAMP_MINGHEN_LAYOUT.saveButton.y,
+      CAMP_MINGHEN_LAYOUT.saveButton.width,
+      CAMP_MINGHEN_LAYOUT.saveButton.height,
+      () => this._callbacks.onSavePreset(),
+      new Color(25, 75, 110, 190),
+      { noArt: true, border: BORDER },
+    );
+  }
+
+  private _renderMinghenShop(profile: PveProfile): void {
+    const shop = profile.minghenDailyShop;
+    this._sectionLabel(`今日商会${shop ? ` · ${shop.dayKey}` : ''}`, CAMP_MINGHEN_LAYOUT.shopTitle.y);
+    if (!shop) {
+      makeLabel(this._body, 0, CAMP_MINGHEN_LAYOUT.shopStardustY, 520, 36, 18, DIM, Label.HorizontalAlign.CENTER).string = '商会加载中…';
+      return;
+    }
+    shop.stardustSlots.forEach((slot, index) => {
+      const name = getMinghenDefinition(slot.minghenId).name;
+      const label = slot.purchased ? `${name}\n已购` : `${name}\n${slot.price}星尘`;
+      this._gridCard(
+        this._body,
+        index,
+        4,
+        128,
+        46,
+        CAMP_MINGHEN_LAYOUT.shopStardustY,
+        label,
+        () => {
+          if (!slot.purchased) this._callbacks.onBuyMinghenStardust?.(slot.slotId);
+        },
+        slot.purchased,
+      );
     });
-    makeFlatButton(this._body, '保存方案', CAMP_MINGHEN_LAYOUT.saveButton.x, CAMP_MINGHEN_LAYOUT.saveButton.y, CAMP_MINGHEN_LAYOUT.saveButton.width, CAMP_MINGHEN_LAYOUT.saveButton.height, () => this._callbacks.onSavePreset(), new Color(25, 75, 110, 190), { noArt: true, border: BORDER });
+    shop.exchangeRecipes.forEach((recipe, index) => {
+      const [a, b] = recipe.inputIds;
+      const canPay = canSpendCopyAsExchangeMaterial(profile.minghenCollection[a])
+        && canSpendCopyAsExchangeMaterial(profile.minghenCollection[b]);
+      const text = recipe.claimed
+        ? `${getMinghenDefinition(recipe.outputId).name}\n已兑`
+        : `${getMinghenDefinition(a).name}+${getMinghenDefinition(b).name}\n→${getMinghenDefinition(recipe.outputId).name}`;
+      this._gridCard(
+        this._body,
+        index,
+        3,
+        170,
+        46,
+        CAMP_MINGHEN_LAYOUT.shopExchangeY,
+        text,
+        () => {
+          if (!recipe.claimed) this._callbacks.onExchangeMinghen?.(recipe.recipeId);
+        },
+        recipe.claimed || !canPay,
+      );
+    });
+    const refreshLeft = MINGHEN_DAILY_AD_REFRESH_LIMIT - (shop.adRefreshUsed ?? 0);
+    makeFlatButton(
+      this._body,
+      refreshLeft > 0 ? `刷新商会(广告·剩${refreshLeft})` : '今日已刷新',
+      CAMP_MINGHEN_LAYOUT.shopRefresh.x,
+      CAMP_MINGHEN_LAYOUT.shopRefresh.y,
+      CAMP_MINGHEN_LAYOUT.shopRefresh.width,
+      CAMP_MINGHEN_LAYOUT.shopRefresh.height,
+      () => {
+        if (refreshLeft > 0) this._callbacks.onRefreshMinghenShop?.();
+      },
+      new Color(40, 70, 100, 200),
+      { noArt: true, border: BORDER },
+    );
   }
 
   private _renderEquipment(profile: PveProfile): void {
@@ -201,30 +313,42 @@ export class CampView {
       const block = new Node(`Profession_${id}`);
       block.setParent(this._body);
       block.setPosition(0, y);
-      block.addComponent(UITransform).setContentSize(540, 145);
+      block.addComponent(UITransform).setContentSize(540, 168);
       const gfx = block.addComponent(Graphics);
       gfx.fillColor = new Color(17, 58, 98, 170);
-      gfx.roundRect(-270, -72, 540, 145, 12);
+      gfx.roundRect(-270, -84, 540, 168, 12);
       gfx.fill();
       gfx.strokeColor = id === profile.selectedProfessionId ? new Color(255, 214, 110) : new Color(100, 175, 220);
       gfx.lineWidth = 2;
-      gfx.roundRect(-269, -71, 538, 143, 11);
+      gfx.roundRect(-269, -83, 538, 166, 11);
       gfx.stroke();
-      const title = makeLabel(block, 0, 42, 490, 30, 23, TEXT, Label.HorizontalAlign.LEFT);
+      const title = makeLabel(block, 0, 52, 490, 30, 23, TEXT, Label.HorizontalAlign.LEFT);
       title.isBold = true;
       title.string = mastery.unlocked ? `${id === profile.selectedProfessionId ? '当前职业 · ' : ''}${PROFESSION_NAMES[id]}    LV.${mastery.level}` : `${PROFESSION_NAMES[id]}    未解锁`;
       if (mastery.unlocked) {
         const progress = masteryProgressForXp(mastery.xp);
-        this._progressBar(block, 0, 10, 480, 14, progress.ratio);
-        const detail = makeLabel(block, 0, -20, 490, 26, 17, DIM, Label.HorizontalAlign.CENTER);
+        this._progressBar(block, 0, 18, 480, 14, progress.ratio);
+        const detail = makeLabel(block, 0, -10, 490, 26, 17, DIM, Label.HorizontalAlign.CENTER);
         detail.string = progress.next == null ? `经验：${mastery.xp}    已满级` : `经验：${mastery.xp} / ${progress.next}    还需 ${progress.remaining} 经验`;
-        const techniques = makeLabel(block, -70, -52, 330, 26, 18, TEXT, Label.HorizontalAlign.LEFT);
+        const stats = previewCampCombatStats(profile, id);
+        const statsLabel = makeLabel(
+          block,
+          0,
+          -36,
+          490,
+          26,
+          18,
+          id === profile.selectedProfessionId ? new Color(255, 214, 110) : TEXT,
+          Label.HorizontalAlign.LEFT,
+        );
+        statsLabel.string = `攻击 ${stats.attack} · 生命 ${stats.maxHp} · 护甲 ${stats.armor} · 射程 ${stats.range}`;
+        const techniques = makeLabel(block, -70, -62, 330, 26, 18, TEXT, Label.HorizontalAlign.LEFT);
         techniques.string = `技法：${mastery.unlockedTechniqueIds.map((technique) => TECHNIQUE_NAMES[technique] ?? '未知技法').join('、') || '基础职业规则'}`;
       }
-      const button = makeFlatButton(block, mastery.unlocked ? `切换${PROFESSION_NAMES[id]}` : '未解锁', 185, -48, 130, 42, () => { if (mastery.unlocked) this._callbacks.onSelectProfession(id); }, new Color(25, 75, 110, 190), { noArt: true, border: BORDER });
+      const button = makeFlatButton(block, mastery.unlocked ? `切换${PROFESSION_NAMES[id]}` : '未解锁', 185, -58, 130, 42, () => { if (mastery.unlocked) this._callbacks.onSelectProfession(id); }, new Color(25, 75, 110, 190), { noArt: true, border: BORDER });
       const component = button.getComponent(Button);
       if (component) component.interactable = mastery.unlocked;
-      y -= 170;
+      y -= 190;
     });
   }
 
