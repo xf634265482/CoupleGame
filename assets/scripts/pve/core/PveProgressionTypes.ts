@@ -72,6 +72,27 @@ export interface MinghenTrackingProgress {
   state: 'HUNT' | 'TRIAL_READY';
 }
 
+export interface MinghenStardustShopSlot {
+  slotId: string;
+  minghenId: string;
+  price: number;
+  purchased: boolean;
+}
+
+export interface MinghenExchangeShopRecipe {
+  recipeId: string;
+  inputIds: [string, string];
+  outputId: string;
+  claimed: boolean;
+}
+
+export interface MinghenDailyShopState {
+  dayKey: string;
+  stardustSlots: MinghenStardustShopSlot[];
+  exchangeRecipes: MinghenExchangeShopRecipe[];
+  adRefreshUsed: number;
+}
+
 export interface PveProfile {
   version: typeof PVE_PROFILE_VERSION;
   highestUnlockedFloor: number;
@@ -82,6 +103,8 @@ export interface PveProfile {
   minghenCollection: Record<string, MinghenCollectionEntry>;
   minghenLoadout: MinghenLoadoutEntry[];
   minghenPresets: MinghenLoadoutPreset[];
+  /** 营地每日命痕商会；缺省由云端 loadProfile 生成。 */
+  minghenDailyShop?: MinghenDailyShopState | null;
   equipmentInventory: PveEquipmentInstance[];
   equipmentLoadout: PveEquipmentLoadout;
   /**
@@ -95,6 +118,9 @@ export interface PveProfile {
   selectedProfessionId: PveProfessionId;
   tracking: MinghenTrackingProgress | null;
   activeChallengeId: string | null;
+  /** 伙伴养成进度；缺省由 normalize 软补全。 */
+  partners: import('./partner/PartnerTypes').PartnersMap;
+  equippedPartnerId: import('./partner/PartnerTypes').PartnerId | null;
   stamina?: number;
   staminaUpdatedAt?: number;
   staminaNextRecoveryAt?: number | null;
@@ -107,6 +133,10 @@ export interface FloorChallengeConfigSnapshot {
   equipmentLoadout: PveEquipmentLoadout;
   minghenLoadout: MinghenLoadoutEntry[];
   trackedMinghenId: string | null;
+  /** 开局冻结携带伙伴；旧存档可缺省。 */
+  partnerId?: import('./partner/PartnerTypes').PartnerId | null;
+  partnerEvolutionStage?: import('./partner/PartnerTypes').PartnerEvolutionStage;
+  partnerLevel?: number;
 }
 
 export interface FloorChallengeSnapshot {
@@ -162,7 +192,12 @@ export interface SettleFloorChallengeRequest {
 }
 
 export interface StartMinghenTrackingRequest { floor: number; minghenId: string; }
-export interface UpdateCampConfigurationRequest { selectedProfessionId?: PveProfessionId; minghenLoadout?: MinghenLoadoutEntry[]; equipmentLoadout?: PveEquipmentLoadout; }
+export interface UpdateCampConfigurationRequest {
+  selectedProfessionId?: PveProfessionId;
+  minghenLoadout?: MinghenLoadoutEntry[];
+  equipmentLoadout?: PveEquipmentLoadout;
+  equippedPartnerId?: import('./partner/PartnerTypes').PartnerId | null;
+}
 
 export interface SaveFloorChallengeRuntimeRequest {
   challengeId: string;

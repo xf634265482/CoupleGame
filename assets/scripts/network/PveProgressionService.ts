@@ -78,7 +78,12 @@ export async function updateCampConfiguration(request: UpdateCampConfigurationRe
 
 export type ManageCampRequest =
   | { type: 'EQUIPMENT'; action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL'; instanceId: string }
-  | { type: 'SAVE_MINGHEN_PRESET'; id?: string; name: string };
+  | { type: 'EQUIPMENT'; action: 'SYNTHESIZE'; instanceIds: [string, string, string] }
+  | { type: 'SAVE_MINGHEN_PRESET'; id?: string; name: string }
+  | { type: 'MINGHEN_BUY_STARDUST'; slotId: string }
+  | { type: 'MINGHEN_EXCHANGE'; recipeId: string }
+  | { type: 'MINGHEN_REFRESH_SHOP' }
+  | { type: 'PARTNER'; action: 'EVOLVE'; partnerId: string };
 
 export async function manageCamp(request: ManageCampRequest): Promise<LoadPveProfileResponse> {
   return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'manageCamp', request }), 'PVE_MANAGE_CAMP_FAILED');

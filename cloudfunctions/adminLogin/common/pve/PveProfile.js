@@ -1,7 +1,8 @@
 const { resolveStamina } = require('./PveStamina');
+const { createDefaultPartnersMap, normalizePartnersMap } = require('./PvePartner');
 
 const PROFILE_VERSION = 1;
-const MAX_READY_FLOOR = 14;
+const MAX_READY_FLOOR = 35;
 const PROFESSION_IDS = ['WARRIOR', 'ARCHER', 'RANGER'];
 
 function defaultMastery(unlocked, xp = 0, level = 1) {
@@ -28,6 +29,7 @@ function createDefaultProfile(now = Date.now()) {
     minghenCollection: {},
     minghenLoadout: [],
     minghenPresets: [],
+    minghenDailyShop: null,
     equipmentInventory: [],
     equipmentLoadout: {},
     gold: 0,
@@ -40,6 +42,8 @@ function createDefaultProfile(now = Date.now()) {
     selectedProfessionId: 'WARRIOR',
     tracking: null,
     activeChallengeId: null,
+    partners: createDefaultPartnersMap(),
+    equippedPartnerId: 'MOBILITY',
     stamina: stamina.stamina,
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
@@ -107,6 +111,7 @@ function normalizeProfile(value, now = Date.now()) {
       : defaults.staminaUpdatedAt,
     now,
   );
+  const partnerNorm = normalizePartnersMap(value.partners, value.equippedPartnerId);
 
   return {
     ...defaults,
@@ -117,6 +122,7 @@ function normalizeProfile(value, now = Date.now()) {
     minghenCollection: isPlainObject(value.minghenCollection) ? value.minghenCollection : {},
     minghenLoadout: Array.isArray(value.minghenLoadout) ? value.minghenLoadout : [],
     minghenPresets: Array.isArray(value.minghenPresets) ? value.minghenPresets : [],
+    minghenDailyShop: isPlainObject(value.minghenDailyShop) ? value.minghenDailyShop : null,
     equipmentInventory: Array.isArray(value.equipmentInventory) ? value.equipmentInventory : [],
     equipmentLoadout: isPlainObject(value.equipmentLoadout) ? value.equipmentLoadout : {},
     gold: mergedStardust,
@@ -127,6 +133,8 @@ function normalizeProfile(value, now = Date.now()) {
     activeChallengeId: typeof value.activeChallengeId === 'string' && value.activeChallengeId
       ? value.activeChallengeId
       : null,
+    partners: partnerNorm.partners,
+    equippedPartnerId: partnerNorm.equippedPartnerId,
     stamina: stamina.stamina,
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
@@ -145,6 +153,7 @@ function resetExpeditionProgress(value, now = Date.now()) {
 
 function resetCampInventory(value, now = Date.now()) {
   const profile = normalizeProfile(value, now);
+  // 伙伴养成不属于营地背包清仓范围，保留 partners / equippedPartnerId。
   return {
     ...profile,
     minghenCollection: {},

@@ -1,5 +1,5 @@
 const { COLLECTIONS } = require('../constants');
-const { getDb, getUserById } = require('../db');
+const { getDb, getUserById, runTransactionWithRetry } = require('../db');
 const { normalizeProfile } = require('./PveProfile');
 const { consumeForFloorChallenge } = require('./PveStamina');
 const {
@@ -66,8 +66,7 @@ async function loadActiveFloorChallenge(user) {
 }
 
 async function startFloorChallenge(user, rawRequest = {}) {
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
     const userResult = await userRef.get();
     const userDoc = dataOf(userResult);
@@ -138,8 +137,7 @@ async function startFloorChallenge(user, rawRequest = {}) {
 
 async function settleFloorChallenge(user, rawRequest = {}) {
   const request = validateSettleFloorChallengeRequest(rawRequest);
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
     const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
     const [userResult, challengeResult] = await Promise.all([userRef.get(), challengeRef.get()]);
@@ -185,8 +183,7 @@ async function settleFloorChallenge(user, rawRequest = {}) {
 
 async function saveFloorChallengeRuntime(user, rawRequest = {}) {
   const request = validateSaveFloorChallengeRuntimeRequest(rawRequest);
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
     const challenge = dataOf(await challengeRef.get());
     if (!challenge) {
