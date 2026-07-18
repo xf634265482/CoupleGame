@@ -172,4 +172,25 @@ describe('PveChallengeState', () => {
       expect(settled.profile.activeChallengeId).toBeNull();
     }
   });
+
+  test('freezes partner into challenge config and grants clear XP', () => {
+    const challenge = buildChallenge('u1', request({
+      partnerId: 'MOBILITY',
+      partnerEvolutionStage: 1,
+      partnerLevel: 1,
+    }), 100, 'c-partner', 1);
+    expect(challenge.config.partnerId).toBe('MOBILITY');
+    expect(challenge.config.partnerLevel).toBe(1);
+
+    const profile = createDefaultProfile();
+    const active = applyChallengeStart(profile, challenge, 100);
+    const beforeExp = active.partners.MOBILITY.exp;
+    const settled = applyChallengeSettlement(active, challenge, {
+      status: 'CLEAR',
+      clearTurns: 10,
+      completedOptionalObjectiveIds: [],
+    }, 200);
+    // 30 + floor(1) = 31
+    expect(settled.profile.partners.MOBILITY.exp).toBe(beforeExp + 31);
+  });
 });

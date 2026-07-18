@@ -2,6 +2,7 @@ const { generateId } = require('../id');
 const { calculateRewards, applyMastery, unlockProfessions } = require('./PveRewardV2');
 const { settleMinghen } = require('./PveMinghen');
 const { MAX_READY_FLOOR } = require('./PveProfile');
+const { grantClearExpOnProfile } = require('./PvePartner');
 
 function stableLoadoutEntries(entries) {
   return [...entries].sort((a, b) => a.id.localeCompare(b.id));
@@ -15,6 +16,9 @@ function buildChallenge(userId, request, now = Date.now(), challengeId = generat
   const challengeSeed = Number.isInteger(seed)
     ? seed
     : Number(BigInt(challengeId) & 0x7fffffffn);
+  const partnerId = request.partnerId ?? null;
+  const partnerEvolutionStage = request.partnerEvolutionStage ?? 1;
+  const partnerLevel = request.partnerLevel ?? 1;
   return {
     challengeId,
     userId,
@@ -27,6 +31,9 @@ function buildChallenge(userId, request, now = Date.now(), challengeId = generat
       equipmentLoadout: stableEquipment(request.equipmentLoadout),
       minghenLoadout: stableLoadoutEntries(request.minghenLoadout),
       trackedMinghenId: request.trackedMinghenId,
+      partnerId,
+      partnerEvolutionStage,
+      partnerLevel,
     },
     startedAt: now,
     updatedAt: now,
@@ -35,10 +42,13 @@ function buildChallenge(userId, request, now = Date.now(), challengeId = generat
 
 function requestMatchesChallenge(request, challenge) {
   if (!challenge || challenge.status !== 'ACTIVE') return false;
+  const reqPartner = request.partnerId ?? null;
+  const cfgPartner = challenge.config.partnerId ?? null;
   return request.floor === challenge.floor
     && request.mode === challenge.mode
     && request.professionId === challenge.config.professionId
     && request.trackedMinghenId === challenge.config.trackedMinghenId
+    && reqPartner === cfgPartner
     && JSON.stringify(stableEquipment(request.equipmentLoadout))
       === JSON.stringify(stableEquipment(challenge.config.equipmentLoadout))
     && JSON.stringify(stableLoadoutEntries(request.minghenLoadout))
@@ -229,6 +239,10 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       rewards.firstClear,
     ),
   };
+  // 携带伙伴通关经验：仅 CLEAR，按快照 partnerId，不可由客户端伪造更高阶段。
+  if (challenge.config.partnerId) {
+    nextProfile = grantClearExpOnProfile(nextProfile, challenge.config.partnerId, challenge.floor);
+  }
   const minghenDustGain = Math.max(0, minghen.dust - profile.minghenDust);
   const rewardSnapshot = {
     ...rewards,

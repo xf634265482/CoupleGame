@@ -1,4 +1,5 @@
 const { MAX_READY_FLOOR, PROFESSION_IDS } = require('./PveProfile');
+const { normalizePartnersMap } = require('./PvePartner');
 
 const CHALLENGE_MODES = ['PROGRESSION', 'HUNT', 'TRIAL', 'PRACTICE'];
 const CHALLENGE_RESULT_STATUSES = ['CLEAR', 'DEAD', 'WITHDRAW'];
@@ -101,6 +102,16 @@ function validateStartFloorChallengeRequest(profile, request) {
     minghenLoadout: validateMinghenLoadout(request.minghenLoadout ?? []),
     trackedMinghenId,
     abandonActive: request.abandonActive === true,
+    // 伙伴快照一律来自永久档案，忽略客户端伪造的 stage/level。
+    ...(() => {
+      const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);
+      const progress = partners[equippedPartnerId];
+      return {
+        partnerId: equippedPartnerId,
+        partnerEvolutionStage: progress.evolutionStage,
+        partnerLevel: progress.level,
+      };
+    })(),
   };
 }
 
