@@ -1,7 +1,9 @@
 import { createChapter1ExpeditionState } from '../../assets/scripts/pve/core/chapter1/Chapter1ExpeditionFactory';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 
 function profile(): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 7,
@@ -20,6 +22,8 @@ function profile(): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     updatedAt: 1,
@@ -87,5 +91,31 @@ describe('Chapter 1 official ExpeditionState factory', () => {
     expect(state.player.classId).toBe('BERSERKER');
     expect(state.floorState.ap).toBeGreaterThanOrEqual(8);
     expect(state.floorState.ap).toBeLessThanOrEqual(13);
+  });
+
+  test('applies GM player overrides on fresh chapter1 state', () => {
+    const balance = {
+      globalConfig: { player: { initialHp: 9999, initialGold: 12, initialAnima: 3, apBase: 20, moveCost: 0 } },
+      chapterConfigs: {},
+      unitConfigs: {},
+    };
+    const state = createChapter1ExpeditionState(challenge(1), profile(), balance);
+    expect(state.balanceSnapshot).toEqual(balance);
+    expect(state.player.maxHp).toBe(9999);
+    expect(state.player.hp).toBe(9999);
+    expect(state.player.gold).toBe(12);
+    expect(state.player.anima).toBe(3);
+    expect(state.player.animaProgress).toBe(3);
+    expect(state.floorState.ap).toBeGreaterThanOrEqual(21);
+    expect(state.floorState.ap).toBeLessThanOrEqual(26);
+  });
+
+  test('keeps profession HP when balance snapshot has no player fields', () => {
+    const state = createChapter1ExpeditionState(challenge(1), profile(), {
+      globalConfig: {},
+      chapterConfigs: {},
+      unitConfigs: {},
+    });
+    expect(state.player.maxHp).toBe(320);
   });
 });

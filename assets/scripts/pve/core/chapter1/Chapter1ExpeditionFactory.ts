@@ -10,11 +10,15 @@ import {
 } from '../Chapter1Monsters';
 import { createFogGrid, revealAround } from '../FogSystem';
 import { bossChapterScaling, MONSTER_BASE } from '../PveConstants';
-import type { Coord, ExpeditionState, FixedEntity, Monster, RunPlayer } from '../PveTypes';
+import {
+  getBalanceSnapshot,
+  getPlayerBalanceConfig,
+  resolveProfessionBaseWithBalance,
+} from '../PveBalance';
+import type { Coord, ExpeditionState, FixedEntity, Monster, PveBalanceSnapshot, RunPlayer } from '../PveTypes';
 import type { FloorChallengeSnapshot, PveProfile } from '../PveProgressionTypes';
 import { createRng, hashSeed } from '../rng';
 import { equipmentMaxHpBonus } from '../equipment/EquipmentProgression';
-import { professionBaseStats } from '../professions/ProfessionBaseStats';
 import { classIdFromProfessionId, loadoutToRunEquipment } from '../CampCombatPreview';
 import { generateChapter1Floor } from './Chapter1FloorGenerator';
 import type { Chapter1MonsterSpawn } from './Chapter1FloorCatalog';
@@ -77,16 +81,21 @@ export function createChapter1Monster(spawn: Chapter1MonsterSpawn): Monster {
   return monster;
 }
 
-function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): RunPlayer {
+function createPlayer(
+  snapshot: FloorChallengeSnapshot,
+  profile: PveProfile,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+): RunPlayer {
   const equipment = loadoutToRunEquipment(profile);
-  const base = professionBaseStats(snapshot.config.professionId);
+  const base = resolveProfessionBaseWithBalance(snapshot.config.professionId, balanceSnapshot, 1);
+  const playerConfig = getPlayerBalanceConfig(balanceSnapshot, 1);
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
     hp: maxHp,
     maxHp,
-    gold: 0,
-    anima: 0,
-    animaProgress: 0,
+    gold: playerConfig.initialGold ?? 0,
+    anima: playerConfig.initialAnima ?? 0,
+    animaProgress: playerConfig.initialAnima ?? 0,
     animaThreshold: 100,
     classId: classIdFromProfessionId(snapshot.config.professionId),
     equipment,
@@ -98,10 +107,11 @@ function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): Ru
 export function createChapter1ExpeditionState(
   snapshot: FloorChallengeSnapshot,
   profile: PveProfile,
+  balanceSnapshot?: PveBalanceSnapshot | null,
 ): ExpeditionState {
   if (snapshot.floor < 1 || snapshot.floor > 7) throw new Error('CHAPTER1_FLOOR_OUT_OF_RANGE');
   const map = generateChapter1Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
-  const player = createPlayer(snapshot, profile);
+  const player = createPlayer(snapshot, profile, balanceSnapshot);
   const revealed = createFogGrid(map.size);
   if (map.fogMode === 'NONE') {
     for (const row of revealed) row.fill(true);
@@ -109,7 +119,10 @@ export function createChapter1ExpeditionState(
     revealAround(revealed, map.player);
   }
   const rng = createRng(hashSeed(`${snapshot.seed}:floor:${snapshot.floor}:turn:1`));
-  const { dice, ap } = rollAp(rng, professionBaseStats(snapshot.config.professionId).apBase);
+  const { dice, ap } = rollAp(
+    rng,
+    resolveProfessionBaseWithBalance(snapshot.config.professionId, balanceSnapshot, 1).apBase,
+  );
   const entities: FixedEntity[] = map.walls.map((pos, index) => ({
     id: `ROCK_${index}`,
     type: 'ROCK',
@@ -183,7 +196,7 @@ export function createChapter1ExpeditionState(
         objectiveZoneCells: map.objectiveCells.map((cell) => ({ ...cell })),
       },
     },
-    balanceSnapshot: null,
+    balanceSnapshot: getBalanceSnapshot(balanceSnapshot),
     persistentFloorMode: true,
     equipmentDropPool: [...map.equipmentIds],
     lootSeq: 0,
