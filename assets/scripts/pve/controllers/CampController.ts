@@ -5,7 +5,6 @@ import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefiniti
 import {
   SYNTH_STARDUST,
   nextEquipQuality,
-  pickSynthesizeMaterials,
 } from '../core/equipment/EquipmentProgression';
 import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
 import { canSynthesizeMinghenToII } from '../core/minghen/MinghenLoadout';
@@ -33,7 +32,7 @@ export class CampController extends Component {
       onSynthesizeMinghen: (id) => void this._synthesizeMinghen(id),
       onToggleEquipment: (id) => void this._toggleEquipment(id),
       onManageEquipment: (action, id) => void this._manageEquipment(action, id),
-      onSynthesizeEquipment: (id) => void this._synthesizeEquipment(id),
+      onSynthesizeEquipmentSlots: (ids) => void this._synthesizeEquipmentSlots(ids),
       onSectionChanged: (section) => {
         if (section === 'EQUIPMENT' && this._profile) {
           void ensureEquipmentAssetsForFloor(this._profile.highestUnlockedFloor);
@@ -218,26 +217,21 @@ export class CampController extends Component {
     }
   }
 
-  private async _synthesizeEquipment(primaryInstanceId: string): Promise<void> {
+  private async _synthesizeEquipmentSlots(instanceIds: [string, string, string]): Promise<void> {
     if (this._busy || !this._view || !this._profile) return;
-    const materials = pickSynthesizeMaterials(
-      this._profile.equipmentInventory,
-      this._profile.equipmentLoadout,
-      primaryInstanceId,
-    );
-    if (!materials) {
-      this._view.showResultPopup('无法合成', '需要三件未锁定、未穿戴的同名同品质装备');
-      return;
-    }
-    const primary = this._profile.equipmentInventory.find((x) => x.instanceId === primaryInstanceId);
+    const primary = this._profile.equipmentInventory.find((x) => x.instanceId === instanceIds[0]);
     if (!primary) {
-      this._view.showResultPopup('操作失败', '未找到该装备');
+      this._view.showResultPopup('操作失败', '未找到合成材料');
       return;
     }
     const nextQuality = nextEquipQuality(primary.quality);
     const cost = SYNTH_STARDUST[primary.quality as keyof typeof SYNTH_STARDUST];
     if (!nextQuality || cost == null) {
       this._view.showResultPopup('无法合成', '传奇装备无法继续合成');
+      return;
+    }
+    if (this._profile.gold < cost) {
+      this._view.showResultPopup('无法合成', '星尘不足');
       return;
     }
     const qualityNames = { COMMON: '普通', FINE: '精良', RARE: '稀有', EPIC: '史诗', LEGENDARY: '传说' } as const;
@@ -248,10 +242,11 @@ export class CampController extends Component {
       const { profile } = await manageCamp({
         type: 'EQUIPMENT',
         action: 'SYNTHESIZE',
-        instanceIds: [materials[0]!, materials[1]!, materials[2]!],
+        instanceIds,
       });
       this._profile = profile;
       if (!this._view.node.isValid) return;
+      this._view.clearEquipmentSynthSlots();
       this._view.setProfile(profile);
       const spent = Math.max(0, beforeGold - profile.gold);
       this._view.showResultPopup(

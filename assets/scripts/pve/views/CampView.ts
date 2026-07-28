@@ -4,7 +4,6 @@ import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefiniti
 import {
   ENHANCE_COST,
   SYNTH_STARDUST,
-  countSynthesizeEligible,
   effectiveEquipPrimaryRange,
   nextEquipQuality,
   toFixedEquipItem,
@@ -20,6 +19,7 @@ import { ensureEquipmentAssetsForFloor } from '../EquipmentResourceLoader';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { ensureArtChild } from '../../ui/UiSprite';
 import { CAMP_MINGHEN_LAYOUT, minghenContentMetrics } from './CampMinghenLayout';
+import { CAMP_EQUIPMENT_LAYOUT, equipmentContentMetrics } from './CampEquipmentLayout';
 import { MINGHEN_LOADOUT_SLOTS } from '../core/PveConstants';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
@@ -33,7 +33,7 @@ export interface CampViewCallbacks {
   onSynthesizeMinghen(id: string): void;
   onToggleEquipment(instanceId: string): void;
   onManageEquipment(action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL', instanceId: string): void;
-  onSynthesizeEquipment(primaryInstanceId: string): void;
+  onSynthesizeEquipmentSlots(instanceIds: [string, string, string]): void;
   onSectionChanged?(section: CampSection): void;
 }
 
@@ -63,6 +63,7 @@ export class CampView {
   private _detail: Node | null = null;
   private _equipmentIconRevision = 0;
   private _synthSlots: [string | null, string | null] = [null, null];
+  private _equipSynthSlots: [string | null, string | null, string | null] = [null, null, null];
 
   constructor(parent: Node, private readonly _callbacks: CampViewCallbacks) {
     this._overlay = new Node('PersistentCampModal');
@@ -141,6 +142,10 @@ export class CampView {
 
   clearMinghenSynthSlots(): void {
     this._synthSlots = [null, null];
+  }
+
+  clearEquipmentSynthSlots(): void {
+    this._equipSynthSlots = [null, null, null];
   }
 
   showSection(section: CampSection): void {
@@ -350,33 +355,203 @@ export class CampView {
     this._equipmentIconRevision += 1;
     const iconRevision = this._equipmentIconRevision;
     void ensureEquipmentAssetsForFloor(profile.highestUnlockedFloor);
-    const summary = makeLabel(this._body, 0, 258, 540, 32, 20, TEXT, Label.HorizontalAlign.LEFT);
+    const L = CAMP_EQUIPMENT_LAYOUT;
+    const equippedIds = new Set(Object.values(profile.equipmentLoadout).filter((id): id is string => !!id));
+    const bagItems = profile.equipmentInventory.filter((item) => !equippedIds.has(item.instanceId));
+    const metrics = equipmentContentMetrics(bagItems.length);
+
+    const scrollNode = new Node('EquipmentScroll');
+    scrollNode.setParent(this._body);
+    scrollNode.setPosition(0, 0);
+    scrollNode.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
+    const scroll = scrollNode.addComponent(ScrollView);
+    scroll.horizontal = false;
+    scroll.vertical = true;
+    scroll.inertia = true;
+    const view = new Node('View');
+    view.setParent(scrollNode);
+    view.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
+    view.addComponent(Mask);
+    const content = new Node('Content');
+    content.setParent(view);
+    content.addComponent(UITransform).setContentSize(L.viewportWidth, metrics.contentHeight);
+    content.setPosition(0, (L.viewportHeight - metrics.contentHeight) / 2);
+    scroll.content = content;
+
+    const summary = makeLabel(content, 0, L.summaryY, 540, 32, 20, TEXT, Label.HorizontalAlign.LEFT);
     summary.string = `永久背包 ${profile.equipmentInventory.length}/60    星尘：${profile.gold}`;
-    this._sectionLabel('已穿戴装备', 218);
-    const slotSize = 88;
-    const slotGap = 18;
-    const slotY = 105;
-    const slotTotal = SLOT_ORDER.length * slotSize + (SLOT_ORDER.length - 1) * slotGap;
+
+    const loadoutTitle = makeLabel(content, 0, L.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    loadoutTitle.isBold = true;
+    loadoutTitle.string = '已穿戴装备';
+
+    const slotTotal = SLOT_ORDER.length * L.loadoutSlotSize + (SLOT_ORDER.length - 1) * L.loadoutSlotGap;
     SLOT_ORDER.forEach((slot, index) => {
       const instanceId = profile.equipmentLoadout[slot];
       const item = instanceId ? profile.equipmentInventory.find((entry) => entry.instanceId === instanceId) : undefined;
-      const x = -slotTotal / 2 + slotSize / 2 + index * (slotSize + slotGap);
-      this._equipSquareSlot(this._body, SLOT_NAMES[slot], x, slotY, slotSize, item, iconRevision, () => {
+      const x = -slotTotal / 2 + L.loadoutSlotSize / 2 + index * (L.loadoutSlotSize + L.loadoutSlotGap);
+      this._equipSquareSlot(content, SLOT_NAMES[slot], x, L.loadoutY, L.loadoutSlotSize, item, iconRevision, () => {
         if (item) this._showEquipmentDetail(item, true);
       });
     });
-    this._sectionLabel('永久背包', 18);
-    const equippedIds = new Set(Object.values(profile.equipmentLoadout).filter((id): id is string => !!id));
-    const bagItems = profile.equipmentInventory.filter((item) => !equippedIds.has(item.instanceId));
-    const bagSize = 96;
-    const bagCols = 5;
-    this._scrollGrid(0, -155, 540, 225, bagCols, bagSize, bagSize, bagItems.length, (index, parent, y) => {
-      const item = bagItems[index];
-      if (!item) return;
-      this._bagIconCard(parent, index, bagCols, bagSize, y, item, iconRevision, () => {
+
+    const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    bagTitle.isBold = true;
+    bagTitle.string = '永久背包';
+
+    bagItems.forEach((item, index) => {
+      this._bagIconCard(content, index, L.bagCols, L.bagSize, metrics.bagFirstRowY, item, iconRevision, () => {
         this._showEquipmentDetail(item, false);
+      }, L.bagGap);
+    });
+
+    this._renderEquipmentSynth(content, profile, metrics, iconRevision);
+  }
+
+  private _renderEquipmentSynth(
+    parent: Node,
+    profile: PveProfile,
+    metrics: ReturnType<typeof equipmentContentMetrics>,
+    iconRevision: number,
+  ): void {
+    const L = CAMP_EQUIPMENT_LAYOUT;
+    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
+    title.isBold = true;
+    title.string = '装备合成';
+
+    const filled = this._equipSynthSlots
+      .map((id) => (id ? profile.equipmentInventory.find((x) => x.instanceId === id) : undefined))
+      .filter((x): x is PveEquipmentInstance => !!x);
+    const allFilled = this._equipSynthSlots.every(Boolean) && filled.length === 3;
+    const matched = allFilled
+      && filled[0]!.definitionId === filled[1]!.definitionId
+      && filled[0]!.definitionId === filled[2]!.definitionId
+      && filled[0]!.quality === filled[1]!.quality
+      && filled[0]!.quality === filled[2]!.quality;
+    const next = matched ? nextEquipQuality(filled[0]!.quality) : null;
+    const cost = matched && next ? (SYNTH_STARDUST[filled[0]!.quality as keyof typeof SYNTH_STARDUST] ?? null) : null;
+    const canSynth = matched && !!next && cost != null && profile.gold >= cost;
+
+    let resultText = '结果';
+    if (allFilled && matched && !next) resultText = '满品不可合成';
+    else if (allFilled && matched && next && cost != null && profile.gold < cost) {
+      resultText = `${getFixedEquipmentDefinition(filled[0]!.definitionId).name}\n${QUALITY_NAMES[next]}\n星尘不足`;
+    } else if (canSynth && next && cost != null) {
+      resultText = `${getFixedEquipmentDefinition(filled[0]!.definitionId).name}\n${QUALITY_NAMES[next]}\n${cost}星尘`;
+    } else if (this._equipSynthSlots.some(Boolean)) {
+      resultText = '需同名同品质×3';
+    }
+
+    const lines = new Node('EquipSynthLines');
+    lines.setParent(parent);
+    lines.setPosition(0, 0);
+    lines.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
+    const gfx = lines.addComponent(Graphics);
+    gfx.strokeColor = BORDER;
+    gfx.lineWidth = 2;
+    for (const x of L.synthInputXs) {
+      gfx.moveTo(x, metrics.synthInputY);
+      gfx.lineTo(0, metrics.synthResultY);
+      gfx.stroke();
+    }
+
+    this._equipSynthSlotCard(parent, 0, metrics.synthResultY, resultText, true, undefined, iconRevision, () => undefined);
+    L.synthInputXs.forEach((x, index) => {
+      const id = this._equipSynthSlots[index];
+      const item = id ? profile.equipmentInventory.find((entry) => entry.instanceId === id) : undefined;
+      const label = item
+        ? `${getFixedEquipmentDefinition(item.definitionId).name}\n${QUALITY_NAMES[item.quality]}`
+        : `材料${index + 1}`;
+      this._equipSynthSlotCard(parent, x, metrics.synthInputY, label, false, item, iconRevision, () => {
+        this._equipSynthSlots[index] = null;
+        this.showSection('EQUIPMENT');
       });
     });
+
+    const ids = this._equipSynthSlots;
+    const synthBtn = makeFlatButton(
+      parent,
+      '合成',
+      0,
+      metrics.synthButtonY,
+      L.synthButtonWidth,
+      L.synthButtonHeight,
+      () => {
+        if (!canSynth || !ids[0] || !ids[1] || !ids[2]) return;
+        this._callbacks.onSynthesizeEquipmentSlots([ids[0], ids[1], ids[2]]);
+      },
+      new Color(25, 75, 110, 190),
+      { noArt: true, border: BORDER },
+    );
+    const btn = synthBtn.getComponent(Button);
+    if (btn) btn.interactable = canSynth;
+  }
+
+  private _equipSynthSlotCard(
+    parent: Node,
+    x: number,
+    y: number,
+    text: string,
+    dashed: boolean,
+    item: PveEquipmentInstance | undefined,
+    iconRevision: number,
+    onClick: () => void,
+  ): void {
+    const L = CAMP_EQUIPMENT_LAYOUT;
+    const card = makeFlatButton(
+      parent,
+      item ? '' : text,
+      x,
+      y,
+      L.synthSlotWidth,
+      L.synthSlotHeight,
+      onClick,
+      new Color(13, 47, 92, 210),
+      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : BORDER },
+    );
+    const label = card.getChildByName('Label')?.getComponent(Label);
+    if (item) {
+      if (label) label.node.active = false;
+      this._attachEquipmentIcon(card, item, iconRevision, L.synthSlotHeight - 12, true);
+      return;
+    }
+    if (label) {
+      label.fontSize = 14;
+      label.lineHeight = 18;
+      label.overflow = Label.Overflow.SHRINK;
+      label.enableWrapText = true;
+      label.string = text;
+    }
+  }
+
+  private _canPutEquipmentIntoSynth(item: PveEquipmentInstance): boolean {
+    if (!this._profile) return false;
+    if (item.locked) return false;
+    const equipped = new Set(Object.values(this._profile.equipmentLoadout).filter((id): id is string => !!id));
+    if (equipped.has(item.instanceId)) return false;
+    if (this._equipSynthSlots.includes(item.instanceId)) return false;
+    if (this._equipSynthSlots.every(Boolean)) return false;
+    if (!nextEquipQuality(item.quality)) return false;
+    const filled = this._equipSynthSlots.filter((id): id is string => !!id);
+    if (filled.length === 0) return true;
+    const anchor = this._profile.equipmentInventory.find((x) => x.instanceId === filled[0]);
+    if (!anchor) return false;
+    return anchor.definitionId === item.definitionId && anchor.quality === item.quality;
+  }
+
+  private _putEquipmentIntoSynth(instanceId: string): void {
+    const item = this._profile?.equipmentInventory.find((x) => x.instanceId === instanceId);
+    if (!item || !this._canPutEquipmentIntoSynth(item)) {
+      this.showNotice('无法投入：须未穿戴未锁定，同名同品质，且槽未满');
+      return;
+    }
+    const empty = this._equipSynthSlots.findIndex((id) => !id);
+    if (empty < 0) {
+      this.showNotice('合成槽已满，请先点材料格卸下');
+      return;
+    }
+    this._equipSynthSlots[empty] = instanceId;
+    this.showSection('EQUIPMENT');
   }
 
   private _renderIntel(profile: PveProfile): void {
@@ -462,39 +637,16 @@ export class CampView {
     this._showDetail(`${getMinghenDefinition(id).name}详情`, `${formatMinghenCampDetail(id, level)}\n${trackingText}`, actions);
   }
 
-  private _synthesizeAction(item: PveEquipmentInstance, equipped: boolean): {
-    text: string;
-    action: () => void;
-    disabled?: boolean;
-  } {
-    const next = nextEquipQuality(item.quality);
-    const eligible = this._profile
-      ? countSynthesizeEligible(
-        this._profile.equipmentInventory,
-        this._profile.equipmentLoadout,
-        item.definitionId,
-        item.quality,
-      )
-      : 0;
-    const cost = next ? (SYNTH_STARDUST[item.quality as keyof typeof SYNTH_STARDUST] ?? null) : null;
-    const canSynth = !equipped && !item.locked && !!next && cost != null && eligible >= 3;
-    let text = '合成';
-    if (!next) text = '合成（满品）';
-    else if (eligible < 3) text = `合成（还差${3 - eligible}件）`;
-    else if (cost != null) text = `合成（${cost}星尘）`;
-    return {
-      text,
-      action: () => this._callbacks.onSynthesizeEquipment(item.instanceId),
-      disabled: !canSynth,
-    };
-  }
-
   private _showEquipmentDetail(item: PveEquipmentInstance, equipped: boolean): void {
     const body = this._equipmentDetailText(item, equipped);
     if (!equipped) {
       this._showDetail('装备详情', body, [
         { text: '装备', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
-        this._synthesizeAction(item, false),
+        {
+          text: '投入合成',
+          disabled: !this._canPutEquipmentIntoSynth(item),
+          action: () => this._putEquipmentIntoSynth(item.instanceId),
+        },
         { text: item.locked ? '解锁' : '锁定', action: () => this._callbacks.onManageEquipment('TOGGLE_LOCK', item.instanceId) },
         { text: '出售', action: () => this._callbacks.onManageEquipment('SELL', item.instanceId), disabled: item.locked },
       ], item);
@@ -503,7 +655,6 @@ export class CampView {
     const nextLevel = item.enhanceLevel + 1;
     const enhanceCost = item.enhanceLevel >= 5 ? null : (ENHANCE_COST[nextLevel] ?? null);
     const enhanceLabel = enhanceCost == null ? '已满级' : `强化（${enhanceCost}星尘）`;
-    // 合成材料须未穿戴：已装备详情不提供合成入口（去背包点同名副本）。
     this._showDetail('装备详情', body, [
       { text: '卸下', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
       {
@@ -624,8 +775,8 @@ export class CampView {
     item: PveEquipmentInstance,
     iconRevision: number,
     onClick: () => void,
+    gap = 12,
   ): void {
-    const gap = 12;
     const total = columns * size + (columns - 1) * gap;
     const column = index % columns;
     const row = Math.floor(index / columns);
