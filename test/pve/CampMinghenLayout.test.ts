@@ -3,6 +3,7 @@ import {
   cardBounds,
   intersects,
   minghenContentMetrics,
+  ownedRows,
 } from '../../assets/scripts/pve/views/CampMinghenLayout';
 
 describe('camp Minghen layout geometry', () => {
@@ -43,5 +44,13 @@ describe('camp Minghen layout geometry', () => {
       centerY: metrics.synthResultY,
     };
     expect(intersects(leftInput, result)).toBe(false);
+  });
+
+  test('empty owned list does not reserve a blank inventory row', () => {
+    expect(ownedRows(0)).toBe(0);
+    const empty = minghenContentMetrics(0);
+    const withItems = minghenContentMetrics(4);
+    expect(empty.synthTitleY).toBeGreaterThan(withItems.synthTitleY);
+    expect(empty.ownedTitleY - empty.synthTitleY).toBeLessThan(80);
   });
 });

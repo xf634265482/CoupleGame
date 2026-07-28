@@ -9,12 +9,12 @@ export interface LayoutBounds {
 /** 装备台：穿戴 + 背包 + 合成（上1下3）；整页 ScrollView。 */
 export const CAMP_EQUIPMENT_LAYOUT = {
   viewportWidth: 570,
-  viewportHeight: 620,
-  summaryY: 250,
-  loadoutTitleY: 210,
+  viewportHeight: 720,
+  summaryY: 320,
+  loadoutTitleY: 275,
   loadoutSlotSize: 88,
   loadoutSlotGap: 18,
-  loadoutY: 120,
+  loadoutY: 185,
   bagCols: 5,
   bagSize: 96,
   bagGap: 10,
@@ -24,11 +24,12 @@ export const CAMP_EQUIPMENT_LAYOUT = {
   synthInputXs: [-130, 0, 130] as const,
   synthButtonWidth: 160,
   synthButtonHeight: 48,
-  contentBottomPadding: 40,
+  /** 滚到底时合成按钮下方留白，避免 Mask 裁切。 */
+  contentBottomPadding: 100,
 } as const;
 
 export function bagRows(count: number): number {
-  return Math.max(1, Math.ceil(Math.max(0, count) / CAMP_EQUIPMENT_LAYOUT.bagCols));
+  return Math.ceil(Math.max(0, count) / CAMP_EQUIPMENT_LAYOUT.bagCols);
 }
 
 export function equipmentContentMetrics(bagCount: number): {
@@ -44,15 +45,18 @@ export function equipmentContentMetrics(bagCount: number): {
   const loadoutBottom = L.loadoutY - L.loadoutSlotSize / 2 - 24;
   const bagTitleY = loadoutBottom - 20;
   const bagFirstRowY = bagTitleY - 50;
-  const bagBottom = bagFirstRowY - bagRows(bagCount) * (L.bagSize + L.bagGap);
-  const synthTitleY = bagBottom - 36;
-  const synthResultY = synthTitleY - 50;
-  const synthInputY = synthResultY - 90;
-  const synthButtonY = synthInputY - 70;
-  const top = L.summaryY + 40;
-  const bottom = synthButtonY - L.contentBottomPadding;
+  const rows = bagRows(bagCount);
+  const bagBottom = rows > 0
+    ? bagFirstRowY - rows * (L.bagSize + L.bagGap)
+    : bagTitleY - 12;
+  const synthTitleY = bagBottom - 28;
+  const synthResultY = synthTitleY - 48;
+  const synthInputY = synthResultY - 88;
+  const synthButtonY = synthInputY - (L.synthSlotHeight / 2 + L.synthButtonHeight / 2 + 20);
+  const top = L.summaryY + 36;
+  const bottom = synthButtonY - L.synthButtonHeight / 2 - L.contentBottomPadding;
   return {
-    contentHeight: Math.max(L.viewportHeight, top - bottom + 20),
+    contentHeight: Math.max(L.viewportHeight, top - bottom),
     bagTitleY,
     bagFirstRowY,
     synthTitleY,

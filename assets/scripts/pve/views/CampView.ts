@@ -92,9 +92,9 @@ export class CampView {
     });
     this._body = new Node('CampBody');
     this._body.setParent(this._panel);
-    this._body.setPosition(0, 18);
-    this._body.addComponent(UITransform).setContentSize(570, 620);
-    makeFlatButton(this._panel, '返回大厅', 0, -450, 240, 60, () => this._callbacks.onClose(), new Color(105, 65, 45, 190), { noArt: true, border: new Color(255, 190, 120) });
+    this._body.setPosition(0, -20);
+    this._body.addComponent(UITransform).setContentSize(570, 720);
+    makeFlatButton(this._panel, '返回大厅', 0, -470, 240, 60, () => this._callbacks.onClose(), new Color(105, 65, 45, 190), { noArt: true, border: new Color(255, 190, 120) });
   }
 
   setProfile(profile: PveProfile): void { this._profile = profile; this.showSection(this._section); }
@@ -963,7 +963,7 @@ export class CampView {
       '目标：击败毒蝎精英\n完成条件：找到并击败本层精英。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：解毒/高护甲，优先处理护卫。',
       '目标：清除沙暴警戒者\n完成条件：消灭全部沙暴警戒者后开启传送门；清警戒者后围猎压力会下降。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：优先集火沙暴警戒者，再清理杂兵。',
       '目标：截获沙漠逃兵\n完成条件：追上携令逃跑的目标；若其抵达逃离点则失败。\n失败条件：目标逃离，或角色生命降为零 / 中途撤离。\n推荐准备：高机动、击退或截击。',
-      '目标：沙暴走廊突围\n完成条件：在 12 个回合内抵达出口并互动通关。\n失败条件：超时、角色死亡或中途撤离。\n推荐准备：保留 AP 应对沙暴与沙坑，不必清怪。',
+      '目标：沙暴走廊突围\n完成条件：在 20 个回合内抵达出口并互动通关。\n失败条件：超时、角色死亡或中途撤离。\n推荐准备：保留 AP 应对沙暴与沙坑，不必清怪。',
       '目标：守住流沙潮汐\n完成条件：清空 4 波敌人并存活；波次清空后出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：范围攻击与走位，注意动态沙坑扩张。',
       '目标：击败流沙巨蝎\n完成条件：利用沙坑与走位击败流沙巨蝎 Boss。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：高生命、护甲与爆发，注意潜地与沙暴。',
       '目标：取得钥匙\n完成条件：穿越冰墙迷径取得钥匙；可绕路、拆墙或战斗突破；完成后钥匙位置出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：破甲或单体输出，学会拆冰墙捷径。',
