@@ -75,6 +75,22 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
   -> [Cloud] PveMinghenShop.js
 ```
 
+### 大厅邮箱
+
+```text
+[Lobby] 左上头像卡下方「邮箱」
+  -> listMails（红点 unreadCount）
+  -> MailView：列表 / 详情 / 领取 / 删除 / 一键领取
+  -> claimMail / claimAllMails / deleteMail / markMailRead
+  -> [Cloud] cloudfunctions/pve action → PveMailService
+  -> 星尘入账 pveProfile.gold；体力入账 pveStamina（封顶）
+  -> 大厅刷新星尘芯片与体力条
+
+[GM] gm-web「发送邮件」
+  -> adminTool sendMail | sendMailBroadcast
+  -> AdminToolService → createMailForUser（广播同 batchId，≤500）
+```
+
 ---
 
 ## 3. 选择楼层并进入远征

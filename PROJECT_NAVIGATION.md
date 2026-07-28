@@ -14,6 +14,7 @@
 | 游戏启动 | `assets/scripts/core/GameApp.ts` |
 | 场景切换 | `assets/scripts/core/SceneLoader.ts` |
 | 大厅 UI / 远征入口 / 营地入口 | `assets/scripts/lobby/PveLobbyController.ts` |
+| 大厅邮箱入口 / 邮件弹层 | `PveLobbyController.ts` + `assets/scripts/pve/views/MailView.ts`；云端 `cloudfunctions/common/pve/PveMailService.js` |
 | 大厅伙伴入口 / 养成面板 | `assets/scripts/pve/controllers/PartnerController.ts` + `views/PartnerView.ts` |
 | 远征战斗场景 | `assets/scripts/pve/controllers/ExpeditionController.ts` 挂载于 `assets/scenes/pve_expedition.scene` |
 | 营地场景 UI | `assets/scripts/pve/controllers/CampController.ts` + `assets/scripts/pve/views/CampView.ts` |
