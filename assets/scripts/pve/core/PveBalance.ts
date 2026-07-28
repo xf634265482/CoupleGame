@@ -1,4 +1,5 @@
 import { AP_BASE, AP_COST, BASE_ATTACK, BASE_ATTACK_RANGE, INITIAL_ANIMA, INITIAL_GOLD, INITIAL_HP } from './PveConstants';
+import type { PveProfessionId } from './PveProgressionTypes';
 import type {
   EquipSlot,
   ExpeditionState,
@@ -8,6 +9,7 @@ import type {
   PveBalanceSnapshot,
   RunPlayer,
 } from './PveTypes';
+import { professionBaseStats } from './professions/ProfessionBaseStats';
 
 type UnitType = 'player' | 'monster' | 'boss';
 
@@ -53,6 +55,22 @@ export function getPlayerBalanceConfig(snapshot: PveBalanceSnapshot | null | und
   const chapterConfig = safe.chapterConfigs[buildChapterKey(chapter)] || getEmptyConfig();
   const unitConfig = safe.unitConfigs[buildUnitKey('player', 'ADVENTURER')] || getEmptyConfig();
   return mergeConfig(mergeConfig(safe.globalConfig, chapterConfig), unitConfig).player || {};
+}
+
+/** GM 玩家字段有值则整项替换职业基础；未配置字段保持职业默认。 */
+export function resolveProfessionBaseWithBalance(
+  professionId: PveProfessionId,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+  chapter = 1,
+): { maxHp: number; attack: number; apBase: number; attackRange: number } {
+  const base = professionBaseStats(professionId);
+  const config = getPlayerBalanceConfig(balanceSnapshot, chapter);
+  return {
+    maxHp: config.initialHp ?? base.maxHp,
+    attack: config.baseAttack ?? base.attack,
+    apBase: config.apBase ?? base.apBase,
+    attackRange: config.baseAttackRange ?? base.attackRange,
+  };
 }
 
 export function getUnitBalanceConfig(
@@ -113,8 +131,8 @@ export function getBalancedActionCost(
     return config.openChestCost ?? AP_COST.OPEN_CHEST;
   case 'OPEN_EXIT':
     return config.openExitCost ?? AP_COST.OPEN_EXIT;
-  case 'USE_IDOL':
-    return config.useIdolCost ?? AP_COST.USE_IDOL;
+  case 'USE_INTERACT':
+    return config.useInteractCost ?? AP_COST.USE_INTERACT;
   case 'USE_HOT_SPRING':
     return config.useHotSpringCost ?? AP_COST.USE_HOT_SPRING;
   case 'USE_ALTAR':
