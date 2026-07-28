@@ -80,6 +80,7 @@ export type ManageCampRequest =
   | { type: 'EQUIPMENT'; action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL'; instanceId: string }
   | { type: 'EQUIPMENT'; action: 'SYNTHESIZE'; instanceIds: [string, string, string] }
   | { type: 'SAVE_MINGHEN_PRESET'; id?: string; name: string }
+  | { type: 'SYNTHESIZE_MINGHEN'; id: string }
   | { type: 'MINGHEN_BUY_STARDUST'; slotId: string }
   | { type: 'MINGHEN_EXCHANGE'; recipeId: string }
   | { type: 'MINGHEN_REFRESH_SHOP' }

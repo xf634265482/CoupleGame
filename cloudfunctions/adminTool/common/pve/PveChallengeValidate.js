@@ -4,7 +4,7 @@ const { normalizePartnersMap } = require('./PvePartner');
 const CHALLENGE_MODES = ['PROGRESSION', 'HUNT', 'TRIAL', 'PRACTICE'];
 const CHALLENGE_RESULT_STATUSES = ['CLEAR', 'DEAD', 'WITHDRAW'];
 const EQUIPMENT_SLOTS = ['WEAPON', 'HELMET', 'ARMOR', 'SHOES', 'TRINKET'];
-const MAX_MINGHEN_SLOTS = 8;
+const MAX_MINGHEN_SLOTS = 10;
 
 function fail(code, message) {
   const err = new Error(message);
@@ -102,6 +102,7 @@ function validateStartFloorChallengeRequest(profile, request) {
     minghenLoadout: validateMinghenLoadout(request.minghenLoadout ?? []),
     trackedMinghenId,
     abandonActive: request.abandonActive === true,
+    forceRestart: request.forceRestart === true,
     // 伙伴快照一律来自永久档案，忽略客户端伪造的 stage/level。
     ...(() => {
       const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);

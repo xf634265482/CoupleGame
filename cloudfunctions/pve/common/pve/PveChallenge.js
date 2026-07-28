@@ -82,6 +82,7 @@ async function startFloorChallenge(user, rawRequest = {}) {
     validateLoadoutOwnership(profile, request);
 
     let activeToWithdraw = null;
+    let challengeRequest = request;
     if (profile.activeChallengeId) {
       const activeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(profile.activeChallengeId);
       let active = null;
@@ -91,11 +92,25 @@ async function startFloorChallenge(user, rawRequest = {}) {
         active = null;
       }
       if (active?.status === 'ACTIVE') {
-        if (requestMatchesChallenge(request, active)) {
+        const matchesActive = requestMatchesChallenge(request, active);
+        if (matchesActive && request.forceRestart !== true) {
           return { challenge: active, profile, resume: true, charged: 0 };
         }
         const err = new Error('已有不同配置的进行中挑战');
-        if (request.abandonActive === true) {
+        if (request.abandonActive === true && request.forceRestart === true
+          && request.floor === active.floor && request.mode === active.mode) {
+          activeToWithdraw = activeRef;
+          challengeRequest = {
+            ...request,
+            professionId: active.config.professionId,
+            equipmentLoadout: active.config.equipmentLoadout || {},
+            minghenLoadout: active.config.minghenLoadout || [],
+            trackedMinghenId: active.config.trackedMinghenId ?? null,
+            partnerId: active.config.partnerId ?? null,
+            partnerEvolutionStage: active.config.partnerEvolutionStage ?? 1,
+            partnerLevel: active.config.partnerLevel ?? 1,
+          };
+        } else if (request.abandonActive === true && request.forceRestart !== true) {
           activeToWithdraw = activeRef;
         } else {
           err.code = 'PVE_CHALLENGE_ALREADY_ACTIVE';
@@ -104,16 +119,22 @@ async function startFloorChallenge(user, rawRequest = {}) {
       }
     }
 
-    const freeEligible = request.floor === 1
-      && request.mode === 'PROGRESSION'
+    const freeEligible = challengeRequest.floor === 1
+      && challengeRequest.mode === 'PROGRESSION'
       && profile.tutorialFreeChallengeConsumed !== true;
-    const consumed = consumeForFloorChallenge(profile, freeEligible);
+    const consumed = challengeRequest.forceRestart === true && activeToWithdraw
+      ? {
+        stamina: profile.stamina,
+        tutorialFreeChallengeConsumed: profile.tutorialFreeChallengeConsumed,
+        charged: 0,
+      }
+      : consumeForFloorChallenge(profile, freeEligible);
     const chargedProfile = {
       ...profile,
       stamina: consumed.stamina,
       tutorialFreeChallengeConsumed: consumed.tutorialFreeChallengeConsumed,
     };
-    const challenge = buildChallenge(user.id, request, now);
+    const challenge = buildChallenge(user.id, challengeRequest, now);
     const nextProfile = applyChallengeStart(chargedProfile, challenge, now);
     if (activeToWithdraw) {
       await activeToWithdraw.update({

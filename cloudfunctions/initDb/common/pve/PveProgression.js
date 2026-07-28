@@ -5,7 +5,7 @@ const { beginTracking } = require('./PveMinghen');
 const { PROFESSION_IDS } = require('./PveProfile');
 const { validateMinghenLoadout, validateEquipmentLoadout } = require('./PveChallengeValidate');
 const { validateLoadoutOwnership } = require('./PveChallengeState');
-const { manageEquipment, saveMinghenPreset } = require('./PveCamp');
+const { manageEquipment, saveMinghenPreset, synthesizeMinghen } = require('./PveCamp');
 const {
   ensureDailyShop,
   buyStardustSlot,
@@ -93,6 +93,7 @@ async function manageCamp(user, request = {}) {
   let next;
   if (request.type === 'EQUIPMENT') next = manageEquipment(profile, request);
   else if (request.type === 'SAVE_MINGHEN_PRESET') next = saveMinghenPreset(profile, request);
+  else if (request.type === 'SYNTHESIZE_MINGHEN') next = synthesizeMinghen(profile, request);
   else if (request.type === 'MINGHEN_BUY_STARDUST') next = buyStardustSlot(profile, request, shopSeedKey(user), now);
   else if (request.type === 'MINGHEN_EXCHANGE') next = claimExchangeRecipe(profile, request, shopSeedKey(user), now);
   else if (request.type === 'MINGHEN_REFRESH_SHOP') next = refreshDailyShop(profile, request, shopSeedKey(user), now);

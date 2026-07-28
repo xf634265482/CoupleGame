@@ -124,10 +124,31 @@ function saveMinghenPreset(profile, request) {
   return { ...profile, minghenPresets: presets };
 }
 
+/** Explicit I→II: level=2, copies unchanged. */
+function synthesizeMinghen(profile, request) {
+  const id = typeof request.id === 'string' ? request.id : '';
+  if (!id) fail('PVE_INVALID_MINGHEN_ID', '命痕无效');
+  const owned = profile.minghenCollection?.[id];
+  if (!owned) fail('PVE_MINGHEN_NOT_OWNED', '未持有该命痕');
+  if ((profile.minghenLoadout || []).some((x) => x.id === id)) {
+    fail('PVE_MINGHEN_EQUIPPED', '已装配命痕不能用于合成');
+  }
+  if (owned.level !== 1) fail('PVE_MINGHEN_ALREADY_II', '已是II级或更高');
+  if ((owned.copies || 0) < 2) fail('PVE_MINGHEN_COPIES_SHORT', '副本不足，需要至少2枚');
+  return {
+    ...profile,
+    minghenCollection: {
+      ...profile.minghenCollection,
+      [id]: { ...owned, level: 2 },
+    },
+  };
+}
+
 module.exports = {
   ENHANCE_COST,
   SELL_BASE,
   SYNTH_STARDUST,
   manageEquipment,
   saveMinghenPreset,
+  synthesizeMinghen,
 };
