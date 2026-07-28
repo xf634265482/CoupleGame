@@ -2,9 +2,11 @@ import {
   canSynthesizeMinghenToII,
   synthesizeMinghenToII,
 } from '../../assets/scripts/pve/core/minghen/MinghenLoadout';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 import type { PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 
 function stubProfile(partial: Partial<PveProfile> & { minghenCollection: PveProfile['minghenCollection'] }): PveProfile {
+  const defaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 1,
@@ -25,8 +27,8 @@ function stubProfile(partial: Partial<PveProfile> & { minghenCollection: PveProf
     selectedProfessionId: 'WARRIOR',
     tracking: null,
     activeChallengeId: null,
-    partners: {},
-    equippedPartnerId: null,
+    partners: defaults.partners,
+    equippedPartnerId: defaults.equippedPartnerId,
     stamina: 60,
     staminaUpdatedAt: 1,
     staminaNextRecoveryAt: null,
