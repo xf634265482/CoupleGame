@@ -3,8 +3,10 @@ import { generateChapter2Floor, isReachable } from '../../assets/scripts/pve/cor
 import { getChapter2Objective } from '../../assets/scripts/pve/core/chapter2/Chapter2Objectives';
 import { createPersistentFloorRuntime } from '../../assets/scripts/pve/core/PersistentExpeditionRuntime';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 
 function profile(activeChallengeId = 'c8'): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 14,
@@ -23,6 +25,8 @@ function profile(activeChallengeId = 'c8'): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId,
     updatedAt: 1,

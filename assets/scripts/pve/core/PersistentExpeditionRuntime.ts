@@ -9,10 +9,11 @@ import {
 import { createMinghenTriggerMemory, pruneMinghenMemory, type MinghenTriggerMemory } from './minghen/MinghenEffects';
 import { getChapter1Objective } from './objectives/Chapter1Objectives';
 import type { FloorObjectiveState, ObjectiveCommand, ObjectiveDefinition, ObjectiveEvent } from './objectives/FloorObjective';
-import type { ApplyResult, Coord, ExpeditionState, PveEvent } from './PveTypes';
+import type { ApplyResult, Coord, ExpeditionState, PveBalanceSnapshot, PveEvent } from './PveTypes';
 import type { FloorChallengeSnapshot, PveProfile } from './PveProgressionTypes';
 import { chapterIdForFloor, isFloorContentReady } from './chapterRouting';
 import { createChapter1ExpeditionState, createChapter1Monster } from './chapter1/Chapter1ExpeditionFactory';
+import { VARIANT_DUNE_SENTINEL } from './Chapter2Monsters';
 import { createChapter2ExpeditionState, createChapter2Monster } from './chapter2/Chapter2ExpeditionFactory';
 import { createChapter3ExpeditionState, createChapter3Monster } from './chapter3/Chapter3ExpeditionFactory';
 import { createChapter4ExpeditionState, createChapter4Monster } from './chapter4/Chapter4ExpeditionFactory';
@@ -66,7 +67,7 @@ import {
 } from './chapter5/Chapter5FloorCatalog';
 import { CHAPTER5_FATE_REWRITE_INTERVAL } from './PveConstants';
 import { applyLightSandstorm } from './chapter2/LightSandstorm';
-import { expandSandPits } from './chapter2/SandPitExpansion';
+import { expandSandPitsWithTiles } from './chapter2/SandPitExpansion';
 import {
   markSandPitStepWaived,
   sandPitPenaltyReduction,
@@ -133,6 +134,8 @@ export function syncRuntimeFromExpedition(
 export interface PersistentFloorRuntimeOptions {
   /** 玩家已完成第一层新手引导时传 true；缺省（含未知/false）视为需要注入脚本化教学层。 */
   tutorialCompleted?: boolean;
+  /** GM 玩家数值快照；仅新建 runtime 时灌入，续玩不重套。 */
+  balanceSnapshot?: PveBalanceSnapshot | null;
 }
 
 export function createPersistentFloorRuntime(
@@ -143,11 +146,12 @@ export function createPersistentFloorRuntime(
 ): PersistentExpeditionRuntime {
   if (!isFloorContentReady(snapshot.floor)) throw new Error('FLOOR_CONTENT_NOT_READY');
   const chapterId = chapterIdForFloor(snapshot.floor);
+  const balanceSnapshot = options?.balanceSnapshot ?? null;
   if (chapterId === 1) {
     const useTutorial = shouldUseTutorialFloor(snapshot.floor, options?.tutorialCompleted);
     let expedition = useTutorial
-      ? createTutorialExpeditionState(snapshot, profile)
-      : createChapter1ExpeditionState(snapshot, profile);
+      ? createTutorialExpeditionState(snapshot, profile, balanceSnapshot)
+      : createChapter1ExpeditionState(snapshot, profile, balanceSnapshot);
     // 新手教学层固定用战士出战，不受玩家当前选定职业影响，保证引导脚本可预测。
     const effectiveSnapshot: FloorChallengeSnapshot = useTutorial
       ? { ...snapshot, config: { ...snapshot.config, professionId: 'WARRIOR' } }
@@ -191,11 +195,13 @@ export function createPersistentFloorRuntime(
     return syncRuntimeFromExpedition(runtime, expedition, now);
   }
   if (chapterId === 2) {
-    let expedition = createChapter2ExpeditionState(snapshot, profile);
+    let expedition = createChapter2ExpeditionState(snapshot, profile, balanceSnapshot);
     const map = generateChapter2Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
     const profession = createFreshProfessionState();
     let objective = getChapter2Objective(snapshot.floor).create();
     if (snapshot.floor === 13) {
+      const initialTideCount = Number(getChapter2FloorDefinition(13).special?.initialTidePits ?? 8);
+      expedition = expandSandPitsWithTiles(expedition, initialTideCount, 'F13_initial').state;
       const waveIds = expedition.floorState.monsters
         .filter((monster) => monster.id.startsWith('wave1_'))
         .map((monster) => monster.id);
@@ -228,7 +234,7 @@ export function createPersistentFloorRuntime(
     return syncRuntimeFromExpedition(runtime, expedition, now);
   }
   if (chapterId === 3) {
-    let expedition = createChapter3ExpeditionState(snapshot, profile);
+    let expedition = createChapter3ExpeditionState(snapshot, profile, balanceSnapshot);
     const map = generateChapter3Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
     const profession = createFreshProfessionState();
     let objective = getChapter3Objective(snapshot.floor).create();
@@ -265,7 +271,7 @@ export function createPersistentFloorRuntime(
     return syncRuntimeFromExpedition(runtime, expedition, now);
   }
   if (chapterId === 5) {
-    const expedition = createChapter5ExpeditionState(snapshot, profile);
+    const expedition = createChapter5ExpeditionState(snapshot, profile, balanceSnapshot);
     const map = generateChapter5Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
     const profession = createFreshProfessionState();
     const objective = getChapter5Objective(snapshot.floor).create();
@@ -286,7 +292,7 @@ export function createPersistentFloorRuntime(
     }, now);
     return syncRuntimeFromExpedition(runtime, expedition, now);
   }
-  let expedition = createChapter4ExpeditionState(snapshot, profile);
+  let expedition = createChapter4ExpeditionState(snapshot, profile, balanceSnapshot);
   const map = generateChapter4Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
   const profession = createFreshProfessionState();
   let objective = getChapter4Objective(snapshot.floor).create();
@@ -335,6 +341,7 @@ export function resumeOrRebuildPersistentRuntime(
   serialized: string,
   profile: PveProfile,
   now = Date.now(),
+  options?: PersistentFloorRuntimeOptions,
 ): PersistentExpeditionRuntime {
   let parsed: {
     version?: unknown;
@@ -346,7 +353,7 @@ export function resumeOrRebuildPersistentRuntime(
     throw new Error('INVALID_FLOOR_RUNTIME_SAVE');
   }
   if (parsed.version === 1 && parsed.runtime?.version === 1) {
-    return createPersistentFloorRuntime(snapshot, profile, undefined, now);
+    return createPersistentFloorRuntime(snapshot, profile, options, now);
   }
   if (parsed.version !== FLOOR_RUNTIME_VERSION || parsed.runtime?.version !== FLOOR_RUNTIME_VERSION) {
     throw new Error('FLOOR_RUNTIME_VERSION_MISMATCH');
@@ -368,8 +375,16 @@ export function initialPersistentPresentationEvents(runtime: PersistentExpeditio
       if (floor.revealed[y]![x]) cells.push({ x, y });
     }
   }
+  const floor13TideTiles = runtime.floor === 13
+    ? floor.entities
+      .filter((entity) => entity.type === 'SAND_PIT' && entity.id.startsWith('F13_initial'))
+      .map((entity) => ({ ...entity.pos }))
+    : [];
   return [
     { type: 'REVEAL', cells },
+    ...(floor13TideTiles.length > 0
+      ? [{ type: 'SAND_TIDE_SPAWNED' as const, tiles: floor13TideTiles, duration: 0 }]
+      : []),
     { type: 'AP_ROLLED', turn: floor.turn, dice: floor.dice, ap: floor.ap },
   ];
 }
@@ -847,7 +862,7 @@ function waveKindsForFloor(floor: number, wave: number): string[] {
 function spawnWave(
   runtime: PersistentExpeditionRuntime,
   wave: number,
-): { expedition: ExpeditionState; spawnedIds: string[] } {
+): { expedition: ExpeditionState; spawnedIds: string[]; events: PveEvent[] } {
   const current = runtime.battleState.expedition;
   const kinds = waveKindsForFloor(current.floor, wave);
   const markerCells = current.floorState.entities
@@ -911,13 +926,19 @@ function spawnWave(
     collapseMoves: true,
   });
   let nextExpedition = rush.state;
-  if (current.floor === 13 && wave > 1) {
-    const expandCount = Number(getChapter2FloorDefinition(13).special?.expandPitsPerWave ?? 2);
-    nextExpedition = expandSandPits(nextExpedition, expandCount);
+  const events: PveEvent[] = [];
+  if (current.floor === 13) {
+    const expandCount = Number(getChapter2FloorDefinition(13).special?.expandPitsPerWave ?? 8);
+    const tide = expandSandPitsWithTiles(nextExpedition, expandCount, `F13_wave${wave}`);
+    nextExpedition = tide.state;
+    if (tide.tiles.length > 0) {
+      events.push({ type: 'SAND_TIDE_SPAWNED', tiles: tide.tiles, duration: 0 });
+    }
   }
   return {
     expedition: nextExpedition,
     spawnedIds,
+    events,
   };
 }
 
@@ -1289,12 +1310,48 @@ export function applyPersistentBattleResult(
   // 目标卡在 ACTIVE、传送门不刷。
   if (runtime.floor === 10 && objective.kind === 'PURGE' && objective.status === 'ACTIVE') {
     const sentinelIds = stringArray(objective.data.sentinelIds);
-    const ids = sentinelIds.length > 0 ? sentinelIds : ['F10_SENTINEL_1', 'F10_SENTINEL_2'];
+    const battlefieldSentinelIds = result.state.floorState.monsters
+      .filter((monster) => monster.variantId === VARIANT_DUNE_SENTINEL)
+      .map((monster) => monster.id);
+    const ids = battlefieldSentinelIds.length > 0
+      ? [...new Set(battlefieldSentinelIds)]
+      : (sentinelIds.length > 0 ? sentinelIds : ['F10_SENTINEL_1', 'F10_SENTINEL_2']);
+    objective = {
+      ...objective,
+      target: Math.max(objective.target, ids.length),
+      data: { ...objective.data, sentinelIds: ids },
+    };
     for (const sentinelId of ids) {
       if (!isMonsterDeadOrMissing(result.state.floorState.monsters, sentinelId)) continue;
       const applied = definition.apply(objective, { type: 'ENTITY_KILLED', entityId: sentinelId });
       objective = applied.state;
       pendingCommands.push(...applied.commands);
+    }
+  }
+  if (runtime.floor === 10 && objective.kind === 'PURGE' && objective.status === 'COMPLETE') {
+    const battlefieldSentinels = result.state.floorState.monsters
+      .filter((monster) => monster.variantId === VARIANT_DUNE_SENTINEL);
+    const livingSentinels = battlefieldSentinels.filter((monster) => monster.hp > 0 && monster.aiState !== 'DEAD');
+    if (livingSentinels.length > 0) {
+      const sentinelIds = [...new Set(battlefieldSentinels.map((monster) => monster.id))];
+      const cleared = sentinelIds.filter((id) => isMonsterDeadOrMissing(result.state.floorState.monsters, id));
+      objective = {
+        ...objective,
+        status: 'ACTIVE',
+        progress: cleared.length,
+        target: Math.max(1, sentinelIds.length),
+        data: { ...objective.data, sentinelIds, cleared },
+      };
+      result = {
+        ...result,
+        state: {
+          ...result.state,
+          floorState: {
+            ...result.state.floorState,
+            entities: result.state.floorState.entities.filter((entity) => entity.type !== 'PORTAL' || entity.consumed),
+          },
+        },
+      };
     }
   }
   if (runtime.floor === 16 && objective.kind === 'BOUNTY_HUNT' && objective.status === 'ACTIVE') {
@@ -1458,6 +1515,7 @@ export function applyPersistentBattleResult(
       entityIds: spawned.spawnedIds,
     });
     objective = applied.state;
+    spawnedPresentationEvents.push(...spawned.events);
     for (const monster of spawned.expedition.floorState.monsters.filter((entry) => spawned.spawnedIds.includes(entry.id))) {
       spawnedPresentationEvents.push({ type: 'MONSTER_SPAWNED', monsterId: monster.id, pos: { ...monster.pos } });
     }

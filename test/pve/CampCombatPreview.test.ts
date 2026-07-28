@@ -1,8 +1,10 @@
 import { previewCampCombatStats } from '../../assets/scripts/pve/core/CampCombatPreview';
 import { PROFESSION_BASE_STATS } from '../../assets/scripts/pve/core/professions/ProfessionBaseStats';
 import type { PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 
 function profile(overrides: Partial<PveProfile> = {}): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 1,
@@ -22,6 +24,8 @@ function profile(overrides: Partial<PveProfile> = {}): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     stamina: 60,

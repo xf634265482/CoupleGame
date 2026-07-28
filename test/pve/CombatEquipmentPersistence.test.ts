@@ -11,8 +11,10 @@ import {
   rollPersistentNormalEquip,
   toFixedEquipItem,
 } from '../../assets/scripts/pve/core/equipment/FixedEquipmentLoot';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 
 function profile(overrides: Partial<PveProfile> = {}): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 1,
@@ -31,6 +33,8 @@ function profile(overrides: Partial<PveProfile> = {}): PveProfile {
       RANGER: { unlocked: false, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     updatedAt: 1,
@@ -155,7 +159,7 @@ describe('FixedEquipmentLoot / combat settle carry', () => {
       equipmentDropPool: [],
     };
     const rng = createRng(7);
-    // 10% chance â€” enough trials to hit within a few hundred.
+    // 10% chance â€?enough trials to hit within a few hundred.
     let found = false;
     for (let i = 0; i < 200; i += 1) {
       const rolled = rollPersistentNormalEquip(rng, state);

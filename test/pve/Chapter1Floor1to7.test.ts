@@ -4,8 +4,10 @@ import { getChapter1Objective } from '../../assets/scripts/pve/core/objectives/C
 import { applyPersistentBattleResult, createPersistentFloorRuntime } from '../../assets/scripts/pve/core/PersistentExpeditionRuntime';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 import { createGoblinChiefEncounter, damageGoblinChief, stepGoblinChief } from '../../assets/scripts/pve/core/chapter1/Chapter1Encounters';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 
 function profile(activeChallengeId = 'c1'): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 7,
@@ -24,6 +26,8 @@ function profile(activeChallengeId = 'c1'): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId,
     updatedAt: 1,

@@ -8,10 +8,12 @@ import {
 import { applyPersistentAttack } from '../../assets/scripts/pve/core/PersistentCombatRules';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 import { BOSS_SPOILS } from '../../assets/scripts/pve/core/bosses/BossSpoils';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 
 const SPOIL_NAMES = BOSS_SPOILS.GOBLIN_CHIEF.map((t) => t.name);
 
 function profile(): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 7,
@@ -30,6 +32,8 @@ function profile(): PveProfile {
       RANGER: { unlocked: false, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     updatedAt: 1,

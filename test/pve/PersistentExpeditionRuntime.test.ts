@@ -8,10 +8,12 @@ import {
   syncRuntimeFromExpedition,
   isPersistentMoveBlocked,
 } from '../../assets/scripts/pve/core/PersistentExpeditionRuntime';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 import type { PveEvent } from '../../assets/scripts/pve/core/PveTypes';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 
 function profile(): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1, highestUnlockedFloor: 1, highestClearedFloor: 0, floorRecords: {},
     minghenCollection: {}, minghenLoadout: [], minghenPresets: [], equipmentInventory: [],
@@ -21,7 +23,10 @@ function profile(): PveProfile {
       ARCHER: { unlocked: false, xp: 0, level: 1, unlockedTechniqueIds: [] },
       RANGER: { unlocked: false, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
-    selectedProfessionId: 'WARRIOR', tracking: null, activeChallengeId: 'c1', updatedAt: 1,
+    selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
+    tracking: null, activeChallengeId: 'c1', updatedAt: 1,
   };
 }
 
@@ -32,6 +37,20 @@ const snapshot: FloorChallengeSnapshot = {
 };
 
 describe('persistent official expedition runtime', () => {
+  test('createPersistentFloorRuntime bakes GM initialHp into expedition', () => {
+    const balance = {
+      globalConfig: { player: { initialHp: 9001 } },
+      chapterConfigs: {},
+      unitConfigs: {},
+    };
+    const runtime = createPersistentFloorRuntime(snapshot, profile(), {
+      tutorialCompleted: true,
+      balanceSnapshot: balance,
+    }, 1);
+    expect(runtime.battleState.expedition.player.maxHp).toBe(9001);
+    expect(runtime.battleState.expedition.balanceSnapshot).toEqual(balance);
+  });
+
   test('mirrors official ExpeditionState resources and restores V2 exactly', () => {
     const runtime = createPersistentFloorRuntime(snapshot, profile(), undefined, 10);
     expect(runtime.version).toBe(2);
@@ -84,6 +103,7 @@ describe('persistent official expedition runtime', () => {
     expect(applied.runtime.resources.shield).toBe(0);
     expect(applied.result.state.player.hp).toBe(base.battleState.expedition.player.hp - 4);
     expect(applied.result.events[0]).toMatchObject({ type: 'PLAYER_DAMAGED', damage: 4 });
+    expect(applied.result.events[1]).toEqual({ type: 'PLAYER_SHIELD_BROKEN', absorbed: 8 });
   });
 
   test('M23 and M24 turn choices are explicit and can only be made once per turn', () => {
