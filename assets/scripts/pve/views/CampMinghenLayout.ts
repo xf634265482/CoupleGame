@@ -13,19 +13,82 @@ export interface LayoutBounds {
   centerY: number;
 }
 
+/** 命痕台：装配 + 库存 + 合成三角；整页 ScrollView。装配槽 10 = 5 列 × 2 行。 */
 export const CAMP_MINGHEN_LAYOUT = {
-  bodyWidth: 570,
-  bodyHeight: 620,
-  columns: 4,
-  cardWidth: 132,
-  cardHeight: 58,
-  cardGap: 8,
-  firstRowY: 130,
-  equippedTitle: { x: 0, y: 175, width: 540, height: 30 },
-  ownedTitle: { x: 0, y: -12, width: 540, height: 30 },
-  inventory: { x: 0, y: -145, width: 570, height: 210 },
-  saveButton: { x: 0, y: -285, width: 180, height: 48 },
+  viewportWidth: 570,
+  viewportHeight: 620,
+  equippedSlots: 10,
+  columns: 5,
+  cardWidth: 106,
+  cardHeight: 64,
+  cardGap: 6,
+  ownedColumns: 4,
+  ownedCardWidth: 132,
+  ownedCardHeight: 48,
+  ownedGap: 8,
+  ownedFontSize: 16,
+  equippedFontSize: 18,
+  contentTop: 280,
+  summaryY: 250,
+  equippedTitleY: 200,
+  firstRowY: 150,
+  /** Owned title Y = ownedBlockTop(ownedCount) + 30 — computed in view. */
+  synthSlotWidth: 120,
+  synthSlotHeight: 56,
+  synthResultYOffset: 0,
+  synthInputYOffset: -90,
+  synthInputX: 90,
+  synthButtonWidth: 160,
+  synthButtonHeight: 48,
+  contentBottomPadding: 40,
 } as const;
+
+export function equippedGridHeight(): number {
+  const { cardHeight, cardGap } = CAMP_MINGHEN_LAYOUT;
+  return 2 * cardHeight + cardGap;
+}
+
+export function ownedRows(ownedCount: number): number {
+  return Math.max(1, Math.ceil(Math.max(0, ownedCount) / CAMP_MINGHEN_LAYOUT.ownedColumns));
+}
+
+export function ownedBlockHeight(ownedCount: number): number {
+  const { ownedCardHeight, ownedGap } = CAMP_MINGHEN_LAYOUT;
+  return ownedRows(ownedCount) * (ownedCardHeight + ownedGap);
+}
+
+/** Content Y positions from top of scroll content (positive up in Cocos, content origin center). */
+export function minghenContentMetrics(ownedCount: number): {
+  contentHeight: number;
+  ownedTitleY: number;
+  ownedFirstRowY: number;
+  synthTitleY: number;
+  synthResultY: number;
+  synthInputY: number;
+  synthButtonY: number;
+} {
+  const L = CAMP_MINGHEN_LAYOUT;
+  const equippedBottom = L.firstRowY - equippedGridHeight() - 8;
+  const ownedTitleY = equippedBottom - 28;
+  const ownedFirstRowY = ownedTitleY - 40;
+  const ownedBottom = ownedFirstRowY - ownedBlockHeight(ownedCount);
+  const synthTitleY = ownedBottom - 36;
+  const synthResultY = synthTitleY - 50;
+  const synthInputY = synthResultY + L.synthInputYOffset;
+  const synthButtonY = synthInputY - 70;
+  const top = L.summaryY + 40;
+  const bottom = synthButtonY - L.contentBottomPadding;
+  const contentHeight = Math.max(L.viewportHeight, top - bottom + 20);
+  return {
+    contentHeight,
+    ownedTitleY,
+    ownedFirstRowY,
+    synthTitleY,
+    synthResultY,
+    synthInputY,
+    synthButtonY,
+  };
+}
 
 export function rectBounds(rect: LayoutRect): LayoutBounds {
   return {

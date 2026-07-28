@@ -1,21 +1,26 @@
 import { Button, Color, EventTouch, Graphics, Label, Mask, Node, ScrollView, UITransform } from 'cc';
 import type { PveEquipmentInstance, PveProfile, PveProfessionId } from '../core/PveProgressionTypes';
 import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefinition';
-import { ENHANCE_COST, effectiveEquipPrimaryRange, toFixedEquipItem } from '../core/equipment/EquipmentProgression';
-import { formatMinghenCampDetail } from '../core/minghen/MinghenDisplay';
-import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
 import {
-  canSpendCopyAsExchangeMaterial,
-  MINGHEN_DAILY_AD_REFRESH_LIMIT,
-  spareCopiesForExchange,
-} from '../core/minghen/MinghenAcquire';
+  ENHANCE_COST,
+  SYNTH_STARDUST,
+  countSynthesizeEligible,
+  effectiveEquipPrimaryRange,
+  nextEquipQuality,
+  toFixedEquipItem,
+} from '../core/equipment/EquipmentProgression';
+import { formatMinghenCampDetail, formatMinghenLevelMark } from '../core/minghen/MinghenDisplay';
+import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
+import { spareCopiesForExchange } from '../core/minghen/MinghenAcquire';
+import { canSynthesizeMinghenToII } from '../core/minghen/MinghenLoadout';
 import { masteryProgressForXp } from '../core/professions/ProfessionMastery';
 import { PROFESSION_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
 import { previewCampCombatStats } from '../core/CampCombatPreview';
 import { ensureEquipmentAssetsForFloor } from '../EquipmentResourceLoader';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { ensureArtChild } from '../../ui/UiSprite';
-import { CAMP_MINGHEN_LAYOUT } from './CampMinghenLayout';
+import { CAMP_MINGHEN_LAYOUT, minghenContentMetrics } from './CampMinghenLayout';
+import { MINGHEN_LOADOUT_SLOTS } from '../core/PveConstants';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 export type CampSection = 'MINGHEN' | 'EQUIPMENT' | 'INTEL' | 'PROFESSION';
@@ -25,11 +30,10 @@ export interface CampViewCallbacks {
   onToggleMinghen(id: string): void;
   onTrackMinghen(id: string): void;
   onSavePreset(): void;
-  onBuyMinghenStardust?(slotId: string): void;
-  onExchangeMinghen?(recipeId: string): void;
-  onRefreshMinghenShop?(): void;
+  onSynthesizeMinghen(id: string): void;
   onToggleEquipment(instanceId: string): void;
   onManageEquipment(action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL', instanceId: string): void;
+  onSynthesizeEquipment(primaryInstanceId: string): void;
   onSectionChanged?(section: CampSection): void;
 }
 
@@ -58,6 +62,7 @@ export class CampView {
   private _section: CampSection = 'MINGHEN';
   private _detail: Node | null = null;
   private _equipmentIconRevision = 0;
+  private _synthSlots: [string | null, string | null] = [null, null];
 
   constructor(parent: Node, private readonly _callbacks: CampViewCallbacks) {
     this._overlay = new Node('PersistentCampModal');
@@ -134,6 +139,10 @@ export class CampView {
   get node(): Node { return this._overlay; }
   destroy(): void { this._detail?.destroy(); this._overlay.destroy(); }
 
+  clearMinghenSynthSlots(): void {
+    this._synthSlots = [null, null];
+  }
+
   showSection(section: CampSection): void {
     this._section = section;
     this._title.string = `营地 · ${SECTION_LABELS[section]}`;
@@ -147,135 +156,206 @@ export class CampView {
   }
 
   private _renderMinghen(profile: PveProfile): void {
-    const ownedCount = Object.keys(profile.minghenCollection).length;
-    this._summary(`已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/8    方案 ${profile.minghenPresets.length}/5\n星尘：${profile.gold}`);
-    this._sectionLabel('已装配命痕', CAMP_MINGHEN_LAYOUT.equippedTitle.y);
+    const L = CAMP_MINGHEN_LAYOUT;
     const equipped = new Map(profile.minghenLoadout.map((entry) => [entry.id, entry]));
-    for (let index = 0; index < 8; index += 1) {
+    const owned = Object.values(profile.minghenCollection).filter((entry) => !equipped.has(entry.id));
+    const metrics = minghenContentMetrics(owned.length);
+
+    const scrollNode = new Node('MinghenScroll');
+    scrollNode.setParent(this._body);
+    scrollNode.setPosition(0, 0);
+    scrollNode.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
+    const scroll = scrollNode.addComponent(ScrollView);
+    scroll.horizontal = false;
+    scroll.vertical = true;
+    scroll.inertia = true;
+    const view = new Node('View');
+    view.setParent(scrollNode);
+    view.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
+    view.addComponent(Mask);
+    const content = new Node('Content');
+    content.setParent(view);
+    content.addComponent(UITransform).setContentSize(L.viewportWidth, metrics.contentHeight);
+    content.setPosition(0, (L.viewportHeight - metrics.contentHeight) / 2);
+    scroll.content = content;
+
+    const ownedCount = Object.keys(profile.minghenCollection).length;
+    const summary = makeLabel(content, 0, L.summaryY, 540, 54, 22, TEXT, Label.HorizontalAlign.LEFT);
+    summary.verticalAlign = Label.VerticalAlign.TOP;
+    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    方案 ${profile.minghenPresets.length}/5\n星尘：${profile.gold}`;
+
+    const equippedTitle = makeLabel(content, 0, L.equippedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    equippedTitle.isBold = true;
+    equippedTitle.string = '已装配命痕';
+
+    for (let index = 0; index < L.equippedSlots; index += 1) {
       const entry = profile.minghenLoadout[index];
+      const text = entry
+        ? `${getMinghenDefinition(entry.id).name} ${formatMinghenLevelMark(entry.level)}`
+        : '空槽';
       this._gridCard(
-        this._body,
+        content,
         index,
-        CAMP_MINGHEN_LAYOUT.columns,
-        CAMP_MINGHEN_LAYOUT.cardWidth,
-        CAMP_MINGHEN_LAYOUT.cardHeight,
-        CAMP_MINGHEN_LAYOUT.firstRowY,
-        entry ? `${getMinghenDefinition(entry.id).name}\nLV.${entry.level}` : '空槽',
+        L.columns,
+        L.cardWidth,
+        L.cardHeight,
+        L.firstRowY,
+        text,
         () => { if (entry) this._showMinghenDetail(entry.id, entry.level, true); },
         !entry,
+        undefined,
+        undefined,
+        36,
+        L.equippedFontSize,
       );
     }
-    this._renderMinghenShop(profile);
-    this._sectionLabel('拥有的命痕', CAMP_MINGHEN_LAYOUT.ownedTitle.y);
-    const owned = Object.values(profile.minghenCollection).filter((entry) => !equipped.has(entry.id));
-    this._scrollGrid(
-      CAMP_MINGHEN_LAYOUT.inventory.x,
-      CAMP_MINGHEN_LAYOUT.inventory.y,
-      CAMP_MINGHEN_LAYOUT.inventory.width,
-      CAMP_MINGHEN_LAYOUT.inventory.height,
-      4,
-      128,
-      64,
-      owned.length,
-      (index, parent, y) => {
-        const entry = owned[index];
-        if (!entry) return;
-        const spare = spareCopiesForExchange(entry);
-        this._gridCard(
-          parent,
-          index,
-          4,
-          128,
-          64,
-          y,
-          `${getMinghenDefinition(entry.id).name}\nLV.${entry.level} ·×${entry.copies}${spare > 0 ? `(余${spare})` : ''}`,
-          () => this._showMinghenDetail(entry.id, entry.level, false),
-        );
+
+    const ownedTitle = makeLabel(content, 0, metrics.ownedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    ownedTitle.isBold = true;
+    ownedTitle.string = '拥有的命痕';
+
+    owned.forEach((entry, index) => {
+      const spare = spareCopiesForExchange(entry);
+      const text = `${getMinghenDefinition(entry.id).name} ${formatMinghenLevelMark(entry.level)} ·×${entry.copies}${spare > 0 ? `(余${spare})` : ''}`;
+      this._gridCard(
+        content,
+        index,
+        L.ownedColumns,
+        L.ownedCardWidth,
+        L.ownedCardHeight,
+        metrics.ownedFirstRowY,
+        text,
+        () => this._showMinghenDetail(entry.id, entry.level, false),
+        false,
+        undefined,
+        undefined,
+        36,
+        L.ownedFontSize,
+      );
+    });
+
+    this._renderMinghenSynth(content, profile, metrics);
+  }
+
+  private _renderMinghenSynth(
+    parent: Node,
+    profile: PveProfile,
+    metrics: ReturnType<typeof minghenContentMetrics>,
+  ): void {
+    const L = CAMP_MINGHEN_LAYOUT;
+    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
+    title.isBold = true;
+    title.string = '命痕合成';
+
+    const left = this._synthSlots[0];
+    const right = this._synthSlots[1];
+    const sameId = left && right && left === right ? left : null;
+    const canSynth = sameId ? canSynthesizeMinghenToII(profile, sameId) : false;
+    const resultText = canSynth && sameId
+      ? `${getMinghenDefinition(sameId).name} II`
+      : (left || right ? '需同名 I×2' : '结果');
+
+    const lines = parent.addComponent(Graphics);
+    lines.strokeColor = BORDER;
+    lines.lineWidth = 2;
+    const resultY = metrics.synthResultY;
+    const inputY = metrics.synthInputY;
+    lines.moveTo(-L.synthInputX, inputY);
+    lines.lineTo(0, resultY);
+    lines.stroke();
+    lines.moveTo(L.synthInputX, inputY);
+    lines.lineTo(0, resultY);
+    lines.stroke();
+
+    this._synthSlotCard(parent, 0, resultY, resultText, true, () => undefined);
+    this._synthSlotCard(parent, -L.synthInputX, inputY, left ? `${getMinghenDefinition(left).name} I` : '材料1', false, () => {
+      this._synthSlots[0] = null;
+      this.showSection('MINGHEN');
+    });
+    this._synthSlotCard(parent, L.synthInputX, inputY, right ? `${getMinghenDefinition(right).name} I` : '材料2', false, () => {
+      this._synthSlots[1] = null;
+      this.showSection('MINGHEN');
+    });
+
+    const synthBtn = makeFlatButton(
+      parent,
+      '合成',
+      0,
+      metrics.synthButtonY,
+      L.synthButtonWidth,
+      L.synthButtonHeight,
+      () => {
+        if (!sameId || !canSynth) return;
+        this._callbacks.onSynthesizeMinghen(sameId);
       },
-    );
-    makeFlatButton(
-      this._body,
-      '保存方案',
-      CAMP_MINGHEN_LAYOUT.saveButton.x,
-      CAMP_MINGHEN_LAYOUT.saveButton.y,
-      CAMP_MINGHEN_LAYOUT.saveButton.width,
-      CAMP_MINGHEN_LAYOUT.saveButton.height,
-      () => this._callbacks.onSavePreset(),
       new Color(25, 75, 110, 190),
       { noArt: true, border: BORDER },
     );
+    const btn = synthBtn.getComponent(Button);
+    if (btn) btn.interactable = canSynth;
   }
 
-  private _renderMinghenShop(profile: PveProfile): void {
-    const shop = profile.minghenDailyShop;
-    this._sectionLabel(`今日商会${shop ? ` · ${shop.dayKey}` : ''}`, CAMP_MINGHEN_LAYOUT.shopTitle.y);
-    if (!shop) {
-      makeLabel(this._body, 0, CAMP_MINGHEN_LAYOUT.shopStardustY, 520, 36, 18, DIM, Label.HorizontalAlign.CENTER).string = '商会加载中…';
+  private _synthSlotCard(
+    parent: Node,
+    x: number,
+    y: number,
+    text: string,
+    dashed: boolean,
+    onClick: () => void,
+  ): void {
+    const L = CAMP_MINGHEN_LAYOUT;
+    const card = makeFlatButton(
+      parent,
+      text,
+      x,
+      y,
+      L.synthSlotWidth,
+      L.synthSlotHeight,
+      onClick,
+      new Color(13, 47, 92, 210),
+      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : BORDER },
+    );
+    const label = card.getChildByName('Label')?.getComponent(Label);
+    if (label) {
+      label.fontSize = 16;
+      label.overflow = Label.Overflow.SHRINK;
+      label.enableWrapText = false;
+    }
+  }
+
+  private _stagedCopiesOf(id: string): number {
+    return (this._synthSlots[0] === id ? 1 : 0) + (this._synthSlots[1] === id ? 1 : 0);
+  }
+
+  private _canPutMinghenIntoSynth(id: string): boolean {
+    if (!this._profile) return false;
+    const entry = this._profile.minghenCollection[id];
+    if (!entry || entry.level !== 1) return false;
+    if (this._profile.minghenLoadout.some((x) => x.id === id)) return false;
+    if (this._synthSlots[0] && this._synthSlots[1]) return false;
+    return entry.copies >= this._stagedCopiesOf(id) + 1;
+  }
+
+  private _putMinghenIntoSynth(id: string): void {
+    if (!this._canPutMinghenIntoSynth(id)) {
+      this.showNotice('无法投入：需要未装配的 I 级，且副本足够、合成槽未满');
       return;
     }
-    shop.stardustSlots.forEach((slot, index) => {
-      const name = getMinghenDefinition(slot.minghenId).name;
-      const label = slot.purchased ? `${name}\n已购` : `${name}\n${slot.price}星尘`;
-      this._gridCard(
-        this._body,
-        index,
-        4,
-        128,
-        46,
-        CAMP_MINGHEN_LAYOUT.shopStardustY,
-        label,
-        () => {
-          if (!slot.purchased) this._callbacks.onBuyMinghenStardust?.(slot.slotId);
-        },
-        slot.purchased,
-      );
-    });
-    shop.exchangeRecipes.forEach((recipe, index) => {
-      const [a, b] = recipe.inputIds;
-      const canPay = canSpendCopyAsExchangeMaterial(profile.minghenCollection[a])
-        && canSpendCopyAsExchangeMaterial(profile.minghenCollection[b]);
-      const text = recipe.claimed
-        ? `${getMinghenDefinition(recipe.outputId).name}\n已兑`
-        : `${getMinghenDefinition(a).name}+${getMinghenDefinition(b).name}\n→${getMinghenDefinition(recipe.outputId).name}`;
-      this._gridCard(
-        this._body,
-        index,
-        3,
-        170,
-        46,
-        CAMP_MINGHEN_LAYOUT.shopExchangeY,
-        text,
-        () => {
-          if (!recipe.claimed) this._callbacks.onExchangeMinghen?.(recipe.recipeId);
-        },
-        recipe.claimed || !canPay,
-      );
-    });
-    const refreshLeft = MINGHEN_DAILY_AD_REFRESH_LIMIT - (shop.adRefreshUsed ?? 0);
-    makeFlatButton(
-      this._body,
-      refreshLeft > 0 ? `刷新商会(广告·剩${refreshLeft})` : '今日已刷新',
-      CAMP_MINGHEN_LAYOUT.shopRefresh.x,
-      CAMP_MINGHEN_LAYOUT.shopRefresh.y,
-      CAMP_MINGHEN_LAYOUT.shopRefresh.width,
-      CAMP_MINGHEN_LAYOUT.shopRefresh.height,
-      () => {
-        if (refreshLeft > 0) this._callbacks.onRefreshMinghenShop?.();
-      },
-      new Color(40, 70, 100, 200),
-      { noArt: true, border: BORDER },
-    );
+    if (!this._synthSlots[0]) this._synthSlots[0] = id;
+    else if (!this._synthSlots[1]) this._synthSlots[1] = id;
+    this.showSection('MINGHEN');
   }
 
   private _renderEquipment(profile: PveProfile): void {
     this._equipmentIconRevision += 1;
     const iconRevision = this._equipmentIconRevision;
     void ensureEquipmentAssetsForFloor(profile.highestUnlockedFloor);
-    this._summary(`永久背包 ${profile.equipmentInventory.length}/60    星尘：${profile.gold}`);
-    this._sectionLabel('已穿戴装备', 210);
+    const summary = makeLabel(this._body, 0, 258, 540, 32, 20, TEXT, Label.HorizontalAlign.LEFT);
+    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    星尘：${profile.gold}`;
+    this._sectionLabel('已穿戴装备', 218);
     const slotSize = 88;
     const slotGap = 18;
-    const slotY = 100;
+    const slotY = 105;
     const slotTotal = SLOT_ORDER.length * slotSize + (SLOT_ORDER.length - 1) * slotGap;
     SLOT_ORDER.forEach((slot, index) => {
       const instanceId = profile.equipmentLoadout[slot];
@@ -288,11 +368,14 @@ export class CampView {
     this._sectionLabel('永久背包', 18);
     const equippedIds = new Set(Object.values(profile.equipmentLoadout).filter((id): id is string => !!id));
     const bagItems = profile.equipmentInventory.filter((item) => !equippedIds.has(item.instanceId));
-    // 540 宽 + 卡片 124×4 留边，避免首列贴左被裁切
-    this._scrollGrid(0, -155, 540, 225, 4, 124, 72, bagItems.length, (index, parent, y) => {
+    const bagSize = 96;
+    const bagCols = 5;
+    this._scrollGrid(0, -155, 540, 225, bagCols, bagSize, bagSize, bagItems.length, (index, parent, y) => {
       const item = bagItems[index];
       if (!item) return;
-      this._gridCard(parent, index, 4, 124, 72, y, `${item.definitionId}\n${QUALITY_NAMES[item.quality]} · 强化${item.enhanceLevel}`, () => this._showEquipmentDetail(item, false), false, item, iconRevision, 38);
+      this._bagIconCard(parent, index, bagCols, bagSize, y, item, iconRevision, () => {
+        this._showEquipmentDetail(item, false);
+      });
     });
   }
 
@@ -333,19 +416,29 @@ export class CampView {
         const stats = previewCampCombatStats(profile, id);
         const statsLabel = makeLabel(
           block,
-          0,
+          -50,
           -36,
-          490,
+          400,
           26,
           18,
           id === profile.selectedProfessionId ? new Color(255, 214, 110) : TEXT,
           Label.HorizontalAlign.LEFT,
         );
         statsLabel.string = `攻击 ${stats.attack} · 生命 ${stats.maxHp} · 护甲 ${stats.armor} · 射程 ${stats.range}`;
-        const techniques = makeLabel(block, -70, -62, 330, 26, 18, TEXT, Label.HorizontalAlign.LEFT);
+        const techniques = makeLabel(block, -50, -62, 400, 26, 18, TEXT, Label.HorizontalAlign.LEFT);
         techniques.string = `技法：${mastery.unlockedTechniqueIds.map((technique) => TECHNIQUE_NAMES[technique] ?? '未知技法').join('、') || '基础职业规则'}`;
       }
-      const button = makeFlatButton(block, mastery.unlocked ? `切换${PROFESSION_NAMES[id]}` : '未解锁', 185, -58, 130, 42, () => { if (mastery.unlocked) this._callbacks.onSelectProfession(id); }, new Color(25, 75, 110, 190), { noArt: true, border: BORDER });
+      const button = makeFlatButton(
+        block,
+        mastery.unlocked ? '切换' : '未解锁',
+        212,
+        -50,
+        90,
+        40,
+        () => { if (mastery.unlocked) this._callbacks.onSelectProfession(id); },
+        new Color(25, 75, 110, 190),
+        { noArt: true, border: BORDER },
+      );
       const component = button.getComponent(Button);
       if (component) component.interactable = mastery.unlocked;
       y -= 190;
@@ -355,26 +448,71 @@ export class CampView {
   private _showMinghenDetail(id: string, level: 1 | 2 | 3, equipped: boolean): void {
     const tracking = this._profile?.tracking;
     const trackingText = tracking?.minghenId === id ? `追踪状态：${tracking.state === 'HUNT' ? '追踪中' : '可试炼'} · 第${tracking.floor}层` : '追踪状态：未追踪';
-    this._showDetail(`${getMinghenDefinition(id).name}详情`, `${formatMinghenCampDetail(id, level)}\n${trackingText}`, [
+    const actions: Array<{ text: string; action: () => void; disabled?: boolean }> = [
       { text: equipped ? '卸下' : '装配', action: () => this._callbacks.onToggleMinghen(id) },
       { text: '追踪', action: () => this._callbacks.onTrackMinghen(id) },
-    ]);
+    ];
+    if (!equipped) {
+      actions.push({
+        text: '投入合成',
+        disabled: !this._canPutMinghenIntoSynth(id),
+        action: () => this._putMinghenIntoSynth(id),
+      });
+    }
+    this._showDetail(`${getMinghenDefinition(id).name}详情`, `${formatMinghenCampDetail(id, level)}\n${trackingText}`, actions);
+  }
+
+  private _synthesizeAction(item: PveEquipmentInstance, equipped: boolean): {
+    text: string;
+    action: () => void;
+    disabled?: boolean;
+  } {
+    const next = nextEquipQuality(item.quality);
+    const eligible = this._profile
+      ? countSynthesizeEligible(
+        this._profile.equipmentInventory,
+        this._profile.equipmentLoadout,
+        item.definitionId,
+        item.quality,
+      )
+      : 0;
+    const cost = next ? (SYNTH_STARDUST[item.quality as keyof typeof SYNTH_STARDUST] ?? null) : null;
+    const canSynth = !equipped && !item.locked && !!next && cost != null && eligible >= 3;
+    let text = '合成';
+    if (!next) text = '合成（满品）';
+    else if (eligible < 3) text = `合成（还差${3 - eligible}件）`;
+    else if (cost != null) text = `合成（${cost}星尘）`;
+    return {
+      text,
+      action: () => this._callbacks.onSynthesizeEquipment(item.instanceId),
+      disabled: !canSynth,
+    };
   }
 
   private _showEquipmentDetail(item: PveEquipmentInstance, equipped: boolean): void {
     const body = this._equipmentDetailText(item, equipped);
+    if (!equipped) {
+      this._showDetail('装备详情', body, [
+        { text: '装备', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
+        this._synthesizeAction(item, false),
+        { text: item.locked ? '解锁' : '锁定', action: () => this._callbacks.onManageEquipment('TOGGLE_LOCK', item.instanceId) },
+        { text: '出售', action: () => this._callbacks.onManageEquipment('SELL', item.instanceId), disabled: item.locked },
+      ], item);
+      return;
+    }
     const nextLevel = item.enhanceLevel + 1;
     const enhanceCost = item.enhanceLevel >= 5 ? null : (ENHANCE_COST[nextLevel] ?? null);
     const enhanceLabel = enhanceCost == null ? '已满级' : `强化（${enhanceCost}星尘）`;
+    // 合成材料须未穿戴：已装备详情不提供合成入口（去背包点同名副本）。
     this._showDetail('装备详情', body, [
-      { text: equipped ? '卸下' : '穿戴', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
+      { text: '卸下', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
       {
         text: enhanceLabel,
         action: () => this._callbacks.onManageEquipment('ENHANCE', item.instanceId),
         disabled: enhanceCost == null,
       },
       { text: item.locked ? '解锁' : '锁定', action: () => this._callbacks.onManageEquipment('TOGGLE_LOCK', item.instanceId) },
-      { text: '出售', action: () => this._callbacks.onManageEquipment('SELL', item.instanceId), disabled: item.locked || equipped },
+      { text: '出售', action: () => this._callbacks.onManageEquipment('SELL', item.instanceId), disabled: item.locked },
     ], item);
   }
 
@@ -428,7 +566,7 @@ export class CampView {
     bodyLabel.lineHeight = 32;
     bodyLabel.string = body;
     actions.forEach((entry, index) => {
-      const x = index % 2 === 0 ? -135 : 135;
+      const x = actions.length === 1 ? 0 : (index % 2 === 0 ? -135 : 135);
       const y = index < 2 ? -175 : -232;
       const button = makeFlatButton(panel, entry.text, x, y, 220, 48, () => { detail.destroy(); entry.action(); }, new Color(25, 75, 110, 190), { noArt: true, border: BORDER });
       const component = button.getComponent(Button);
@@ -476,6 +614,39 @@ export class CampView {
     if (item) this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
   }
 
+  /** 永久背包：纯图标方格，无属性文字。 */
+  private _bagIconCard(
+    parent: Node,
+    index: number,
+    columns: number,
+    size: number,
+    rowBaseY: number,
+    item: PveEquipmentInstance,
+    iconRevision: number,
+    onClick: () => void,
+  ): void {
+    const gap = 12;
+    const total = columns * size + (columns - 1) * gap;
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = -total / 2 + size / 2 + column * (size + gap);
+    const y = rowBaseY - row * (size + gap);
+    const card = makeFlatButton(
+      parent,
+      '',
+      x,
+      y,
+      size,
+      size,
+      onClick,
+      new Color(25, 75, 110, 205),
+      { noArt: true, border: BORDER },
+    );
+    const label = card.getChildByName('Label');
+    if (label) label.active = false;
+    this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
+  }
+
   private _gridCard(
     parent: Node,
     index: number,
@@ -489,6 +660,7 @@ export class CampView {
     iconInstance?: PveEquipmentInstance,
     iconRevision?: number,
     iconSize = 36,
+    fontSize?: number,
   ): void {
     const gap = 8;
     const total = columns * width + (columns - 1) * gap;
@@ -499,9 +671,17 @@ export class CampView {
     const card = makeFlatButton(parent, text, x, y, width, height, onClick, disabled ? new Color(33, 53, 77, 150) : new Color(25, 75, 110, 205), { noArt: true, border: disabled ? new Color(90, 125, 155) : BORDER });
     const button = card.getComponent(Button);
     if (button) button.interactable = !disabled;
+    const label = card.getChildByName('Label')?.getComponent(Label);
+    if (label) {
+      if (fontSize != null) {
+        label.fontSize = fontSize;
+        label.lineHeight = fontSize + 4;
+      }
+      label.overflow = Label.Overflow.SHRINK;
+      label.enableWrapText = false;
+    }
     if (iconInstance && iconRevision != null) {
       this._attachEquipmentIcon(card, iconInstance, iconRevision, iconSize);
-      const label = card.getChildByName('Label')?.getComponent(Label);
       if (label) {
         label.fontSize = Math.min(17, Math.round(height * 0.26));
         label.lineHeight = label.fontSize + 2;
@@ -635,6 +815,27 @@ export class CampView {
       '目标：沙暴走廊突围\n完成条件：在 12 个回合内抵达出口并互动通关。\n失败条件：超时、角色死亡或中途撤离。\n推荐准备：保留 AP 应对沙暴与沙坑，不必清怪。',
       '目标：守住流沙潮汐\n完成条件：清空 4 波敌人并存活；波次清空后出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：范围攻击与走位，注意动态沙坑扩张。',
       '目标：击败流沙巨蝎\n完成条件：利用沙坑与走位击败流沙巨蝎 Boss。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：高生命、护甲与爆发，注意潜地与沙暴。',
+      '目标：取得钥匙\n完成条件：穿越冰墙迷径取得钥匙；可绕路、拆墙或战斗突破；完成后钥匙位置出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：破甲或单体输出，学会拆冰墙捷径。',
+      '目标：霜猎悬赏\n完成条件：消灭任意 2 个强化悬赏目标（雪狼/豪猪/精灵/筑墙者原型强化版）后开启传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：按职业与命痕选择最易处理的两名悬赏，不必清场。',
+      '目标：冰隙追缉\n完成条件：追上并击败逃跑目标；若目标抵达逃离点则失败。\n失败条件：目标逃离，或角色生命降为零 / 中途撤离。\n推荐准备：利用冰面捷径或破墙截击，注意滑行打乱站位。',
+      '目标：摧毁冰川阵核\n完成条件：摧毁中央冰川阵核；周围三座晶柱可选，关闭可降低压力。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：可强杀核心，也可先拆最碍事的晶柱。',
+      '目标：霜域夺控\n完成条件：任意 2 个控制点各累计 5 回合占领进度；站在未完成点上会触发夺控狂暴。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：可分段占点，进度不清零；选择适合自己的两点即可。',
+      '目标：守住冰潮围城\n完成条件：清空 4 波敌人并存活；第四波清空后中央出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：综合应对冰墙、冰面、雪狼与精英控场。',
+      '目标：击败冰霜巨人\n完成条件：击败冰霜巨人 Boss；利用冰墙与走位躲避重击与冲锋。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：高生命、破冰与走位，注意冻结与狂暴冲锋。',
+      '目标：取得钥匙\n完成条件：穿越熔痕初境取得钥匙；熔岩格为移动成本而非即死；完成后钥匙位置出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：移动减费或高生命，利用灰烬猎犬踏火特性。',
+      '目标：熔脉封锁\n完成条件：相邻互动封印任意 3 个熔岩 vent；未封印 vents 每 3 回合喷发预警并伤害。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：优先封印离玩家最近的 vents，再清理灰烬猎犬与岩浆蟹。',
+      '目标：冷核护运\n完成条件：玩家在 2 格内时护运核心会朝基地移动；抵达基地后开启传送门。\n失败条件：角色死亡、中途撤离或护运核心被摧毁。\n推荐准备：贴身护运，可走安全长路或熔岩短路。',
+      '目标：灼域迁徙\n完成条件：在安全区内坚持 8 个玩家回合；安全区每 2 回合迁移。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：跟随安全区迁移，区外每回合受到环境伤害。',
+      '目标：守住炎潮围猎\n完成条件：清空 4 波敌人并存活；第四波清空后中央出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：综合应对灰烬猎犬、岩浆蟹、火焰元素与灵气炎魂。',
+      '目标：逆潮突围\n完成条件：在熔岩潮汐自起点推进下抵达出口并互动；无回合上限失败。\n失败条件：角色死亡或中途撤离。\n推荐准备：关注潮汐预警，保留 AP 冲向出口。',
+      '目标：击败熔岩领主\n完成条件：击败熔岩领主 Boss；Boss 机制与经典层一致。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：高生命、灼烧管理与走位，注意熔岩格。',
+      '目标：取得钥匙\n完成条件：在命途岔路中选择路线取得钥匙；三条路线风险可预知。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：按职业选择守望 / 影袭 / 轮回路。',
+      '目标：击败命轮兽\n完成条件：真正击杀命轮兽；首次死亡会回溯并恢复 50% 生命。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：保留爆发应对第二阶段。',
+      '目标：三命择途\n完成条件：互动契印选择斩首 / 突围 / 固守之一并完成该挑战。\n失败条件：角色死亡、中途撤离；突围超时亦失败。\n推荐准备：按当前工具箱选择最适合的命运。',
+      '目标：摧毁预言阵眼\n完成条件：摧毁全部 2 个预言阵眼；存活阵眼会周期发动 3×3 预言打击。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：读取预警后调整站位，优先拆眼。',
+      '目标：击败命运镜像\n完成条件：击败复用命运守卫行为镜像逻辑的命运镜像。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：改变攻击与移动节奏，避免被镜像针对性复制。',
+      '目标：改写命运生存\n完成条件：在周期性改写命运中存活 6 个玩家回合；每次删除 1 个坏结果。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：按当前局势舍弃最不能承受的事件。',
+      '目标：击败命运守卫\n完成条件：击败命运守卫 Boss；预言 / 镜像 / 改写命运完整机制不变。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：综合前三层教学，注意阶段切换。',
     ];
     return text[floor] ?? '后续章节情报尚未开放';
   }
