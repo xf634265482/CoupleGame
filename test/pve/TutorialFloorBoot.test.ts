@@ -1,9 +1,11 @@
 import { createPersistentFloorRuntime } from '../../assets/scripts/pve/core/PersistentExpeditionRuntime';
 import { serializeFloorRuntime } from '../../assets/scripts/pve/core/FloorChallengeLifecycle';
 import { PersistentFloorFlow, type PersistentFloorFlowApi } from '../../assets/scripts/pve/core/PersistentFloorFlow';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 import type { FloorChallengeSnapshot, PveProfile, StartFloorChallengeRequest } from '../../assets/scripts/pve/core/PveProgressionTypes';
 
 function profile(overrides: Partial<PveProfile> = {}): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 1,
@@ -22,6 +24,8 @@ function profile(overrides: Partial<PveProfile> = {}): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'ARCHER', // must be forced to WARRIOR in tutorial
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     updatedAt: 1,

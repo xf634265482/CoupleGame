@@ -4,9 +4,11 @@ import { createChapter1ExpeditionState } from '../../assets/scripts/pve/core/cha
 import { CHAPTER2_FLOORS } from '../../assets/scripts/pve/core/chapter2/Chapter2FloorCatalog';
 import { createChapter2ExpeditionState } from '../../assets/scripts/pve/core/chapter2/Chapter2ExpeditionFactory';
 import { chapterIdForFloor } from '../../assets/scripts/pve/core/chapterRouting';
+import { createDefaultPartners } from '../../assets/scripts/pve/core/partner/PartnerProfile';
 import type { FloorChallengeSnapshot, PveProfile } from '../../assets/scripts/pve/core/PveProgressionTypes';
 
 function profile(): PveProfile {
+  const partnerDefaults = createDefaultPartners();
   return {
     version: 1,
     highestUnlockedFloor: 14,
@@ -25,6 +27,8 @@ function profile(): PveProfile {
       RANGER: { unlocked: true, xp: 0, level: 1, unlockedTechniqueIds: [] },
     },
     selectedProfessionId: 'WARRIOR',
+    partners: partnerDefaults.partners,
+    equippedPartnerId: partnerDefaults.equippedPartnerId,
     tracking: null,
     activeChallengeId: null,
     updatedAt: 1,

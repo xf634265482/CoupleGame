@@ -7,14 +7,18 @@ import {
 } from '../Chapter2Monsters';
 import { createFogGrid, revealAround } from '../FogSystem';
 import { bossChapterScaling, CHAPTER2_SAND_PIT_COUNT, MONSTER_BASE } from '../PveConstants';
-import type { Coord, ExpeditionState, FixedEntity, Monster, RunPlayer } from '../PveTypes';
+import {
+  getBalanceSnapshot,
+  getPlayerBalanceConfig,
+  resolveProfessionBaseWithBalance,
+} from '../PveBalance';
+import type { Coord, ExpeditionState, FixedEntity, Monster, PveBalanceSnapshot, RunPlayer } from '../PveTypes';
 import type { FloorChallengeSnapshot, PveProfile } from '../PveProgressionTypes';
 import { createRng, hashSeed } from '../rng';
 import { equipmentMaxHpBonus } from '../equipment/EquipmentProgression';
-import { professionBaseStats } from '../professions/ProfessionBaseStats';
 import { classIdFromProfessionId, loadoutToRunEquipment } from '../CampCombatPreview';
 import { generateChapter2Floor } from './Chapter2FloorGenerator';
-import type { Chapter2MonsterSpawn } from './Chapter2FloorCatalog';
+import { getChapter2FloorDefinition, type Chapter2MonsterSpawn } from './Chapter2FloorCatalog';
 
 function makeQuicksandScorpion(id: string, pos: Coord): Monster {
   const base = MONSTER_BASE.BOSS;
@@ -31,7 +35,7 @@ function makeQuicksandScorpion(id: string, pos: Coord): Monster {
     aggroRadius: base.aggroRadius,
     aiState: 'IDLE',
     bossId: 'QUICKSAND_SCORPION',
-    armor: 15,
+    armor: 10,
   };
 }
 
@@ -64,16 +68,21 @@ export function createChapter2Monster(spawn: Chapter2MonsterSpawn): Monster {
   return monster;
 }
 
-function createPlayer(snapshot: FloorChallengeSnapshot, profile: PveProfile): RunPlayer {
+function createPlayer(
+  snapshot: FloorChallengeSnapshot,
+  profile: PveProfile,
+  balanceSnapshot?: PveBalanceSnapshot | null,
+): RunPlayer {
   const equipment = loadoutToRunEquipment(profile);
-  const base = professionBaseStats(snapshot.config.professionId);
+  const base = resolveProfessionBaseWithBalance(snapshot.config.professionId, balanceSnapshot, 2);
+  const playerConfig = getPlayerBalanceConfig(balanceSnapshot, 2);
   const maxHp = base.maxHp + equipmentMaxHpBonus(equipment);
   return {
     hp: maxHp,
     maxHp,
-    gold: 0,
-    anima: 0,
-    animaProgress: 0,
+    gold: playerConfig.initialGold ?? 0,
+    anima: playerConfig.initialAnima ?? 0,
+    animaProgress: playerConfig.initialAnima ?? 0,
     animaThreshold: 100,
     classId: classIdFromProfessionId(snapshot.config.professionId),
     equipment,
@@ -104,13 +113,46 @@ function addSandPits(
   }
 }
 
+function addDenseSandPits(
+  entities: FixedEntity[],
+  size: number,
+  blocked: Set<string>,
+  coveragePct: number,
+  prefix: string,
+): void {
+  const centerLeft = Math.floor((size - 1) / 2);
+  const centerRight = centerLeft + 1;
+  const candidates: Coord[] = [];
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const k = `${x},${y}`;
+      if (!blocked.has(k)) candidates.push({ x, y });
+    }
+  }
+  candidates.sort((a, b) => {
+    const aLane = a.x === centerLeft || a.x === centerRight ? 0 : 1;
+    const bLane = b.x === centerLeft || b.x === centerRight ? 0 : 1;
+    if (aLane !== bLane) return aLane - bLane;
+    const aHash = (a.x * 17 + a.y * 31 + a.x * a.y * 7) % 97;
+    const bHash = (b.x * 17 + b.y * 31 + b.x * b.y * 7) % 97;
+    return aHash - bHash;
+  });
+  const targetCount = Math.min(candidates.length, Math.floor(size * size * coveragePct / 100));
+  for (let i = 0; i < targetCount; i += 1) {
+    const pos = candidates[i]!;
+    blocked.add(`${pos.x},${pos.y}`);
+    entities.push({ id: `${prefix}_pit_${i}`, type: 'SAND_PIT', pos: { ...pos }, consumed: false });
+  }
+}
+
 export function createChapter2ExpeditionState(
   snapshot: FloorChallengeSnapshot,
   profile: PveProfile,
+  balanceSnapshot?: PveBalanceSnapshot | null,
 ): ExpeditionState {
   if (snapshot.floor < 8 || snapshot.floor > 14) throw new Error('CHAPTER2_FLOOR_OUT_OF_RANGE');
   const map = generateChapter2Floor(snapshot.floor, snapshot.seed, snapshot.mode, false);
-  const player = createPlayer(snapshot, profile);
+  const player = createPlayer(snapshot, profile, balanceSnapshot);
   const revealed = createFogGrid(map.size);
   if (map.fogMode === 'NONE') {
     for (const row of revealed) row.fill(true);
@@ -118,7 +160,10 @@ export function createChapter2ExpeditionState(
     revealAround(revealed, map.player);
   }
   const rng = createRng(hashSeed(`${snapshot.seed}:floor:${snapshot.floor}:turn:1`));
-  const { dice, ap } = rollAp(rng, professionBaseStats(snapshot.config.professionId).apBase);
+  const { dice, ap } = rollAp(
+    rng,
+    resolveProfessionBaseWithBalance(snapshot.config.professionId, balanceSnapshot, 2).apBase,
+  );
   const entities: FixedEntity[] = map.walls.map((pos, index) => ({
     id: `ROCK_${index}`,
     type: 'ROCK',
@@ -130,6 +175,7 @@ export function createChapter2ExpeditionState(
     ...map.walls.map((p) => `${p.x},${p.y}`),
     `${map.player.x},${map.player.y}`,
     ...map.monsters.map((m) => `${m.pos.x},${m.pos.y}`),
+    ...map.exitCells.map((p) => `${p.x},${p.y}`),
   ]);
   if (snapshot.floor === 8 && map.objectiveCells[0]) {
     entities.push({ id: 'KEY', type: 'KEY', pos: { ...map.objectiveCells[0] }, consumed: false });
@@ -155,7 +201,8 @@ export function createChapter2ExpeditionState(
     }
   }
   if (snapshot.floor === 12) {
-    addSandPits(entities, map.size, blocked, 4, 'F12');
+    const coveragePct = Number(getChapter2FloorDefinition(12).special?.sandPitCoveragePct ?? 70);
+    addDenseSandPits(entities, map.size, blocked, coveragePct, 'F12');
   }
   if (snapshot.floor === 14) {
     addSandPits(entities, map.size, blocked, CHAPTER2_SAND_PIT_COUNT, 'F14');
@@ -194,7 +241,7 @@ export function createChapter2ExpeditionState(
         objectiveZoneCells: map.objectiveCells.map((cell) => ({ ...cell })),
       },
     },
-    balanceSnapshot: null,
+    balanceSnapshot: getBalanceSnapshot(balanceSnapshot),
     persistentFloorMode: true,
     equipmentDropPool: [...map.equipmentIds],
     lootSeq: 0,
