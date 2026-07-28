@@ -18,9 +18,11 @@ export function validateMinghenLoadout(entries: readonly MinghenLoadoutEntry[], 
   });
 }
 
-export function highestCraftableMinghenLevel(entry: Pick<MinghenCollectionEntry, 'copies' | 'trialCompleted'>): MinghenLevel {
+/** Preview only: material/trial ceilings. Does not mutate granted level. */
+export function highestCraftableMinghenLevel(entry: Pick<MinghenCollectionEntry, 'copies' | 'trialCompleted' | 'level'>): MinghenLevel {
   const copies = Math.max(0, Math.trunc(entry.copies));
   if (copies >= MINGHEN_COPY_REQUIREMENTS[3] && entry.trialCompleted) return 3;
+  if (entry.level >= 2) return entry.level >= 3 ? 3 : 2;
   if (copies >= MINGHEN_COPY_REQUIREMENTS[2]) return 2;
   return 1;
 }
@@ -28,12 +30,53 @@ export function highestCraftableMinghenLevel(entry: Pick<MinghenCollectionEntry,
 export function addMinghenCopy(entry: MinghenCollectionEntry | undefined, id: string): MinghenCollectionEntry {
   getMinghenDefinition(id);
   const copies = (entry?.copies ?? 0) + 1;
-  const next = { id, copies, trialCompleted: entry?.trialCompleted ?? false, level: 1 as MinghenLevel };
-  next.level = highestCraftableMinghenLevel(next);
-  return next;
+  return {
+    id,
+    copies,
+    trialCompleted: entry?.trialCompleted ?? false,
+    level: entry?.level ?? 1,
+  };
 }
 
 export function completeMinghenTrial(entry: MinghenCollectionEntry): MinghenCollectionEntry {
-  const next = { ...entry, trialCompleted: true };
-  return { ...next, level: highestCraftableMinghenLevel(next) };
+  if (entry.copies < MINGHEN_COPY_REQUIREMENTS[3]) {
+    throw new Error('MINGHEN_TRIAL_COPIES_REQUIRED');
+  }
+  return { ...entry, trialCompleted: true, level: 3 };
+}
+
+export function canSynthesizeMinghenToII(
+  profile: { minghenCollection: Record<string, MinghenCollectionEntry>; minghenLoadout: readonly { id: string }[] },
+  id: string,
+): boolean {
+  const owned = profile.minghenCollection[id];
+  if (!owned) return false;
+  if (owned.level !== 1) return false;
+  if (owned.copies < MINGHEN_COPY_REQUIREMENTS[2]) return false;
+  if (profile.minghenLoadout.some((x) => x.id === id)) return false;
+  return true;
+}
+
+export function synthesizeMinghenToII<T extends {
+  minghenCollection: Record<string, MinghenCollectionEntry>;
+  minghenLoadout: readonly { id: string }[];
+}>(profile: T, id: string): T {
+  const fail = (code: string, message: string): never => {
+    const err = new Error(message) as Error & { code: string };
+    err.code = code;
+    throw err;
+  };
+  getMinghenDefinition(id);
+  const owned = profile.minghenCollection[id];
+  if (!owned) fail('PVE_MINGHEN_NOT_OWNED', '未持有该命痕');
+  if (profile.minghenLoadout.some((x) => x.id === id)) fail('PVE_MINGHEN_EQUIPPED', '已装配命痕不能用于合成');
+  if (owned.level !== 1) fail('PVE_MINGHEN_ALREADY_II', '已是II级或更高');
+  if (owned.copies < MINGHEN_COPY_REQUIREMENTS[2]) fail('PVE_MINGHEN_COPIES_SHORT', '副本不足，需要至少2枚');
+  return {
+    ...profile,
+    minghenCollection: {
+      ...profile.minghenCollection,
+      [id]: { ...owned, level: 2 },
+    },
+  };
 }
