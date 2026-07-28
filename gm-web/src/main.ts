@@ -12,6 +12,7 @@ import type {
   LocalDocSyncResult,
   PlayerListItem,
   PlayerView,
+  MailAttachmentType,
   ResourceType,
   ToolResponse,
 } from './types';
@@ -27,7 +28,15 @@ type FeedbackType = 'info' | 'error';
 
 const loginForm = { username: '', password: '' };
 const searchForm = { keyword: '' };
-const resourceForm = { resourceType: 'diamond' as ResourceType, amount: '', reason: '' };
+const resourceForm = { resourceType: 'stardust' as ResourceType, amount: '', reason: '' };
+const mailForm = {
+  broadcast: false,
+  title: '',
+  body: '',
+  attachmentType: 'none' as MailAttachmentType,
+  attachmentAmount: '',
+  reason: '',
+};
 const resetForm = { reason: '', leaderboardConfirm: '' };
 const balanceForm = {
   scopeType: 'global' as BalanceScopeType,
@@ -294,6 +303,8 @@ const ADMIN_ACTION_LABELS: Record<string, string> = {
   getPlayer: '查询玩家',
   listPlayers: '读取玩家列表',
   adjustResources: '资源调整',
+  sendMail: '发送邮件',
+  sendMailBroadcast: '全服发信',
   resetExpedition: '重置远征',
   resetTutorial: '重置新手教程',
   resetLeaderboardGlobal: '全服重置排行榜',
@@ -307,7 +318,7 @@ const ADMIN_ACTION_LABELS: Record<string, string> = {
 };
 
 const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
-  diamond: '钻石',
+  stardust: '星尘',
   stamina: '体力',
 };
 
@@ -717,7 +728,7 @@ function renderPlayerList(): string {
             <button class="secondary" data-select-user="${escapeHtml(player.userId)}">查看玩家</button>
           </div>
           <div class="player-card-stats">
-            <span>钻石 ${player.diamond}</span>
+            <span>星尘 ${player.stardust}</span>
             <span>最高层 ${player.highestFloor}</span>
             <span>${player.hasActiveExpedition ? `远征 ${player.chapter}-${player.floor}` : '无进行中远征'}</span>
             <span>${escapeHtml(getClassLabel(player.classId))}</span>
@@ -739,7 +750,7 @@ function renderPlayerDetail(): string {
         <div class="stat"><span>昵称</span><strong>${escapeHtml(currentPlayer.nickname)}</strong></div>
         <div class="stat"><span>userId</span><strong>${escapeHtml(currentPlayer.userId)}</strong></div>
         <div class="stat"><span>openid</span><strong style="font-size:14px">${escapeHtml(currentPlayer.openId)}</strong></div>
-        <div class="stat"><span>钻石</span><strong>${currentPlayer.diamond}</strong></div>
+        <div class="stat"><span>星尘</span><strong>${currentPlayer.stardust}</strong></div>
         <div class="stat"><span>排行榜最高层</span><strong>${currentPlayer.highestFloor}</strong></div>
         <div class="stat"><span>新手教程</span><strong>${currentPlayer.tutorialCompleted ? '已完成' : '未完成'}</strong></div>
         <div class="stat"><span>体力</span><strong>${currentPlayer.stamina}</strong></div>
@@ -933,7 +944,7 @@ function renderDashboard(): void {
               <div>
                 <label for="resourceType">资源类型</label>
                 <select id="resourceType">
-                  <option value="diamond" ${resourceForm.resourceType === 'diamond' ? 'selected' : ''}>钻石</option>
+                  <option value="stardust" ${resourceForm.resourceType === 'stardust' ? 'selected' : ''}>星尘</option>
                   <option value="stamina" ${resourceForm.resourceType === 'stamina' ? 'selected' : ''}>体力</option>
                 </select>
               </div>
@@ -949,6 +960,46 @@ function renderDashboard(): void {
             <div class="button-row">
               <button id="adjustBtn" ${currentPlayer ? '' : 'disabled'}>执行资源调整</button>
             </div>
+          </div>
+          <div class="panel" style="margin-top:16px;">
+            <h2>发送邮件</h2>
+            <div class="field-row">
+              <div>
+                <label for="mailBroadcast">发送范围</label>
+                <select id="mailBroadcast">
+                  <option value="player" ${!mailForm.broadcast ? 'selected' : ''}>当前选中玩家</option>
+                  <option value="broadcast" ${mailForm.broadcast ? 'selected' : ''}>全服广播（≤500）</option>
+                </select>
+              </div>
+              <div>
+                <label for="mailTitle">标题</label>
+                <input id="mailTitle" value="${escapeHtml(mailForm.title)}" placeholder="邮件标题" />
+              </div>
+              <div>
+                <label for="mailAttachmentType">附件</label>
+                <select id="mailAttachmentType">
+                  <option value="none" ${mailForm.attachmentType === 'none' ? 'selected' : ''}>纯通知</option>
+                  <option value="stardust" ${mailForm.attachmentType === 'stardust' ? 'selected' : ''}>星尘</option>
+                  <option value="stamina" ${mailForm.attachmentType === 'stamina' ? 'selected' : ''}>体力</option>
+                </select>
+              </div>
+              <div>
+                <label for="mailAttachmentAmount">附件数量</label>
+                <input id="mailAttachmentAmount" value="${escapeHtml(mailForm.attachmentAmount)}" placeholder="纯通知可留空" ${mailForm.attachmentType === 'none' ? 'disabled' : ''} />
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label for="mailBody">正文</label>
+                <textarea id="mailBody" placeholder="邮件正文">${escapeHtml(mailForm.body)}</textarea>
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label for="mailReason">操作原因</label>
+                <textarea id="mailReason" placeholder="必须填写原因">${escapeHtml(mailForm.reason)}</textarea>
+              </div>
+            </div>
+            <div class="button-row">
+              <button id="sendMailBtn" ${mailForm.broadcast || currentPlayer ? '' : 'disabled'}>发送邮件</button>
+            </div>
+            <p class="muted">星尘附件入账到玩家档案星尘；未领取的附件邮件玩家无法删除。</p>
           </div>
           <div class="panel" style="margin-top:16px;">
             <h2>重置操作</h2>
@@ -1123,6 +1174,69 @@ function bindDashboardEvents(): void {
     }, async () => {
       setFeedback('资源调整成功', 'info');
     });
+  });
+
+  document.querySelector<HTMLSelectElement>('#mailBroadcast')?.addEventListener('change', (event) => {
+    mailForm.broadcast = (event.target as HTMLSelectElement).value === 'broadcast';
+    render();
+  });
+  document.querySelector<HTMLInputElement>('#mailTitle')?.addEventListener('input', (event) => {
+    mailForm.title = (event.target as HTMLInputElement).value;
+  });
+  document.querySelector<HTMLTextAreaElement>('#mailBody')?.addEventListener('input', (event) => {
+    mailForm.body = (event.target as HTMLTextAreaElement).value;
+  });
+  document.querySelector<HTMLSelectElement>('#mailAttachmentType')?.addEventListener('change', (event) => {
+    mailForm.attachmentType = (event.target as HTMLSelectElement).value as MailAttachmentType;
+    if (mailForm.attachmentType === 'none') mailForm.attachmentAmount = '';
+    render();
+  });
+  document.querySelector<HTMLInputElement>('#mailAttachmentAmount')?.addEventListener('input', (event) => {
+    mailForm.attachmentAmount = (event.target as HTMLInputElement).value;
+  });
+  document.querySelector<HTMLTextAreaElement>('#mailReason')?.addEventListener('input', (event) => {
+    mailForm.reason = (event.target as HTMLTextAreaElement).value;
+  });
+  document.querySelector<HTMLButtonElement>('#sendMailBtn')?.addEventListener('click', async () => {
+    if (!mailForm.broadcast && !currentPlayer) return setFeedback('请先查询玩家，或选择全服广播', 'error');
+    if (!mailForm.title.trim()) return setFeedback('请填写邮件标题', 'error');
+    if (!mailForm.body.trim()) return setFeedback('请填写邮件正文', 'error');
+    if (!mailForm.reason.trim()) return setFeedback('请填写发信原因', 'error');
+    const attachments: Array<{ type: 'stardust' | 'stamina'; amount: number }> = [];
+    if (mailForm.attachmentType !== 'none') {
+      const amount = Number(mailForm.attachmentAmount.trim());
+      if (!mailForm.attachmentAmount.trim() || !Number.isInteger(amount) || amount <= 0) {
+        return setFeedback('附件数量必须是正整数', 'error');
+      }
+      attachments.push({ type: mailForm.attachmentType, amount });
+    }
+    const targetLabel = mailForm.broadcast
+      ? '全服玩家'
+      : `${currentPlayer!.nickname}（${currentPlayer!.userId}）`;
+    const attachLabel = attachments.length
+      ? attachments.map((item) => `${RESOURCE_TYPE_LABELS[item.type]}×${item.amount}`).join('、')
+      : '纯通知';
+    if (!window.confirm(`确认向 ${targetLabel} 发送邮件？\n附件：${attachLabel}`)) return;
+    if (mailForm.broadcast) {
+      await withTool('sendMailBroadcast', {
+        title: mailForm.title.trim(),
+        body: mailForm.body.trim(),
+        attachments,
+        reason: mailForm.reason.trim(),
+      }, async (result) => {
+        setFeedback(`全服发信成功，影响 ${result.affectedUsers || 0} 人`, 'info');
+      });
+    } else {
+      await withTool('sendMail', {
+        userId: currentPlayer!.userId,
+        title: mailForm.title.trim(),
+        body: mailForm.body.trim(),
+        attachments,
+        reason: mailForm.reason.trim(),
+      }, async () => {
+        setFeedback('邮件已发送', 'info');
+      });
+    }
   });
 
   document.querySelector<HTMLTextAreaElement>('#resetReason')?.addEventListener('input', (event) => {

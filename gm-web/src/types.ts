@@ -2,6 +2,8 @@ export type AdminAction =
   | 'getPlayer'
   | 'listPlayers'
   | 'adjustResources'
+  | 'sendMail'
+  | 'sendMailBroadcast'
   | 'resetExpedition'
   | 'resetCampInventory'
   | 'resetTutorial'
@@ -17,7 +19,8 @@ export type AdminAction =
   | 'syncBalanceDocsPreview'
   | 'syncBalanceDocsLog';
 
-export type ResourceType = 'diamond' | 'stamina';
+export type ResourceType = 'stardust' | 'stamina';
+export type MailAttachmentType = 'none' | 'stardust' | 'stamina';
 export type BalanceScopeType = 'global' | 'chapter' | 'unit';
 export type BalanceUnitType = 'player' | 'monster' | 'boss' | 'equipment';
 
@@ -39,7 +42,7 @@ export interface PlayerView {
   openId: string;
   userId: string;
   lastActiveAt: number | null;
-  diamond: number;
+  stardust: number;
   highestFloor: number;
   tutorialCompleted: boolean;
   stamina: number;
@@ -61,7 +64,7 @@ export interface PlayerListItem {
   openId: string;
   userId: string;
   lastActiveAt: number | null;
-  diamond: number;
+  stardust: number;
   highestFloor: number;
   hasActiveExpedition: boolean;
   chapter: number;
