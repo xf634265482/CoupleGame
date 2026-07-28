@@ -31,9 +31,10 @@ import {
   createBalancedInitialPlayer,
   getBalancedApBase,
   getBalanceSnapshot,
+  resolveProfessionBaseWithBalance,
 } from './PveBalance';
 import { legFateArmorHeal, legFortuneBlessingFloorHeal } from './LegendarySystem';
-import { professionBaseStats, professionIdFromClassId } from './professions/ProfessionBaseStats';
+import { professionIdFromClassId } from './professions/ProfessionBaseStats';
 
 function deriveFloorSeed(runSeed: number, floor: number): number {
   return hashSeed(`${runSeed}:floor:${floor}`);
@@ -180,7 +181,11 @@ export function endTurn(state: ExpeditionState): ApplyResult {
 
   const rng = createRng(postExposureState.floorState.rngState);
   const professionApBase = postExposureState.persistentFloorMode
-    ? professionBaseStats(professionIdFromClassId(postExposureState.player.classId)).apBase
+    ? resolveProfessionBaseWithBalance(
+      professionIdFromClassId(postExposureState.player.classId),
+      postExposureState.balanceSnapshot,
+      postExposureState.chapter,
+    ).apBase
     : getBalancedApBase(postExposureState.balanceSnapshot, postExposureState.chapter);
   const { dice, ap } = rollAp(rng, professionApBase);
   const nextTurn = postExposureState.floorState.turn + 1;

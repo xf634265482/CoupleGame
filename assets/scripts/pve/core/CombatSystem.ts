@@ -10,6 +10,11 @@
 // M2 装备效果（AC-17）：
 //   WEAPON.baseStat → 攻击加成；ARMOR.baseStat + 神像护甲 → 受伤减伤（最低造成 1 伤害）
 
+import {
+  F18_CORE,
+  F18_PILLAR_ARMOR,
+} from './chapter3/Chapter3FloorCatalog';
+import { isControlRageActive } from './chapter3/ControlPointRage';
 import { addAnima } from './AnimaSystem';
 import { clearMonsterAlert, DUNE_SENTINEL_ATTACK_BONUS, hasDuneSentinelAttackAura } from './AlertSystem';
 import { canAfford, spend } from './ApSystem';
@@ -38,6 +43,8 @@ import {
 import {
   CHAPTER3_ICE_WALL_DROP_ANIMA,
   CHAPTER3_ICE_WALL_HP,
+  CHAPTER3_CORE_ARMOR_PILLAR_REDUCTION,
+  CHAPTER3_CONTROL_RAGE_ATTACK_BONUS,
   GLACIER_SHAPER_ICE_WALL_FLOOR_ANIMA_CAP,
   FROST_GIANT_SHATTERED_ICE_DURATION,
   ASH_HOUND_LAVA_ATTACK_MULT,
@@ -66,7 +73,7 @@ import {
   SPECIAL_MONSTER_RETREAT_STEPS,
   STATIONARY_PRESSURE_DAMAGE_PER_STACK,
 } from './PveConstants';
-import { getBalancedActionCost } from './PveBalance';
+import { getBalancedActionCost, resolveProfessionBaseWithBalance } from './PveBalance';
 import { makeGoblinWarrior, VARIANT_FIRE_GOBLIN, VARIANT_FROST_GOBLIN, VARIANT_GOBLIN_SENTINEL } from './Chapter1Monsters';
 import { VARIANT_DESERT_HOPPER_LIZARD, VARIANT_DUNE_SENTINEL, VARIANT_POISON_SCORPION } from './Chapter2Monsters';
 import { VARIANT_FROST_SPRITE, VARIANT_FROSTSPIKE_PORCUPINE, VARIANT_GLACIER_SHAPER } from './Chapter3Monsters';
@@ -80,7 +87,7 @@ import { checkLos } from './LosSystem';
 import { isSpecialMonster } from './MonsterCategories';
 import { inBounds, isBlockedByIceWall, isBlockedByRock } from './MovementSystem';
 import { resolveWarriorKnockback } from './professions/WarriorSystem';
-import { professionBaseStats, professionIdFromClassId } from './professions/ProfessionBaseStats';
+import { professionIdFromClassId } from './professions/ProfessionBaseStats';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent, RunPlayer } from './PveTypes';
 import { scaledStatsForEquipItem } from './equipment/EquipmentProgression';
 import { getFixedEquipmentDefinition, type FixedEquipmentDefinition } from './equipment/EquipmentDefinition';
@@ -782,12 +789,16 @@ function resolveHit(
  */
 export function playerAttackPower(
   player: RunPlayer,
-  _balanceSnapshot?: ExpeditionState['balanceSnapshot'],
-  _chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  chapter = 1,
 ): { damage: number; range: number } {
   const stats = CLASS_STATS[player.classId];
   const weapon = player.equipment.WEAPON;
-  const profession = professionBaseStats(professionIdFromClassId(player.classId));
+  const profession = resolveProfessionBaseWithBalance(
+    professionIdFromClassId(player.classId),
+    balanceSnapshot,
+    chapter,
+  );
 
   const weaponPower = weapon
     ? (scaledStatsForEquipItem(weapon)?.power ?? weapon.baseStat ?? 0)
@@ -824,7 +835,6 @@ export function playerAttackPower(
     if (!alreadyFromDef) range += 1;
   }
 
-  rawAttack += player.idolAttackBonus ?? 0;                 // 神像祝福累计攻击加成
   return {
     damage: Math.max(10, Math.round(rawAttack)),
     range,
@@ -851,9 +861,8 @@ export function playerArmorPower(player: RunPlayer): { armor: number; baseArmor:
       baseArmor += item.baseStat ?? 0;
     }
   }
-  const bonusArmor = player.idolArmorBonus ?? 0;
   return {
-    armor: Math.max(0, baseArmor + bonusArmor),
+    armor: Math.max(0, baseArmor),
     baseArmor,
   };
 }
@@ -939,7 +948,11 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
 
   let { damage, range } = playerAttackPower(state.player, state.balanceSnapshot, state.chapter);
   if (context) {
-    const professionRange = professionBaseStats(professionIdFromClassId(state.player.classId)).attackRange;
+    const professionRange = resolveProfessionBaseWithBalance(
+      professionIdFromClassId(state.player.classId),
+      state.balanceSnapshot,
+      state.chapter,
+    ).attackRange;
     range = Math.max(professionRange, context.definition.fixed.maxRange ?? professionRange)
       + context.profession.rangeBonus;
     damage = Math.max(1, Math.round(
@@ -1238,6 +1251,9 @@ export function monsterAttack(
   if (monster.variantId !== VARIANT_DUNE_SENTINEL && hasDuneSentinelAttackAura(floor)) {
     rawDamage += DUNE_SENTINEL_ATTACK_BONUS;
   }
+  if (isControlRageActive(floor)) {
+    rawDamage += CHAPTER3_CONTROL_RAGE_ATTACK_BONUS;
+  }
   const armorReduction = Math.min(effectiveArmor, Math.round(rawDamage * PLAYER_ARMOR_MAX_REDUCTION_RATIO));
   // damageMult 在护甲减伤后生效（护甲先吸收，余量再倍率）；痛觉钝化系(≥5 时再-2)在最终取整前扣除。
   let reducedDamage = Math.max(0, rawDamage - armorReduction) * damageMult;
@@ -1384,11 +1400,19 @@ export function attackIceWall(state: ExpeditionState, entityId: string): ApplyRe
   if (manhattan(floor.player, wall.pos) > range) return noop(state);
   if (!isRevealed(floor.revealed, wall.pos)) return noop(state);
 
-  const newHp = Math.max(0, (wall.hp ?? 0) - damage);
+  let effectiveDamage = damage;
+  if (entityId === F18_CORE) {
+    const armorPillar = floor.entities.find((entity) => entity.id === F18_PILLAR_ARMOR && !entity.consumed);
+    if (armorPillar) {
+      effectiveDamage = Math.max(1, Math.round(damage * (1 - CHAPTER3_CORE_ARMOR_PILLAR_REDUCTION)));
+    }
+  }
+
+  const newHp = Math.max(0, (wall.hp ?? 0) - effectiveDamage);
   const destroyed = newHp <= 0;
 
   const events: PveEvent[] = [
-    { type: 'ATTACK', attackerId: 'PLAYER', targetId: entityId, damage, targetHp: newHp },
+    { type: 'ATTACK', attackerId: 'PLAYER', targetId: entityId, damage: effectiveDamage, targetHp: newHp },
   ];
 
   let entities = floor.entities.map((e) =>
