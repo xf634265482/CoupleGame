@@ -64,9 +64,10 @@
 ## 7. 命痕
 
 - 命痕是玩家永久解锁的**战术工具箱**：每枚绑定一种可重复触发的战场行为，通过装配组合改变打法，而非单纯数值加成。
+- 营地命痕装配槽上限为 **10**；首通通关命痕弹窗固定 **三选一**（楼层主题池可更长，展示截取前 3 个）。
 - 完整机制、数值与试炼文案以 `specs/260712-pve-persistent-floor-progression/minghen-catalog.md` 与客户端 `core/minghen/MinghenCatalog.ts` 为权威；V3 已扩容至 M56，M39–M56 暂以 `sourceFloor = 0` 占位，尚未写入各章主题池。
 - 命痕收集、装配、方案、追踪、试炼和战斗效果是当前系统；数据由 `PveMinghen.js`、`PveProgression.js` 与客户端 `core/minghen/` 共同维护。
-- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（含 M39–M56）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格，广告刷新 ≤1 次/日；兑换只消耗升级里程碑之外的多余副本。同名升级保留，不做异名随机合成与残片。营地命痕台只负责装配/库存/方案。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md`；云端 `PveMinghenShop.js` + 大厅侧边入口 `MinghenShopController`。
+- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（含 M39–M56）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格，广告刷新 ≤1 次/日；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片。营地命痕台负责装配/库存/合成；方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md` 与 `docs/superpowers/specs/2026-07-28-minghen-camp-synth-ui-design.md`；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
 - 楼层与命痕的掉落接入、主题池与关卡标签适配见各章 content 文档，不在本文件展开。
 - 星尘是营地统一货币；结算产生的命痕粉尘在入账时统一折算为星尘。
 
@@ -103,3 +104,11 @@
 - 楼层中立交互只保留当前关卡需要的宝箱、温泉、祭坛、火药桶、爆破点、传送门等。
 - 旧楼层神像与旧楼层铁匠已退役，不再进入地图生成、HUD/迷雾图标、远征弹窗 UI 或主包预加载。
 - 装备强化仅保留营地成长线。
+## 12. 2026-07-18 战斗内设置与重开本层
+
+- 远征战斗 HUD 左下原「返回」按钮改为「设置」。
+- 设置弹窗包含「继续冒险」「重新挑战本层」「返回大厅」。
+- 返回大厅会先保存当前 ACTIVE 楼层运行时，之后可从大厅继续。
+- 重新挑战本层会二次确认，放弃当前同配置 ACTIVE 挑战并创建新的同层挑战；不重复扣除体力，本层未结算的临时进度、临时掉落和战斗状态全部丢弃。
+- 云端 `startFloorChallenge` 使用 `abandonActive + forceRestart` 表示同配置重开；只有请求与当前 ACTIVE 挑战配置一致时才允许免体力重开，防止借重开切职业、装备或命痕。
+- 战斗内重开必须以当前 ACTIVE challenge 的开局配置快照为准，不能使用营地当前配置；云端在 `abandonActive + forceRestart` 且同楼层/同模式时也以 ACTIVE challenge 配置重建，避免玩家在营地调整配置后无法重开旧运行时。
