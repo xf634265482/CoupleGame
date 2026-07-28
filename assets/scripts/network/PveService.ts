@@ -34,7 +34,7 @@ export interface LoadPveLeaderboardResponse extends CloudOk {
 }
 
 export interface UpdateMetaReport {
-  /** Diamond delta. Cloud rejects if balance would go below zero. */
+  /** @deprecated 局外钻石已废弃；勿再传。 */
   diamond?: number;
   tutorialCompleted?: boolean;
   resetTutorial?: boolean;
@@ -58,10 +58,80 @@ export async function loadPveLeaderboard(limit = 50): Promise<LoadPveLeaderboard
   );
 }
 
-/** Update out-of-run markers (tutorial / diamond). */
+/** Update out-of-run markers (tutorial). */
 export async function updatePveMeta(report: UpdateMetaReport): Promise<CloudOk> {
   return ensureOk(
     await callFunction<CloudOk>('pve', { action: 'updateMeta', report }),
     'PVE_UPDATE_META_FAILED',
+  );
+}
+
+export type MailAttachmentType = 'stardust' | 'stamina';
+
+export interface MailAttachment {
+  type: MailAttachmentType;
+  amount: number;
+}
+
+export interface MailItem {
+  id: string;
+  title: string;
+  body: string;
+  attachments: MailAttachment[];
+  claimed: boolean;
+  read: boolean;
+  deleted?: boolean;
+  batchId?: string;
+  createdAt: number;
+  createdBy?: string;
+  unread: boolean;
+}
+
+export interface ListMailsResponse extends CloudOk {
+  mails: MailItem[];
+  unreadCount: number;
+}
+
+export interface ClaimMailResponse extends CloudOk {
+  mail: MailItem;
+  profile?: { gold?: number; stamina?: number; staminaNextRecoveryAt?: number | null };
+  stamina?: number;
+}
+
+export async function listMails(limit = 100): Promise<ListMailsResponse> {
+  return ensureOk(
+    await callFunction<ListMailsResponse>('pve', { action: 'listMails', limit }),
+    'PVE_LIST_MAILS_FAILED',
+  );
+}
+
+export async function claimMail(mailId: string): Promise<ClaimMailResponse> {
+  return ensureOk(
+    await callFunction<ClaimMailResponse>('pve', { action: 'claimMail', mailId }),
+    'PVE_CLAIM_MAIL_FAILED',
+  );
+}
+
+export async function claimAllMails(): Promise<ClaimMailResponse & { claimedCount?: number }> {
+  return ensureOk(
+    await callFunction<ClaimMailResponse & { claimedCount?: number }>('pve', { action: 'claimAllMails' }),
+    'PVE_CLAIM_ALL_MAILS_FAILED',
+  );
+}
+
+export async function deleteMail(mailId: string): Promise<CloudOk> {
+  return ensureOk(
+    await callFunction<CloudOk>('pve', { action: 'deleteMail', mailId }),
+    'PVE_DELETE_MAIL_FAILED',
+  );
+}
+
+export async function markMailRead(mailId: string): Promise<{ ok: boolean; mail?: MailItem; code?: string; message?: string }> {
+  return ensureOk(
+    await callFunction<{ ok: boolean; mail?: MailItem; code?: string; message?: string }>('pve', {
+      action: 'markMailRead',
+      mailId,
+    }),
+    'PVE_MARK_MAIL_READ_FAILED',
   );
 }

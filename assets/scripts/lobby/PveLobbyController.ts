@@ -25,7 +25,13 @@ import {
   loadPveLeaderboard,
   loadPveMeta,
   updatePveMeta,
+  listMails,
+  claimMail,
+  claimAllMails,
+  deleteMail,
+  markMailRead,
   type PveLeaderboardEntry,
+  type MailItem,
 } from '../network/PveService';
 import {
   loadActiveFloorChallenge,
@@ -33,6 +39,7 @@ import {
   type LoadActiveFloorChallengeResponse,
 } from '../network/PveProgressionService';
 import { flushPendingFloorSettlement } from '../pve/flushPendingFloorSettlement';
+import { preloadChapter } from '../pve/ChapterResourceLoader';
 import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
@@ -47,6 +54,8 @@ import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { CampController } from '../pve/controllers/CampController';
 import { PartnerController } from '../pve/controllers/PartnerController';
 import { MinghenShopController } from '../pve/controllers/MinghenShopController';
+import { MailView } from '../pve/views/MailView';
+import { preloadPartnerIconBundle } from '../pve/PartnerIconResourceLoader';
 import {
   applyUiLayerTree,
   bindWindowResize,
@@ -87,9 +96,12 @@ const NAV_Y_OFFSET = 112;
 @ccclass('PveLobbyController')
 export class PveLobbyController extends Component {
   private _logo: Node | null = null;
-  private _diamondLabel: Label | null = null;
+  private _stardustLabel: Label | null = null;
   private _staminaLabel: Label | null = null;
   private _staminaTimerLabel: Label | null = null;
+  private _mailBadgeLabel: Label | null = null;
+  private _mailView: MailView | null = null;
+  private _mailBusy = false;
   private _metaFloorLabel: Label | null = null;
   private _metaRankLabel: Label | null = null;
   private _metaFloor = 0;
@@ -141,11 +153,15 @@ export class PveLobbyController extends Component {
     const relayout = () => {
       refreshScreenAdapt(this.node);
       LoadingOverlay.recompute();
-      if (this._lobbyReady) void applyScreenBackground(this.node, 'lobby');
+      // 尺寸晚就绪时 ensureScreenBackground 会重铺已有 Art；仍主动再 apply 一次兜底。
+      if (this._lobbyReady || getCachedSprite('backgrounds/bg_lobby')) {
+        void applyScreenBackground(this.node, 'lobby');
+      }
     };
     this.scheduleOnce(relayout, 0);
     this.scheduleOnce(relayout, 0.12);
     this.scheduleOnce(relayout, 0.35);
+    this.scheduleOnce(relayout, 0.8);
     this._unbindResize = bindWindowResize(this.node, relayout);
     this.schedule(this._tickStamina, 1);
 
@@ -243,14 +259,16 @@ export class PveLobbyController extends Component {
       void this._applyRemoteAvatar(GameSession.user.avatarUrl);
     }
 
+    this._buildMailEntry(root, y - CARD_H / 2 - 42);
+
     const assetStrip = new Node('TopAssetStrip');
     assetStrip.setParent(root);
     assetStrip.setPosition(214, y + 2, 0);
     assetStrip.addComponent(UITransform).setContentSize(270, 82);
 
-    this._diamondLabel = this._makeTopAssetBadge(assetStrip, 'Diamond', -66, 0, 'pve/lobby/icon_chip_stardust', 114, 50, 44, 23);
+    this._stardustLabel = this._makeTopAssetBadge(assetStrip, 'StardustChip', -66, 0, 'pve/lobby/icon_chip_stardust', 114, 50, 44, 23);
     this._staminaLabel = this._makeTopAssetBadge(assetStrip, 'StaminaChip', 66, 0, 'pve/lobby/icon_chip_stamina', 118, 50, 42, 23);
-    if (this._diamondLabel) this._diamondLabel.string = '0';
+    if (this._stardustLabel) this._stardustLabel.string = '0';
     if (this._staminaLabel) this._staminaLabel.string = `${this._stamina}/${this._staminaMax}`;
     const staminaChip = assetStrip.getChildByName('StaminaChip');
     if (staminaChip) {
@@ -263,7 +281,130 @@ export class PveLobbyController extends Component {
     }
   }
 
-  /** 右侧浮标：每日命痕商会（与营地命痕台职责分离）。 */
+  private _buildMailEntry(root: Node, y: number): void {
+    const entry = new Node('MailEntry');
+    entry.setParent(root);
+    entry.setPosition(-226, y, 0);
+    entry.addComponent(UITransform).setContentSize(160, 52);
+    this._drawRoundedRect(
+      entry,
+      160,
+      52,
+      14,
+      new Color(10, 38, 78, 170),
+      new Color(120, 205, 255, 210),
+    );
+    const label = this._makeLabel(entry, 'MailLabel', 0, 22, 120, 36);
+    label.string = '邮箱';
+    label.isBold = true;
+    this._mailBadgeLabel = this._makeLabel(entry, 'MailBadge', 14, 16, 40, 24);
+    this._mailBadgeLabel.node.setPosition(58, 14, 0);
+    this._mailBadgeLabel.string = '';
+    this._mailBadgeLabel.color = new Color(255, 90, 90, 255);
+    this._mailBadgeLabel.isBold = true;
+    this._bindButton(entry, () => void this._showMailBox());
+  }
+
+  private _setMailBadge(count: number): void {
+    if (!this._mailBadgeLabel) return;
+    this._mailBadgeLabel.string = count > 0 ? (count > 99 ? '99+' : String(count)) : '';
+  }
+
+  private async _refreshMailBadge(): Promise<void> {
+    try {
+      const res = await listMails(50);
+      this._setMailBadge(res.unreadCount || 0);
+    } catch {
+      // 邮箱红点失败不阻断大厅
+    }
+  }
+
+  private async _showMailBox(): Promise<void> {
+    if (this._mailBusy) return;
+    this._mailBusy = true;
+    try {
+      const res = await listMails();
+      this._setMailBadge(res.unreadCount || 0);
+      if (this._mailView) {
+        this._mailView.destroy();
+        this._mailView = null;
+      }
+      this._mailView = new MailView(this.node, {
+        onClose: () => {
+          this._mailView?.destroy();
+          this._mailView = null;
+          void this._refreshMailBadge();
+        },
+        onOpen: (mailId) => {
+          void markMailRead(mailId).then(() => this._reloadMailView()).catch(() => undefined);
+        },
+        onClaim: (mailId) => {
+          void this._claimOneMail(mailId);
+        },
+        onClaimAll: () => {
+          void this._claimAllMail();
+        },
+        onDelete: (mailId) => {
+          void this._deleteOneMail(mailId);
+        },
+      });
+      this._mailView.setMails(res.mails || []);
+    } catch (err) {
+      this._setStatus(`邮箱打开失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._mailBusy = false;
+    }
+  }
+
+  private async _reloadMailView(): Promise<void> {
+    const res = await listMails();
+    this._setMailBadge(res.unreadCount || 0);
+    this._mailView?.setMails(res.mails || []);
+  }
+
+  private _applyMailReward(res: { profile?: { gold?: number; stamina?: number; staminaNextRecoveryAt?: number | null }; stamina?: number }): void {
+    if (typeof res.profile?.gold === 'number') this._applyStardust(res.profile.gold);
+    if (typeof res.profile?.stamina === 'number') {
+      this._stamina = Math.max(0, Math.min(PVE_STAMINA_MAX, Math.floor(res.profile.stamina)));
+      this._staminaNextRecoveryAt = res.profile.staminaNextRecoveryAt ?? this._staminaNextRecoveryAt;
+      this._updateStaminaLabels();
+    } else if (typeof res.stamina === 'number') {
+      this._stamina = Math.max(0, Math.min(PVE_STAMINA_MAX, Math.floor(res.stamina)));
+      this._updateStaminaLabels();
+    }
+  }
+
+  private async _claimOneMail(mailId: string): Promise<void> {
+    try {
+      const res = await claimMail(mailId);
+      this._applyMailReward(res);
+      await this._reloadMailView();
+      this._setStatus('已领取邮件奖励');
+    } catch (err) {
+      this._setStatus(`领取失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async _claimAllMail(): Promise<void> {
+    try {
+      const res = await claimAllMails();
+      this._applyMailReward(res);
+      await this._reloadMailView();
+      this._setStatus(res.claimedCount ? `已领取 ${res.claimedCount} 封` : '没有可领取的邮件');
+    } catch (err) {
+      this._setStatus(`一键领取失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async _deleteOneMail(mailId: string): Promise<void> {
+    try {
+      await deleteMail(mailId);
+      await this._reloadMailView();
+      this._setStatus('邮件已删除');
+    } catch (err) {
+      this._setStatus(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   private _buildSideShopEntry(root: Node): void {
     const entry = new Node('MinghenShopEntry');
     entry.setParent(root);
@@ -323,7 +464,7 @@ export class PveLobbyController extends Component {
     this._makeNavButton(
       dock,
       '伙伴',
-      'pve/lobby/icon_nav_camp',
+      'pve/lobby/icon_nav_partner',
       -navStep * 0.5,
       -4,
       navButtonW,
@@ -399,6 +540,9 @@ export class PveLobbyController extends Component {
       this._lobbyReady = true;
       if (lobbyRoot) lobbyRoot.active = true;
       applyUiLayerTree(this.node, this.node.layer);
+      // 揭开 UI 后再按最终可视高度重铺一次，消掉偶发底部黑边。
+      refreshScreenAdapt(this.node);
+      void applyScreenBackground(this.node, 'lobby');
       LoadingOverlay.update({
         text: '大厅准备完成',
         hint: '即将进入大厅',
@@ -443,9 +587,12 @@ export class PveLobbyController extends Component {
 
   private _warmLobbyBackground(): void {
     if (this._warmPromise) return;
+    void preloadPartnerIconBundle().catch((err: unknown) => {
+      console.warn('[PveLobby] partner icon bundle warm failed', err);
+    });
     this._warmPromise = (async () => {
-      // 先补推本地待结算，避免云端仍挂着旧挑战导致无法开新层。
-      await flushPendingFloorSettlement().catch((err: unknown) => {
+      // 待结算补推放后台，不阻塞大厅预热（最多 3 次短重试，避免进远征前空等十秒）。
+      void flushPendingFloorSettlement().catch((err: unknown) => {
         console.warn('[PveLobby] pending settlement flush failed', err);
       });
       // 档案/进行中挑战不依赖 resources 分包，尽早拉，点「远征」时可瞬时出选层。
@@ -479,6 +626,9 @@ export class PveLobbyController extends Component {
       }
       void playMainBgm(bundle);
       await Promise.all([preloadPveCampUi(), dataP]);
+      void SceneLoader.preloadPveExpedition().catch((err: unknown) => {
+        console.warn('[PveLobby] expedition scene preload failed', err);
+      });
     })().catch((err: unknown) => {
       this._warmPromise = null;
       console.warn('[PveLobby] background warm failed', err);
@@ -545,6 +695,7 @@ export class PveLobbyController extends Component {
           ? `继续挑战 · 第 ${activeRes.challenge?.floor ?? profileRes.profile.highestUnlockedFloor} 层`
           : `挑战第 ${profileRes.profile.highestUnlockedFloor} 层`;
       }
+      void this._refreshMailBadge();
     } catch (err: unknown) {
       this._setStatus(`大厅数据加载失败：${err instanceof Error ? err.message : String(err)}`);
     }
@@ -672,6 +823,8 @@ export class PveLobbyController extends Component {
     let currentChapter: 1 | 2 = activeFloor
       ? chapterIdForFloor(activeFloor)
       : (chapterTwoUnlocked ? 2 : 1);
+    // 打开选层时就开始预热当前章分包（续玩第12层 = 第2章），缩短切场景后的等待。
+    preloadChapter(currentChapter);
 
     const paintChapterArrow = (node: Node, label: Label, enabled: boolean): void => {
       this._drawRoundedRect(
@@ -707,6 +860,7 @@ export class PveLobbyController extends Component {
 
     const renderChapter = (): void => {
       floorGrid.destroyAllChildren();
+      preloadChapter(currentChapter);
 
       const maxUnlockedFloor = Math.max(1, Math.min(MAX_READY_FLOOR, profile.highestUnlockedFloor || 1));
       const chapterStart = currentChapter === 1 ? 1 : CHAPTER_SIZE + 1;
@@ -808,9 +962,14 @@ export class PveLobbyController extends Component {
     try {
       const ok = await this._ensureWarmReady('正在进入远征…');
       if (!ok) return;
+      // 切场景前就开始下章节包，避免进战后再弹一次「进入第N章」。
+      preloadChapter(chapterIdForFloor(floor));
       GameSession.pendingPveFloor = floor;
       this._closeFloorSelectModal();
-      this._gotoScene(`进入第 ${floor} 层…`, () => SceneLoader.loadPveExpedition());
+      this._gotoScene(
+        resume ? `继续第 ${floor} 层…` : `进入第 ${floor} 层…`,
+        () => SceneLoader.loadPveExpedition(),
+      );
     } finally {
       this._busy = false;
     }
@@ -1632,7 +1791,7 @@ export class PveLobbyController extends Component {
   }
 
   private _applyStardust(amount: number): void {
-    if (this._diamondLabel) this._diamondLabel.string = String(Math.max(0, Math.floor(amount)));
+    if (this._stardustLabel) this._stardustLabel.string = String(Math.max(0, Math.floor(amount)));
   }
 
   private _tickStamina = (): void => {
