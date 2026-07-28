@@ -9,6 +9,7 @@ const COLLECTIONS = [
   'pve_saves',
   'pve_challenges',
   'pve_balance_configs',
+  'pve_mails',
   'admin_accounts',
   'admin_sessions',
   'admin_logs',

@@ -13,6 +13,13 @@ const {
   updateMeta,
   loadLeaderboard,
 } = require('./common/pve/PveMeta');
+const {
+  listMailsForUser,
+  claimMailForUser,
+  claimAllMailsForUser,
+  deleteMailForUser,
+  markMailReadForUser,
+} = require('./common/pve/PveMailService');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -80,6 +87,31 @@ exports.main = async (event = {}) => {
     if (action === 'loadLeaderboard') {
       const { entries, myRank } = await loadLeaderboard(user, event.limit);
       return { ok: true, entries, myRank: myRank ?? null };
+    }
+
+    if (action === 'listMails') {
+      const result = await listMailsForUser(user.id, { limit: event.limit });
+      return { ok: true, ...result };
+    }
+
+    if (action === 'claimMail') {
+      const result = await claimMailForUser(user, event.mailId || event.request?.mailId);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'claimAllMails') {
+      const result = await claimAllMailsForUser(user);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'deleteMail') {
+      await deleteMailForUser(user.id, event.mailId || event.request?.mailId);
+      return { ok: true };
+    }
+
+    if (action === 'markMailRead') {
+      const result = await markMailReadForUser(user.id, event.mailId || event.request?.mailId);
+      return { ok: true, ...result };
     }
 
     return { ok: false, code: 'UNKNOWN_ACTION', message: `未知 action: ${action}` };
