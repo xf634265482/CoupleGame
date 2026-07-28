@@ -84,6 +84,9 @@
 - `users.pveProfile`：永久进度、库存、职业、命痕、体力与活动挑战引用。
 - `pve_challenges`：当前楼层挑战、运行时、结算状态与幂等信息。
 - `pve_balance_configs`：GM 数值覆盖。
+  - 永久楼层**新开本层 / 重新挑战本层**时，客户端将 `loadPveMeta.balanceSnapshot` 写入 `ExpeditionState.balanceSnapshot`。
+  - 玩家字段：GM 有覆盖则整项替换对应职业基础（HP / 攻击 / 射程 / AP 基数 / 行动消耗 / 开局金与灵力）；装备加成仍叠加。
+  - 纯续玩不重套最新 GM；怪物 / Boss / 装备倍率本轮不接入永久楼层开局。
 - 云端共享源码只修改 `cloudfunctions/common/`，随后执行 `node scripts/sync-cloud-common.js`。
 
 ## 9. 结算与大厅资料

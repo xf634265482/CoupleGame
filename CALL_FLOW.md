@@ -13,6 +13,8 @@ GameApp.onLoad()
   -> SceneLoader.loadLobby()（启动读条止于 0.92）
   -> lobby.scene / PveLobbyController
        -> 读条从 0.55 续跑；preloadPveLobbyUi 只拉主包大厅 critical native
+       -> applyScreenBackground（await 后重读 visibleDesignSize；过期 apply 丢弃）
+       -> refreshScreenAdapt / ensureScreenBackground：尺寸变化时同步重铺 ScreenBg/Art，避免长屏底部黑边
        -> 首屏绘制后 hide overlay
        -> 后台 ensureResourcesBundle + preloadPveCampUi + loadPveProfile + playMainBgm
 ```
@@ -97,23 +99,18 @@ ExpeditionController.onLoad()
   -> _buildUi()（空 HUD/地图先建好，但被 LoadingOverlay 盖住）
   -> LoadingOverlay.show「正在进入远征…」
   -> _bootstrap()
-       -> 读取 GameSession.pendingPveFloor
-       -> PersistentFloorFlow.bootstrap(selectedFloor)
-         -> PveProgressionService.loadPveProfile()
-         -> PveProgressionService.loadActiveFloorChallenge()
-         -> 必要时 startFloorChallenge()
-           -> [Cloud transaction] 恢复同一 ACTIVE 挑战：返回原挑战，扣费 0
-           -> [Cloud transaction] 新挑战：首次第 1 层教程免费，否则从 pveProfile 扣 5 体力
-           -> 体力不足：保持原 ACTIVE 挑战不变并返回 PVE_STAMINA_INSUFFICIENT
-           -> 返回扣费后的权威 profile，客户端据此创建 runtime
-         -> create/resume PersistentExpeditionRuntime
-         -> chapterRouting.chapterIdForFloor(selectedFloor)
-         -> Chapter1ExpeditionFactory 或 Chapter2ExpeditionFactory 生成 ExpeditionState/FloorState
-       -> _ensureChapterReady（章节资源；成功不关 overlay）
+       -> 大厅确认楼层时已 preloadChapter；进战再与云端并行 ensureChapterAssets
+       -> 同一条 LoadingOverlay 更新进度（不再二次 show「进入第N章」）
+       -> loadPveMeta（含 balanceSnapshot）
+          → PersistentFloorFlow.bootstrap(..., { balanceSnapshot })
+          → createPersistentFloorRuntime → ChapterFactory（灌入玩家覆盖；续玩不重灌）
+       -> _ensureChapterReady({ reuseOverlay: true })（已就绪则瞬时返回）
        -> _refreshAll() 画出真实 HUD/地图
        -> LoadingOverlay.hide()
-       -> 播放 initialPersistentPresentationEvents()
 ```
+
+> 进战加速：已删除的 HUD/弹窗图不再加入 preload；主包 native 缺图 `accessSync` 立刻失败，避免 6×150ms 空重试。
+> 续玩第 2 章：选层/确认时预热 `chapter_2`，避免「远征读条结束后再弹一次进章读条」。
 
 HUD 右上「目标」按钮：
 
