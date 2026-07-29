@@ -11,23 +11,23 @@ import { hasCompletedPartnerTrial } from '../../assets/scripts/pve/core/partner/
 import type { PlayerPartnerProgress } from '../../assets/scripts/pve/core/partner/PartnerTypes';
 
 describe('PartnerProgression', () => {
-  it('defaults unlock all six and equip MOBILITY', () => {
+  it('defaults lock all six with null equipped', () => {
     const { partners, equippedPartnerId } = createDefaultPartners();
     expect(Object.keys(partners).sort()).toEqual(
       ['ANIMA', 'BREAKER', 'CONTROL', 'GUARD', 'HEAL', 'MOBILITY'].sort(),
     );
-    expect(equippedPartnerId).toBe('MOBILITY');
-    expect(partners.MOBILITY).toEqual({ unlocked: true, level: 1, exp: 0, evolutionStage: 1 });
+    expect(equippedPartnerId).toBeNull();
+    expect(partners.MOBILITY).toEqual({ unlocked: false, level: 1, exp: 0, evolutionStage: 1 });
   });
 
   it('normalize fills missing partners without wiping existing', () => {
     const n = normalizePartners({
       partners: { MOBILITY: { unlocked: true, level: 4, exp: 10, evolutionStage: 1 } },
-      equippedPartnerId: 'GUARD',
+      equippedPartnerId: 'MOBILITY',
     });
     expect(n.partners.MOBILITY.level).toBe(4);
-    expect(n.partners.HEAL.unlocked).toBe(true);
-    expect(n.equippedPartnerId).toBe('GUARD');
+    expect(n.partners.HEAL.unlocked).toBe(false);
+    expect(n.equippedPartnerId).toBe('MOBILITY');
   });
 
   it('grants clear exp and levels up', () => {

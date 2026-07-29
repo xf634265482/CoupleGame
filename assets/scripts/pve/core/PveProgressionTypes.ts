@@ -121,6 +121,8 @@ export interface PveProfile {
   /** 伙伴养成进度；缺省由 normalize 软补全。 */
   partners: import('./partner/PartnerTypes').PartnersMap;
   equippedPartnerId: import('./partner/PartnerTypes').PartnerId | null;
+  /** progressive=逐步解锁；legacy=旧档全解锁不倒扣。缺省由 normalize 判定。 */
+  partnerUnlockScheme?: import('./partner/PartnerUnlock').PartnerUnlockScheme;
   stamina?: number;
   staminaUpdatedAt?: number;
   staminaNextRecoveryAt?: number | null;
@@ -169,6 +171,7 @@ export interface StartFloorChallengeRequest {
   minghenLoadout: MinghenLoadoutEntry[];
   trackedMinghenId?: string | null;
   abandonActive?: boolean;
+  forceRestart?: boolean;
 }
 
 export interface SettleFloorChallengeRequest {
