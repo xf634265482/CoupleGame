@@ -183,6 +183,9 @@ describe('PveChallengeState', () => {
     expect(challenge.config.partnerLevel).toBe(1);
 
     const profile = createDefaultProfile();
+    profile.partners.MOBILITY.unlocked = true;
+    profile.equippedPartnerId = 'MOBILITY';
+    profile.partnerUnlockScheme = 'progressive';
     const active = applyChallengeStart(profile, challenge, 100);
     const beforeExp = active.partners.MOBILITY.exp;
     const settled = applyChallengeSettlement(active, challenge, {

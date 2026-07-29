@@ -1,7 +1,8 @@
 const { COLLECTIONS } = require('../constants');
-const { getDb, getUserById } = require('../db');
+const { getDb, getUserById, runTransactionWithRetry } = require('../db');
 const { normalizeProfile } = require('./PveProfile');
 const { consumeForFloorChallenge } = require('./PveStamina');
+const { grantStarterPartnerOnProfile } = require('./PvePartner');
 const {
   validateStartFloorChallengeRequest,
   validateSettleFloorChallengeRequest,
@@ -66,8 +67,7 @@ async function loadActiveFloorChallenge(user) {
 }
 
 async function startFloorChallenge(user, rawRequest = {}) {
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
     const userResult = await userRef.get();
     const userDoc = dataOf(userResult);
@@ -78,11 +78,17 @@ async function startFloorChallenge(user, rawRequest = {}) {
     }
 
     const now = Date.now();
-    const profile = normalizeProfile(userDoc.pveProfile, now);
+    let profile = normalizeProfile(userDoc.pveProfile, now);
+    // 第 1 层挑战：progressive 档发放位移伙伴并写入档案，再校验快照。
+    if (Number(rawRequest.floor) === 1 && profile.partnerUnlockScheme !== 'legacy') {
+      const granted = grantStarterPartnerOnProfile(profile);
+      profile = granted.profile;
+    }
     const request = validateStartFloorChallengeRequest(profile, rawRequest);
     validateLoadoutOwnership(profile, request);
 
     let activeToWithdraw = null;
+    let challengeRequest = request;
     if (profile.activeChallengeId) {
       const activeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(profile.activeChallengeId);
       let active = null;
@@ -92,11 +98,25 @@ async function startFloorChallenge(user, rawRequest = {}) {
         active = null;
       }
       if (active?.status === 'ACTIVE') {
-        if (requestMatchesChallenge(request, active)) {
+        const matchesActive = requestMatchesChallenge(request, active);
+        if (matchesActive && request.forceRestart !== true) {
           return { challenge: active, profile, resume: true, charged: 0 };
         }
         const err = new Error('已有不同配置的进行中挑战');
-        if (request.abandonActive === true) {
+        if (request.abandonActive === true && request.forceRestart === true
+          && request.floor === active.floor && request.mode === active.mode) {
+          activeToWithdraw = activeRef;
+          challengeRequest = {
+            ...request,
+            professionId: active.config.professionId,
+            equipmentLoadout: active.config.equipmentLoadout || {},
+            minghenLoadout: active.config.minghenLoadout || [],
+            trackedMinghenId: active.config.trackedMinghenId ?? null,
+            partnerId: active.config.partnerId ?? null,
+            partnerEvolutionStage: active.config.partnerEvolutionStage ?? 1,
+            partnerLevel: active.config.partnerLevel ?? 1,
+          };
+        } else if (request.abandonActive === true && request.forceRestart !== true) {
           activeToWithdraw = activeRef;
         } else {
           err.code = 'PVE_CHALLENGE_ALREADY_ACTIVE';
@@ -105,16 +125,22 @@ async function startFloorChallenge(user, rawRequest = {}) {
       }
     }
 
-    const freeEligible = request.floor === 1
-      && request.mode === 'PROGRESSION'
+    const freeEligible = challengeRequest.floor === 1
+      && challengeRequest.mode === 'PROGRESSION'
       && profile.tutorialFreeChallengeConsumed !== true;
-    const consumed = consumeForFloorChallenge(profile, freeEligible);
+    const consumed = challengeRequest.forceRestart === true && activeToWithdraw
+      ? {
+        stamina: profile.stamina,
+        tutorialFreeChallengeConsumed: profile.tutorialFreeChallengeConsumed,
+        charged: 0,
+      }
+      : consumeForFloorChallenge(profile, freeEligible);
     const chargedProfile = {
       ...profile,
       stamina: consumed.stamina,
       tutorialFreeChallengeConsumed: consumed.tutorialFreeChallengeConsumed,
     };
-    const challenge = buildChallenge(user.id, request, now);
+    const challenge = buildChallenge(user.id, challengeRequest, now);
     const nextProfile = applyChallengeStart(chargedProfile, challenge, now);
     if (activeToWithdraw) {
       await activeToWithdraw.update({
@@ -138,8 +164,7 @@ async function startFloorChallenge(user, rawRequest = {}) {
 
 async function settleFloorChallenge(user, rawRequest = {}) {
   const request = validateSettleFloorChallengeRequest(rawRequest);
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
     const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
     const [userResult, challengeResult] = await Promise.all([userRef.get(), challengeRef.get()]);
@@ -185,8 +210,7 @@ async function settleFloorChallenge(user, rawRequest = {}) {
 
 async function saveFloorChallengeRuntime(user, rawRequest = {}) {
   const request = validateSaveFloorChallengeRuntimeRequest(rawRequest);
-  const db = getDb();
-  return db.runTransaction(async (transaction) => {
+  return runTransactionWithRetry(async (transaction) => {
     const challengeRef = transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(request.challengeId);
     const challenge = dataOf(await challengeRef.get());
     if (!challenge) {

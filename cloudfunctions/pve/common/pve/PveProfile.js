@@ -43,7 +43,8 @@ function createDefaultProfile(now = Date.now()) {
     tracking: null,
     activeChallengeId: null,
     partners: createDefaultPartnersMap(),
-    equippedPartnerId: 'MOBILITY',
+    equippedPartnerId: null,
+    partnerUnlockScheme: 'progressive',
     stamina: stamina.stamina,
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
@@ -111,7 +112,10 @@ function normalizeProfile(value, now = Date.now()) {
       : defaults.staminaUpdatedAt,
     now,
   );
-  const partnerNorm = normalizePartnersMap(value.partners, value.equippedPartnerId);
+  const partnerNorm = normalizePartnersMap(value.partners, value.equippedPartnerId, {
+    partnerUnlockScheme: value.partnerUnlockScheme,
+    highestClearedFloor,
+  });
 
   return {
     ...defaults,
@@ -135,6 +139,7 @@ function normalizeProfile(value, now = Date.now()) {
       : null,
     partners: partnerNorm.partners,
     equippedPartnerId: partnerNorm.equippedPartnerId,
+    partnerUnlockScheme: partnerNorm.partnerUnlockScheme,
     stamina: stamina.stamina,
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,

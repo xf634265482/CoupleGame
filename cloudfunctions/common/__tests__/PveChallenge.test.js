@@ -50,6 +50,7 @@ jest.mock('../db', () => ({
     }
     return null;
   },
+  runTransactionWithRetry: async (handler) => mockDb.runTransaction(handler),
 }));
 
 const { createDefaultProfile } = require('../pve/PveProfile');

@@ -10,6 +10,7 @@ jest.mock('../db', () => ({
 }));
 
 const { PROFILE_VERSION, createDefaultProfile } = require('../pve/PveProfile');
+const { ensureDailyShop } = require('../pve/PveMinghenShop');
 const { loadProfile, updateCampConfiguration } = require('../pve/PveProgression');
 
 describe('PveProgression', () => {
@@ -28,10 +29,11 @@ describe('PveProgression', () => {
   });
 
   test('does not rewrite an existing current-version profile on load', async () => {
-    const existing = createDefaultProfile(100);
+    const existing = ensureDailyShop(createDefaultProfile(100), 'u2', Date.now());
     mockGetUserById.mockResolvedValue({ _id: 'doc2', id: 'u2', pveProfile: existing });
     const { profile } = await loadProfile({ id: 'u2' });
     expect(profile.version).toBe(PROFILE_VERSION);
+    expect(profile.partnerUnlockScheme).toBe('progressive');
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 

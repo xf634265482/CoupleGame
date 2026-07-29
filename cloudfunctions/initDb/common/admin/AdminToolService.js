@@ -15,9 +15,12 @@ const {
   RESOURCE_LIMITS,
   LOG_LIMIT,
   RESET_LEADERBOARD_CONFIRM,
+  BROADCAST_MAIL_USER_CAP,
   getCurrentEnvId,
   getEnvLabel,
 } = require('./AdminConstants');
+const { createMailForUser } = require('../pve/PveMailService');
+const { generateId } = require('../id');
 
 function getPveBalanceApi() {
   return require('../pve/PveBalance');
@@ -212,11 +215,11 @@ function getLastActiveAt(user) {
 function toPlayerListItem(user) {
   const profile = normalizeProfile(user.pveProfile);
   return {
-    nickname: user.nickname || '鐜╁',
+    nickname: user.nickname || '玩家',
     openId: user._openid || '',
     userId: user.id,
     lastActiveAt: getLastActiveAt(user),
-    diamond: Number(user.diamond || 0),
+    stardust: Number(profile.gold || 0),
     highestFloor: Number(profile.highestClearedFloor || 0),
     hasActiveExpedition: Boolean(profile.activeChallengeId),
   };
@@ -225,15 +228,15 @@ function toPlayerListItem(user) {
 function toPlayerView(user) {
   const profile = normalizeProfile(user.pveProfile);
   return {
-    nickname: user.nickname || '鐜╁',
+    nickname: user.nickname || '玩家',
     avatarUrl: user.avatarUrl || '',
     openId: user._openid || '',
     userId: user.id,
     lastActiveAt: getLastActiveAt(user),
-    diamond: Number(user.diamond || 0),
+    stardust: Number(profile.gold || 0),
     highestFloor: Number(profile.highestClearedFloor || 0),
     tutorialCompleted: user.pveTutorialCompleted === true,
-    stamina: Number(user.pveStamina || 0),
+    stamina: Number(user.pveStamina ?? profile.stamina ?? 0),
     campInventory: {
       minghen: Object.keys(profile.minghenCollection || {}).length,
       minghenLoadout: Array.isArray(profile.minghenLoadout) ? profile.minghenLoadout.length : 0,
@@ -379,44 +382,53 @@ async function adjustResourcesAction(account, payload, requestSource) {
   let before = null;
   let after = null;
 
-  if (resourceType === RESOURCE_TYPES.DIAMOND) {
-    const fieldName = 'diamond';
-    const currentValue = Number(user[fieldName] || 0);
+  if (resourceType === RESOURCE_TYPES.STARDUST) {
+    const profile = normalizeProfile(user.pveProfile);
+    const currentValue = Number(profile.gold || 0);
     const nextValue = currentValue + amount;
     if (nextValue < 0) {
       const err = new Error('GM_RESOURCE_NEGATIVE_NOT_ALLOWED');
       err.code = 'GM_RESOURCE_NEGATIVE_NOT_ALLOWED';
       throw err;
     }
-
+    const nextProfile = { ...profile, gold: nextValue, updatedAt: Date.now() };
     await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
       data: {
-        [fieldName]: nextValue,
+        pveProfile: nextProfile,
         updatedDate: serverDate(),
       },
     });
-
-    before = { [fieldName]: currentValue };
-    after = { [fieldName]: nextValue };
+    before = { stardust: currentValue };
+    after = { stardust: nextValue };
   } else if (resourceType === RESOURCE_TYPES.STAMINA) {
-    const currentValue = Number(user.pveStamina || 0);
+    const profile = normalizeProfile(user.pveProfile);
+    const currentValue = Number(user.pveStamina ?? profile.stamina ?? 0);
     const nextValue = currentValue + amount;
     if (nextValue < 0) {
       const err = new Error('GM_RESOURCE_NEGATIVE_NOT_ALLOWED');
       err.code = 'GM_RESOURCE_NEGATIVE_NOT_ALLOWED';
       throw err;
     }
-
+    const capped = Math.min(STAMINA_MAX, nextValue);
+    const now = Date.now();
+    const nextProfile = {
+      ...profile,
+      stamina: capped,
+      staminaUpdatedAt: now,
+      staminaNextRecoveryAt: capped >= STAMINA_MAX ? null : now,
+      updatedAt: now,
+    };
     await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
       data: {
-        pveStamina: Math.min(STAMINA_MAX, nextValue),
-        pveStaminaUpdatedAt: Date.now(),
+        pveProfile: nextProfile,
+        pveStamina: capped,
+        pveStaminaUpdatedAt: now,
         updatedDate: serverDate(),
       },
     });
 
     before = { stamina: currentValue };
-    after = { stamina: Math.min(STAMINA_MAX, nextValue) };
+    after = { stamina: capped };
   } else {
     const err = new Error('ADMIN_UNSUPPORTED_RESOURCE');
     err.code = 'ADMIN_UNSUPPORTED_RESOURCE';
@@ -443,6 +455,96 @@ async function adjustResourcesAction(account, payload, requestSource) {
     ok: true,
     player: toPlayerView(userAfter),
   };
+}
+
+async function sendMailAction(account, payload, requestSource) {
+  const reason = ensureReason(payload?.reason);
+  const user = await getTargetUser(payload || {});
+  const mail = await createMailForUser({
+    userId: user.id,
+    title: payload?.title,
+    body: payload?.body,
+    attachments: payload?.attachments || [],
+    createdBy: account.username || account.id,
+    reason,
+  });
+  await writeAdminLog({
+    account,
+    targetUser: user,
+    action: ADMIN_ACTIONS.SEND_MAIL,
+    payload: {
+      title: mail.title,
+      attachments: mail.attachments,
+    },
+    before: null,
+    after: { mailId: mail.id },
+    reason,
+    requestSource,
+    success: true,
+  });
+  return { ok: true, mail, affectedUsers: 1 };
+}
+
+async function listAllUserIdsForBroadcast(cap) {
+  const ids = [];
+  let skip = 0;
+  const pageSize = 50;
+  while (ids.length < cap) {
+    const { data } = await getDb()
+      .collection(COLLECTIONS.USERS)
+      .skip(skip)
+      .limit(pageSize)
+      .get();
+    if (!Array.isArray(data) || data.length === 0) break;
+    for (const doc of data) {
+      if (doc.id) ids.push(String(doc.id));
+      if (ids.length >= cap + 1) break;
+    }
+    if (data.length < pageSize) break;
+    skip += pageSize;
+  }
+  return ids;
+}
+
+async function sendMailBroadcastAction(account, payload, requestSource) {
+  const reason = ensureReason(payload?.reason);
+  const userIds = await listAllUserIdsForBroadcast(BROADCAST_MAIL_USER_CAP + 1);
+  if (userIds.length > BROADCAST_MAIL_USER_CAP) {
+    const err = new Error(`ADMIN_BROADCAST_TOO_LARGE:${BROADCAST_MAIL_USER_CAP}`);
+    err.code = 'ADMIN_BROADCAST_TOO_LARGE';
+    throw err;
+  }
+  const batchId = generateId();
+  let affectedUsers = 0;
+  for (const userId of userIds) {
+    await createMailForUser({
+      userId,
+      title: payload?.title,
+      body: payload?.body,
+      attachments: payload?.attachments || [],
+      createdBy: account.username || account.id,
+      reason,
+      batchId,
+    });
+    affectedUsers += 1;
+  }
+  await writeAdminLog({
+    account,
+    targetUser: null,
+    action: ADMIN_ACTIONS.SEND_MAIL_BROADCAST,
+    payload: {
+      title: String(payload?.title || ''),
+      attachments: payload?.attachments || [],
+      batchId,
+      affectedUsers,
+    },
+    before: null,
+    after: { batchId, affectedUsers },
+    reason,
+    requestSource,
+    success: true,
+  });
+  return { ok: true, batchId, affectedUsers };
 }
 
 async function listBalanceConfigsAction() {
@@ -1020,6 +1122,10 @@ async function handleAdminAction({ account, action, payload, requestSource }) {
     return syncBalanceDocsLogAction(account, payload, requestSource);
   case ADMIN_ACTIONS.ADJUST_RESOURCES:
     return adjustResourcesAction(account, payload, requestSource);
+  case ADMIN_ACTIONS.SEND_MAIL:
+    return sendMailAction(account, payload, requestSource);
+  case ADMIN_ACTIONS.SEND_MAIL_BROADCAST:
+    return sendMailBroadcastAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_EXPEDITION:
     return resetExpeditionAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_CAMP_INVENTORY:

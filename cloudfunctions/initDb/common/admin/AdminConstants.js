@@ -17,6 +17,8 @@ const ADMIN_ACTIONS = {
   SYNC_BALANCE_DOCS_PREVIEW: 'syncBalanceDocsPreview',
   SYNC_BALANCE_DOCS_LOG: 'syncBalanceDocsLog',
   ADJUST_RESOURCES: 'adjustResources',
+  SEND_MAIL: 'sendMail',
+  SEND_MAIL_BROADCAST: 'sendMailBroadcast',
   RESET_EXPEDITION: 'resetExpedition',
   RESET_CAMP_INVENTORY: 'resetCampInventory',
   RESET_TUTORIAL: 'resetTutorial',
@@ -27,14 +29,16 @@ const ADMIN_ACTIONS = {
 const ADMIN_ACTION_SET = new Set(Object.values(ADMIN_ACTIONS));
 
 const RESOURCE_TYPES = {
-  DIAMOND: 'diamond',
+  STARDUST: 'stardust',
   STAMINA: 'stamina',
 };
 
 const RESOURCE_LIMITS = {
-  [RESOURCE_TYPES.DIAMOND]: 2000,
+  [RESOURCE_TYPES.STARDUST]: 999999,
   [RESOURCE_TYPES.STAMINA]: 200,
 };
+
+const BROADCAST_MAIL_USER_CAP = 500;
 
 const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const PASSWORD_PBKDF2_ITERATIONS = 120000;
@@ -59,6 +63,7 @@ module.exports = {
   ADMIN_ACTION_SET,
   RESOURCE_TYPES,
   RESOURCE_LIMITS,
+  BROADCAST_MAIL_USER_CAP,
   DEFAULT_SESSION_TTL_MS,
   PASSWORD_PBKDF2_ITERATIONS,
   TOKEN_BYTES,

@@ -2,7 +2,7 @@ const { generateId } = require('../id');
 const { calculateRewards, applyMastery, unlockProfessions } = require('./PveRewardV2');
 const { settleMinghen } = require('./PveMinghen');
 const { MAX_READY_FLOOR } = require('./PveProfile');
-const { grantClearExpOnProfile } = require('./PvePartner');
+const { grantClearExpOnProfile, applyPartnerUnlocksOnProfile } = require('./PvePartner');
 
 function stableLoadoutEntries(entries) {
   return [...entries].sort((a, b) => a.id.localeCompare(b.id));
@@ -243,6 +243,9 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
   if (challenge.config.partnerId) {
     nextProfile = grantClearExpOnProfile(nextProfile, challenge.config.partnerId, challenge.floor);
   }
+  // progressive：按最高通关层解锁伙伴。
+  const unlockResult = applyPartnerUnlocksOnProfile(nextProfile, highestClearedFloor);
+  nextProfile = unlockResult.profile;
   const minghenDustGain = Math.max(0, minghen.dust - profile.minghenDust);
   const rewardSnapshot = {
     ...rewards,
@@ -251,6 +254,9 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
     stardust: rewards.gold + lootedStardust + minghenDustGain,
     ...(lootedStardust > 0 ? { lootedStardust } : {}),
     ...(combatLoot.added.length > 0 ? { lootedEquipment: combatLoot.added } : {}),
+    ...(unlockResult.newlyUnlockedPartnerIds.length > 0
+      ? { newlyUnlockedPartnerIds: unlockResult.newlyUnlockedPartnerIds }
+      : {}),
   };
   settledChallenge.rewards = rewardSnapshot;
   return { challenge: settledChallenge, profile: nextProfile, rewards: rewardSnapshot };

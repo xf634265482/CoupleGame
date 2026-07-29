@@ -3,13 +3,36 @@ const PARTNER_EVOLVE_STARDUST = [0, 0, 50, 200, 500];
 const PARTNER_EVOLVE_LEVEL = [0, 1, 5, 15, 30];
 const MAX_PARTNER_LEVEL = 99;
 
-function defaultProgress() {
+/** 通关层数门槛（不含 MOBILITY；位移仅教程发放）。 */
+const PARTNER_UNLOCK_BY_CLEAR_FLOOR = {
+  GUARD: 3,
+  HEAL: 5,
+  BREAKER: 7,
+  CONTROL: 10,
+  ANIMA: 17,
+};
+
+function lockedProgress() {
+  return { unlocked: false, level: 1, exp: 0, evolutionStage: 1 };
+}
+
+function unlockedProgress() {
   return { unlocked: true, level: 1, exp: 0, evolutionStage: 1 };
+}
+
+function defaultProgress() {
+  return lockedProgress();
 }
 
 function createDefaultPartnersMap() {
   const partners = {};
-  for (const id of PARTNER_IDS) partners[id] = defaultProgress();
+  for (const id of PARTNER_IDS) partners[id] = lockedProgress();
+  return partners;
+}
+
+function createLegacyAllUnlockedMap() {
+  const partners = {};
+  for (const id of PARTNER_IDS) partners[id] = unlockedProgress();
   return partners;
 }
 
@@ -20,29 +43,125 @@ function clampStage(value) {
 }
 
 function normalizeOne(raw) {
-  const base = defaultProgress();
-  if (!raw || typeof raw !== 'object') return base;
+  if (!raw || typeof raw !== 'object') return lockedProgress();
   return {
-    unlocked: raw.unlocked !== false,
+    unlocked: raw.unlocked === true,
     level: Math.max(1, Math.min(MAX_PARTNER_LEVEL, Number.isFinite(Number(raw.level)) ? Math.trunc(Number(raw.level)) : 1)),
     exp: Math.max(0, Number.isFinite(Number(raw.exp)) ? Math.trunc(Number(raw.exp)) : 0),
     evolutionStage: clampStage(raw.evolutionStage),
   };
 }
 
-function normalizePartnersMap(rawPartners, equippedPartnerId) {
-  const defaults = createDefaultPartnersMap();
-  const src = rawPartners && typeof rawPartners === 'object' ? rawPartners : {};
-  const partners = {};
-  for (const id of PARTNER_IDS) {
-    partners[id] = src[id] !== undefined ? normalizeOne(src[id]) : defaults[id];
+function resolvePartnerUnlockScheme(rawPartners, equippedPartnerId, highestClearedFloor, schemeRaw) {
+  if (schemeRaw === 'legacy' || schemeRaw === 'progressive') return schemeRaw;
+  const src = rawPartners && typeof rawPartners === 'object' ? rawPartners : null;
+  if (src) {
+    for (const id of PARTNER_IDS) {
+      if (src[id] && typeof src[id] === 'object' && src[id].unlocked === true) return 'legacy';
+    }
+  }
+  const cleared = Number(highestClearedFloor);
+  if (!src && Number.isFinite(cleared) && cleared > 0) return 'legacy';
+  return 'progressive';
+}
+
+function normalizePartnersMap(rawPartners, equippedPartnerId, opts = {}) {
+  const scheme = resolvePartnerUnlockScheme(
+    rawPartners,
+    equippedPartnerId,
+    opts.highestClearedFloor,
+    opts.partnerUnlockScheme,
+  );
+  const src = rawPartners && typeof rawPartners === 'object' ? rawPartners : null;
+  let partners;
+  if (!src && scheme === 'legacy') {
+    partners = createLegacyAllUnlockedMap();
+  } else {
+    partners = {};
+    const defaults = createDefaultPartnersMap();
+    for (const id of PARTNER_IDS) {
+      partners[id] = src && src[id] !== undefined ? normalizeOne(src[id]) : defaults[id];
+    }
   }
   const equipped = typeof equippedPartnerId === 'string'
     && PARTNER_IDS.includes(equippedPartnerId)
     && partners[equippedPartnerId].unlocked
     ? equippedPartnerId
-    : 'MOBILITY';
-  return { partners, equippedPartnerId: equipped };
+    : null;
+  return { partners, equippedPartnerId: equipped, partnerUnlockScheme: scheme };
+}
+
+function partnerUnlockHint(partnerId) {
+  if (partnerId === 'MOBILITY') return '进入新手教程解锁';
+  const floor = PARTNER_UNLOCK_BY_CLEAR_FLOOR[partnerId];
+  if (floor != null) return `通关第 ${floor} 层解锁`;
+  return '未解锁';
+}
+
+function applyPartnerUnlocks(partners, clearedFloor) {
+  const floor = Math.max(0, Math.trunc(clearedFloor || 0));
+  const next = { ...partners };
+  const newlyUnlockedPartnerIds = [];
+  for (const id of PARTNER_IDS) {
+    const need = PARTNER_UNLOCK_BY_CLEAR_FLOOR[id];
+    if (need == null) continue;
+    const cur = next[id] || lockedProgress();
+    if (!cur.unlocked && floor >= need) {
+      next[id] = { ...cur, unlocked: true };
+      newlyUnlockedPartnerIds.push(id);
+    } else {
+      next[id] = cur;
+    }
+  }
+  return { partners: next, newlyUnlockedPartnerIds };
+}
+
+function applyPartnerUnlocksOnProfile(profile, clearedFloor) {
+  if (profile.partnerUnlockScheme === 'legacy') {
+    return { profile, newlyUnlockedPartnerIds: [] };
+  }
+  const { partners, equippedPartnerId, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    { partnerUnlockScheme: profile.partnerUnlockScheme, highestClearedFloor: profile.highestClearedFloor },
+  );
+  const applied = applyPartnerUnlocks(partners, clearedFloor);
+  return {
+    profile: {
+      ...profile,
+      partners: applied.partners,
+      equippedPartnerId,
+      partnerUnlockScheme,
+    },
+    newlyUnlockedPartnerIds: applied.newlyUnlockedPartnerIds,
+  };
+}
+
+function grantStarterPartnerOnProfile(profile) {
+  if (profile.partnerUnlockScheme === 'legacy') {
+    return { profile, newlyUnlockedPartnerIds: [] };
+  }
+  const { partners, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    { partnerUnlockScheme: profile.partnerUnlockScheme || 'progressive', highestClearedFloor: profile.highestClearedFloor },
+  );
+  const cur = partners.MOBILITY || lockedProgress();
+  const newlyUnlockedPartnerIds = [];
+  let nextMobility = cur;
+  if (!cur.unlocked) {
+    nextMobility = { ...cur, unlocked: true };
+    newlyUnlockedPartnerIds.push('MOBILITY');
+  }
+  return {
+    profile: {
+      ...profile,
+      partners: { ...partners, MOBILITY: nextMobility },
+      equippedPartnerId: 'MOBILITY',
+      partnerUnlockScheme: partnerUnlockScheme || 'progressive',
+    },
+    newlyUnlockedPartnerIds,
+  };
 }
 
 function xpRequiredForLevel(level) {
@@ -79,7 +198,11 @@ function evolvePartnerOnProfile(profile, partnerId) {
     err.code = 'PVE_PARTNER_UNKNOWN';
     throw err;
   }
-  const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);
+  const { partners, equippedPartnerId, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    { partnerUnlockScheme: profile.partnerUnlockScheme, highestClearedFloor: profile.highestClearedFloor },
+  );
   const progress = partners[partnerId];
   if (!progress.unlocked) {
     const err = new Error('伙伴未解锁');
@@ -118,34 +241,49 @@ function evolvePartnerOnProfile(profile, partnerId) {
       [partnerId]: { ...progress, evolutionStage: toStage },
     },
     equippedPartnerId,
+    partnerUnlockScheme,
   };
 }
 
 function equipPartnerOnProfile(profile, partnerId) {
-  const { partners } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);
-  if (partnerId != null && partnerId !== '') {
-    if (!PARTNER_IDS.includes(partnerId)) {
-      const err = new Error('未知伙伴');
-      err.code = 'PVE_PARTNER_UNKNOWN';
-      throw err;
-    }
-    if (!partners[partnerId].unlocked) {
-      const err = new Error('伙伴未解锁');
-      err.code = 'PVE_PARTNER_LOCKED';
-      throw err;
-    }
+  const { partners, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    { partnerUnlockScheme: profile.partnerUnlockScheme, highestClearedFloor: profile.highestClearedFloor },
+  );
+  if (partnerId == null || partnerId === '') {
+    return {
+      ...profile,
+      partners,
+      equippedPartnerId: null,
+      partnerUnlockScheme,
+    };
   }
-  const equipped = partnerId == null || partnerId === '' ? 'MOBILITY' : partnerId;
+  if (!PARTNER_IDS.includes(partnerId)) {
+    const err = new Error('未知伙伴');
+    err.code = 'PVE_PARTNER_UNKNOWN';
+    throw err;
+  }
+  if (!partners[partnerId].unlocked) {
+    const err = new Error('伙伴未解锁');
+    err.code = 'PVE_PARTNER_LOCKED';
+    throw err;
+  }
   return {
     ...profile,
     partners,
-    equippedPartnerId: equipped,
+    equippedPartnerId: partnerId,
+    partnerUnlockScheme,
   };
 }
 
 function grantClearExpOnProfile(profile, partnerId, clearedFloor) {
   if (!partnerId || !PARTNER_IDS.includes(partnerId)) return profile;
-  const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);
+  const { partners, equippedPartnerId, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    { partnerUnlockScheme: profile.partnerUnlockScheme, highestClearedFloor: profile.highestClearedFloor },
+  );
   if (!partners[partnerId]?.unlocked) return profile;
   return {
     ...profile,
@@ -154,6 +292,7 @@ function grantClearExpOnProfile(profile, partnerId, clearedFloor) {
       [partnerId]: grantPartnerExp(partners[partnerId], partnerClearExp(clearedFloor)),
     },
     equippedPartnerId,
+    partnerUnlockScheme,
   };
 }
 
@@ -161,8 +300,13 @@ module.exports = {
   PARTNER_IDS,
   PARTNER_EVOLVE_STARDUST,
   PARTNER_EVOLVE_LEVEL,
+  PARTNER_UNLOCK_BY_CLEAR_FLOOR,
   createDefaultPartnersMap,
   normalizePartnersMap,
+  partnerUnlockHint,
+  applyPartnerUnlocks,
+  applyPartnerUnlocksOnProfile,
+  grantStarterPartnerOnProfile,
   grantPartnerExp,
   partnerClearExp,
   evolvePartnerOnProfile,

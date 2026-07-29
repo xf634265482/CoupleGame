@@ -8,7 +8,13 @@ const {
   getUserPveMeta,
   updateUserPveMeta,
   listPveLeaderboard,
+  getUserById,
+  getDb,
+  serverDate,
 } = require('../db');
+const { COLLECTIONS } = require('../constants');
+const { normalizeProfile } = require('./PveProfile');
+const { grantStarterPartnerOnProfile } = require('./PvePartner');
 
 function buildEmptyBalanceSnapshot() {
   return {
@@ -42,6 +48,27 @@ async function updateMeta(user, report = {}) {
     tutorialCompleted: report.tutorialCompleted === true,
     resetTutorial: report.resetTutorial === true,
   });
+
+  // 教程完成兜底：progressive 档发放位移伙伴（开局第 1 层也会发，此处幂等）。
+  if (report.tutorialCompleted === true) {
+    const latest = await getUserById(user.id);
+    if (latest) {
+      const profile = normalizeProfile(latest.pveProfile);
+      if (profile.partnerUnlockScheme !== 'legacy') {
+        const granted = grantStarterPartnerOnProfile(profile);
+        if (granted.newlyUnlockedPartnerIds.length > 0
+          || granted.profile.equippedPartnerId !== profile.equippedPartnerId) {
+          await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
+            data: {
+              pveProfile: granted.profile,
+              updatedDate: serverDate(),
+            },
+          });
+        }
+      }
+    }
+  }
+
   return { ok: true };
 }
 

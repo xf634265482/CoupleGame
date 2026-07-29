@@ -105,7 +105,17 @@ function validateStartFloorChallengeRequest(profile, request) {
     forceRestart: request.forceRestart === true,
     // 伙伴快照一律来自永久档案，忽略客户端伪造的 stage/level。
     ...(() => {
-      const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId);
+      const { partners, equippedPartnerId } = normalizePartnersMap(profile.partners, profile.equippedPartnerId, {
+        partnerUnlockScheme: profile.partnerUnlockScheme,
+        highestClearedFloor: profile.highestClearedFloor,
+      });
+      if (!equippedPartnerId) {
+        return {
+          partnerId: null,
+          partnerEvolutionStage: 1,
+          partnerLevel: 1,
+        };
+      }
       const progress = partners[equippedPartnerId];
       return {
         partnerId: equippedPartnerId,

@@ -2,6 +2,7 @@ const { COLLECTIONS } = require('../constants');
 const { getDb, getUserById, runTransactionWithRetry } = require('../db');
 const { normalizeProfile } = require('./PveProfile');
 const { consumeForFloorChallenge } = require('./PveStamina');
+const { grantStarterPartnerOnProfile } = require('./PvePartner');
 const {
   validateStartFloorChallengeRequest,
   validateSettleFloorChallengeRequest,
@@ -77,7 +78,12 @@ async function startFloorChallenge(user, rawRequest = {}) {
     }
 
     const now = Date.now();
-    const profile = normalizeProfile(userDoc.pveProfile, now);
+    let profile = normalizeProfile(userDoc.pveProfile, now);
+    // 第 1 层挑战：progressive 档发放位移伙伴并写入档案，再校验快照。
+    if (Number(rawRequest.floor) === 1 && profile.partnerUnlockScheme !== 'legacy') {
+      const granted = grantStarterPartnerOnProfile(profile);
+      profile = granted.profile;
+    }
     const request = validateStartFloorChallengeRequest(profile, rawRequest);
     validateLoadoutOwnership(profile, request);
 
