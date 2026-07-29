@@ -34,6 +34,7 @@
 ## 4. 战斗与章节
 
 - 采用格子移动、AP 回合、迷雾、即时攻击、怪物 AI、楼层目标和 Boss 机制。
+- 流沙巨蝎潜地（`isBurrowed`）期间不占格挡路，细则见第二章内容文档。
 - 第一章内容见 `../260712-pve-persistent-floor-progression/chapter-1-content.md`。
 - 第二章内容见 `../260712-pve-persistent-floor-progression/chapter-2-content.md`。
 - 第三章内容见 `../260712-pve-persistent-floor-progression/chapter-3-content.md`。
@@ -65,9 +66,9 @@
 
 - 命痕是玩家永久解锁的**战术工具箱**：每枚绑定一种可重复触发的战场行为，通过装配组合改变打法，而非单纯数值加成。
 - 营地命痕装配槽上限为 **10**；首通通关命痕弹窗固定 **三选一**（楼层主题池可更长，展示截取前 3 个）。
-- 完整机制、数值与试炼文案以 `specs/260712-pve-persistent-floor-progression/minghen-catalog.md` 与客户端 `core/minghen/MinghenCatalog.ts` 为权威；V3 已扩容至 M56，M39–M56 暂以 `sourceFloor = 0` 占位，尚未写入各章主题池。
+- 完整机制、数值与试炼文案以 `specs/260712-pve-persistent-floor-progression/minghen-catalog.md` 与客户端 `core/minghen/MinghenCatalog.ts` 为权威；V3 已扩容至 M56；**楼层主题池**以各章 `*FloorCatalog.minghenIds` 与云端 `PveMinghen.MINGHEN_SOURCES`（1–35）为准。M39–M50 已挂入第五章主题池；M51–M56 仍为通用命痕（商会软补）。
 - 命痕收集、装配、方案、追踪、试炼和战斗效果是当前系统；数据由 `PveMinghen.js`、`PveProgression.js` 与客户端 `core/minghen/` 共同维护。
-- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（含 M39–M56）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格，广告刷新 ≤1 次/日；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片。营地命痕台负责装配/库存/合成；方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md` 与 `docs/superpowers/specs/2026-07-28-minghen-camp-synth-ui-design.md`；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
+- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（M51–M56 等未入主题池者）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格，广告刷新 ≤1 次/日；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片。营地命痕台负责装配/库存/合成；「拥有的命痕」按未装配剩余数量展示（装上 1 枚则背包 ×−1，无剩余则不列出，不标「已装」）；方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md` 与 `docs/superpowers/specs/2026-07-28-minghen-camp-synth-ui-design.md`；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
 - 楼层与命痕的掉落接入、主题池与关卡标签适配见各章 content 文档，不在本文件展开。
 - 星尘是营地统一货币；结算产生的命痕粉尘在入账时统一折算为星尘。
 
@@ -75,8 +76,9 @@
 
 - 伙伴是**主动战术技能陪伴**：每场携带 1 名，不占棋盘/不参与 AI/不自动攻击，每层主动技能基础 1 次。
 - 首批六类：位移 / 守护 / 破阵 / 控场 / 灵气 / 治疗；四阶段进化（Lv5/15/30 + 星尘；试炼接口首版恒通过）。
-- 大厅底栏「伙伴」入口；战斗 HUD 左下「伙伴」按钮；右上去掉星尘/职业标，「角色」移至右上；蓄力文案为 `蓄力 N`。
+- 大厅底栏「伙伴」入口；战斗 HUD 左下「伙伴」按钮；右上去掉星尘/职业标与钥匙角标，「角色」移至右上；蓄力文案为 `蓄力 N`。
 - 档案字段 `partners` + `equippedPartnerId`；开局快照冻结；通关经验 `30 + floor`。
+- **逐步解锁（progressive）**：新档/清档默认全锁；进入第 1 层教程发放并装备 `MOBILITY`；通关 3/5/7/10/17 分别解锁守护/治疗/破阵/控场/灵气；面板灰态展示条件；老档 `legacy` 不倒扣。细则见 `docs/superpowers/specs/2026-07-29-partner-progressive-unlock-design.md`。
 - 权威实现：`core/partner/` + `PartnerController`/`PartnerView`；细则见 `docs/superpowers/specs/2026-07-18-partner-system-design.md`。
 
 ## 8. 云端数据

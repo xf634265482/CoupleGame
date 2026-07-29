@@ -4,6 +4,9 @@ import { listPartnerDefinitions, getStageSkillConfig } from '../core/partner/Par
 import type { PartnerId } from '../core/partner/PartnerTypes';
 import { PARTNER_EVOLVE_LEVEL, PARTNER_EVOLVE_STARDUST } from '../core/partner/PartnerTypes';
 import { canEvolve } from '../core/partner/PartnerProgression';
+import { partnerUnlockHint } from '../core/partner/PartnerUnlock';
+import { loadPartnerSprite } from '../PartnerIconResourceLoader';
+import { applySpriteFill } from '../../ui/UiSprite';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 export type PartnerViewCallbacks = {
@@ -25,6 +28,7 @@ export class PartnerView {
   private _profile: PveProfile | null = null;
   private _selected: PartnerId = 'MOBILITY';
   private readonly _callbacks: PartnerViewCallbacks;
+  private _iconRequestId = 0;
 
   constructor(parent: Node, callbacks: PartnerViewCallbacks) {
     this._callbacks = callbacks;
@@ -103,9 +107,12 @@ export class PartnerView {
     const defs = listPartnerDefinitions();
     defs.forEach((def, index) => {
       const prog = partners[def.id];
+      const unlocked = prog?.unlocked === true;
       const equipped = this._profile!.equippedPartnerId === def.id;
       const selected = this._selected === def.id;
-      const label = `${def.displayName} Lv${prog.level} 阶${prog.evolutionStage}${equipped ? ' ✓' : ''}`;
+      const label = unlocked
+        ? `${def.displayName} Lv${prog.level} 阶${prog.evolutionStage}${equipped ? ' ✓' : ''}`
+        : `🔒 ${def.displayName}`;
       makeFlatButton(
         this._body,
         label,
@@ -117,17 +124,53 @@ export class PartnerView {
           this._selected = def.id;
           this._render();
         },
-        selected ? new Color(80, 110, 40, 220) : new Color(24, 72, 118, 210),
+        !unlocked
+          ? new Color(40, 48, 60, 200)
+          : selected ? new Color(80, 110, 40, 220) : new Color(24, 72, 118, 210),
         { noArt: true, border: BORDER },
       );
     });
 
     const sel = partners[this._selected];
     const def = defs.find((d) => d.id === this._selected)!;
-    const skill = getStageSkillConfig(this._selected, sel.evolutionStage);
-    const detail = makeLabel(this._body, 160, 120, 300, 480, 18, new Color(230, 240, 255), Label.HorizontalAlign.LEFT);
+    const unlocked = sel?.unlocked === true;
+    const skill = unlocked ? getStageSkillConfig(this._selected, sel.evolutionStage) : null;
+    const iconNode = new Node('PartnerIcon');
+    iconNode.setParent(this._body);
+    iconNode.setPosition(160, 278);
+    iconNode.addComponent(UITransform).setContentSize(190, 190);
+    if (unlocked) {
+      const requestId = ++this._iconRequestId;
+      void loadPartnerSprite(this._selected, sel.evolutionStage).then((spriteFrame) => {
+        if (!spriteFrame || requestId !== this._iconRequestId || !iconNode.isValid) return;
+        applySpriteFill(iconNode, spriteFrame, 190, 190);
+      });
+    }
+
+    const detail = makeLabel(this._body, 160, -20, 300, 440, 18, new Color(230, 240, 255), Label.HorizontalAlign.LEFT);
     detail.overflow = Label.Overflow.RESIZE_HEIGHT;
     detail.verticalAlign = Label.VerticalAlign.TOP;
+    if (!unlocked) {
+      detail.string = [
+        def.displayName,
+        '',
+        '尚未解锁',
+        partnerUnlockHint(this._selected),
+      ].join('\n');
+      makeFlatButton(
+        this._body,
+        '未解锁',
+        160,
+        -300,
+        140,
+        56,
+        () => this.showNotice(partnerUnlockHint(this._selected)),
+        new Color(60, 60, 70, 180),
+        { noArt: true, border: BORDER },
+      );
+      return;
+    }
+
     const nextStage = Math.min(4, (sel.evolutionStage + 1)) as 2 | 3 | 4;
     const needLv = PARTNER_EVOLVE_LEVEL[nextStage];
     const cost = PARTNER_EVOLVE_STARDUST[nextStage];
@@ -136,8 +179,8 @@ export class PartnerView {
       `等级 ${sel.level}  经验 ${sel.exp}`,
       `阶段 ${sel.evolutionStage}/4`,
       '',
-      skill.description,
-      skill.nextStageHint ? `下一阶段：${skill.nextStageHint}` : '已达觉醒',
+      skill!.description,
+      skill!.nextStageHint ? `下一阶段：${skill!.nextStageHint}` : '已达觉醒',
       '',
       sel.evolutionStage < 4 ? `进化：Lv≥${needLv} · 星尘 ${cost}` : '已达最高阶段',
       `当前星尘：${this._profile.gold}`,

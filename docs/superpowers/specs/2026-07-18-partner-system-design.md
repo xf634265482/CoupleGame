@@ -33,7 +33,7 @@
 | 项 | 决策 |
 |---|---|
 | 大厅入口 | 底栏第 2 格（排行榜 ↔ 远征），替换原「遗物」语义位；当前工程无独立遗物系统 |
-| 首版解锁 | 六只伙伴默认全解锁（正式投放条件后续再接） |
+| 首版解锁 | ~~六只默认全解锁~~ → 见 progressive unlock：`docs/superpowers/specs/2026-07-29-partner-progressive-unlock-design.md` |
 | 进化材料 | 扣星尘 `gold`；建议消耗 50 / 200 / 500（可配置常量） |
 | 进化试炼 | 接口 `hasCompletedPartnerTrial(partnerId, stage)` 首版恒 `true`；正式关卡测通后再接 |
 | 等级门槛 | Stage2@Lv5 / Stage3@Lv15 / Stage4@Lv30 |

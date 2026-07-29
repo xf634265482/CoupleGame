@@ -31,7 +31,7 @@ import { chooseDestinyRewrite } from '../core/bosses/FateGuardian';
 import { applySellBagEquip, applySellEquip, applyShopBuy, getCampShopItems } from '../core/CampSystem';
 import type { CampItemId } from '../core/CampSystem';
 import { GameSession } from '../../core/GameSession';
-import { attackIceWall, playerAttack, playerAttackPower } from '../core/CombatSystem';
+import { attackIceWall, attackRock, playerAttack, playerAttackPower } from '../core/CombatSystem';
 import { endTurn } from '../core/ExpeditionState';
 import { activateGunpowderBarrel, detonateBlastTarget, findAdjacentFateSeal, findAdjacentLavaVent, interactFateSeal, interactPortal, openExit, pickKey, sealLavaVent, spawnPortal } from '../core/FloorRules';
 import { isRevealed } from '../core/FogSystem';
@@ -51,6 +51,8 @@ import {
   syncRuntimeFromExpedition,
   type PersistentExpeditionRuntime,
 } from '../core/PersistentExpeditionRuntime';
+import { getPartnerDefinition } from '../core/partner/PartnerCatalog';
+import type { PartnerId } from '../core/partner/PartnerTypes';
 import { PersistentFloorFlow } from '../core/PersistentFloorFlow';
 import { localPendingSettlementStore } from '../PendingSettlementStore';
 import { activateSpiritBurst } from '../core/SpiritBurstSystem';
@@ -1961,16 +1963,16 @@ export class ExpeditionController extends Component {
   }
 
   /**
-   * "攻击"按钮在没有怪物目标时会命中的冰墙（FrostGiant 专属机制，→ attackIceWall）。
-   * 已点选范围内冰墙时优先该目标。
+   * "攻击"按钮在没有怪物目标时会命中的可破坏地形（冰墙 / 石块）。
+   * 已点选范围内目标时优先该实体。
    */
   private _computeAttackTargetEntity(): FixedEntity | undefined {
     if (!this._state) return undefined;
     const floor = this._state.floorState;
     const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
-    const walls = floor.entities
+    const destructibles = floor.entities
       .filter((e) =>
-        e.type === 'ICE_WALL' &&
+        (e.type === 'ICE_WALL' || e.type === 'ROCK') &&
         !e.consumed &&
         manhattan(floor.player, e.pos) <= range &&
         isRevealed(floor.revealed, e.pos),
@@ -1978,10 +1980,10 @@ export class ExpeditionController extends Component {
       .sort((a, b) => manhattan(floor.player, a.pos) - manhattan(floor.player, b.pos));
     const focusedId = this._hud?.getFocusedEntityId();
     if (focusedId) {
-      const focused = walls.find((e) => e.id === focusedId);
+      const focused = destructibles.find((e) => e.id === focusedId);
       if (focused) return focused;
     }
-    return walls[0];
+    return destructibles[0];
   }
 
   private _rebuildInputHints(): void {
@@ -2101,9 +2103,10 @@ export class ExpeditionController extends Component {
       this._attack(target.id, true);
       return;
     }
-    const wall = this._cachedAttackEntityTarget;
-    if (wall) {
-      this._attackIceWall(wall.id);
+    const entity = this._cachedAttackEntityTarget;
+    if (entity) {
+      this._hud?.focusEntity(entity.id);
+      this._attackDestructible(entity.id, entity.type, true);
       return;
     }
     this._toast?.toast('附近没有目标');
@@ -2381,6 +2384,22 @@ export class ExpeditionController extends Component {
     this._queuePersistentSave(300);
   }
 
+  private _toastPartnerUnlocks(rewards: Record<string, unknown> | null | undefined): void {
+    const ids = rewards?.newlyUnlockedPartnerIds;
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const names = ids
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => {
+        try {
+          return getPartnerDefinition(id as PartnerId).displayName;
+        } catch {
+          return id;
+        }
+      });
+    if (names.length === 0) return;
+    this._toast?.toastImportant(`解锁伙伴：${names.join('、')}`, 2200);
+  }
+
   private _confirmPartnerAim(target: { cell?: Coord; monsterId?: string }): void {
     if (!this._partnerAim || !this._runtime || !this._floorFlow) return;
     const applied = applyPartnerSkillToRuntime(this._runtime, {
@@ -2402,11 +2421,19 @@ export class ExpeditionController extends Component {
     this._queuePersistentSave(300);
   }
 
-  /** 攻击冰墙（FrostGiant 专属机制，→ attackIceWall）。 */
-  private _attackIceWall(entityId: string, tutorialBypass = false): void {
+  /** 攻击可破坏地形：冰墙 → attackIceWall；石块 → attackRock。 */
+  private _attackDestructible(
+    entityId: string,
+    entityType: FixedEntity['type'],
+    tutorialBypass = false,
+  ): void {
     if (!this._state) return;
     if (!tutorialBypass && this._isTutorialBlocked('ATTACK')) return;
-    const result = attackIceWall(this._state, entityId);
+    const result = entityType === 'ROCK'
+      ? attackRock(this._state, entityId)
+      : entityType === 'ICE_WALL'
+        ? attackIceWall(this._state, entityId)
+        : { state: this._state, events: [] as PveEvent[] };
     if (result.events.length === 0) {
       this._toast?.toast('目标不在攻击范围内或 AP 不足');
       void this._maybeAutoEndTurn();
@@ -2794,16 +2821,34 @@ export class ExpeditionController extends Component {
       await this._playCollisionImpactFx(ev);
       return;
     }
-    const target = this._state.floorState.monsters.find((m) => m.id === ev.targetId);
-    if (!target) return;
     const playerPos = this._state.floorState.player;
-    // 受击反应位移后最终距离常 ≥2：必须用受击格，否则近战会误播远程弹道。
-    const hitPos = resolveAttackHitPos(this._playbackEvents, ev.targetId, target.pos) ?? target.pos;
+    const monster = this._state.floorState.monsters.find((m) => m.id === ev.targetId);
+    // 冰墙/石块等：ATTACK.targetId 是实体 id；击碎后 consumed=true，仍要用其 pos 播表现。
+    const entity = monster
+      ? undefined
+      : this._state.floorState.entities.find((e) => e.id === ev.targetId);
+    if (!monster && !entity) return;
+
+    const hitPos = monster
+      ? (resolveAttackHitPos(this._playbackEvents, ev.targetId, monster.pos) ?? monster.pos)
+      : entity!.pos;
     const dist = manhattan(playerPos, hitPos);
-    // 同批有击退/逃跑 MOVE 时，受击格 OccupantArt 已空（真身在终点且被藏），优先打在 MOVE ghost 上。
-    const targetNode = this._moveGhosts.get(ev.targetId)?.ghost
-      ?? this._map.getOccupantArtAt(hitPos)
-      ?? this._map.getOccupantArtAt(target.pos);
+    // 怪物优先 OccupantArt / MOVE ghost；地形用 EntityArt（击碎后可能已空）。
+    let targetNode = monster
+      ? (this._moveGhosts.get(ev.targetId)?.ghost
+        ?? this._map.getOccupantArtAt(hitPos)
+        ?? this._map.getOccupantArtAt(monster.pos))
+      : (this._map.getEntityArtAt(hitPos) ?? this._map.getEntityArtAt(entity!.pos));
+    // 击碎当帧 EntityArt 已被 refresh 清掉：落临时锚点，保证伤害数字/闪白仍有载体。
+    let ephemeralAnchor: Node | null = null;
+    if (!targetNode?.isValid && this._map) {
+      ephemeralAnchor = new Node('AttackFxAnchor');
+      ephemeralAnchor.setParent(this._map.getMoveFxParent());
+      ephemeralAnchor.setPosition(this._map.getCellLocalPosition(hitPos));
+      ephemeralAnchor.addComponent(UITransform).setContentSize(8, 8);
+      this._attackLungeGhosts.add(ephemeralAnchor);
+      targetNode = ephemeralAnchor;
+    }
     const onContact = () => {
       if (targetNode?.isValid) {
         void Effects.flash(targetNode, { color: new Color(255, 80, 80, 255) });
@@ -2811,6 +2856,13 @@ export class ExpeditionController extends Component {
           playSfx(SFX_IDS.ATTACK_HIT);
           void Effects.damageNumber(targetNode, ev.damage);
         }
+      }
+      if (ephemeralAnchor?.isValid) {
+        const anchor = ephemeralAnchor;
+        void delay(400).then(() => {
+          this._attackLungeGhosts.delete(anchor);
+          if (anchor.isValid) anchor.destroy();
+        });
       }
     };
     // 只有游侠（ARCHER）用射箭；战士/潜行者即使射程>1 也走冲脸光剑。
@@ -3795,7 +3847,8 @@ export class ExpeditionController extends Component {
       );
       try {
         LoadingOverlay.update({ text: '正在同步本层结算…', progress: 0.35 });
-        await this._floorFlow.ensureSettled(selection);
+        const settled = await this._floorFlow.ensureSettled(selection);
+        this._toastPartnerUnlocks(settled?.rewards);
         LoadingOverlay.update({
           text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在进入下一层…',
           progress: 0.55,

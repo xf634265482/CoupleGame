@@ -54,6 +54,10 @@ export class PartnerController extends Component {
 
   private async _equip(partnerId: PartnerId): Promise<void> {
     if (this._busy || !this._view) return;
+    if (this._profile?.partners[partnerId]?.unlocked !== true) {
+      this._view.showNotice('伙伴未解锁');
+      return;
+    }
     this._busy = true;
     try {
       const { profile } = await updateCampConfiguration({ equippedPartnerId: partnerId });
@@ -69,6 +73,10 @@ export class PartnerController extends Component {
 
   private async _evolve(partnerId: PartnerId): Promise<void> {
     if (this._busy || !this._view) return;
+    if (this._profile?.partners[partnerId]?.unlocked !== true) {
+      this._view.showNotice('伙伴未解锁');
+      return;
+    }
     this._busy = true;
     try {
       const { profile } = await manageCamp({ type: 'PARTNER', action: 'EVOLVE', partnerId });
