@@ -99,9 +99,10 @@
 - 通关写入最高解锁层、最高通关层、楼层记录、职业熟练度、星尘、装备和命痕奖励。
 - 死亡只结算当前规则允许保留的内容，并清除活动挑战引用。
 - 排行榜以当前资料中的最高通关层为核心字段。
-- 大厅只展示当前资料、楼层选择、营地、排行榜、邮箱和通用设置。
+- 大厅只展示当前资料、楼层选择、营地、排行榜、邮箱、签到和通用设置。
 - **邮箱**：左上头像卡下方入口；集合 `pve_mails`；附件仅星尘（入账 `pveProfile.gold`）与体力；纯通知无附件；未领有附件不可删；一键领取全部；不过期；软删。
-- **货币口径**：对外仅星尘；GM `adjustResources` 支持 `stardust`/`stamina`；GM 可 `sendMail` / `sendMailBroadcast`（广播硬顶 500 用户）。
+- **签到**：邮箱旁独立入口；本月累计签到（断签不清零，换月重置进度、保留补签卡）；每日奖按「当月第几天」7 日循环（星尘/淬星砂/聚星核/虚空革）；累计档 1/3/7/15/20 手动领取（7 天档附送补签卡）；补签消耗补签卡；权威 `PveCheckIn`（`pveProfile.checkIn`）；细则见 `docs/superpowers/specs/2026-07-31-lobby-checkin-rewards-design.md`。
+- **货币口径**：对外仅星尘；GM `adjustResources` 支持 `stardust`/`stamina`/`makeupCards`；GM 可 `sendMail` / `sendMailBroadcast`（广播硬顶 500 用户）。
 
 ## 10. 变更要求
 

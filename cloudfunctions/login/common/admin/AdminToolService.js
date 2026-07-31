@@ -237,6 +237,7 @@ function toPlayerView(user) {
     highestFloor: Number(profile.highestClearedFloor || 0),
     tutorialCompleted: user.pveTutorialCompleted === true,
     stamina: Number(user.pveStamina ?? profile.stamina ?? 0),
+    makeupCards: Number(profile.checkIn?.makeupCards || 0),
     campInventory: {
       minghen: Object.keys(profile.minghenCollection || {}).length,
       minghenLoadout: Array.isArray(profile.minghenLoadout) ? profile.minghenLoadout.length : 0,
@@ -429,6 +430,29 @@ async function adjustResourcesAction(account, payload, requestSource) {
 
     before = { stamina: currentValue };
     after = { stamina: capped };
+  } else if (resourceType === RESOURCE_TYPES.MAKEUP_CARDS) {
+    const profile = normalizeProfile(user.pveProfile);
+    const checkIn = profile.checkIn || { monthKey: '', signedDays: [], claimedMilestones: [], makeupCards: 0 };
+    const currentValue = Number(checkIn.makeupCards || 0);
+    const nextValue = currentValue + amount;
+    if (nextValue < 0) {
+      const err = new Error('GM_RESOURCE_NEGATIVE_NOT_ALLOWED');
+      err.code = 'GM_RESOURCE_NEGATIVE_NOT_ALLOWED';
+      throw err;
+    }
+    const nextProfile = {
+      ...profile,
+      checkIn: { ...checkIn, makeupCards: nextValue },
+      updatedAt: Date.now(),
+    };
+    await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
+      data: {
+        pveProfile: nextProfile,
+        updatedDate: serverDate(),
+      },
+    });
+    before = { makeupCards: currentValue };
+    after = { makeupCards: nextValue };
   } else {
     const err = new Error('ADMIN_UNSUPPORTED_RESOURCE');
     err.code = 'ADMIN_UNSUPPORTED_RESOURCE';

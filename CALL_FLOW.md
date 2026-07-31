@@ -16,7 +16,10 @@ GameApp.onLoad()
        -> applyScreenBackground（await 后重读 visibleDesignSize；过期 apply 丢弃）
        -> refreshScreenAdapt / ensureScreenBackground：尺寸变化时同步重铺 ScreenBg/Art，避免长屏底部黑边
        -> 首屏绘制后 hide overlay
-       -> 后台 ensureResourcesBundle + preloadPveCampUi + loadPveProfile + playMainBgm
+       -> 后台并行：loadPveProfile / loadActiveFloorChallenge（营地·商会·选层可瞬时开）
+                    + ensureEquipmentAssetsForFloor（装备图标）
+                    + ensureResourcesBundle + playMainBgm
+                    + preloadPveExpedition + preloadPartnerIconBundle
 ```
 
 ---
@@ -25,12 +28,9 @@ GameApp.onLoad()
 
 ```text
 [Lobby] PveLobbyController 点击“营地”
-  -> _ensureWarmReady（现有 LoadingOverlay 短等预热完成）
-  -> CampController.open()
-  -> PveProgressionService.loadPveProfile()
-  -> [Cloud] cloudfunctions/pve/index.js action=loadProfile
-  -> [Cloud] PveProgression.loadProfile()
-  -> CampView 渲染：命痕台 / 装备台 / 远征情报 / 角色区
+  -> 有 _warmedProfile 则立刻 CampController.open（不再等 resources 预热）
+  -> 无档案时仅短等 loadPveProfile
+  -> CampView 立刻渲染命痕/装备/情报/角色（装备图标后台补齐，进厅后已开始预热）
      （角色区：已解锁职业卡调用 previewCampCombatStats 显示攻击/生命/护甲/射程预览）
      （命痕台只负责装配/库存/方案；不含每日商会）
 ```
@@ -68,9 +68,8 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
 
 ```text
 [Lobby] 右侧「商会」浮标
-  -> MinghenShopController.open()
-  -> loadPveProfile（ensureDailyShop）
-  -> MinghenShopView：星尘池 / 命痕兑换 / 广告刷新
+  -> 有 _warmedProfile 则立刻 MinghenShopController.open（不再等 resources）
+  -> MinghenShopView：星尘池 / 命痕兑换（字形格同营地 CAMP_SLOT_SIZE；广告刷新按钮暂隐藏）
   -> manageCamp(MINGHEN_BUY_STARDUST | MINGHEN_EXCHANGE | MINGHEN_REFRESH_SHOP)
   -> [Cloud] PveMinghenShop.js
 ```
@@ -79,16 +78,34 @@ CampView.onSelectProfession / onEquip / onMinghenLoadout
 
 ```text
 [Lobby] 左上头像卡下方「邮箱」
-  -> listMails（红点 unreadCount）
+  -> listMails（红点 unreadCount；打开时有缓存先立刻展示再刷新）
   -> MailView：列表 / 详情 / 领取 / 删除 / 一键领取
-  -> claimMail / claimAllMails / deleteMail / markMailRead
+  -> 领取/删除/已读：乐观更新本地列表与红点，再调云端；失败回滚
+  -> claimMail / claimAllMails / deleteMail / markMailRead（成功后用返回值更新星尘/体力，不再阻塞等 listMails）
   -> [Cloud] cloudfunctions/pve action → PveMailService
+  -> claimAllMails：单次事务批量入账（分块 ≤15），避免 N 次串行事务
   -> 星尘入账 pveProfile.gold；体力入账 pveStamina（封顶）
   -> 大厅刷新星尘芯片与体力条
 
 [GM] gm-web「发送邮件」
   -> adminTool sendMail | sendMailBroadcast
   -> AdminToolService → createMailForUser（广播同 batchId，≤500）
+```
+
+### 大厅签到
+
+```text
+[Lobby] 左上头像卡下方「签到」（邮箱旁；红点 = 今日未签或有可领累计）
+  -> getCheckInState / signCheckInToday / makeupCheckIn / claimCheckInMilestone
+  -> CheckInView：月历每日奖 / 补签选日 / 累计里程碑领取
+  -> [Cloud] pve action=checkIn → PveCheckIn.handleCheckInAction
+       GET_STATE | SIGN_TODAY | MAKEUP | CLAIM_MILESTONE
+  -> 入账 gold / materials / checkIn.makeupCards；换月重置 signedDays 与 claimedMilestones
+  -> 返回 checkIn 状态 + profile 片段；大厅刷新星尘芯片与红点
+
+[GM] gm-web「资源调整」补签卡
+  -> adminTool adjustResources resourceType=makeupCards
+  -> 写入 pveProfile.checkIn.makeupCards
 ```
 
 ---
@@ -173,16 +190,14 @@ PveHudView「目标」
 
 攻击按钮
   -> ExpeditionController._onAttack()
-  -> 优先已点选且在攻击范围内的怪物/冰墙；否则取最近可攻击目标
-  -> PersistentCombatRules.applyPersistentAttack()
-    -> 固定武器 / 职业 / 命痕上下文
-  -> CombatSystem.playerAttack(state, target, context)
+  -> 优先已点选且在攻击范围内的怪物；否则可破坏地形（ICE_WALL / ROCK）；再否则最近可攻击目标
+  -> 怪物：PersistentCombatRules.applyPersistentAttack() / CombatSystem.playerAttack
+  -> 冰墙：CombatSystem.attackIceWall；石块：CombatSystem.attackRock
   -> ExpeditionController._apply(result)
-  -> MinghenCombatBridge / PersistentExpeditionRuntime 同步目标与命痕状态
-  -> _playEvents(ATTACK/KILL/LOOT/PLAYER_DAMAGED...)
-     ATTACK：按受击格（若同批有目标 MOVE，用 MOVE.from）判定近战/远程；
-             远程 → 箭矢 `_playRangedShot`；有武器近战 → 剑弧 `_playMeleeSlash`；
-             空装近战 → lunge `_playMeleeLunge`；await 结束后再回放后续 MOVE
+  -> _playEvents(ATTACK/...)
+     ATTACK：targetId 先查怪物，未命中再查固定实体（冰墙/石块）；
+             按受击格判定近战/远程；远程 → 箭矢；有武器近战 → 光剑；空装 → lunge
+             地形击碎当帧若 EntityArt 已清空，用临时锚点承载闪白/伤害数字
   -> _queuePersistentSave()
 ```
 

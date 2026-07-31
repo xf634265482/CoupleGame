@@ -19,7 +19,7 @@ export type AdminAction =
   | 'syncBalanceDocsPreview'
   | 'syncBalanceDocsLog';
 
-export type ResourceType = 'stardust' | 'stamina';
+export type ResourceType = 'stardust' | 'stamina' | 'makeupCards';
 export type MailAttachmentType = 'none' | 'stardust' | 'stamina';
 export type BalanceScopeType = 'global' | 'chapter' | 'unit';
 export type BalanceUnitType = 'player' | 'monster' | 'boss' | 'equipment';
@@ -46,6 +46,7 @@ export interface PlayerView {
   highestFloor: number;
   tutorialCompleted: boolean;
   stamina: number;
+  makeupCards?: number;
   campInventory?: {
     minghen: number;
     minghenLoadout: number;

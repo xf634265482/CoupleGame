@@ -320,6 +320,7 @@ const ADMIN_ACTION_LABELS: Record<string, string> = {
 const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
   stardust: '星尘',
   stamina: '体力',
+  makeupCards: '补签卡',
 };
 
 const CLASS_LABELS: Record<string, string> = {
@@ -754,6 +755,7 @@ function renderPlayerDetail(): string {
         <div class="stat"><span>排行榜最高层</span><strong>${currentPlayer.highestFloor}</strong></div>
         <div class="stat"><span>新手教程</span><strong>${currentPlayer.tutorialCompleted ? '已完成' : '未完成'}</strong></div>
         <div class="stat"><span>体力</span><strong>${currentPlayer.stamina}</strong></div>
+        <div class="stat"><span>补签卡</span><strong>${currentPlayer.makeupCards ?? 0}</strong></div>
       </div>
       <div class="split-two" style="margin-top:16px;">
         <div class="panel panel-subsection">
@@ -946,6 +948,7 @@ function renderDashboard(): void {
                 <select id="resourceType">
                   <option value="stardust" ${resourceForm.resourceType === 'stardust' ? 'selected' : ''}>星尘</option>
                   <option value="stamina" ${resourceForm.resourceType === 'stamina' ? 'selected' : ''}>体力</option>
+                  <option value="makeupCards" ${resourceForm.resourceType === 'makeupCards' ? 'selected' : ''}>补签卡</option>
                 </select>
               </div>
               <div>
