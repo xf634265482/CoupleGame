@@ -1,3 +1,11 @@
+import {
+  CAMP_BAG_COLS,
+  CAMP_BAG_SLOTS,
+  CAMP_SLOT_GAP,
+  CAMP_SLOT_SIZE,
+  campBagBlockHeight,
+} from './CampLayoutConstants';
+
 export interface LayoutRect {
   x: number;
   y: number;
@@ -13,30 +21,27 @@ export interface LayoutBounds {
   centerY: number;
 }
 
-/** 命痕台：装配 + 库存 + 合成三角；整页 ScrollView。装配槽 10 = 5 列 × 2 行。 */
+/** 命痕台：装配 + 共用库存(固定25) + 合成；整页 ScrollView。格子统一正方形 96。 */
 export const CAMP_MINGHEN_LAYOUT = {
   viewportWidth: 570,
   viewportHeight: 720,
   equippedSlots: 10,
-  columns: 5,
-  cardWidth: 106,
-  cardHeight: 64,
-  cardGap: 6,
-  ownedColumns: 4,
-  ownedCardWidth: 132,
-  ownedCardHeight: 48,
-  ownedGap: 8,
-  ownedFontSize: 16,
-  equippedFontSize: 18,
+  columns: CAMP_BAG_COLS,
+  cardWidth: CAMP_SLOT_SIZE,
+  cardHeight: CAMP_SLOT_SIZE,
+  cardGap: CAMP_SLOT_GAP,
+  bagSlots: CAMP_BAG_SLOTS,
+  bagColumns: CAMP_BAG_COLS,
+  bagSize: CAMP_SLOT_SIZE,
+  bagGap: CAMP_SLOT_GAP,
   contentTop: 320,
   summaryY: 320,
   equippedTitleY: 270,
-  firstRowY: 220,
-  synthSlotWidth: 120,
-  synthSlotHeight: 56,
-  synthResultYOffset: 0,
-  synthInputYOffset: -90,
-  synthInputX: 90,
+  firstRowY: 200,
+  filterYOffset: 28,
+  bagTitleYOffset: 36,
+  synthSlotSize: CAMP_SLOT_SIZE,
+  synthInputX: 110,
   synthButtonWidth: 160,
   synthButtonHeight: 48,
   contentBottomPadding: 100,
@@ -47,22 +52,12 @@ export function equippedGridHeight(): number {
   return 2 * cardHeight + cardGap;
 }
 
-export function ownedRows(ownedCount: number): number {
-  return Math.ceil(Math.max(0, ownedCount) / CAMP_MINGHEN_LAYOUT.ownedColumns);
-}
-
-export function ownedBlockHeight(ownedCount: number): number {
-  const { ownedCardHeight, ownedGap } = CAMP_MINGHEN_LAYOUT;
-  const rows = ownedRows(ownedCount);
-  if (rows <= 0) return 0;
-  return rows * (ownedCardHeight + ownedGap);
-}
-
-/** Content Y positions from top of scroll content (positive up in Cocos). */
-export function minghenContentMetrics(ownedCount: number): {
+/** Content Y positions from top of scroll content (positive up in Cocos). Fixed bag = 25 slots. */
+export function minghenContentMetrics(): {
   contentHeight: number;
-  ownedTitleY: number;
-  ownedFirstRowY: number;
+  filterY: number;
+  bagTitleY: number;
+  bagFirstRowY: number;
   synthTitleY: number;
   synthResultY: number;
   synthInputY: number;
@@ -70,20 +65,21 @@ export function minghenContentMetrics(ownedCount: number): {
 } {
   const L = CAMP_MINGHEN_LAYOUT;
   const equippedBottom = L.firstRowY - equippedGridHeight() - 8;
-  const ownedTitleY = equippedBottom - 28;
-  const ownedFirstRowY = ownedTitleY - 40;
-  const ownedH = ownedBlockHeight(ownedCount);
-  const ownedBottom = ownedH > 0 ? ownedFirstRowY - ownedH : ownedTitleY - 12;
-  const synthTitleY = ownedBottom - 28;
-  const synthResultY = synthTitleY - 48;
-  const synthInputY = synthResultY + L.synthInputYOffset;
-  const synthButtonY = synthInputY - (L.synthSlotHeight / 2 + L.synthButtonHeight / 2 + 20);
+  const filterY = equippedBottom - L.filterYOffset;
+  const bagTitleY = filterY - L.bagTitleYOffset;
+  const bagFirstRowY = bagTitleY - 44;
+  const bagBottom = bagFirstRowY - campBagBlockHeight();
+  const synthTitleY = bagBottom - 28;
+  const synthResultY = synthTitleY - (L.synthSlotSize / 2 + 28);
+  const synthInputY = synthResultY - (L.synthSlotSize + 16);
+  const synthButtonY = synthInputY - (L.synthSlotSize / 2 + L.synthButtonHeight / 2 + 20);
   const top = L.summaryY + 36;
   const bottom = synthButtonY - L.synthButtonHeight / 2 - L.contentBottomPadding;
   return {
     contentHeight: Math.max(L.viewportHeight, top - bottom),
-    ownedTitleY,
-    ownedFirstRowY,
+    filterY,
+    bagTitleY,
+    bagFirstRowY,
     synthTitleY,
     synthResultY,
     synthInputY,

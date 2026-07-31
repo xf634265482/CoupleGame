@@ -1,14 +1,17 @@
 import {
   CAMP_EQUIPMENT_LAYOUT,
-  bagRows,
   equipmentContentMetrics,
   intersects,
 } from '../../assets/scripts/pve/views/CampEquipmentLayout';
 
 describe('camp equipment layout geometry', () => {
-  test('equipment synth sits below bag and uses three input slots', () => {
-    const m = equipmentContentMetrics(8);
+  test('equipment synth sits below fixed bag and uses three input slots', () => {
+    const m = equipmentContentMetrics();
     expect(CAMP_EQUIPMENT_LAYOUT.synthInputCount).toBe(3);
+    expect(CAMP_EQUIPMENT_LAYOUT.bagSize).toBe(96);
+    expect(CAMP_EQUIPMENT_LAYOUT.loadoutSlotSize).toBe(96);
+    expect(CAMP_EQUIPMENT_LAYOUT.synthSlotSize).toBe(96);
+    expect(CAMP_EQUIPMENT_LAYOUT.bagSlots).toBe(25);
     expect(m.bagTitleY).toBeGreaterThan(m.synthTitleY);
     expect(m.synthResultY).toBeGreaterThan(m.synthInputY);
     expect(m.synthInputY).toBeGreaterThan(m.synthButtonY);
@@ -16,21 +19,21 @@ describe('camp equipment layout geometry', () => {
     const buttonBottom = m.synthButtonY - CAMP_EQUIPMENT_LAYOUT.synthButtonHeight / 2;
     expect(m.contentHeight / 2).toBeGreaterThanOrEqual(Math.abs(Math.min(0, buttonBottom)) - 1);
     const slots = CAMP_EQUIPMENT_LAYOUT.synthInputXs.map((x) => ({
-      left: x - CAMP_EQUIPMENT_LAYOUT.synthSlotWidth / 2,
-      right: x + CAMP_EQUIPMENT_LAYOUT.synthSlotWidth / 2,
-      top: m.synthInputY + CAMP_EQUIPMENT_LAYOUT.synthSlotHeight / 2,
-      bottom: m.synthInputY - CAMP_EQUIPMENT_LAYOUT.synthSlotHeight / 2,
+      left: x - CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
+      right: x + CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
+      top: m.synthInputY + CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
+      bottom: m.synthInputY - CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
       centerY: m.synthInputY,
     }));
     expect(intersects(slots[0]!, slots[1]!)).toBe(false);
     expect(intersects(slots[1]!, slots[2]!)).toBe(false);
+    expect(CAMP_EQUIPMENT_LAYOUT.synthSlotSize).toBe(CAMP_EQUIPMENT_LAYOUT.bagSize);
   });
 
-  test('empty bag does not reserve a blank inventory row', () => {
-    expect(bagRows(0)).toBe(0);
-    const empty = equipmentContentMetrics(0);
-    const withItems = equipmentContentMetrics(3);
-    expect(empty.synthTitleY).toBeGreaterThan(withItems.synthTitleY);
-    expect(empty.bagTitleY - empty.synthTitleY).toBeLessThan(80);
+  test('bag metrics are fixed regardless of call count', () => {
+    const empty = equipmentContentMetrics();
+    const full = equipmentContentMetrics();
+    expect(empty.synthTitleY).toBe(full.synthTitleY);
+    expect(empty.contentHeight).toBe(full.contentHeight);
   });
 });
