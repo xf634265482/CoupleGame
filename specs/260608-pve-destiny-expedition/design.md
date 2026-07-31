@@ -61,7 +61,7 @@
 - 装备品质、强化等级、固定几何和生效数值由 `core/equipment/` 统一计算。
 - 营地强化消耗**星尘 + 淬星砂**；合成升品消耗**星尘 + 聚星核**（`materials.quenchSand` / `materials.fusionCore`）。
 - 营地支持 **三合一升品**：三件同名同品质、未锁未穿装备 → 一件高一阶品质（强化归零，`baseStat` 取平均）；按材料品质扣星尘与聚星核；传奇不可再合成。营地装备台提供显式合成区（上 1 结果、下 3 材料；格子与背包同尺寸、无连线、结果格不预告文案）；背包详情用「投入合成」，不再一键自动挑料。权威在 `PveCamp` `SYNTHESIZE`。
-- 材料可通过通关结算与出售装备获得。营地 **命痕台 / 装备台** 下方为**共用库存 UI**（滤镜：命痕 / 装备 / 材料 / 全部）；格子与装配区统一正方形；材料按种类占格 + 数量角标。库存外层固定按 **25** 格占位（防版面跳动；>25 时区内滚动）；扩容经济（25→35→45→60）留后。细则见 `docs/superpowers/specs/2026-07-31-camp-ui-glyph-inventory-design.md` 与 `2026-07-31-camp-materials-v1-design.md`、`equipment-catalog.md` §1.4–1.5。
+- 材料可通过通关结算与出售装备获得。营地 **命痕台 / 装备台** 下方为**共用背包 UI**（滤镜：命痕 / 装备 / 材料 / 全部）；格子与装配区统一正方形；淬星砂/聚星核仅数量 > 0 时入包（材料图标 + 右下角数量），装备台顶部不另挂材料摘要。背包外层固定按 **25** 格占位（防版面跳动；>25 时区内滚动）；扩容经济（25→35→45→60）留后。细则见 `docs/superpowers/specs/2026-07-31-camp-ui-glyph-inventory-design.md` 与 `2026-07-31-camp-materials-v1-design.md`、`equipment-catalog.md` §1.4–1.5。
 - 任何无法在固定目录解析的装备都不得进入挑战快照。
 - 第二章入口护甲软着陆（普通甲 4 / 精英 8 / Boss 10 等）见 `docs/superpowers/specs/2026-07-18-ch2-armor-softland-craft-v1-design.md`，不改 `chapterScaling` 总表。
 
