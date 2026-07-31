@@ -3,14 +3,17 @@ import type { PveEquipmentInstance, PveProfile, PveProfessionId } from '../core/
 import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefinition';
 import {
   ENHANCE_COST,
+  ENHANCE_QUENCH_SAND,
+  SYNTH_FUSION_CORE,
   SYNTH_STARDUST,
   effectiveEquipPrimaryRange,
   nextEquipQuality,
+  normalizeCampMaterials,
   toFixedEquipItem,
 } from '../core/equipment/EquipmentProgression';
-import { formatMinghenCampDetail, formatMinghenLevelMark } from '../core/minghen/MinghenDisplay';
+import { formatMinghenCampDetail } from '../core/minghen/MinghenDisplay';
 import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
-import { spareCopiesForExchange } from '../core/minghen/MinghenAcquire';
+import { buildMinghenGlyph } from '../core/minghen/MinghenGlyph';
 import { canSynthesizeMinghenToII } from '../core/minghen/MinghenLoadout';
 import { masteryProgressForXp } from '../core/professions/ProfessionMastery';
 import { PROFESSION_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
@@ -18,10 +21,23 @@ import { previewCampCombatStats } from '../core/CampCombatPreview';
 import { ensureEquipmentAssetsForFloor } from '../EquipmentResourceLoader';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { ensureArtChild } from '../../ui/UiSprite';
+import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
+import { CAMP_BAG_SLOTS, CAMP_SLOT_GAP, CAMP_SLOT_SIZE, campBagBlockHeight } from './CampLayoutConstants';
 import { CAMP_MINGHEN_LAYOUT, minghenContentMetrics } from './CampMinghenLayout';
 import { CAMP_EQUIPMENT_LAYOUT, equipmentContentMetrics } from './CampEquipmentLayout';
+import {
+  buildCampSharedBagEntries,
+  defaultCampBagFilter,
+  type CampBagEntry,
+  type CampBagFilter,
+} from './CampSharedBag';
+import { paintMinghenGlyph } from './MinghenGlyphPainter';
 import { MINGHEN_LOADOUT_SLOTS } from '../core/PveConstants';
 import { makeFlatButton, makeLabel } from './pveUiKit';
+
+const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
+const MAT_ICON_FUSION_CORE = 'pve/lobby/icon_mat_fusion_core';
+const MAT_ICON_SIZE = 28;
 
 export type CampSection = 'MINGHEN' | 'EQUIPMENT' | 'INTEL' | 'PROFESSION';
 export interface CampViewCallbacks {
@@ -60,6 +76,7 @@ export class CampView {
   private readonly _body: Node;
   private _profile: PveProfile | null = null;
   private _section: CampSection = 'MINGHEN';
+  private _bagFilter: CampBagFilter = 'MINGHEN';
   private _detail: Node | null = null;
   private _equipmentIconRevision = 0;
   private _synthSlots: [string | null, string | null] = [null, null];
@@ -148,7 +165,12 @@ export class CampView {
     this._equipSynthSlots = [null, null, null];
   }
 
-  showSection(section: CampSection): void {
+  showSection(section: CampSection, opts?: { keepBagFilter?: boolean }): void {
+    if (section !== this._section) {
+      if (section === 'MINGHEN' || section === 'EQUIPMENT') {
+        this._bagFilter = defaultCampBagFilter(section);
+      }
+    }
     this._section = section;
     this._title.string = `营地 · ${SECTION_LABELS[section]}`;
     this._callbacks.onSectionChanged?.(section);
@@ -162,9 +184,7 @@ export class CampView {
 
   private _renderMinghen(profile: PveProfile): void {
     const L = CAMP_MINGHEN_LAYOUT;
-    const equipped = new Map(profile.minghenLoadout.map((entry) => [entry.id, entry]));
-    const owned = Object.values(profile.minghenCollection).filter((entry) => !equipped.has(entry.id));
-    const metrics = minghenContentMetrics(owned.length);
+    const metrics = minghenContentMetrics();
 
     const scrollNode = new Node('MinghenScroll');
     scrollNode.setParent(this._body);
@@ -185,9 +205,10 @@ export class CampView {
     scroll.content = content;
 
     const ownedCount = Object.keys(profile.minghenCollection).length;
+    const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
     const summary = makeLabel(content, 0, L.summaryY, 540, 54, 22, TEXT, Label.HorizontalAlign.LEFT);
     summary.verticalAlign = Label.VerticalAlign.TOP;
-    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    方案 ${profile.minghenPresets.length}/5\n星尘：${profile.gold}`;
+    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    库存 ${bagEntries.length}/${CAMP_BAG_SLOTS}\n星尘：${profile.gold}`;
 
     const equippedTitle = makeLabel(content, 0, L.equippedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     equippedTitle.isBold = true;
@@ -195,49 +216,21 @@ export class CampView {
 
     for (let index = 0; index < L.equippedSlots; index += 1) {
       const entry = profile.minghenLoadout[index];
-      const text = entry
-        ? `${getMinghenDefinition(entry.id).name} ${formatMinghenLevelMark(entry.level)}`
-        : '空槽';
-      this._gridCard(
-        content,
-        index,
-        L.columns,
-        L.cardWidth,
-        L.cardHeight,
-        L.firstRowY,
-        text,
-        () => { if (entry) this._showMinghenDetail(entry.id, entry.level, true); },
-        !entry,
-        undefined,
-        undefined,
-        36,
-        L.equippedFontSize,
-      );
+      const col = index % L.columns;
+      const row = Math.floor(index / L.columns);
+      const total = L.columns * L.cardWidth + (L.columns - 1) * L.cardGap;
+      const x = -total / 2 + L.cardWidth / 2 + col * (L.cardWidth + L.cardGap);
+      const y = L.firstRowY - row * (L.cardHeight + L.cardGap);
+      this._minghenGlyphSlot(content, x, y, L.cardWidth, entry?.id, () => {
+        if (entry) this._showMinghenDetail(entry.id, entry.level, true);
+      }, !entry);
     }
 
-    const ownedTitle = makeLabel(content, 0, metrics.ownedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
-    ownedTitle.isBold = true;
-    ownedTitle.string = '拥有的命痕';
-
-    owned.forEach((entry, index) => {
-      const spare = spareCopiesForExchange(entry);
-      const text = `${getMinghenDefinition(entry.id).name} ${formatMinghenLevelMark(entry.level)} ·×${entry.copies}${spare > 0 ? `(余${spare})` : ''}`;
-      this._gridCard(
-        content,
-        index,
-        L.ownedColumns,
-        L.ownedCardWidth,
-        L.ownedCardHeight,
-        metrics.ownedFirstRowY,
-        text,
-        () => this._showMinghenDetail(entry.id, entry.level, false),
-        false,
-        undefined,
-        undefined,
-        36,
-        L.ownedFontSize,
-      );
-    });
+    this._renderBagFilters(content, metrics.filterY, 'MINGHEN');
+    const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    bagTitle.isBold = true;
+    bagTitle.string = '共用库存';
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, 0);
 
     this._renderMinghenSynth(content, profile, metrics);
   }
@@ -256,9 +249,6 @@ export class CampView {
     const right = this._synthSlots[1];
     const sameId = left && right && left === right ? left : null;
     const canSynth = sameId ? canSynthesizeMinghenToII(profile, sameId) : false;
-    const resultText = canSynth && sameId
-      ? `${getMinghenDefinition(sameId).name} II`
-      : (left || right ? '需同名 I×2' : '结果');
 
     const lines = parent.addComponent(Graphics);
     lines.strokeColor = BORDER;
@@ -272,15 +262,18 @@ export class CampView {
     lines.lineTo(0, resultY);
     lines.stroke();
 
-    this._synthSlotCard(parent, 0, resultY, resultText, true, () => undefined);
-    this._synthSlotCard(parent, -L.synthInputX, inputY, left ? `${getMinghenDefinition(left).name} I` : '材料1', false, () => {
+    this._minghenGlyphSlot(parent, 0, resultY, L.synthSlotSize, null, () => undefined, true, true);
+    this._minghenGlyphSlot(parent, -L.synthInputX, inputY, L.synthSlotSize, left, () => {
       this._synthSlots[0] = null;
       this.showSection('MINGHEN');
-    });
-    this._synthSlotCard(parent, L.synthInputX, inputY, right ? `${getMinghenDefinition(right).name} I` : '材料2', false, () => {
+    }, !left);
+    this._minghenGlyphSlot(parent, L.synthInputX, inputY, L.synthSlotSize, right, () => {
       this._synthSlots[1] = null;
       this.showSection('MINGHEN');
-    });
+    }, !right);
+
+    const hint = makeLabel(parent, 0, resultY + L.synthSlotSize / 2 + 18, 200, 24, 16, DIM, Label.HorizontalAlign.CENTER);
+    hint.string = canSynth && sameId ? `${getMinghenDefinition(sameId).name} II` : (left || right ? '需同名 I×2' : '结果');
 
     const synthBtn = makeFlatButton(
       parent,
@@ -300,35 +293,7 @@ export class CampView {
     if (btn) btn.interactable = canSynth;
   }
 
-  private _synthSlotCard(
-    parent: Node,
-    x: number,
-    y: number,
-    text: string,
-    dashed: boolean,
-    onClick: () => void,
-  ): void {
-    const L = CAMP_MINGHEN_LAYOUT;
-    const card = makeFlatButton(
-      parent,
-      text,
-      x,
-      y,
-      L.synthSlotWidth,
-      L.synthSlotHeight,
-      onClick,
-      new Color(13, 47, 92, 210),
-      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : BORDER },
-    );
-    const label = card.getChildByName('Label')?.getComponent(Label);
-    if (label) {
-      label.fontSize = 16;
-      label.overflow = Label.Overflow.SHRINK;
-      label.enableWrapText = false;
-    }
-  }
-
-  private _stagedCopiesOf(id: string): number {
+    private _stagedCopiesOf(id: string): number {
     return (this._synthSlots[0] === id ? 1 : 0) + (this._synthSlots[1] === id ? 1 : 0);
   }
 
@@ -356,9 +321,7 @@ export class CampView {
     const iconRevision = this._equipmentIconRevision;
     void ensureEquipmentAssetsForFloor(profile.highestUnlockedFloor);
     const L = CAMP_EQUIPMENT_LAYOUT;
-    const equippedIds = new Set(Object.values(profile.equipmentLoadout).filter((id): id is string => !!id));
-    const bagItems = profile.equipmentInventory.filter((item) => !equippedIds.has(item.instanceId));
-    const metrics = equipmentContentMetrics(bagItems.length);
+    const metrics = equipmentContentMetrics();
 
     const scrollNode = new Node('EquipmentScroll');
     scrollNode.setParent(this._body);
@@ -378,8 +341,11 @@ export class CampView {
     content.setPosition(0, (L.viewportHeight - metrics.contentHeight) / 2);
     scroll.content = content;
 
-    const summary = makeLabel(content, 0, L.summaryY, 540, 32, 20, TEXT, Label.HorizontalAlign.LEFT);
-    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    星尘：${profile.gold}`;
+    const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
+    const summary = makeLabel(content, 0, L.summaryY, 540, 28, 18, TEXT, Label.HorizontalAlign.LEFT);
+    const mats = normalizeCampMaterials(profile.materials);
+    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    库存 ${bagEntries.length}/${CAMP_BAG_SLOTS}    星尘：${profile.gold}`;
+    this._renderMaterialSummary(content, -270, L.summaryY - 30, mats);
 
     const loadoutTitle = makeLabel(content, 0, L.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     loadoutTitle.isBold = true;
@@ -395,17 +361,49 @@ export class CampView {
       });
     });
 
+    this._renderBagFilters(content, metrics.filterY, 'EQUIPMENT');
     const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     bagTitle.isBold = true;
-    bagTitle.string = '永久背包';
-
-    bagItems.forEach((item, index) => {
-      this._bagIconCard(content, index, L.bagCols, L.bagSize, metrics.bagFirstRowY, item, iconRevision, () => {
-        this._showEquipmentDetail(item, false);
-      }, L.bagGap);
-    });
+    bagTitle.string = '共用库存';
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, iconRevision);
 
     this._renderEquipmentSynth(content, profile, metrics, iconRevision);
+  }
+
+    private _renderMaterialSummary(
+    parent: Node,
+    leftX: number,
+    y: number,
+    mats: ReturnType<typeof normalizeCampMaterials>,
+  ): void {
+    const place = (key: string, name: string, x: number, label: string): void => {
+      const icon = new Node(name);
+      icon.setParent(parent);
+      icon.setPosition(x + MAT_ICON_SIZE / 2, y, 0);
+      icon.addComponent(UITransform).setContentSize(MAT_ICON_SIZE, MAT_ICON_SIZE);
+      const cached = getCachedSprite(key);
+      if (cached) {
+        ensureArtChild(icon, 'Art', cached, MAT_ICON_SIZE, MAT_ICON_SIZE);
+      } else {
+        void loadUiSprite(key).then((frame) => {
+          if (!frame || !icon.isValid) return;
+          ensureArtChild(icon, 'Art', frame, MAT_ICON_SIZE, MAT_ICON_SIZE);
+        }).catch(() => null);
+      }
+      const text = makeLabel(
+        parent,
+        x + MAT_ICON_SIZE + 8 + 70,
+        y,
+        140,
+        28,
+        18,
+        TEXT,
+        Label.HorizontalAlign.LEFT,
+      );
+      text.string = label;
+    };
+    place(MAT_ICON_QUENCH_SAND, 'QuenchSandIcon', leftX, `淬星砂 ×${mats.quenchSand}`);
+    place(MAT_ICON_FUSION_CORE, 'FusionCoreIcon', leftX + 220, `聚星核 ×${mats.fusionCore}`);
   }
 
   private _renderEquipmentSynth(
@@ -430,48 +428,35 @@ export class CampView {
       && filled[0]!.quality === filled[2]!.quality;
     const next = matched ? nextEquipQuality(filled[0]!.quality) : null;
     const cost = matched && next ? (SYNTH_STARDUST[filled[0]!.quality as keyof typeof SYNTH_STARDUST] ?? null) : null;
-    const canSynth = matched && !!next && cost != null && profile.gold >= cost;
+    const coreCost = matched && next
+      ? (SYNTH_FUSION_CORE[filled[0]!.quality as keyof typeof SYNTH_FUSION_CORE] ?? null)
+      : null;
+    const mats = normalizeCampMaterials(profile.materials);
+    const canSynth = matched
+      && !!next
+      && cost != null
+      && coreCost != null
+      && profile.gold >= cost
+      && mats.fusionCore >= coreCost;
 
-    let resultText = '结果';
-    if (allFilled && matched && !next) resultText = '满品不可合成';
-    else if (allFilled && matched && next && cost != null && profile.gold < cost) {
-      resultText = `${getFixedEquipmentDefinition(filled[0]!.definitionId).name}\n${QUALITY_NAMES[next]}\n星尘不足`;
-    } else if (canSynth && next && cost != null) {
-      resultText = `${getFixedEquipmentDefinition(filled[0]!.definitionId).name}\n${QUALITY_NAMES[next]}\n${cost}星尘`;
-    } else if (this._equipSynthSlots.some(Boolean)) {
-      resultText = '需同名同品质×3';
-    }
-
-    const lines = new Node('EquipSynthLines');
-    lines.setParent(parent);
-    lines.setPosition(0, 0);
-    lines.addComponent(UITransform).setContentSize(L.viewportWidth, L.viewportHeight);
-    const gfx = lines.addComponent(Graphics);
-    gfx.strokeColor = BORDER;
-    gfx.lineWidth = 2;
-    for (const x of L.synthInputXs) {
-      gfx.moveTo(x, metrics.synthInputY);
-      gfx.lineTo(0, metrics.synthResultY);
-      gfx.stroke();
-    }
-
-    this._equipSynthSlotCard(parent, 0, metrics.synthResultY, resultText, true, undefined, iconRevision, () => undefined);
+    // 结果格只作空槽预览位，不显示预告文案。
+    this._equipSynthSlotCard(parent, 0, metrics.synthResultY, '', true, undefined, iconRevision, () => undefined);
     L.synthInputXs.forEach((x, index) => {
       const id = this._equipSynthSlots[index];
       const item = id ? profile.equipmentInventory.find((entry) => entry.instanceId === id) : undefined;
-      const label = item
-        ? `${getFixedEquipmentDefinition(item.definitionId).name}\n${QUALITY_NAMES[item.quality]}`
-        : `材料${index + 1}`;
-      this._equipSynthSlotCard(parent, x, metrics.synthInputY, label, false, item, iconRevision, () => {
+      this._equipSynthSlotCard(parent, x, metrics.synthInputY, '', false, item, iconRevision, () => {
         this._equipSynthSlots[index] = null;
         this.showSection('EQUIPMENT');
       });
     });
 
     const ids = this._equipSynthSlots;
+    const synthLabel = canSynth && cost != null && coreCost != null
+      ? `合成（${cost}星尘+${coreCost}核）`
+      : '合成';
     const synthBtn = makeFlatButton(
       parent,
-      '合成',
+      synthLabel,
       0,
       metrics.synthButtonY,
       L.synthButtonWidth,
@@ -498,13 +483,14 @@ export class CampView {
     onClick: () => void,
   ): void {
     const L = CAMP_EQUIPMENT_LAYOUT;
+    const size = L.synthSlotSize;
     const card = makeFlatButton(
       parent,
       item ? '' : text,
       x,
       y,
-      L.synthSlotWidth,
-      L.synthSlotHeight,
+      size,
+      size,
       onClick,
       new Color(13, 47, 92, 210),
       { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : BORDER },
@@ -512,15 +498,18 @@ export class CampView {
     const label = card.getChildByName('Label')?.getComponent(Label);
     if (item) {
       if (label) label.node.active = false;
-      this._attachEquipmentIcon(card, item, iconRevision, L.synthSlotHeight - 12, true);
+      this._attachEquipmentIcon(card, item, iconRevision, size - 2, true);
       return;
     }
     if (label) {
-      label.fontSize = 14;
-      label.lineHeight = 18;
-      label.overflow = Label.Overflow.SHRINK;
-      label.enableWrapText = true;
-      label.string = text;
+      label.node.active = !!text;
+      if (text) {
+        label.fontSize = 14;
+        label.lineHeight = 18;
+        label.overflow = Label.Overflow.SHRINK;
+        label.enableWrapText = true;
+        label.string = text;
+      }
     }
   }
 
@@ -654,13 +643,21 @@ export class CampView {
     }
     const nextLevel = item.enhanceLevel + 1;
     const enhanceCost = item.enhanceLevel >= 5 ? null : (ENHANCE_COST[nextLevel] ?? null);
-    const enhanceLabel = enhanceCost == null ? '已满级' : `强化（${enhanceCost}星尘）`;
+    const sandCost = item.enhanceLevel >= 5 ? null : (ENHANCE_QUENCH_SAND[nextLevel] ?? null);
+    const mats = normalizeCampMaterials(this._profile?.materials);
+    const canEnhance = enhanceCost != null
+      && sandCost != null
+      && (this._profile?.gold ?? 0) >= enhanceCost
+      && mats.quenchSand >= sandCost;
+    const enhanceLabel = enhanceCost == null || sandCost == null
+      ? '已满级'
+      : `强化（${enhanceCost}星尘+${sandCost}砂）`;
     this._showDetail('装备详情', body, [
       { text: '卸下', action: () => this._callbacks.onToggleEquipment(item.instanceId) },
       {
         text: enhanceLabel,
         action: () => this._callbacks.onManageEquipment('ENHANCE', item.instanceId),
-        disabled: enhanceCost == null,
+        disabled: !canEnhance,
       },
       { text: item.locked ? '解锁' : '锁定', action: () => this._callbacks.onManageEquipment('TOGGLE_LOCK', item.instanceId) },
       { text: '出售', action: () => this._callbacks.onManageEquipment('SELL', item.instanceId), disabled: item.locked },
@@ -732,6 +729,203 @@ export class CampView {
   private _renderMessage(text: string): void { this._clearBody(); const label = makeLabel(this._body, 0, 120, 540, 180, 24, TEXT, Label.HorizontalAlign.CENTER); label.verticalAlign = Label.VerticalAlign.TOP; label.overflow = Label.Overflow.SHRINK; label.string = text; }
   private _clearBody(): void { for (const child of [...this._body.children]) child.destroy(); }
 
+  private _renderBagFilters(parent: Node, y: number, section: 'MINGHEN' | 'EQUIPMENT'): void {
+    const chips: Array<{ id: CampBagFilter; label: string }> = [
+      { id: 'MINGHEN', label: '命痕' },
+      { id: 'EQUIPMENT', label: '装备' },
+      { id: 'MATERIAL', label: '材料' },
+      { id: 'ALL', label: '全部' },
+    ];
+    const w = 100;
+    const gap = 10;
+    const total = chips.length * w + (chips.length - 1) * gap;
+    chips.forEach((chip, index) => {
+      const active = this._bagFilter === chip.id;
+      const x = -total / 2 + w / 2 + index * (w + gap);
+      makeFlatButton(
+        parent,
+        chip.label,
+        x,
+        y,
+        w,
+        40,
+        () => {
+          this._bagFilter = chip.id;
+          this.showSection(section, { keepBagFilter: true });
+        },
+        active ? new Color(36, 90, 140, 220) : new Color(20, 48, 82, 180),
+        { noArt: true, border: active ? BORDER : new Color(90, 125, 155) },
+      );
+    });
+  }
+
+  private _renderSharedBag(parent: Node, profile: PveProfile, firstRowY: number, iconRevision: number): void {
+    const entries = buildCampSharedBagEntries(profile, this._bagFilter);
+    const cols = CAMP_MINGHEN_LAYOUT.bagColumns;
+    const size = CAMP_SLOT_SIZE;
+    const gap = CAMP_SLOT_GAP;
+    const outerH = campBagBlockHeight();
+    const totalW = cols * size + (cols - 1) * gap;
+
+    const host = new Node('SharedBagHost');
+    host.setParent(parent);
+    host.setPosition(0, firstRowY - outerH / 2 + size / 2);
+    host.addComponent(UITransform).setContentSize(totalW + 8, outerH + 8);
+
+    let gridParent = host;
+    if (entries.length > CAMP_BAG_SLOTS) {
+      const scrollNode = new Node('BagInnerScroll');
+      scrollNode.setParent(host);
+      scrollNode.setPosition(0, 0);
+      scrollNode.addComponent(UITransform).setContentSize(totalW + 8, outerH + 8);
+      const scroll = scrollNode.addComponent(ScrollView);
+      scroll.horizontal = false;
+      scroll.vertical = true;
+      scroll.inertia = true;
+      const view = new Node('View');
+      view.setParent(scrollNode);
+      view.addComponent(UITransform).setContentSize(totalW + 8, outerH + 8);
+      view.addComponent(Mask);
+      const rows = Math.ceil(entries.length / cols);
+      const contentH = rows * size + Math.max(0, rows - 1) * gap;
+      const content = new Node('Content');
+      content.setParent(view);
+      content.addComponent(UITransform).setContentSize(totalW + 8, contentH);
+      content.setPosition(0, (outerH + 8 - contentH) / 2);
+      scroll.content = content;
+      gridParent = content;
+      for (let i = 0; i < entries.length; i += 1) {
+        this._placeBagEntry(gridParent, entries[i]!, i, cols, size, gap, contentH / 2 - size / 2, profile, iconRevision);
+      }
+      return;
+    }
+
+    for (let i = 0; i < CAMP_BAG_SLOTS; i += 1) {
+      const entry = entries[i];
+      if (entry) {
+        this._placeBagEntry(gridParent, entry, i, cols, size, gap, outerH / 2 - size / 2, profile, iconRevision);
+      } else {
+        this._emptyBagSlot(gridParent, i, cols, size, gap, outerH / 2 - size / 2);
+      }
+    }
+  }
+
+  private _slotXY(index: number, cols: number, size: number, gap: number, firstRowY: number): { x: number; y: number } {
+    const total = cols * size + (cols - 1) * gap;
+    const column = index % cols;
+    const row = Math.floor(index / cols);
+    return {
+      x: -total / 2 + size / 2 + column * (size + gap),
+      y: firstRowY - row * (size + gap),
+    };
+  }
+
+  private _emptyBagSlot(parent: Node, index: number, cols: number, size: number, gap: number, firstRowY: number): void {
+    const { x, y } = this._slotXY(index, cols, size, gap, firstRowY);
+    const card = makeFlatButton(parent, '', x, y, size, size, () => undefined, new Color(33, 53, 77, 120), {
+      noArt: true,
+      border: new Color(90, 125, 155),
+    });
+    const button = card.getComponent(Button);
+    if (button) button.interactable = false;
+    const label = card.getChildByName('Label');
+    if (label) label.active = false;
+  }
+
+  private _placeBagEntry(
+    parent: Node,
+    entry: CampBagEntry,
+    index: number,
+    cols: number,
+    size: number,
+    gap: number,
+    firstRowY: number,
+    profile: PveProfile,
+    iconRevision: number,
+  ): void {
+    const { x, y } = this._slotXY(index, cols, size, gap, firstRowY);
+    if (entry.kind === 'MINGHEN') {
+      this._minghenGlyphSlot(parent, x, y, size, entry.id, () => {
+        this._showMinghenDetail(entry.id, entry.level, profile.minghenLoadout.some((e) => e.id === entry.id));
+      }, false);
+      if (entry.bagCopies > 1) {
+        const badge = makeLabel(parent, x + size / 2 - 18, y - size / 2 + 14, 36, 22, 16, new Color(255, 230, 140), Label.HorizontalAlign.RIGHT);
+        badge.string = `×${entry.bagCopies}`;
+      }
+      return;
+    }
+    if (entry.kind === 'EQUIPMENT') {
+      const item = profile.equipmentInventory.find((e) => e.instanceId === entry.instanceId);
+      if (!item) return;
+      const card = makeFlatButton(parent, '', x, y, size, size, () => this._showEquipmentDetail(item, false), new Color(25, 75, 110, 205), {
+        noArt: true,
+        border: BORDER,
+      });
+      const label = card.getChildByName('Label');
+      if (label) label.active = false;
+      this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
+      return;
+    }
+    const name = entry.materialId === 'QUENCH_SAND' ? '砂' : '核';
+    const card = makeFlatButton(
+      parent,
+      '',
+      x,
+      y,
+      size,
+      size,
+      () => this._showMaterialDetail(entry.materialId, entry.amount),
+      new Color(60, 40, 28, 210),
+      { noArt: true, border: new Color(220, 170, 100) },
+    );
+    const label = card.getChildByName('Label');
+    if (label) label.active = false;
+    const tag = makeLabel(card, 0, 8, size - 8, 28, 22, new Color(255, 220, 160), Label.HorizontalAlign.CENTER);
+    tag.string = name;
+    const amt = makeLabel(card, 0, -18, size - 8, 24, 18, TEXT, Label.HorizontalAlign.CENTER);
+    amt.string = `×${entry.amount}`;
+  }
+
+  private _minghenGlyphSlot(
+    parent: Node,
+    x: number,
+    y: number,
+    size: number,
+    minghenId: string | null | undefined,
+    onClick: () => void,
+    empty: boolean,
+    dashed = false,
+  ): void {
+    const card = makeFlatButton(
+      parent,
+      '',
+      x,
+      y,
+      size,
+      size,
+      onClick,
+      empty ? new Color(33, 53, 77, 150) : new Color(25, 75, 110, 205),
+      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : (empty ? new Color(90, 125, 155) : BORDER) },
+    );
+    const button = card.getComponent(Button);
+    if (button) button.interactable = !empty;
+    const label = card.getChildByName('Label');
+    if (label) label.active = false;
+    if (!minghenId) return;
+    const art = new Node('Glyph');
+    art.setParent(card);
+    art.setPosition(0, 0);
+    art.addComponent(UITransform).setContentSize(size, size);
+    const g = art.addComponent(Graphics);
+    paintMinghenGlyph(g, buildMinghenGlyph(minghenId), size - 12);
+  }
+
+  private _showMaterialDetail(materialId: 'QUENCH_SAND' | 'FUSION_CORE', amount: number): void {
+    const title = materialId === 'QUENCH_SAND' ? '淬星砂' : '聚星核';
+    const use = materialId === 'QUENCH_SAND' ? '用途：装备强化' : '用途：装备三合一升品';
+    this._showDetail(title, `${use}\n持有：${amount}`, []);
+  }
+
   /** 标题在上、正方形槽；有装备时图标铺满，格内无文字。 */
   private _equipSquareSlot(
     parent: Node,
@@ -763,89 +957,6 @@ export class CampView {
     const label = card.getChildByName('Label');
     if (label) label.active = false;
     if (item) this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
-  }
-
-  /** 永久背包：纯图标方格，无属性文字。 */
-  private _bagIconCard(
-    parent: Node,
-    index: number,
-    columns: number,
-    size: number,
-    rowBaseY: number,
-    item: PveEquipmentInstance,
-    iconRevision: number,
-    onClick: () => void,
-    gap = 12,
-  ): void {
-    const total = columns * size + (columns - 1) * gap;
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const x = -total / 2 + size / 2 + column * (size + gap);
-    const y = rowBaseY - row * (size + gap);
-    const card = makeFlatButton(
-      parent,
-      '',
-      x,
-      y,
-      size,
-      size,
-      onClick,
-      new Color(25, 75, 110, 205),
-      { noArt: true, border: BORDER },
-    );
-    const label = card.getChildByName('Label');
-    if (label) label.active = false;
-    this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
-  }
-
-  private _gridCard(
-    parent: Node,
-    index: number,
-    columns: number,
-    width: number,
-    height: number,
-    rowBaseY: number,
-    text: string,
-    onClick: () => void,
-    disabled = false,
-    iconInstance?: PveEquipmentInstance,
-    iconRevision?: number,
-    iconSize = 36,
-    fontSize?: number,
-  ): void {
-    const gap = 8;
-    const total = columns * width + (columns - 1) * gap;
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const x = -total / 2 + width / 2 + column * (width + gap);
-    const y = rowBaseY - row * (height + gap);
-    const card = makeFlatButton(parent, text, x, y, width, height, onClick, disabled ? new Color(33, 53, 77, 150) : new Color(25, 75, 110, 205), { noArt: true, border: disabled ? new Color(90, 125, 155) : BORDER });
-    const button = card.getComponent(Button);
-    if (button) button.interactable = !disabled;
-    const label = card.getChildByName('Label')?.getComponent(Label);
-    if (label) {
-      if (fontSize != null) {
-        label.fontSize = fontSize;
-        label.lineHeight = fontSize + 4;
-      }
-      label.overflow = Label.Overflow.SHRINK;
-      label.enableWrapText = false;
-    }
-    if (iconInstance && iconRevision != null) {
-      this._attachEquipmentIcon(card, iconInstance, iconRevision, iconSize);
-      if (label) {
-        label.fontSize = Math.min(17, Math.round(height * 0.26));
-        label.lineHeight = label.fontSize + 2;
-        label.enableWrapText = true;
-        label.overflow = Label.Overflow.SHRINK;
-        const labelTf = label.node.getComponent(UITransform);
-        if (labelTf) {
-          const pad = iconSize + 10;
-          labelTf.setContentSize(Math.max(40, width - pad), height - 8);
-          label.node.setPosition(pad / 2 - 2, -2, 0);
-        }
-      }
-    }
   }
 
   private _attachEquipmentIcon(
@@ -941,7 +1052,10 @@ export class CampView {
     }
     lines.push(`强化等级 +${item.enhanceLevel}`);
     if (item.enhanceLevel < 5) {
-      lines.push(`下次强化消耗 ${ENHANCE_COST[item.enhanceLevel + 1] ?? 0} 星尘`);
+      lines.push(
+        `下次强化消耗 ${ENHANCE_COST[item.enhanceLevel + 1] ?? 0} 星尘`
+        + ` + ${ENHANCE_QUENCH_SAND[item.enhanceLevel + 1] ?? 0} 淬星砂`,
+      );
     } else {
       lines.push('已强化至上限');
     }

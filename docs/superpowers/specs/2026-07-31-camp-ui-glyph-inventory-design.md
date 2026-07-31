@@ -1,7 +1,7 @@
 # 营地 UI 规整：星座符命痕 + 共用固定库存格
 
 日期：2026-07-31  
-状态：已确认，待写实现计划  
+状态：实现完成；计划见 `docs/superpowers/plans/2026-07-31-camp-ui-glyph-inventory.md`  
 关联：`CampView` / `CampMinghenLayout` / `CampEquipmentLayout` / `specs/260608-pve-destiny-expedition/design.md`  
 前置：`2026-07-28-minghen-camp-synth-ui-design.md`、`2026-07-28-equipment-camp-synth-ui-design.md`、`2026-07-31-camp-materials-v1-design.md`
 
