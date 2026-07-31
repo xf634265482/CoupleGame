@@ -48,7 +48,7 @@ GM Web sendMail / sendMailBroadcast
 | `_id` / `id` | 邮件 ID |
 | `userId` | 收件玩家 |
 | `title` / `body` | 标题与正文 |
-| `attachments` | `[]` 或 `[{ type: 'stardust' \| 'stamina', amount: number }]`；星尘入账到 `pveProfile.gold` |
+| `attachments` | `[]` 或 `[{ type: 'stardust' \| 'stamina' \| 'quenchSand' \| 'fusionCore' \| 'voidHide' \| 'makeupCards', amount: number }]`；星尘入账 `pveProfile.gold`，材料入账 `materials.*`，补签卡入账 `checkIn.makeupCards` |
 | `claimed` | 是否已领取附件（无附件视为无需领取，打开即算已读可用 `read` 字段） |
 | `read` | 是否已读（用于红点；领取或打开详情置 true） |
 | `deleted` | 软删，列表过滤 |
