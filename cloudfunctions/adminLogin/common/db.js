@@ -297,6 +297,24 @@ async function listPveLeaderboard(userId, limit = 50) {
   return { entries, myRank };
 }
 
+/**
+ * 整份替换 users.pveProfile。
+ * 云库 update 对嵌套对象是 merge：若库里已是 null（如 minghenDailyShop），
+ * 再写入子字段会报 Cannot create field 'adRefreshUsed' in element {minghenDailyShop: null}。
+ * 用 command.set 整体覆盖，避免 null→object 合并失败。
+ */
+async function updateUserPveProfile(docId, profile, extra = {}) {
+  const db = getDb();
+  const _ = db.command;
+  const safe = JSON.parse(JSON.stringify(profile));
+  await db.collection(COLLECTIONS.USERS).doc(docId).update({
+    data: {
+      pveProfile: _.set(safe),
+      ...extra,
+    },
+  });
+}
+
 module.exports = {
   getDb,
   runTransactionWithRetry,
@@ -312,4 +330,5 @@ module.exports = {
   listPveLeaderboard,
   getUserPveMeta,
   updateUserPveMeta,
+  updateUserPveProfile,
 };

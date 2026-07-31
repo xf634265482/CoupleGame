@@ -377,8 +377,13 @@ export class PveLobbyController extends Component {
       new Color(10, 38, 78, 170),
       new Color(255, 200, 120, 210),
     );
-    const label = this._makeLabel(entry, 'CheckInLabel', 0, 26, 100, 36);
-    label.node.setPosition(0, 0, 0);
+    const icon = new Node('CheckInIcon');
+    icon.setParent(entry);
+    icon.setPosition(-MAIL_W / 2 + 24, 1, 0);
+    icon.addComponent(UITransform).setContentSize(40, 40);
+    this._navIconKeys.set(icon, 'pve/lobby/icon_checkin');
+    const label = this._makeLabel(entry, 'CheckInLabel', 0, 26, 64, 36);
+    label.node.setPosition(14, 0, 0);
     label.string = '签到';
     label.isBold = true;
     const badgeHost = new Node('CheckInBadgeHost');
@@ -775,7 +780,7 @@ export class PveLobbyController extends Component {
         if (!frame || !iconNode.isValid) continue;
         const size =
           key === 'pve/lobby/icon_nav_expedition' ? 82
-            : key === 'pve/lobby/icon_mail' ? 40
+            : key === 'pve/lobby/icon_mail' || key === 'pve/lobby/icon_checkin' ? 40
               : 76;
         ensureArtChild(iconNode, 'IconArt', frame, size, size);
       }
@@ -903,11 +908,12 @@ export class PveLobbyController extends Component {
     try {
       await this._refreshExpeditionEntryCache();
     } catch (err: unknown) {
-      this._setStatus(`${statusText.replace(/…$/, '')}失败：${err instanceof Error ? err.message : String(err)}`);
+      console.warn('[PveLobby]', statusText, err instanceof Error ? err.message : String(err));
+      this._setStatus(`${statusText.replace(/…$/, '')}失败，请稍后重试`);
       return null;
     }
     if (!this._warmedProfile) {
-      this._setStatus(`${statusText.replace(/…$/, '')}失败：未获取到档案`);
+      this._setStatus(`${statusText.replace(/…$/, '')}失败，请稍后重试`);
       return null;
     }
     this._setStatus('');
@@ -977,7 +983,11 @@ export class PveLobbyController extends Component {
       void this._refreshMailBadge();
       void this._refreshCheckInBadge();
     } catch (err: unknown) {
-      this._setStatus(`大厅数据加载失败：${err instanceof Error ? err.message : String(err)}`);
+      const raw = err instanceof Error ? err.message : String(err);
+      const friendly = /DATABASE_REQUEST_FAILED|Cannot create field|document\.update:fail/i.test(raw)
+        ? '大厅数据同步失败，请稍后重试'
+        : raw;
+      this._setStatus(`大厅数据加载失败：${friendly}`);
     }
   }
 

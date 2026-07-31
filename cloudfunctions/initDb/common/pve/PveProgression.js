@@ -1,5 +1,4 @@
-const { COLLECTIONS } = require('../constants');
-const { getDb, getUserById, serverDate } = require('../db');
+const { getUserById, serverDate, updateUserPveProfile } = require('../db');
 const { PROFILE_VERSION, normalizeProfile } = require('./PveProfile');
 const { beginTracking } = require('./PveMinghen');
 const { PROFESSION_IDS } = require('./PveProfile');
@@ -41,12 +40,8 @@ async function loadProfile(user) {
     || current.stamina !== profile.stamina
     || shopChanged;
   if (shouldPersist) {
-    await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
-      data: {
-        pveProfile: profile,
-        updatedDate: serverDate(),
-      },
-    });
+    // must use command.set — null minghenDailyShop cannot gain nested fields via merge update
+    await updateUserPveProfile(latest._id, profile, { updatedDate: serverDate() });
   }
   return { profile };
 }
@@ -63,7 +58,7 @@ async function startMinghenTracking(user, request = {}) {
   if (floor > profile.highestClearedFloor) { const err = new Error('只能追踪已通关楼层'); err.code = 'PVE_TRACKING_FLOOR_LOCKED'; throw err; }
   if (profile.activeChallengeId) { const err = new Error('挑战中不能切换追踪'); err.code = 'PVE_CHALLENGE_ALREADY_ACTIVE'; throw err; }
   const next = { ...beginTracking(profile, floor, minghenId), updatedAt: Date.now() };
-  await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({ data: { pveProfile: next } });
+  await updateUserPveProfile(latest._id, next);
   return { profile: next };
 }
 
@@ -81,7 +76,7 @@ async function updateCampConfiguration(user, request = {}) {
     next = equipPartnerOnProfile(next, request.equippedPartnerId);
     next = { ...next, updatedAt: Date.now() };
   }
-  await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({ data: { pveProfile: next } });
+  await updateUserPveProfile(latest._id, next);
   return { profile: next };
 }
 
@@ -101,7 +96,7 @@ async function manageCamp(user, request = {}) {
   else if (request.type === 'PARTNER' && request.action === 'EVOLVE') next = evolvePartnerOnProfile(profile, request.partnerId);
   else { const err = new Error('未知营地操作'); err.code = 'PVE_INVALID_CAMP_ACTION'; throw err; }
   next = { ...next, updatedAt: now };
-  await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({ data: { pveProfile: next } });
+  await updateUserPveProfile(latest._id, next);
   return { profile: next };
 }
 

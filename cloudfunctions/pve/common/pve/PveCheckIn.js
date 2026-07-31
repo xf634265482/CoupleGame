@@ -198,8 +198,7 @@ function hasCheckInRedDot(state) {
 }
 
 async function handleCheckInAction(user, request = {}, nowMs = Date.now()) {
-  const { COLLECTIONS } = require('../constants');
-  const { getDb, getUserById, serverDate } = require('../db');
+  const { getUserById, serverDate, updateUserPveProfile } = require('../db');
   const { normalizeProfile } = require('./PveProfile');
 
   const latest = await getUserById(user.id);
@@ -228,9 +227,7 @@ async function handleCheckInAction(user, request = {}, nowMs = Date.now()) {
   const shouldPersist = action !== 'GET_STATE'
     || JSON.stringify(rawCheckIn || null) !== JSON.stringify(profile.checkIn);
   if (shouldPersist) {
-    await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
-      data: { pveProfile: profile, updatedDate: serverDate() },
-    });
+    await updateUserPveProfile(latest._id, profile, { updatedDate: serverDate() });
   }
 
   const checkIn = buildState(profile, nowMs);

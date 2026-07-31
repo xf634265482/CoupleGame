@@ -2,11 +2,13 @@ const mockUpdate = jest.fn();
 const mockDoc = jest.fn(() => ({ update: mockUpdate }));
 const mockCollection = jest.fn(() => ({ doc: mockDoc }));
 const mockGetUserById = jest.fn();
+const mockUpdateUserPveProfile = jest.fn();
 
 jest.mock('../db', () => ({
   getDb: () => ({ collection: mockCollection }),
   getUserById: mockGetUserById,
   serverDate: () => 'SERVER_DATE',
+  updateUserPveProfile: (...args) => mockUpdateUserPveProfile(...args),
 }));
 
 const { PROFILE_VERSION, createDefaultProfile } = require('../pve/PveProfile');
@@ -23,9 +25,23 @@ describe('PveProgression', () => {
     const { profile } = await loadProfile({ id: 'u1' });
     expect(profile.version).toBe(PROFILE_VERSION);
     expect(profile.highestUnlockedFloor).toBe(1);
-    expect(mockCollection).toHaveBeenCalledWith('users');
-    expect(mockDoc).toHaveBeenCalledWith('doc1');
-    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateUserPveProfile).toHaveBeenCalledTimes(1);
+    expect(mockUpdateUserPveProfile.mock.calls[0][0]).toBe('doc1');
+    expect(mockUpdateUserPveProfile.mock.calls[0][1].minghenDailyShop).toMatchObject({
+      adRefreshUsed: 0,
+    });
+  });
+
+  test('persists shop when minghenDailyShop was null (cleared profile)', async () => {
+    const cleared = createDefaultProfile(1);
+    expect(cleared.minghenDailyShop).toBeNull();
+    mockGetUserById.mockResolvedValue({ _id: 'doc-clear', id: 'u-clear', pveProfile: cleared });
+    const { profile } = await loadProfile({ id: 'u-clear' });
+    expect(profile.minghenDailyShop).toBeTruthy();
+    expect(profile.minghenDailyShop.adRefreshUsed).toBe(0);
+    expect(mockUpdateUserPveProfile).toHaveBeenCalledTimes(1);
+    const saved = mockUpdateUserPveProfile.mock.calls[0][1];
+    expect(saved.minghenDailyShop).toEqual(profile.minghenDailyShop);
   });
 
   test('does not rewrite an existing current-version profile on load', async () => {
@@ -34,7 +50,7 @@ describe('PveProgression', () => {
     const { profile } = await loadProfile({ id: 'u2' });
     expect(profile.version).toBe(PROFILE_VERSION);
     expect(profile.partnerUnlockScheme).toBe('progressive');
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockUpdateUserPveProfile).not.toHaveBeenCalled();
   });
 
   test('rejects a missing user', async () => {
@@ -49,7 +65,7 @@ describe('PveProgression', () => {
     mockGetUserById.mockResolvedValue({ _id: 'doc3', id: 'u3', pveProfile: profile });
     const result = await updateCampConfiguration({ id: 'u3' }, { selectedProfessionId: 'ARCHER' });
     expect(result.profile.selectedProfessionId).toBe('ARCHER');
-    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateUserPveProfile).toHaveBeenCalledTimes(1);
 
     mockGetUserById.mockResolvedValue({
       _id: 'doc3',

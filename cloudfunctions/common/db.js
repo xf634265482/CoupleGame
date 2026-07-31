@@ -14,6 +14,37 @@ function getDb() {
   return cloud.database();
 }
 
+function isTransientTransactionError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = err && typeof err === 'object'
+    ? String(err.errCode ?? err.code ?? '')
+    : '';
+  return /TransactionBusy|TransactionConflict|DATABASE_TRANSACTION_FAIL|-501001|resourceunavailable|transaction\s+is\s+(conflict|busy)|modified by others/i.test(
+    `${message} ${code}`,
+  );
+}
+
+/**
+ * 微信云库事务在并发 save/settle 同文档时会抛 TransactionBusy。
+ * 在云函数内指数退避重试，避免教程通关/层结算被瞬时冲突永久打断。
+ */
+async function runTransactionWithRetry(handler, { attempts = 8, baseDelayMs = 60 } = {}) {
+  const db = getDb();
+  let lastErr;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await db.runTransaction(handler);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientTransactionError(err) || attempt === attempts - 1) throw err;
+      const waitMs = Math.min(1800, baseDelayMs * (2 ** attempt))
+        + Math.floor(Math.random() * 50);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+  throw lastErr;
+}
+
 function serverDate() {
   return getDb().serverDate();
 }
@@ -266,8 +297,28 @@ async function listPveLeaderboard(userId, limit = 50) {
   return { entries, myRank };
 }
 
+/**
+ * 整份替换 users.pveProfile。
+ * 云库 update 对嵌套对象是 merge：若库里已是 null（如 minghenDailyShop），
+ * 再写入子字段会报 Cannot create field 'adRefreshUsed' in element {minghenDailyShop: null}。
+ * 用 command.set 整体覆盖，避免 null→object 合并失败。
+ */
+async function updateUserPveProfile(docId, profile, extra = {}) {
+  const db = getDb();
+  const _ = db.command;
+  const safe = JSON.parse(JSON.stringify(profile));
+  await db.collection(COLLECTIONS.USERS).doc(docId).update({
+    data: {
+      pveProfile: _.set(safe),
+      ...extra,
+    },
+  });
+}
+
 module.exports = {
   getDb,
+  runTransactionWithRetry,
+  isTransientTransactionError,
   serverDate,
   nowMs,
   getUserByOpenId,
@@ -279,4 +330,5 @@ module.exports = {
   listPveLeaderboard,
   getUserPveMeta,
   updateUserPveMeta,
+  updateUserPveProfile,
 };
