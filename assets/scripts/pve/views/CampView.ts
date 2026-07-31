@@ -32,6 +32,7 @@ import {
   type CampBagFilter,
 } from './CampSharedBag';
 import { paintMinghenGlyph } from './MinghenGlyphPainter';
+import { paintFurnaceStage, paintStarchartStage } from './CampSynthStagePainter';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
@@ -234,39 +235,35 @@ export class CampView {
     metrics: ReturnType<typeof minghenContentMetrics>,
   ): void {
     const L = CAMP_MINGHEN_LAYOUT;
-    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
-    title.isBold = true;
-    title.string = '命痕合成';
-
     const left = this._synthSlots[0];
     const right = this._synthSlots[1];
     const sameId = left && right && left === right ? left : null;
     const canSynth = sameId ? canSynthesizeMinghenToII(profile, sameId) : false;
 
-    const lines = parent.addComponent(Graphics);
-    lines.strokeColor = BORDER;
-    lines.lineWidth = 2;
+    const stage = new Node('StarchartStage');
+    stage.setParent(parent);
+    stage.setPosition(0, metrics.synthStageY);
+    stage.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
+    paintStarchartStage(stage.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight, { ready: canSynth });
+
+    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
+    title.isBold = true;
+    title.string = '命痕合成';
+
     const resultY = metrics.synthResultY;
     const inputY = metrics.synthInputY;
-    lines.moveTo(-L.synthInputX, inputY);
-    lines.lineTo(0, resultY);
-    lines.stroke();
-    lines.moveTo(L.synthInputX, inputY);
-    lines.lineTo(0, resultY);
-    lines.stroke();
-
     this._minghenGlyphSlot(parent, 0, resultY, L.synthSlotSize, null, () => undefined, true, true);
-    this._minghenGlyphSlot(parent, -L.synthInputX, inputY, L.synthSlotSize, left, () => {
+    this._minghenGlyphSlot(parent, metrics.synthInputLeftX, inputY, L.synthSlotSize, left, () => {
       this._synthSlots[0] = null;
       this.showSection('MINGHEN');
     }, !left);
-    this._minghenGlyphSlot(parent, L.synthInputX, inputY, L.synthSlotSize, right, () => {
+    this._minghenGlyphSlot(parent, metrics.synthInputRightX, inputY, L.synthSlotSize, right, () => {
       this._synthSlots[1] = null;
       this.showSection('MINGHEN');
     }, !right);
 
-    const hint = makeLabel(parent, 0, resultY + L.synthSlotSize / 2 + 18, 200, 24, 16, DIM, Label.HorizontalAlign.CENTER);
-    hint.string = canSynth && sameId ? `${getMinghenDefinition(sameId).name} II` : (left || right ? '需同名 I×2' : '结果');
+    const hint = makeLabel(parent, 0, metrics.synthButtonY - L.synthButtonHeight / 2 - 18, 280, 24, 16, DIM, Label.HorizontalAlign.CENTER);
+    hint.string = canSynth && sameId ? `${getMinghenDefinition(sameId).name} II` : (left || right ? '需同名 I×2' : '');
 
     const synthBtn = makeFlatButton(
       parent,
@@ -365,10 +362,6 @@ export class CampView {
     iconRevision: number,
   ): void {
     const L = CAMP_EQUIPMENT_LAYOUT;
-    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
-    title.isBold = true;
-    title.string = '装备合成';
-
     const filled = this._equipSynthSlots
       .map((id) => (id ? profile.equipmentInventory.find((x) => x.instanceId === id) : undefined))
       .filter((x): x is PveEquipmentInstance => !!x);
@@ -391,9 +384,19 @@ export class CampView {
       && profile.gold >= cost
       && mats.fusionCore >= coreCost;
 
+    const stage = new Node('FurnaceStage');
+    stage.setParent(parent);
+    stage.setPosition(0, metrics.synthStageY);
+    stage.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
+    paintFurnaceStage(stage.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight);
+
+    const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
+    title.isBold = true;
+    title.string = '装备合成';
+
     // 结果格只作空槽预览位，不显示预告文案。
     this._equipSynthSlotCard(parent, 0, metrics.synthResultY, '', true, undefined, iconRevision, () => undefined);
-    L.synthInputXs.forEach((x, index) => {
+    metrics.synthInputXs.forEach((x, index) => {
       const id = this._equipSynthSlots[index];
       const item = id ? profile.equipmentInventory.find((entry) => entry.instanceId === id) : undefined;
       this._equipSynthSlotCard(parent, x, metrics.synthInputY, '', false, item, iconRevision, () => {
