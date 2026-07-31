@@ -105,18 +105,17 @@
 
 不改（本轮）：
 
-- 云端容量/材料扩容经济
-- `minghenCollection` / `equipmentInventory` / `materials` 数据结构
+- ~~云端容量/材料扩容经济~~ → 已另立 `2026-07-31-camp-bag-upgrade-design.md`
 - 装配槽数 10、穿戴 5 槽规则
 - 情报区 / 角色区
 - Controller 装配/合成权威回调语义（仅适配新点击入口若需要）
 
 ## 8. 非目标
 
-- 背包扩容消耗与云端 `bagCapacity` 字段
-- 统一背包权威数据模型
+- ~~背包扩容消耗与云端 `bagCapacity` 字段~~（已实现，见 bag-upgrade）
 - 命痕 PNG/图集资源
 - 营地整页架构重写
+- 虚空革正式图标绘制（path 预留 `pve/lobby/icon_mat_void_hide`）
 
 ## 9. 验收
 
