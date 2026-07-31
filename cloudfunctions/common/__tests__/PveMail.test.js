@@ -55,4 +55,47 @@ describe('PveMail', () => {
     })).toBe(true);
     expect(isUnread({ read: true, claimed: true, attachments: [] })).toBe(false);
   });
+
+  test('accepts material and makeupCards attachments', () => {
+    const m = normalizeMailInput({
+      title: 't',
+      body: 'b',
+      attachments: [
+        { type: 'quenchSand', amount: 2 },
+        { type: 'fusionCore', amount: 1 },
+        { type: 'voidHide', amount: 3 },
+        { type: 'makeupCards', amount: 1 },
+      ],
+    });
+    expect(m.attachments).toEqual([
+      { type: 'quenchSand', amount: 2 },
+      { type: 'fusionCore', amount: 1 },
+      { type: 'voidHide', amount: 3 },
+      { type: 'makeupCards', amount: 1 },
+    ]);
+  });
+
+  test('rejects makeupCards amount over 999', () => {
+    expect(() => normalizeMailInput({
+      title: 't', body: 'b', attachments: [{ type: 'makeupCards', amount: 1000 }],
+    })).toThrow();
+  });
+
+  test('apply materials and makeupCards into profile', () => {
+    const profile = createDefaultProfile(1);
+    const next = applyMailAttachmentsToUserState(
+      { profile, stamina: 10, staminaUpdatedAt: 1 },
+      [
+        { type: 'quenchSand', amount: 5 },
+        { type: 'fusionCore', amount: 2 },
+        { type: 'voidHide', amount: 4 },
+        { type: 'makeupCards', amount: 3 },
+      ],
+      1000,
+    );
+    expect(next.profile.materials.quenchSand).toBe(5);
+    expect(next.profile.materials.fusionCore).toBe(2);
+    expect(next.profile.materials.voidHide).toBe(4);
+    expect(next.profile.checkIn.makeupCards).toBe(3);
+  });
 });

@@ -28,12 +28,25 @@ function ref(collectionName, id) {
         throw new Error('document.update:fail -501007 invalid parameters');
       }
       const current = mockStores[collectionName].get(id) ?? {};
-      mockStores[collectionName].set(id, { ...current, ...mockClone(data) });
+      const next = { ...current };
+      for (const [key, val] of Object.entries(data)) {
+        if (val && typeof val === 'object' && val.__cmd === 'set') {
+          next[key] = mockClone(val.value);
+        } else {
+          next[key] = mockClone(val);
+        }
+      }
+      mockStores[collectionName].set(id, next);
     },
   };
 }
 
 const mockDb = {
+  command: {
+    set(value) {
+      return { __cmd: 'set', value };
+    },
+  },
   collection(name) {
     return { doc: (id) => ref(name, id) };
   },

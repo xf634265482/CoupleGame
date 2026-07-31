@@ -1,9 +1,17 @@
 const { STAMINA_MAX, resolveStamina } = require('./PveStamina');
+const { normalizeMaterials } = require('./PveCamp');
+const { normalizeCheckIn } = require('./PveCheckIn');
 
 const MAIL_ATTACHMENT_TYPES = {
   STARDUST: 'stardust',
   STAMINA: 'stamina',
+  QUENCH_SAND: 'quenchSand',
+  FUSION_CORE: 'fusionCore',
+  VOID_HIDE: 'voidHide',
+  MAKEUP_CARDS: 'makeupCards',
 };
+
+const ALLOWED_ATTACHMENT_TYPES = new Set(Object.values(MAIL_ATTACHMENT_TYPES));
 
 function fail(code, message) {
   const err = new Error(message || code);
@@ -14,13 +22,14 @@ function fail(code, message) {
 function normalizeAttachment(input) {
   const type = String(input?.type || '').trim();
   const amount = Number(input?.amount);
-  if (type !== MAIL_ATTACHMENT_TYPES.STARDUST && type !== MAIL_ATTACHMENT_TYPES.STAMINA) {
+  if (!ALLOWED_ATTACHMENT_TYPES.has(type)) {
     fail('PVE_MAIL_ATTACHMENT_INVALID', '附件类型不支持');
   }
   if (!Number.isInteger(amount) || amount <= 0) {
     fail('PVE_MAIL_ATTACHMENT_INVALID', '附件数量必须为正整数');
   }
-  if (amount > 999999) {
+  const max = type === MAIL_ATTACHMENT_TYPES.MAKEUP_CARDS ? 999 : 999999;
+  if (amount > max) {
     fail('PVE_MAIL_ATTACHMENT_INVALID', '附件数量过大');
   }
   return { type, amount };
@@ -65,6 +74,8 @@ function applyMailAttachmentsToUserState(
   const list = Array.isArray(attachments) ? attachments : [];
   let nextProfile = { ...profile };
   let gold = Math.max(0, Math.trunc(Number(nextProfile.gold) || 0));
+  let materials = normalizeMaterials(nextProfile.materials);
+  let checkIn = normalizeCheckIn(nextProfile.checkIn, now);
   const resolved = resolveStamina(stamina, staminaUpdatedAt, now);
   let nextStamina = resolved.stamina;
   let nextUpdatedAt = resolved.updatedAt;
@@ -76,10 +87,18 @@ function applyMailAttachmentsToUserState(
     } else if (item.type === MAIL_ATTACHMENT_TYPES.STAMINA) {
       nextStamina = Math.min(STAMINA_MAX, nextStamina + item.amount);
       nextUpdatedAt = now;
+    } else if (item.type === MAIL_ATTACHMENT_TYPES.QUENCH_SAND) {
+      materials = { ...materials, quenchSand: materials.quenchSand + item.amount };
+    } else if (item.type === MAIL_ATTACHMENT_TYPES.FUSION_CORE) {
+      materials = { ...materials, fusionCore: materials.fusionCore + item.amount };
+    } else if (item.type === MAIL_ATTACHMENT_TYPES.VOID_HIDE) {
+      materials = { ...materials, voidHide: materials.voidHide + item.amount };
+    } else if (item.type === MAIL_ATTACHMENT_TYPES.MAKEUP_CARDS) {
+      checkIn = { ...checkIn, makeupCards: checkIn.makeupCards + item.amount };
     }
   }
 
-  nextProfile = { ...nextProfile, gold };
+  nextProfile = { ...nextProfile, gold, materials, checkIn };
   const after = resolveStamina(nextStamina, nextUpdatedAt, now);
   return {
     profile: nextProfile,

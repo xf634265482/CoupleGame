@@ -9,10 +9,9 @@ const {
   updateUserPveMeta,
   listPveLeaderboard,
   getUserById,
-  getDb,
   serverDate,
+  updateUserPveProfile,
 } = require('../db');
-const { COLLECTIONS } = require('../constants');
 const { normalizeProfile } = require('./PveProfile');
 const { grantStarterPartnerOnProfile } = require('./PvePartner');
 
@@ -58,12 +57,7 @@ async function updateMeta(user, report = {}) {
         const granted = grantStarterPartnerOnProfile(profile);
         if (granted.newlyUnlockedPartnerIds.length > 0
           || granted.profile.equippedPartnerId !== profile.equippedPartnerId) {
-          await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
-            data: {
-              pveProfile: granted.profile,
-              updatedDate: serverDate(),
-            },
-          });
+          await updateUserPveProfile(latest._id, granted.profile, { updatedDate: serverDate() });
         }
       }
     }

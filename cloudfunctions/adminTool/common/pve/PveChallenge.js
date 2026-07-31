@@ -58,7 +58,7 @@ async function loadActiveFloorChallenge(user) {
   if (!challenge || challenge.userId !== user.id || challenge.status !== 'ACTIVE') {
     await getDb().collection(COLLECTIONS.USERS).doc(latest._id).update({
       data: {
-        pveProfile: { ...profile, activeChallengeId: null, updatedAt: Date.now() },
+        pveProfile: getDb().command.set({ ...profile, activeChallengeId: null, updatedAt: Date.now() }),
       },
     });
     return { challenge: null };
@@ -157,7 +157,7 @@ async function startFloorChallenge(user, rawRequest = {}) {
     await transaction.collection(COLLECTIONS.PVE_CHALLENGES).doc(challenge.challengeId).set({
       data: challenge,
     });
-    await userRef.update({ data: { pveProfile: nextProfile } });
+    await userRef.update({ data: { pveProfile: getDb().command.set(nextProfile) } });
     return { challenge, profile: nextProfile, resume: false, charged: consumed.charged };
   });
 }
@@ -203,7 +203,9 @@ async function settleFloorChallenge(user, rawRequest = {}) {
 
     const settled = applyChallengeSettlement(profile, challenge, request, Date.now());
     await challengeRef.update({ data: writableDocument(settled.challenge) });
-    await userRef.update({ data: { pveProfile: withoutUndefined(settled.profile) } });
+    await userRef.update({
+      data: { pveProfile: getDb().command.set(withoutUndefined(settled.profile)) },
+    });
     return { ...settled, idempotent: false };
   });
 }
