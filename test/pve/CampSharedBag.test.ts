@@ -77,11 +77,20 @@ describe('CampSharedBag', () => {
   });
 
   test('material filter only lists materials with amount > 0', () => {
-    const profile = stubProfile({ materials: { quenchSand: 3, fusionCore: 0 } });
+    const profile = stubProfile({ materials: { quenchSand: 3, fusionCore: 0, voidHide: 0 } });
     expect(buildCampSharedBagEntries(profile, 'MATERIAL')).toEqual([
       { kind: 'MATERIAL', materialId: 'QUENCH_SAND', amount: 3 },
     ]);
-    expect(buildCampSharedBagEntries(stubProfile({ materials: { quenchSand: 0, fusionCore: 0 } }), 'MATERIAL')).toEqual([]);
+    expect(buildCampSharedBagEntries(
+      stubProfile({ materials: { quenchSand: 0, fusionCore: 0, voidHide: 0 } }),
+      'MATERIAL',
+    )).toEqual([]);
+    expect(buildCampSharedBagEntries(
+      stubProfile({ materials: { quenchSand: 0, fusionCore: 0, voidHide: 4 } }),
+      'MATERIAL',
+    )).toEqual([
+      { kind: 'MATERIAL', materialId: 'VOID_HIDE', amount: 4 },
+    ]);
   });
 
   test('ALL concatenates minghen, equipment, materials', () => {

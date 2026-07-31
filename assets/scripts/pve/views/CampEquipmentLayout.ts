@@ -1,10 +1,11 @@
 import {
   CAMP_BAG_COLS,
-  CAMP_BAG_SLOTS,
+  CAMP_BAG_DEFAULT_SLOTS,
   CAMP_SLOT_GAP,
   CAMP_SLOT_SIZE,
   campBagBlockHeight,
 } from './CampLayoutConstants';
+import { normalizeBagCapacity } from '../core/CampBagUpgrade';
 import {
   CAMP_FURNACE_STAGE_HEIGHT,
   CAMP_SYNTH_STAGE_WIDTH,
@@ -25,7 +26,7 @@ export const CAMP_EQUIPMENT_LAYOUT = {
   viewportHeight: 720,
   loadoutSlotSize: CAMP_SLOT_SIZE,
   loadoutSlotGap: 14,
-  bagSlots: CAMP_BAG_SLOTS,
+  bagSlots: CAMP_BAG_DEFAULT_SLOTS,
   bagCols: CAMP_BAG_COLS,
   bagSize: CAMP_SLOT_SIZE,
   bagGap: CAMP_SLOT_GAP,
@@ -40,13 +41,14 @@ export const CAMP_EQUIPMENT_LAYOUT = {
 } as const;
 
 /** Pack from content top — no empty band above summary. */
-export function equipmentContentMetrics(): {
+export function equipmentContentMetrics(bagCapacity: number = CAMP_BAG_DEFAULT_SLOTS): {
   contentHeight: number;
   loadoutTitleY: number;
   loadoutY: number;
   filterY: number;
   bagTitleY: number;
   bagFirstRowY: number;
+  bagSlots: number;
   synthStageY: number;
   synthTitleY: number;
   synthResultY: number;
@@ -55,6 +57,7 @@ export function equipmentContentMetrics(): {
   synthButtonY: number;
 } {
   const L = CAMP_EQUIPMENT_LAYOUT;
+  const bagSlots = normalizeBagCapacity(bagCapacity);
   const locals = furnaceSlotLocals();
   let fromTop = L.contentTopPadding;
   const loadoutTitleFromTop = fromTop + 12;
@@ -70,7 +73,7 @@ export function equipmentContentMetrics(): {
   fromTop += 28;
   fromTop += 18;
   const bagFirstRowFromTop = fromTop + L.bagSize / 2;
-  fromTop += campBagBlockHeight();
+  fromTop += campBagBlockHeight(bagSlots);
   fromTop += 20;
   const stageCenterFromTop = fromTop + L.synthStageHeight / 2;
   fromTop += L.synthStageHeight;
@@ -89,6 +92,7 @@ export function equipmentContentMetrics(): {
     filterY: toY(filterFromTop),
     bagTitleY: toY(bagTitleFromTop),
     bagFirstRowY: toY(bagFirstRowFromTop),
+    bagSlots,
     synthStageY,
     synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
     synthResultY: synthStageY + locals.result.y,

@@ -35,10 +35,11 @@ describe('camp equipment layout geometry', () => {
     expect(CAMP_EQUIPMENT_LAYOUT.synthSlotSize).toBe(CAMP_EQUIPMENT_LAYOUT.bagSize);
   });
 
-  test('bag metrics are fixed regardless of call count', () => {
-    const empty = equipmentContentMetrics();
-    const full = equipmentContentMetrics();
-    expect(empty.synthTitleY).toBe(full.synthTitleY);
-    expect(empty.contentHeight).toBe(full.contentHeight);
+  test('bag metrics grow when capacity upgrades', () => {
+    const empty = equipmentContentMetrics(25);
+    const full = equipmentContentMetrics(35);
+    expect(full.bagSlots).toBe(35);
+    expect(full.contentHeight).toBeGreaterThan(empty.contentHeight);
+    expect(empty.synthTitleY).toBe(equipmentContentMetrics(25).synthTitleY);
   });
 });

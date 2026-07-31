@@ -6,7 +6,7 @@ export type CampBagFilter = 'MINGHEN' | 'EQUIPMENT' | 'MATERIAL' | 'ALL';
 export type CampBagEntry =
   | { kind: 'MINGHEN'; id: string; level: 1 | 2 | 3; bagCopies: number }
   | { kind: 'EQUIPMENT'; instanceId: string }
-  | { kind: 'MATERIAL'; materialId: 'QUENCH_SAND' | 'FUSION_CORE'; amount: number };
+  | { kind: 'MATERIAL'; materialId: 'QUENCH_SAND' | 'FUSION_CORE' | 'VOID_HIDE'; amount: number };
 
 export function defaultCampBagFilter(section: 'MINGHEN' | 'EQUIPMENT'): CampBagFilter {
   return section === 'MINGHEN' ? 'MINGHEN' : 'EQUIPMENT';
@@ -46,6 +46,9 @@ function materialEntries(profile: PveProfile): CampBagEntry[] {
   }
   if (mats.fusionCore > 0) {
     rows.push({ kind: 'MATERIAL', materialId: 'FUSION_CORE', amount: mats.fusionCore });
+  }
+  if (mats.voidHide > 0) {
+    rows.push({ kind: 'MATERIAL', materialId: 'VOID_HIDE', amount: mats.voidHide });
   }
   return rows;
 }

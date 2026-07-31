@@ -1,10 +1,11 @@
 import {
   CAMP_BAG_COLS,
-  CAMP_BAG_SLOTS,
+  CAMP_BAG_DEFAULT_SLOTS,
   CAMP_SLOT_GAP,
   CAMP_SLOT_SIZE,
   campBagBlockHeight,
 } from './CampLayoutConstants';
+import { normalizeBagCapacity } from '../core/CampBagUpgrade';
 import {
   CAMP_STARCHART_STAGE_HEIGHT,
   CAMP_SYNTH_STAGE_WIDTH,
@@ -35,7 +36,7 @@ export const CAMP_MINGHEN_LAYOUT = {
   cardWidth: CAMP_SLOT_SIZE,
   cardHeight: CAMP_SLOT_SIZE,
   cardGap: CAMP_SLOT_GAP,
-  bagSlots: CAMP_BAG_SLOTS,
+  bagSlots: CAMP_BAG_DEFAULT_SLOTS,
   bagColumns: CAMP_BAG_COLS,
   bagSize: CAMP_SLOT_SIZE,
   bagGap: CAMP_SLOT_GAP,
@@ -57,13 +58,14 @@ export function equippedGridHeight(): number {
  * Pack layout from content top so ScrollView has no empty band above summary.
  * Returned Y values are center-origin (Cocos content node).
  */
-export function minghenContentMetrics(): {
+export function minghenContentMetrics(bagCapacity: number = CAMP_BAG_DEFAULT_SLOTS): {
   contentHeight: number;
   equippedTitleY: number;
   firstRowY: number;
   filterY: number;
   bagTitleY: number;
   bagFirstRowY: number;
+  bagSlots: number;
   synthStageY: number;
   synthTitleY: number;
   synthResultY: number;
@@ -73,6 +75,7 @@ export function minghenContentMetrics(): {
   synthButtonY: number;
 } {
   const L = CAMP_MINGHEN_LAYOUT;
+  const bagSlots = normalizeBagCapacity(bagCapacity);
   const locals = starchartSlotLocals();
   let fromTop = L.contentTopPadding;
   const equippedTitleFromTop = fromTop + 12;
@@ -88,7 +91,7 @@ export function minghenContentMetrics(): {
   fromTop += 28;
   fromTop += 18;
   const bagFirstRowFromTop = fromTop + L.bagSize / 2;
-  fromTop += campBagBlockHeight();
+  fromTop += campBagBlockHeight(bagSlots);
   fromTop += 20;
   const stageCenterFromTop = fromTop + L.synthStageHeight / 2;
   fromTop += L.synthStageHeight;
@@ -107,6 +110,7 @@ export function minghenContentMetrics(): {
     filterY: toY(filterFromTop),
     bagTitleY: toY(bagTitleFromTop),
     bagFirstRowY: toY(bagFirstRowFromTop),
+    bagSlots,
     synthStageY,
     synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
     synthResultY: synthStageY + locals.result.y,

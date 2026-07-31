@@ -55,11 +55,12 @@ describe('camp Minghen layout geometry', () => {
     expect(intersects(leftInput, result)).toBe(false);
   });
 
-  test('bag metrics are fixed regardless of call count', () => {
-    const a = minghenContentMetrics();
-    const b = minghenContentMetrics();
-    expect(a.synthTitleY).toBe(b.synthTitleY);
-    expect(a.contentHeight).toBe(b.contentHeight);
-    expect(a.bagFirstRowY).toBe(b.bagFirstRowY);
+  test('bag metrics grow when capacity upgrades', () => {
+    const base = minghenContentMetrics(25);
+    const upgraded = minghenContentMetrics(35);
+    expect(upgraded.bagSlots).toBe(35);
+    expect(upgraded.contentHeight).toBeGreaterThan(base.contentHeight);
+    expect(base.bagFirstRowY).toBeGreaterThan(base.synthStageY);
+    expect(upgraded.bagFirstRowY).toBeGreaterThan(upgraded.synthStageY);
   });
 });
