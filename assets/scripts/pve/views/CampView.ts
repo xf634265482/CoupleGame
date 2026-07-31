@@ -245,7 +245,11 @@ export class CampView {
     stage.setParent(parent);
     stage.setPosition(0, metrics.synthStageY);
     stage.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
-    paintStarchartStage(stage.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight, { ready: canSynth });
+    stage.addComponent(Mask);
+    const art = new Node('StarchartArt');
+    art.setParent(stage);
+    art.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
+    paintStarchartStage(art.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight, { ready: canSynth });
 
     const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
     title.isBold = true;
@@ -387,7 +391,11 @@ export class CampView {
     stage.setParent(parent);
     stage.setPosition(0, metrics.synthStageY);
     stage.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
-    paintFurnaceStage(stage.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight);
+    stage.addComponent(Mask);
+    const art = new Node('FurnaceArt');
+    art.setParent(stage);
+    art.addComponent(UITransform).setContentSize(L.synthStageWidth, L.synthStageHeight);
+    paintFurnaceStage(art.addComponent(Graphics), L.synthStageWidth, L.synthStageHeight);
 
     const title = makeLabel(parent, 0, metrics.synthTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
     title.isBold = true;

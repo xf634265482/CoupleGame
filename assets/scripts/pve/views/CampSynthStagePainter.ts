@@ -55,9 +55,9 @@ function paintSlotWell(
   border: Color,
   glow: Color,
 ): void {
-  const size = CAMP_SLOT_SIZE + 6;
+  const size = CAMP_SLOT_SIZE + 4;
   const r = 12;
-  roundRect(g, x, y, size + 8, size + 8, r + 2);
+  roundRect(g, x, y, size + 4, size + 4, r + 1);
   g.fillColor = glow;
   g.fill();
   roundRect(g, x, y, size, size, r);
@@ -69,36 +69,48 @@ function paintSlotWell(
   g.stroke();
 }
 
-/** Warm furnace plate for equipment synth. Local origin = stage center. */
+/** Warm furnace plate for equipment synth. Local origin = stage center. All chrome stays inset. */
 export function paintFurnaceStage(g: Graphics, width: number, height: number): void {
   const radius = 18;
+  const inset = 12;
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const maxR = Math.min(halfW, halfH) - inset;
+
   // Warm charcoal base — not cold navy.
   roundRect(g, 0, 0, width, height, radius);
   g.fillColor = new Color(28, 16, 10, 250);
   g.fill();
 
-  // Ember wash layers (bottom-heavy orange refining table).
-  g.fillColor = new Color(90, 36, 12, 110);
-  g.circle(0, -height * 0.12, Math.min(width, height) * 0.42);
-  g.fill();
-  g.fillColor = new Color(160, 70, 22, 90);
-  g.circle(0, -height * 0.2, Math.min(width, height) * 0.3);
-  g.fill();
-  g.fillColor = new Color(220, 110, 36, 55);
-  g.circle(0, -height * 0.26, Math.min(width, height) * 0.18);
-  g.fill();
-  g.fillColor = new Color(255, 180, 70, 35);
-  g.circle(0, -height * 0.28, Math.min(width, height) * 0.1);
-  g.fill();
+  // Ember wash layers — radii clamped so they never cross the frame edge.
+  const washSpecs: Array<{ cy: number; rWant: number; c: Color }> = [
+    { cy: -height * 0.08, rWant: maxR * 0.78, c: new Color(90, 36, 12, 100) },
+    { cy: -height * 0.14, rWant: maxR * 0.55, c: new Color(160, 70, 22, 85) },
+    { cy: -height * 0.18, rWant: maxR * 0.34, c: new Color(220, 110, 36, 55) },
+    { cy: -height * 0.2, rWant: maxR * 0.18, c: new Color(255, 180, 70, 35) },
+  ];
+  for (const wash of washSpecs) {
+    const r = Math.min(
+      wash.rWant,
+      halfH - inset - wash.cy,
+      halfH - inset + wash.cy,
+      maxR,
+    );
+    if (r <= 8) continue;
+    g.fillColor = wash.c;
+    g.circle(0, wash.cy, r);
+    g.fill();
+  }
 
-  // Molten pool rings near bottom.
-  const mouthY = -height / 2 + 48;
+  // Molten pool — fully above bottom edge.
+  const mouthY = -halfH + inset + 36;
   const mouthRings = [
-    { r: 52, fill: new Color(255, 90, 20, 35), stroke: new Color(255, 140, 50, 90) },
-    { r: 36, fill: new Color(255, 130, 40, 50), stroke: new Color(255, 190, 80, 140) },
-    { r: 20, fill: new Color(255, 210, 100, 70), stroke: new Color(255, 240, 180, 180) },
+    { r: 34, fill: new Color(255, 90, 20, 35), stroke: new Color(255, 140, 50, 90) },
+    { r: 24, fill: new Color(255, 130, 40, 50), stroke: new Color(255, 190, 80, 140) },
+    { r: 14, fill: new Color(255, 210, 100, 70), stroke: new Color(255, 240, 180, 180) },
   ];
   for (const ring of mouthRings) {
+    if (mouthY - ring.r < -halfH + 4) continue;
     g.fillColor = ring.fill;
     g.circle(0, mouthY, ring.r);
     g.fill();
@@ -108,50 +120,51 @@ export function paintFurnaceStage(g: Graphics, width: number, height: number): v
     g.stroke();
   }
 
-  // Rising heat column (glow, not fold polyline).
+  // Rising heat column between result and center input (stays inside slot band).
   const locals = furnaceSlotLocals();
-  const heatTop = locals.result.y - CAMP_SLOT_SIZE / 2 - 6;
-  const heatBottom = locals.inputs[1]!.y + CAMP_SLOT_SIZE / 2 + 6;
+  const heatTop = Math.min(locals.result.y - CAMP_SLOT_SIZE / 2 - 4, halfH - inset);
+  const heatBottom = Math.max(locals.inputs[1]!.y + CAMP_SLOT_SIZE / 2 + 4, -halfH + inset);
   g.strokeColor = new Color(255, 120, 40, 40);
-  g.lineWidth = 18;
+  g.lineWidth = 14;
   g.moveTo(0, heatBottom);
   g.lineTo(0, heatTop);
   g.stroke();
   g.strokeColor = new Color(255, 160, 60, 70);
-  g.lineWidth = 8;
+  g.lineWidth = 6;
   g.moveTo(0, heatBottom);
   g.lineTo(0, heatTop);
   g.stroke();
   g.strokeColor = new Color(255, 220, 140, 160);
-  g.lineWidth = 2.4;
+  g.lineWidth = 2;
   g.moveTo(0, heatBottom);
   g.lineTo(0, heatTop);
   g.stroke();
 
-  // Ember sparks (static).
+  // Ember sparks — only if inside bounds.
   const sparks: Array<[number, number, number]> = [
-    [-40, mouthY + 30, 2.2],
-    [36, mouthY + 42, 1.8],
-    [-18, mouthY + 58, 1.5],
-    [22, mouthY + 70, 2],
-    [0, mouthY + 88, 1.6],
+    [-28, mouthY + 22, 2],
+    [26, mouthY + 30, 1.6],
+    [-12, mouthY + 40, 1.4],
+    [16, mouthY + 48, 1.8],
   ];
   for (const [sx, sy, sr] of sparks) {
-    g.fillColor = new Color(255, 200, 100, 160);
+    if (Math.abs(sx) + sr > halfW - inset) continue;
+    if (sy + sr > halfH - inset || sy - sr < -halfH + inset) continue;
+    g.fillColor = new Color(255, 200, 100, 150);
     g.circle(sx, sy, sr);
     g.fill();
   }
 
-  // Opaque warm wells under each slot.
+  // Opaque warm wells under each slot (glow pad kept small to stay inset).
   const wellFill = new Color(42, 24, 12, 255);
   const wellBorder = new Color(210, 150, 70, 220);
-  const wellGlow = new Color(255, 120, 40, 45);
+  const wellGlow = new Color(255, 120, 40, 40);
   paintSlotWell(g, locals.result.x, locals.result.y, wellFill, wellBorder, wellGlow);
   for (const p of locals.inputs) {
     paintSlotWell(g, p.x, p.y, wellFill, wellBorder, wellGlow);
   }
 
-  // Bronze frame.
+  // Bronze frame last so it sits on top of chrome.
   roundRect(g, 0, 0, width - 8, height - 8, radius - 2);
   g.strokeColor = new Color(210, 150, 70, 200);
   g.lineWidth = 2.4;

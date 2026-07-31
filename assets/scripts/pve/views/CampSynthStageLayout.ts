@@ -7,9 +7,9 @@ export const CAMP_FURNACE_STAGE_HEIGHT = 360;
 export const CAMP_STARCHART_STAGE_HEIGHT = 340;
 
 /** Top inner band reserved for section title (px from stage top edge). */
-export const CAMP_SYNTH_TITLE_BAND = 44;
+export const CAMP_SYNTH_TITLE_BAND = 52;
 /** Bottom inner padding so slots/mouth stay above the frame stroke. */
-export const CAMP_SYNTH_BOTTOM_PAD = 20;
+export const CAMP_SYNTH_BOTTOM_PAD = 28;
 
 export interface SynthSlotPoint {
   x: number;
@@ -25,7 +25,7 @@ export function furnaceSlotLocals(): {
   const slotHalf = CAMP_SLOT_SIZE / 2;
   // Title band above result; mouth/pad below inputs.
   const resultY = half - CAMP_SYNTH_TITLE_BAND - slotHalf;
-  const inputY = -half + CAMP_SYNTH_BOTTOM_PAD + slotHalf + 18;
+  const inputY = -half + CAMP_SYNTH_BOTTOM_PAD + slotHalf + 8;
   return {
     result: { x: 0, y: resultY },
     inputs: [
