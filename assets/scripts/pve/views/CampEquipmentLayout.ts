@@ -5,6 +5,11 @@ import {
   CAMP_SLOT_SIZE,
   campBagBlockHeight,
 } from './CampLayoutConstants';
+import {
+  CAMP_FURNACE_STAGE_HEIGHT,
+  CAMP_SYNTH_STAGE_WIDTH,
+  furnaceSlotLocals,
+} from './CampSynthStageLayout';
 
 export interface LayoutBounds {
   left: number;
@@ -14,7 +19,7 @@ export interface LayoutBounds {
   centerY: number;
 }
 
-/** 装备台：穿戴 + 背包(固定25) + 合成；整页 ScrollView。格子统一正方形 96。 */
+/** 装备台：穿戴 + 背包(固定25) + 熔炉合成台；整页 ScrollView。格子统一正方形 96。 */
 export const CAMP_EQUIPMENT_LAYOUT = {
   viewportWidth: 570,
   viewportHeight: 720,
@@ -25,8 +30,9 @@ export const CAMP_EQUIPMENT_LAYOUT = {
   bagSize: CAMP_SLOT_SIZE,
   bagGap: CAMP_SLOT_GAP,
   synthSlotSize: CAMP_SLOT_SIZE,
+  synthStageWidth: CAMP_SYNTH_STAGE_WIDTH,
+  synthStageHeight: CAMP_FURNACE_STAGE_HEIGHT,
   synthInputCount: 3,
-  synthInputXs: [-130, 0, 130] as const,
   synthButtonWidth: 160,
   synthButtonHeight: 48,
   contentTopPadding: 18,
@@ -41,17 +47,20 @@ export function equipmentContentMetrics(): {
   filterY: number;
   bagTitleY: number;
   bagFirstRowY: number;
+  synthStageY: number;
   synthTitleY: number;
   synthResultY: number;
   synthInputY: number;
+  synthInputXs: readonly [number, number, number];
   synthButtonY: number;
 } {
   const L = CAMP_EQUIPMENT_LAYOUT;
+  const locals = furnaceSlotLocals();
   let fromTop = L.contentTopPadding;
   const loadoutTitleFromTop = fromTop + 12;
   fromTop += 28;
   fromTop += 10;
-  const loadoutFromTop = fromTop + L.loadoutSlotSize / 2 + 18; // title above slot
+  const loadoutFromTop = fromTop + L.loadoutSlotSize / 2 + 18;
   fromTop += 18 + L.loadoutSlotSize;
   fromTop += 18;
   const filterFromTop = fromTop + 20;
@@ -62,19 +71,16 @@ export function equipmentContentMetrics(): {
   fromTop += 18;
   const bagFirstRowFromTop = fromTop + L.bagSize / 2;
   fromTop += campBagBlockHeight();
-  fromTop += 24;
-  const synthTitleFromTop = fromTop + 12;
-  fromTop += 28;
-  fromTop += L.synthSlotSize / 2 + 20;
-  const synthResultFromTop = fromTop;
-  fromTop += L.synthSlotSize + 16;
-  const synthInputFromTop = fromTop;
-  fromTop += L.synthSlotSize / 2 + L.synthButtonHeight / 2 + 20;
-  const synthButtonFromTop = fromTop;
+  fromTop += 20;
+  const stageCenterFromTop = fromTop + L.synthStageHeight / 2;
+  fromTop += L.synthStageHeight;
+  fromTop += 16;
+  const synthButtonFromTop = fromTop + L.synthButtonHeight / 2;
   fromTop += L.synthButtonHeight / 2 + L.contentBottomPadding;
 
   const contentHeight = Math.max(L.viewportHeight, fromTop);
   const toY = (distanceFromTop: number): number => contentHeight / 2 - distanceFromTop;
+  const synthStageY = toY(stageCenterFromTop);
 
   return {
     contentHeight,
@@ -83,9 +89,11 @@ export function equipmentContentMetrics(): {
     filterY: toY(filterFromTop),
     bagTitleY: toY(bagTitleFromTop),
     bagFirstRowY: toY(bagFirstRowFromTop),
-    synthTitleY: toY(synthTitleFromTop),
-    synthResultY: toY(synthResultFromTop),
-    synthInputY: toY(synthInputFromTop),
+    synthStageY,
+    synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
+    synthResultY: synthStageY + locals.result.y,
+    synthInputY: synthStageY + locals.inputs[0]!.y,
+    synthInputXs: [locals.inputs[0]!.x, locals.inputs[1]!.x, locals.inputs[2]!.x] as const,
     synthButtonY: toY(synthButtonFromTop),
   };
 }

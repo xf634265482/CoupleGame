@@ -5,6 +5,11 @@ import {
   CAMP_SLOT_SIZE,
   campBagBlockHeight,
 } from './CampLayoutConstants';
+import {
+  CAMP_STARCHART_STAGE_HEIGHT,
+  CAMP_SYNTH_STAGE_WIDTH,
+  starchartSlotLocals,
+} from './CampSynthStageLayout';
 
 export interface LayoutRect {
   x: number;
@@ -21,7 +26,7 @@ export interface LayoutBounds {
   centerY: number;
 }
 
-/** 命痕台：装配 + 背包(固定25) + 合成；整页 ScrollView。格子统一正方形 96。 */
+/** 命痕台：装配 + 背包(固定25) + 星盘合成台；整页 ScrollView。格子统一正方形 96。 */
 export const CAMP_MINGHEN_LAYOUT = {
   viewportWidth: 570,
   viewportHeight: 720,
@@ -35,7 +40,8 @@ export const CAMP_MINGHEN_LAYOUT = {
   bagSize: CAMP_SLOT_SIZE,
   bagGap: CAMP_SLOT_GAP,
   synthSlotSize: CAMP_SLOT_SIZE,
-  synthInputX: 110,
+  synthStageWidth: CAMP_SYNTH_STAGE_WIDTH,
+  synthStageHeight: CAMP_STARCHART_STAGE_HEIGHT,
   synthButtonWidth: 160,
   synthButtonHeight: 48,
   contentTopPadding: 18,
@@ -58,12 +64,16 @@ export function minghenContentMetrics(): {
   filterY: number;
   bagTitleY: number;
   bagFirstRowY: number;
+  synthStageY: number;
   synthTitleY: number;
   synthResultY: number;
   synthInputY: number;
+  synthInputLeftX: number;
+  synthInputRightX: number;
   synthButtonY: number;
 } {
   const L = CAMP_MINGHEN_LAYOUT;
+  const locals = starchartSlotLocals();
   let fromTop = L.contentTopPadding;
   const equippedTitleFromTop = fromTop + 12;
   fromTop += 28;
@@ -76,22 +86,19 @@ export function minghenContentMetrics(): {
   fromTop += 10;
   const bagTitleFromTop = fromTop + 12;
   fromTop += 28;
-  fromTop += 18; // clear title before first bag row
+  fromTop += 18;
   const bagFirstRowFromTop = fromTop + L.bagSize / 2;
   fromTop += campBagBlockHeight();
-  fromTop += 24;
-  const synthTitleFromTop = fromTop + 12;
-  fromTop += 28;
-  fromTop += L.synthSlotSize / 2 + 20;
-  const synthResultFromTop = fromTop;
-  fromTop += L.synthSlotSize + 16;
-  const synthInputFromTop = fromTop;
-  fromTop += L.synthSlotSize / 2 + L.synthButtonHeight / 2 + 20;
-  const synthButtonFromTop = fromTop;
+  fromTop += 20;
+  const stageCenterFromTop = fromTop + L.synthStageHeight / 2;
+  fromTop += L.synthStageHeight;
+  fromTop += 16;
+  const synthButtonFromTop = fromTop + L.synthButtonHeight / 2;
   fromTop += L.synthButtonHeight / 2 + L.contentBottomPadding;
 
   const contentHeight = Math.max(L.viewportHeight, fromTop);
   const toY = (distanceFromTop: number): number => contentHeight / 2 - distanceFromTop;
+  const synthStageY = toY(stageCenterFromTop);
 
   return {
     contentHeight,
@@ -100,9 +107,12 @@ export function minghenContentMetrics(): {
     filterY: toY(filterFromTop),
     bagTitleY: toY(bagTitleFromTop),
     bagFirstRowY: toY(bagFirstRowFromTop),
-    synthTitleY: toY(synthTitleFromTop),
-    synthResultY: toY(synthResultFromTop),
-    synthInputY: toY(synthInputFromTop),
+    synthStageY,
+    synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
+    synthResultY: synthStageY + locals.result.y,
+    synthInputY: synthStageY + locals.inputs[0]!.y,
+    synthInputLeftX: locals.inputs[0]!.x,
+    synthInputRightX: locals.inputs[1]!.x,
     synthButtonY: toY(synthButtonFromTop),
   };
 }

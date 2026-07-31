@@ -15,13 +15,15 @@ describe('camp equipment layout geometry', () => {
     expect(m.loadoutTitleY).toBeGreaterThan(m.filterY);
     expect(m.bagTitleY).toBeGreaterThan(m.synthTitleY);
     expect(m.bagTitleY - 15).toBeGreaterThan(m.bagFirstRowY + CAMP_EQUIPMENT_LAYOUT.bagSize / 2);
+    expect(m.bagFirstRowY).toBeGreaterThan(m.synthStageY);
+    expect(m.synthStageY).toBeGreaterThan(m.synthButtonY);
     expect(m.synthResultY).toBeGreaterThan(m.synthInputY);
     expect(m.synthInputY).toBeGreaterThan(m.synthButtonY);
     expect(m.contentHeight).toBeGreaterThanOrEqual(CAMP_EQUIPMENT_LAYOUT.viewportHeight);
     expect(m.contentHeight / 2 - m.loadoutTitleY).toBeLessThan(80);
     const buttonBottom = m.synthButtonY - CAMP_EQUIPMENT_LAYOUT.synthButtonHeight / 2;
     expect(m.contentHeight / 2).toBeGreaterThanOrEqual(Math.abs(Math.min(0, buttonBottom)) - 1);
-    const slots = CAMP_EQUIPMENT_LAYOUT.synthInputXs.map((x) => ({
+    const slots = m.synthInputXs.map((x) => ({
       left: x - CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
       right: x + CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,
       top: m.synthInputY + CAMP_EQUIPMENT_LAYOUT.synthSlotSize / 2,

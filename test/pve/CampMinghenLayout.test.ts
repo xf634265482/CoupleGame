@@ -29,6 +29,8 @@ describe('camp Minghen layout geometry', () => {
     expect(metrics.bagTitleY).toBeGreaterThan(metrics.bagFirstRowY);
     // Title must sit fully above the first bag row (no overlap).
     expect(metrics.bagTitleY - 15).toBeGreaterThan(metrics.bagFirstRowY + CAMP_MINGHEN_LAYOUT.bagSize / 2);
+    expect(metrics.bagFirstRowY).toBeGreaterThan(metrics.synthStageY);
+    expect(metrics.synthStageY).toBeGreaterThan(metrics.synthButtonY);
     expect(metrics.synthResultY).toBeGreaterThan(metrics.synthInputY);
     expect(metrics.synthInputY).toBeGreaterThan(metrics.synthButtonY);
     expect(metrics.contentHeight).toBeGreaterThanOrEqual(CAMP_MINGHEN_LAYOUT.viewportHeight);
@@ -37,8 +39,8 @@ describe('camp Minghen layout geometry', () => {
     expect(metrics.contentHeight / 2 - metrics.equippedTitleY).toBeLessThan(80);
 
     const leftInput = {
-      left: -CAMP_MINGHEN_LAYOUT.synthInputX - CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
-      right: -CAMP_MINGHEN_LAYOUT.synthInputX + CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
+      left: metrics.synthInputLeftX - CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
+      right: metrics.synthInputLeftX + CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
       top: metrics.synthInputY + CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
       bottom: metrics.synthInputY - CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
       centerY: metrics.synthInputY,
