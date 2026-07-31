@@ -114,6 +114,10 @@ export interface PveProfile {
   gold: number;
   /** @deprecated 已并入 gold（星尘）；归一化后恒为 0。 */
   minghenDust: number;
+  /** 营地材料：淬星砂（强化）/ 聚星核（装备合成）/ 虚空革（背包扩容）。缺省视为 0。 */
+  materials?: { quenchSand: number; fusionCore: number; voidHide?: number };
+  /** 共用背包格上限；合法值 25|35|45|60，缺省 25。 */
+  bagCapacity?: number;
   professions: Record<PveProfessionId, ProfessionMasteryProgress>;
   selectedProfessionId: PveProfessionId;
   tracking: MinghenTrackingProgress | null;

@@ -35,7 +35,169 @@ export function resolveEquipTemplate(name: string): ResolvedEquipTemplate | null
 
 export const QUALITY_MULTIPLIER = { COMMON: 1, FINE: 1.15, RARE: 1.32, EPIC: 1.52, LEGENDARY: 1.75 } as const;
 export const QUALITY_SELL_PRICE = { COMMON: 5, FINE: 10, RARE: 20, EPIC: 40, LEGENDARY: 80 } as const;
-export const ENHANCE_COST = [0, 30, 60, 110, 180, 280] as const;
+/** 强化星尘（+1…+5）；另耗 ENHANCE_QUENCH_SAND。 */
+export const ENHANCE_COST = [0, 20, 40, 70, 120, 180] as const;
+export const ENHANCE_QUENCH_SAND = [0, 2, 3, 5, 8, 12] as const;
+/** 三合一升品星尘；另耗 SYNTH_FUSION_CORE。 */
+export const SYNTH_STARDUST = { COMMON: 10, FINE: 20, RARE: 40, EPIC: 80 } as const;
+export const SYNTH_FUSION_CORE = { COMMON: 1, FINE: 2, RARE: 3, EPIC: 5 } as const;
+export const QUALITY_ORDER = ['COMMON', 'FINE', 'RARE', 'EPIC', 'LEGENDARY'] as const;
+
+export type CampMaterials = { quenchSand: number; fusionCore: number; voidHide: number };
+
+export function normalizeCampMaterials(
+  value?: Partial<CampMaterials> | null,
+): CampMaterials {
+  return {
+    quenchSand: Number.isInteger(value?.quenchSand) && (value?.quenchSand ?? 0) >= 0
+      ? (value!.quenchSand as number)
+      : 0,
+    fusionCore: Number.isInteger(value?.fusionCore) && (value?.fusionCore ?? 0) >= 0
+      ? (value!.fusionCore as number)
+      : 0,
+    voidHide: Number.isInteger(value?.voidHide) && (value?.voidHide ?? 0) >= 0
+      ? (value!.voidHide as number)
+      : 0,
+  };
+}
+
+export function sellMaterialGrants(instance: PveEquipmentInstance): CampMaterials {
+  const fusionByQuality: Record<EquipQuality, number> = {
+    COMMON: 0, FINE: 0, RARE: 1, EPIC: 2, LEGENDARY: 3,
+  };
+  return {
+    quenchSand: 1 + Math.max(0, instance.enhanceLevel),
+    fusionCore: fusionByQuality[instance.quality] ?? 0,
+    voidHide: 0,
+  };
+}
+
+export function nextEquipQuality(quality: EquipQuality): EquipQuality | null {
+  const idx = QUALITY_ORDER.indexOf(quality);
+  if (idx < 0 || idx >= QUALITY_ORDER.length - 1) return null;
+  return QUALITY_ORDER[idx + 1]!;
+}
+
+export type SynthesizeEquipmentError =
+  | 'SYNTH_NEED_THREE'
+  | 'SYNTH_NOT_OWNED'
+  | 'SYNTH_LOCKED'
+  | 'SYNTH_EQUIPPED'
+  | 'SYNTH_MISMATCH'
+  | 'SYNTH_MAX_QUALITY'
+  | 'GOLD_NOT_ENOUGH'
+  | 'FUSION_CORE_NOT_ENOUGH';
+
+/**
+ * 同名同品质三合一升品（纯函数，供单测；云端 PveCamp 为权威）。
+ * instanceIds 须恰好 3 个且互异。
+ */
+export function synthesizeEquipment(
+  inventory: readonly PveEquipmentInstance[],
+  loadout: Readonly<Record<string, string | undefined>>,
+  instanceIds: readonly string[],
+  gold: number,
+  newInstanceId: string,
+  materials: CampMaterials = { quenchSand: 0, fusionCore: 999, voidHide: 0 },
+): {
+  inventory: PveEquipmentInstance[];
+  gold: number;
+  cost: number;
+  fusionCoreCost: number;
+  materials: CampMaterials;
+  result: PveEquipmentInstance;
+} {
+  if (instanceIds.length !== 3 || new Set(instanceIds).size !== 3) {
+    throw new Error('SYNTH_NEED_THREE');
+  }
+  const equipped = new Set(Object.values(loadout).filter((id): id is string => !!id));
+  const mats = instanceIds.map((id) => {
+    const item = inventory.find((entry) => entry.instanceId === id);
+    if (!item) throw new Error('SYNTH_NOT_OWNED');
+    if (item.locked) throw new Error('SYNTH_LOCKED');
+    if (equipped.has(id)) throw new Error('SYNTH_EQUIPPED');
+    return item;
+  });
+  const [a, b, c] = mats;
+  if (
+    a.definitionId !== b.definitionId
+    || a.definitionId !== c.definitionId
+    || a.quality !== b.quality
+    || a.quality !== c.quality
+  ) {
+    throw new Error('SYNTH_MISMATCH');
+  }
+  const nextQuality = nextEquipQuality(a.quality);
+  if (!nextQuality) throw new Error('SYNTH_MAX_QUALITY');
+  const cost = SYNTH_STARDUST[a.quality as keyof typeof SYNTH_STARDUST];
+  const fusionCoreCost = SYNTH_FUSION_CORE[a.quality as keyof typeof SYNTH_FUSION_CORE];
+  if (cost == null || fusionCoreCost == null) throw new Error('SYNTH_MAX_QUALITY');
+  if (gold < cost) throw new Error('GOLD_NOT_ENOUGH');
+  const bag = normalizeCampMaterials(materials);
+  if (bag.fusionCore < fusionCoreCost) throw new Error('FUSION_CORE_NOT_ENOUGH');
+  const baseStat = Math.round(
+    (rawEquipBaseStat(a) + rawEquipBaseStat(b) + rawEquipBaseStat(c)) / 3,
+  );
+  const consume = new Set(instanceIds);
+  const result: PveEquipmentInstance = {
+    instanceId: newInstanceId,
+    definitionId: a.definitionId,
+    quality: nextQuality,
+    enhanceLevel: 0,
+    locked: false,
+    baseStat,
+  };
+  return {
+    inventory: [...inventory.filter((item) => !consume.has(item.instanceId)), result],
+    gold: gold - cost,
+    cost,
+    fusionCoreCost,
+    materials: { ...bag, fusionCore: bag.fusionCore - fusionCoreCost },
+    result,
+  };
+}
+
+/** 统计可作合成材料的同名同品质件数（未锁、未穿）。 */
+export function countSynthesizeEligible(
+  inventory: readonly PveEquipmentInstance[],
+  loadout: Readonly<Record<string, string | undefined>>,
+  definitionId: string,
+  quality: EquipQuality,
+): number {
+  const equipped = new Set(Object.values(loadout).filter((id): id is string => !!id));
+  return inventory.filter(
+    (item) =>
+      item.definitionId === definitionId
+      && item.quality === quality
+      && !item.locked
+      && !equipped.has(item.instanceId),
+  ).length;
+}
+
+/** 以 primary 为锚点，再选强化最低的两件凑满三合一。 */
+export function pickSynthesizeMaterials(
+  inventory: readonly PveEquipmentInstance[],
+  loadout: Readonly<Record<string, string | undefined>>,
+  primaryInstanceId: string,
+): string[] | null {
+  const primary = inventory.find((item) => item.instanceId === primaryInstanceId);
+  if (!primary) return null;
+  const equipped = new Set(Object.values(loadout).filter((id): id is string => !!id));
+  if (primary.locked || equipped.has(primary.instanceId)) return null;
+  if (!nextEquipQuality(primary.quality)) return null;
+  const others = inventory
+    .filter(
+      (item) =>
+        item.instanceId !== primary.instanceId
+        && item.definitionId === primary.definitionId
+        && item.quality === primary.quality
+        && !item.locked
+        && !equipped.has(item.instanceId),
+    )
+    .sort((a, b) => a.enhanceLevel - b.enhanceLevel || a.instanceId.localeCompare(b.instanceId));
+  if (others.length < 2) return null;
+  return [primary.instanceId, others[0]!.instanceId, others[1]!.instanceId];
+}
 
 /** 实例上的原始浮动主数值（未乘品质/强化）；缺省或非法时取模板区间中点。 */
 export function rawEquipBaseStat(instance: Pick<PveEquipmentInstance, 'definitionId' | 'baseStat'>): number {
@@ -207,12 +369,25 @@ export function equipPrimaryStatDescription(item: EquipItem): string {
   }
 }
 
-export function enhanceEquipment(instance: PveEquipmentInstance, gold: number) {
+export function enhanceEquipment(
+  instance: PveEquipmentInstance,
+  gold: number,
+  materials: CampMaterials = { quenchSand: 999, fusionCore: 0, voidHide: 0 },
+) {
   if (instance.enhanceLevel >= 5) throw new Error('EQUIPMENT_MAX_ENHANCE');
   const nextLevel = instance.enhanceLevel + 1;
   const cost = ENHANCE_COST[nextLevel] ?? 0;
+  const sandCost = ENHANCE_QUENCH_SAND[nextLevel] ?? 0;
   if (gold < cost) throw new Error('GOLD_NOT_ENOUGH');
-  return { instance: { ...instance, enhanceLevel: nextLevel }, gold: gold - cost, cost };
+  const bag = normalizeCampMaterials(materials);
+  if (bag.quenchSand < sandCost) throw new Error('QUENCH_SAND_NOT_ENOUGH');
+  return {
+    instance: { ...instance, enhanceLevel: nextLevel },
+    gold: gold - cost,
+    cost,
+    sandCost,
+    materials: { ...bag, quenchSand: bag.quenchSand - sandCost },
+  };
 }
 
 export function equipmentSellPrice(instance: PveEquipmentInstance): number {
