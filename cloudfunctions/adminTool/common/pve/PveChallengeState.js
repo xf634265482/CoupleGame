@@ -3,6 +3,7 @@ const { calculateRewards, applyMastery, unlockProfessions } = require('./PveRewa
 const { settleMinghen } = require('./PveMinghen');
 const { MAX_READY_FLOOR } = require('./PveProfile');
 const { grantClearExpOnProfile, applyPartnerUnlocksOnProfile } = require('./PvePartner');
+const { normalizeMaterials, settlementMaterialGrants } = require('./PveCamp');
 
 function stableLoadoutEntries(entries) {
   return [...entries].sort((a, b) => a.id.localeCompare(b.id));
@@ -239,6 +240,16 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
       rewards.firstClear,
     ),
   };
+  const materialGrants = settlementMaterialGrants(challenge.floor, challenge.mode);
+  const bag = normalizeMaterials(nextProfile.materials);
+  nextProfile = {
+    ...nextProfile,
+    materials: {
+      quenchSand: bag.quenchSand + materialGrants.quenchSand,
+      fusionCore: bag.fusionCore + materialGrants.fusionCore,
+      voidHide: bag.voidHide + materialGrants.voidHide,
+    },
+  };
   // 携带伙伴通关经验：仅 CLEAR，按快照 partnerId，不可由客户端伪造更高阶段。
   if (challenge.config.partnerId) {
     nextProfile = grantClearExpOnProfile(nextProfile, challenge.config.partnerId, challenge.floor);
@@ -252,6 +263,9 @@ function applyChallengeSettlement(profile, challenge, result, now = Date.now()) 
     minghenId: minghen.grantedId,
     minghenDust: minghenDustGain,
     stardust: rewards.gold + lootedStardust + minghenDustGain,
+    quenchSand: materialGrants.quenchSand,
+    fusionCore: materialGrants.fusionCore,
+    voidHide: materialGrants.voidHide,
     ...(lootedStardust > 0 ? { lootedStardust } : {}),
     ...(combatLoot.added.length > 0 ? { lootedEquipment: combatLoot.added } : {}),
     ...(unlockResult.newlyUnlockedPartnerIds.length > 0

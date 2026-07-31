@@ -34,6 +34,8 @@ function createDefaultProfile(now = Date.now()) {
     equipmentLoadout: {},
     gold: 0,
     minghenDust: 0,
+    materials: { quenchSand: 0, fusionCore: 0, voidHide: 0 },
+    bagCapacity: 25,
     professions: {
       WARRIOR: defaultMastery(true),
       ARCHER: defaultMastery(false),
@@ -131,6 +133,12 @@ function normalizeProfile(value, now = Date.now()) {
     equipmentLoadout: isPlainObject(value.equipmentLoadout) ? value.equipmentLoadout : {},
     gold: mergedStardust,
     minghenDust: 0,
+    materials: {
+      quenchSand: nonNegativeInt(value.materials?.quenchSand),
+      fusionCore: nonNegativeInt(value.materials?.fusionCore),
+      voidHide: nonNegativeInt(value.materials?.voidHide),
+    },
+    bagCapacity: [25, 35, 45, 60].includes(value.bagCapacity) ? value.bagCapacity : 25,
     professions,
     selectedProfessionId,
     tracking: isPlainObject(value.tracking) ? value.tracking : null,
@@ -167,6 +175,7 @@ function resetCampInventory(value, now = Date.now()) {
     equipmentInventory: [],
     equipmentLoadout: {},
     minghenDust: 0,
+    materials: { quenchSand: 0, fusionCore: 0, voidHide: 0 },
     activeChallengeId: null,
     updatedAt: now,
   };
