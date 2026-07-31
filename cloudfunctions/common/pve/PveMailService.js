@@ -91,6 +91,8 @@ function buildUserRewardPatch(userDoc, applied, now) {
   const profile = {
     ...normalizeProfile(userDoc.pveProfile, now),
     gold: applied.profile.gold,
+    materials: applied.profile.materials,
+    checkIn: applied.profile.checkIn,
     stamina: applied.stamina,
     staminaUpdatedAt: applied.staminaUpdatedAt,
     staminaNextRecoveryAt: applied.staminaNextRecoveryAt,
@@ -173,21 +175,106 @@ async function claimMailForUser(user, mailId) {
 async function claimAllMailsForUser(user) {
   const { mails } = await listMailsForUser(user.id);
   const pending = mails.filter((mail) => mail.attachments.length > 0 && mail.claimed !== true);
+  if (!user._id) fail('USER_NOT_FOUND', '用户不存在');
+  if (pending.length === 0) {
+    const loaded = await getUserById(user.id);
+    const profile = normalizeProfile(loaded?.pveProfile);
+    return {
+      claimedCount: 0,
+      profile,
+      stamina: Number(loaded?.pveStamina ?? profile.stamina ?? 0),
+    };
+  }
+
+  // 一次事务批量领取，避免 N 次串行事务导致一键领取极慢
+  // 微信事务单次文档数有限，按块处理（仍在同一次云函数调用内完成）
+  const CHUNK = 15;
   let claimedCount = 0;
   let profile = null;
   let stamina = null;
-  for (const mail of pending) {
-    const result = await claimMailForUser(user, mail.id);
-    claimedCount += 1;
+  for (let i = 0; i < pending.length; i += CHUNK) {
+    const chunkIds = pending.slice(i, i + CHUNK).map((mail) => mail.id);
+    const result = await claimMailIdsForUser(user, chunkIds);
+    claimedCount += result.claimedCount;
     profile = result.profile;
     stamina = result.stamina;
   }
-  if (!profile) {
-    const loaded = await getUserById(user.id);
-    profile = normalizeProfile(loaded?.pveProfile);
-    stamina = Number(loaded?.pveStamina ?? profile.stamina ?? 0);
-  }
   return { claimedCount, profile, stamina };
+}
+
+async function claimMailIdsForUser(user, mailIds) {
+  const userId = String(user.id);
+  const ids = (Array.isArray(mailIds) ? mailIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (ids.length === 0) {
+    const loaded = await getUserById(user.id);
+    const profile = normalizeProfile(loaded?.pveProfile);
+    return {
+      claimedCount: 0,
+      profile,
+      stamina: Number(loaded?.pveStamina ?? profile.stamina ?? 0),
+    };
+  }
+
+  return runTransactionWithRetry(async (transaction) => {
+    const userRef = transaction.collection(COLLECTIONS.USERS).doc(user._id);
+    const userResult = await userRef.get();
+    const userDoc = dataOf(userResult);
+    if (!userDoc) fail('USER_NOT_FOUND', '用户不存在');
+
+    const now = nowMs();
+    let applied = {
+      profile: normalizeProfile(userDoc.pveProfile, now),
+      stamina: userDoc.pveStamina ?? userDoc.pveProfile?.stamina ?? 0,
+      staminaUpdatedAt: userDoc.pveStaminaUpdatedAt ?? userDoc.pveProfile?.staminaUpdatedAt,
+      staminaNextRecoveryAt: userDoc.pveProfile?.staminaNextRecoveryAt ?? null,
+    };
+    let claimedCount = 0;
+    let profile = null;
+    let stamina = null;
+    const mailPatches = [];
+
+    for (const id of ids) {
+      const mailRef = transaction.collection(COLLECTIONS.PVE_MAILS).doc(id);
+      const mailResult = await mailRef.get();
+      const mail = dataOf(mailResult);
+      if (!mail || mail.userId !== userId || mail.deleted === true) continue;
+
+      if (!hasUnclaimedAttachments(mail) || mail.claimed === true) {
+        if (mail.claimed !== true || mail.read !== true) {
+          mailPatches.push({
+            mailRef,
+            data: { claimed: true, read: true, updatedAt: now },
+          });
+        }
+        continue;
+      }
+
+      applied = applyMailAttachmentsToUserState(applied, mail.attachments, now);
+      claimedCount += 1;
+      mailPatches.push({
+        mailRef,
+        data: { claimed: true, read: true, updatedAt: now },
+      });
+    }
+
+    if (claimedCount > 0) {
+      const userPatch = buildUserRewardPatch(userDoc, applied, now);
+      await userRef.update({ data: userPatch });
+      profile = userPatch.pveProfile;
+      stamina = applied.stamina;
+    } else {
+      profile = normalizeProfile(userDoc.pveProfile, now);
+      stamina = Number(userDoc.pveStamina ?? profile.stamina ?? 0);
+    }
+
+    for (const patch of mailPatches) {
+      await patch.mailRef.update({ data: patch.data });
+    }
+
+    return { claimedCount, profile, stamina };
+  });
 }
 
 async function deleteMailForUser(userId, mailId) {
