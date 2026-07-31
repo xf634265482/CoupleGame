@@ -53,7 +53,6 @@ export function equippedGridHeight(): number {
  */
 export function minghenContentMetrics(): {
   contentHeight: number;
-  summaryY: number;
   equippedTitleY: number;
   firstRowY: number;
   filterY: number;
@@ -66,9 +65,6 @@ export function minghenContentMetrics(): {
 } {
   const L = CAMP_MINGHEN_LAYOUT;
   let fromTop = L.contentTopPadding;
-  const summaryFromTop = fromTop + 22;
-  fromTop += 54;
-  fromTop += 10;
   const equippedTitleFromTop = fromTop + 12;
   fromTop += 28;
   fromTop += 6;
@@ -99,7 +95,6 @@ export function minghenContentMetrics(): {
 
   return {
     contentHeight,
-    summaryY: toY(summaryFromTop),
     equippedTitleY: toY(equippedTitleFromTop),
     firstRowY: toY(firstRowFromTop),
     filterY: toY(filterFromTop),

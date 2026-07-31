@@ -36,7 +36,6 @@ export const CAMP_EQUIPMENT_LAYOUT = {
 /** Pack from content top — no empty band above summary. */
 export function equipmentContentMetrics(): {
   contentHeight: number;
-  summaryY: number;
   loadoutTitleY: number;
   loadoutY: number;
   filterY: number;
@@ -49,9 +48,6 @@ export function equipmentContentMetrics(): {
 } {
   const L = CAMP_EQUIPMENT_LAYOUT;
   let fromTop = L.contentTopPadding;
-  const summaryFromTop = fromTop + 22;
-  fromTop += 54;
-  fromTop += 8;
   const loadoutTitleFromTop = fromTop + 12;
   fromTop += 28;
   fromTop += 10;
@@ -82,7 +78,6 @@ export function equipmentContentMetrics(): {
 
   return {
     contentHeight,
-    summaryY: toY(summaryFromTop),
     loadoutTitleY: toY(loadoutTitleFromTop),
     loadoutY: toY(loadoutFromTop),
     filterY: toY(filterFromTop),

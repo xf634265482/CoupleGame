@@ -32,7 +32,6 @@ import {
   type CampBagFilter,
 } from './CampSharedBag';
 import { paintMinghenGlyph } from './MinghenGlyphPainter';
-import { MINGHEN_LOADOUT_SLOTS } from '../core/PveConstants';
 import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
@@ -203,12 +202,6 @@ export class CampView {
     content.setPosition(0, (L.viewportHeight - metrics.contentHeight) / 2);
     scroll.content = content;
 
-    const ownedCount = Object.keys(profile.minghenCollection).length;
-    const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
-    const summary = makeLabel(content, 0, metrics.summaryY, 540, 54, 22, TEXT, Label.HorizontalAlign.LEFT);
-    summary.verticalAlign = Label.VerticalAlign.TOP;
-    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    背包 ${bagEntries.length}/${CAMP_BAG_SLOTS}\n星尘：${profile.gold}`;
-
     const equippedTitle = makeLabel(content, 0, metrics.equippedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     equippedTitle.isBold = true;
     equippedTitle.string = '已装配命痕';
@@ -340,10 +333,6 @@ export class CampView {
     content.addComponent(UITransform).setContentSize(L.viewportWidth, metrics.contentHeight);
     content.setPosition(0, (L.viewportHeight - metrics.contentHeight) / 2);
     scroll.content = content;
-
-    const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
-    const summary = makeLabel(content, 0, metrics.summaryY, 540, 28, 18, TEXT, Label.HorizontalAlign.LEFT);
-    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    背包 ${bagEntries.length}/${CAMP_BAG_SLOTS}    星尘：${profile.gold}`;
 
     const loadoutTitle = makeLabel(content, 0, metrics.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     loadoutTitle.isBold = true;

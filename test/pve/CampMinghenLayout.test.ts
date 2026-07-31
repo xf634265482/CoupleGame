@@ -24,7 +24,7 @@ describe('camp Minghen layout geometry', () => {
       expect(card.right).toBeLessThanOrEqual(CAMP_MINGHEN_LAYOUT.viewportWidth / 2);
     }
 
-    expect(metrics.summaryY).toBeGreaterThan(metrics.equippedTitleY);
+    expect(metrics.equippedTitleY).toBeGreaterThan(metrics.filterY);
     expect(metrics.filterY).toBeGreaterThan(metrics.bagTitleY);
     expect(metrics.bagTitleY).toBeGreaterThan(metrics.bagFirstRowY);
     // Title must sit fully above the first bag row (no overlap).
@@ -33,8 +33,8 @@ describe('camp Minghen layout geometry', () => {
     expect(metrics.synthInputY).toBeGreaterThan(metrics.synthButtonY);
     expect(metrics.contentHeight).toBeGreaterThanOrEqual(CAMP_MINGHEN_LAYOUT.viewportHeight);
 
-    // No large empty band above summary inside content.
-    expect(metrics.contentHeight / 2 - metrics.summaryY).toBeLessThan(80);
+    // No large empty band above the first section title.
+    expect(metrics.contentHeight / 2 - metrics.equippedTitleY).toBeLessThan(80);
 
     const leftInput = {
       left: -CAMP_MINGHEN_LAYOUT.synthInputX - CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,
