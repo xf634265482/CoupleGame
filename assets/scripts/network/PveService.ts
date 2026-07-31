@@ -135,3 +135,94 @@ export async function markMailRead(mailId: string): Promise<{ ok: boolean; mail?
     'PVE_MARK_MAIL_READ_FAILED',
   );
 }
+
+export type CheckInReward = {
+  gold?: number;
+  quenchSand?: number;
+  fusionCore?: number;
+  voidHide?: number;
+  makeupCards?: number;
+};
+
+export interface CheckInCalendarDay {
+  day: number;
+  reward: CheckInReward;
+  signed: boolean;
+  canMakeup: boolean;
+}
+
+export interface CheckInMilestoneRow {
+  days: number;
+  reward: CheckInReward;
+  reached: boolean;
+  claimed: boolean;
+}
+
+export interface CheckInState {
+  monthKey: string;
+  today: number;
+  signedDays: number[];
+  claimedMilestones: number[];
+  makeupCards: number;
+  canSignToday: boolean;
+  claimableMilestones: number[];
+  milestones: CheckInMilestoneRow[];
+  calendar: CheckInCalendarDay[];
+}
+
+export interface CheckInResponse extends CloudOk {
+  checkIn: CheckInState;
+  gained?: CheckInReward | null;
+  profile?: {
+    gold?: number;
+    materials?: { quenchSand: number; fusionCore: number; voidHide: number };
+    checkIn?: {
+      monthKey: string;
+      signedDays: number[];
+      claimedMilestones: number[];
+      makeupCards: number;
+    };
+  };
+  redDot?: boolean;
+}
+
+export async function getCheckInState(): Promise<CheckInResponse> {
+  return ensureOk(
+    await callFunction<CheckInResponse>('pve', {
+      action: 'checkIn',
+      request: { action: 'GET_STATE' },
+    }),
+    'PVE_CHECKIN_STATE_FAILED',
+  );
+}
+
+export async function signCheckInToday(): Promise<CheckInResponse> {
+  return ensureOk(
+    await callFunction<CheckInResponse>('pve', {
+      action: 'checkIn',
+      request: { action: 'SIGN_TODAY' },
+    }),
+    'PVE_CHECKIN_SIGN_FAILED',
+  );
+}
+
+export async function makeupCheckIn(day: number): Promise<CheckInResponse> {
+  return ensureOk(
+    await callFunction<CheckInResponse>('pve', {
+      action: 'checkIn',
+      request: { action: 'MAKEUP', day },
+    }),
+    'PVE_CHECKIN_MAKEUP_FAILED',
+  );
+}
+
+export async function claimCheckInMilestone(days: number): Promise<CheckInResponse> {
+  return ensureOk(
+    await callFunction<CheckInResponse>('pve', {
+      action: 'checkIn',
+      request: { action: 'CLAIM_MILESTONE', days },
+    }),
+    'PVE_CHECKIN_MILESTONE_FAILED',
+  );
+}
+

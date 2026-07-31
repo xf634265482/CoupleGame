@@ -30,8 +30,14 @@ import {
   claimAllMails,
   deleteMail,
   markMailRead,
+  getCheckInState,
+  signCheckInToday,
+  makeupCheckIn,
+  claimCheckInMilestone,
   type PveLeaderboardEntry,
   type MailItem,
+  type CheckInReward,
+  type CheckInResponse,
 } from '../network/PveService';
 import {
   loadActiveFloorChallenge,
@@ -40,6 +46,7 @@ import {
 } from '../network/PveProgressionService';
 import { flushPendingFloorSettlement } from '../pve/flushPendingFloorSettlement';
 import { preloadChapter } from '../pve/ChapterResourceLoader';
+import { ensureEquipmentAssetsForFloor } from '../pve/EquipmentResourceLoader';
 import { playMainBgm, stopMainBgm } from '../audio/BgmController';
 import {
   applyScreenBackground,
@@ -55,6 +62,7 @@ import { CampController } from '../pve/controllers/CampController';
 import { PartnerController } from '../pve/controllers/PartnerController';
 import { MinghenShopController } from '../pve/controllers/MinghenShopController';
 import { MailView } from '../pve/views/MailView';
+import { CheckInView } from '../pve/views/CheckInView';
 import { preloadPartnerIconBundle } from '../pve/PartnerIconResourceLoader';
 import {
   applyUiLayerTree,
@@ -70,7 +78,18 @@ import {
 } from '../pve/core/PveConstants';
 import type { PveMeta } from '../pve/core/PveTypes';
 import type { PveProfile } from '../pve/core/PveProgressionTypes';
-import { CHAPTER_SIZE, chapterFloorOf, chapterIdForFloor, MAX_READY_FLOOR } from '../pve/core/chapterRouting';
+import {
+  CHAPTER_SIZE,
+  chapterDisplayName,
+  chapterEndFloor,
+  chapterFloorOf,
+  chapterIdForFloor,
+  chapterStartFloor,
+  MAX_READY_CHAPTER,
+  MAX_READY_FLOOR,
+  maxUnlockedChapter,
+  type ChapterId,
+} from '../pve/core/chapterRouting';
 
 const { ccclass } = _decorator;
 
@@ -100,8 +119,15 @@ export class PveLobbyController extends Component {
   private _staminaLabel: Label | null = null;
   private _staminaTimerLabel: Label | null = null;
   private _mailBadgeLabel: Label | null = null;
+  private _mailBadgeHost: Node | null = null;
   private _mailView: MailView | null = null;
   private _mailBusy = false;
+  private _mailActionBusy = false;
+  private _mailCache: MailItem[] = [];
+  private _checkInBadgeHost: Node | null = null;
+  private _checkInView: CheckInView | null = null;
+  private _checkInBusy = false;
+  private _checkInActionBusy = false;
   private _metaFloorLabel: Label | null = null;
   private _metaRankLabel: Label | null = null;
   private _metaFloor = 0;
@@ -259,7 +285,8 @@ export class PveLobbyController extends Component {
       void this._applyRemoteAvatar(GameSession.user.avatarUrl);
     }
 
-    this._buildMailEntry(root, y - CARD_H / 2 - 42);
+    this._buildMailEntry(root, y - CARD_H / 2 - 48, -226, CARD_W);
+    this._buildCheckInEntry(root, y - CARD_H / 2 - 48, -226, CARD_W);
 
     const assetStrip = new Node('TopAssetStrip');
     assetStrip.setParent(root);
@@ -281,33 +308,179 @@ export class PveLobbyController extends Component {
     }
   }
 
-  private _buildMailEntry(root: Node, y: number): void {
+  private _buildMailEntry(root: Node, y: number, playerCardX: number, playerCardW: number): void {
+    const MAIL_W = 120;
+    const MAIL_H = 68;
+    const playerLeft = playerCardX - playerCardW / 2;
+    const entryX = playerLeft + MAIL_W / 2;
     const entry = new Node('MailEntry');
     entry.setParent(root);
-    entry.setPosition(-226, y, 0);
-    entry.addComponent(UITransform).setContentSize(160, 52);
+    entry.setPosition(entryX, y, 0);
+    entry.addComponent(UITransform).setContentSize(MAIL_W, MAIL_H);
     this._drawRoundedRect(
       entry,
-      160,
-      52,
-      14,
+      MAIL_W,
+      MAIL_H,
+      16,
       new Color(10, 38, 78, 170),
       new Color(120, 205, 255, 210),
     );
-    const label = this._makeLabel(entry, 'MailLabel', 0, 22, 120, 36);
+    const icon = new Node('MailIcon');
+    icon.setParent(entry);
+    icon.setPosition(-MAIL_W / 2 + 24, 1, 0);
+    icon.addComponent(UITransform).setContentSize(40, 40);
+    this._navIconKeys.set(icon, 'pve/lobby/icon_mail');
+    const label = this._makeLabel(entry, 'MailLabel', 0, 26, 64, 36);
+    label.node.setPosition(14, 0, 0);
     label.string = '邮箱';
     label.isBold = true;
-    this._mailBadgeLabel = this._makeLabel(entry, 'MailBadge', 14, 16, 40, 24);
-    this._mailBadgeLabel.node.setPosition(58, 14, 0);
+    const badgeHost = new Node('MailBadgeHost');
+    badgeHost.setParent(entry);
+    badgeHost.setPosition(MAIL_W / 2 - 4, MAIL_H / 2 - 6, 0);
+    badgeHost.addComponent(UITransform).setContentSize(36, 36);
+    badgeHost.active = false;
+    this._mailBadgeHost = badgeHost;
+    const badgeBg = badgeHost.addComponent(Graphics);
+    badgeBg.fillColor = new Color(230, 48, 48, 255);
+    badgeBg.circle(0, 0, 16);
+    badgeBg.fill();
+    badgeBg.strokeColor = new Color(255, 255, 255, 230);
+    badgeBg.lineWidth = 2;
+    badgeBg.circle(0, 0, 16);
+    badgeBg.stroke();
+    this._mailBadgeLabel = this._makeLabel(badgeHost, 'MailBadge', 0, 22, 36, 36);
+    this._mailBadgeLabel.node.setPosition(0, 0, 0);
     this._mailBadgeLabel.string = '';
-    this._mailBadgeLabel.color = new Color(255, 90, 90, 255);
+    this._mailBadgeLabel.color = new Color(255, 255, 255, 255);
     this._mailBadgeLabel.isBold = true;
+    this._mailBadgeLabel.enableOutline = true;
+    this._mailBadgeLabel.outlineColor = new Color(120, 16, 16, 255);
+    this._mailBadgeLabel.outlineWidth = 2;
     this._bindButton(entry, () => void this._showMailBox());
+  }
+
+  private _buildCheckInEntry(root: Node, y: number, playerCardX: number, playerCardW: number): void {
+    const MAIL_W = 120;
+    const MAIL_H = 68;
+    const GAP = 12;
+    const playerLeft = playerCardX - playerCardW / 2;
+    const entryX = playerLeft + MAIL_W / 2 + MAIL_W + GAP;
+    const entry = new Node('CheckInEntry');
+    entry.setParent(root);
+    entry.setPosition(entryX, y, 0);
+    entry.addComponent(UITransform).setContentSize(MAIL_W, MAIL_H);
+    this._drawRoundedRect(
+      entry,
+      MAIL_W,
+      MAIL_H,
+      16,
+      new Color(10, 38, 78, 170),
+      new Color(255, 200, 120, 210),
+    );
+    const label = this._makeLabel(entry, 'CheckInLabel', 0, 26, 100, 36);
+    label.node.setPosition(0, 0, 0);
+    label.string = '签到';
+    label.isBold = true;
+    const badgeHost = new Node('CheckInBadgeHost');
+    badgeHost.setParent(entry);
+    badgeHost.setPosition(MAIL_W / 2 - 4, MAIL_H / 2 - 6, 0);
+    badgeHost.addComponent(UITransform).setContentSize(28, 28);
+    badgeHost.active = false;
+    this._checkInBadgeHost = badgeHost;
+    const badgeBg = badgeHost.addComponent(Graphics);
+    badgeBg.fillColor = new Color(230, 48, 48, 255);
+    badgeBg.circle(0, 0, 10);
+    badgeBg.fill();
+    badgeBg.strokeColor = new Color(255, 255, 255, 230);
+    badgeBg.lineWidth = 2;
+    badgeBg.circle(0, 0, 10);
+    badgeBg.stroke();
+    this._bindButton(entry, () => void this._showCheckIn());
+  }
+
+  private _setCheckInBadge(show: boolean): void {
+    if (this._checkInBadgeHost) this._checkInBadgeHost.active = show;
+  }
+
+  private async _refreshCheckInBadge(): Promise<void> {
+    try {
+      const res = await getCheckInState();
+      this._setCheckInBadge(Boolean(res.redDot));
+    } catch {
+      // 签到红点失败不阻断大厅
+    }
+  }
+
+  private _formatCheckInGain(gained?: CheckInReward | null): string {
+    if (!gained) return '';
+    const parts: string[] = [];
+    if (gained.gold) parts.push(`星尘×${gained.gold}`);
+    if (gained.quenchSand) parts.push(`淬星砂×${gained.quenchSand}`);
+    if (gained.fusionCore) parts.push(`聚星核×${gained.fusionCore}`);
+    if (gained.voidHide) parts.push(`虚空革×${gained.voidHide}`);
+    if (gained.makeupCards) parts.push(`补签卡×${gained.makeupCards}`);
+    return parts.join(' · ');
+  }
+
+  private _applyCheckInResponse(res: CheckInResponse): void {
+    this._checkInView?.setState(res.checkIn);
+    this._setCheckInBadge(Boolean(res.redDot));
+    if (typeof res.profile?.gold === 'number') this._applyStardust(res.profile.gold);
+    const tip = this._formatCheckInGain(res.gained);
+    if (tip) this._setStatus(`签到获得：${tip}`);
+  }
+
+  private async _showCheckIn(): Promise<void> {
+    if (this._checkInBusy) return;
+    this._checkInBusy = true;
+    try {
+      if (this._checkInView) {
+        this._checkInView.destroy();
+        this._checkInView = null;
+      }
+      this._checkInView = new CheckInView(this.node, {
+        onClose: () => {
+          this._checkInView?.destroy();
+          this._checkInView = null;
+          void this._refreshCheckInBadge();
+        },
+        onSign: () => {
+          void this._runCheckInAction(() => signCheckInToday());
+        },
+        onMakeup: (day) => {
+          void this._runCheckInAction(() => makeupCheckIn(day));
+        },
+        onClaimMilestone: (days) => {
+          void this._runCheckInAction(() => claimCheckInMilestone(days));
+        },
+      });
+      const res = await getCheckInState();
+      this._applyCheckInResponse(res);
+    } catch (err) {
+      this._setStatus(`签到打开失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._checkInBusy = false;
+    }
+  }
+
+  private async _runCheckInAction(fn: () => Promise<CheckInResponse>): Promise<void> {
+    if (this._checkInActionBusy) return;
+    this._checkInActionBusy = true;
+    try {
+      const res = await fn();
+      this._applyCheckInResponse(res);
+    } catch (err) {
+      this._setStatus(`签到失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._checkInActionBusy = false;
+    }
   }
 
   private _setMailBadge(count: number): void {
     if (!this._mailBadgeLabel) return;
-    this._mailBadgeLabel.string = count > 0 ? (count > 99 ? '99+' : String(count)) : '';
+    const show = count > 0;
+    if (this._mailBadgeHost) this._mailBadgeHost.active = show;
+    this._mailBadgeLabel.string = show ? (count > 99 ? '99+' : String(count)) : '';
   }
 
   private async _refreshMailBadge(): Promise<void> {
@@ -323,8 +496,6 @@ export class PveLobbyController extends Component {
     if (this._mailBusy) return;
     this._mailBusy = true;
     try {
-      const res = await listMails();
-      this._setMailBadge(res.unreadCount || 0);
       if (this._mailView) {
         this._mailView.destroy();
         this._mailView = null;
@@ -336,7 +507,7 @@ export class PveLobbyController extends Component {
           void this._refreshMailBadge();
         },
         onOpen: (mailId) => {
-          void markMailRead(mailId).then(() => this._reloadMailView()).catch(() => undefined);
+          void this._markOneMailRead(mailId);
         },
         onClaim: (mailId) => {
           void this._claimOneMail(mailId);
@@ -348,7 +519,13 @@ export class PveLobbyController extends Component {
           void this._deleteOneMail(mailId);
         },
       });
-      this._mailView.setMails(res.mails || []);
+      // 有缓存时先立刻展示，再后台拉最新列表
+      if (this._mailCache.length > 0) {
+        this._syncMailViewFromCache();
+      }
+      const res = await listMails();
+      this._mailCache = res.mails || [];
+      this._syncMailViewFromCache();
     } catch (err) {
       this._setStatus(`邮箱打开失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -356,10 +533,36 @@ export class PveLobbyController extends Component {
     }
   }
 
-  private async _reloadMailView(): Promise<void> {
-    const res = await listMails();
-    this._setMailBadge(res.unreadCount || 0);
-    this._mailView?.setMails(res.mails || []);
+  private _cloneMailCache(): MailItem[] {
+    return this._mailCache.map((mail) => ({
+      ...mail,
+      attachments: mail.attachments.map((item) => ({ ...item })),
+    }));
+  }
+
+  private _syncMailViewFromCache(): void {
+    const unread = this._mailCache.reduce((n, mail) => n + (mail.unread ? 1 : 0), 0);
+    this._mailView?.setMails(this._mailCache);
+    this._setMailBadge(unread);
+  }
+
+  private _patchMailInCache(mailId: string, patch: Partial<MailItem>): void {
+    this._mailCache = this._mailCache.map((mail) => (
+      mail.id === mailId ? { ...mail, ...patch } : mail
+    ));
+  }
+
+  private async _markOneMailRead(mailId: string): Promise<void> {
+    const target = this._mailCache.find((mail) => mail.id === mailId);
+    if (!target || !target.unread) return;
+    this._patchMailInCache(mailId, { read: true, unread: false });
+    this._syncMailViewFromCache();
+    try {
+      await markMailRead(mailId);
+    } catch {
+      this._patchMailInCache(mailId, { read: false, unread: true });
+      this._syncMailViewFromCache();
+    }
   }
 
   private _applyMailReward(res: { profile?: { gold?: number; stamina?: number; staminaNextRecoveryAt?: number | null }; stamina?: number }): void {
@@ -375,34 +578,85 @@ export class PveLobbyController extends Component {
   }
 
   private async _claimOneMail(mailId: string): Promise<void> {
+    if (this._mailActionBusy) return;
+    const target = this._mailCache.find((mail) => mail.id === mailId);
+    if (!target || target.claimed) return;
+    this._mailActionBusy = true;
+    const prev = this._cloneMailCache();
+    this._patchMailInCache(mailId, { claimed: true, read: true, unread: false });
+    this._syncMailViewFromCache();
     try {
       const res = await claimMail(mailId);
       this._applyMailReward(res);
-      await this._reloadMailView();
+      if (res.mail) {
+        this._patchMailInCache(mailId, { ...res.mail, unread: false });
+        this._syncMailViewFromCache();
+      }
       this._setStatus('已领取邮件奖励');
     } catch (err) {
+      this._mailCache = prev;
+      this._syncMailViewFromCache();
       this._setStatus(`领取失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._mailActionBusy = false;
     }
   }
 
   private async _claimAllMail(): Promise<void> {
+    if (this._mailActionBusy) return;
+    const pending = this._mailCache.filter((mail) => !mail.claimed && mail.attachments.length > 0);
+    if (pending.length <= 0) {
+      this._setStatus('没有可领取的邮件');
+      return;
+    }
+    this._mailActionBusy = true;
+    const prev = this._cloneMailCache();
+    this._mailCache = this._mailCache.map((mail) => (
+      !mail.claimed && mail.attachments.length > 0
+        ? { ...mail, claimed: true, read: true, unread: false }
+        : mail
+    ));
+    this._syncMailViewFromCache();
     try {
       const res = await claimAllMails();
       this._applyMailReward(res);
-      await this._reloadMailView();
       this._setStatus(res.claimedCount ? `已领取 ${res.claimedCount} 封` : '没有可领取的邮件');
+      void this._refreshMailCacheSilent();
     } catch (err) {
+      this._mailCache = prev;
+      this._syncMailViewFromCache();
       this._setStatus(`一键领取失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._mailActionBusy = false;
     }
   }
 
   private async _deleteOneMail(mailId: string): Promise<void> {
+    if (this._mailActionBusy) return;
+    if (!this._mailCache.some((mail) => mail.id === mailId)) return;
+    this._mailActionBusy = true;
+    const prev = this._cloneMailCache();
+    this._mailCache = this._mailCache.filter((mail) => mail.id !== mailId);
+    this._syncMailViewFromCache();
     try {
       await deleteMail(mailId);
-      await this._reloadMailView();
       this._setStatus('邮件已删除');
     } catch (err) {
+      this._mailCache = prev;
+      this._syncMailViewFromCache();
       this._setStatus(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this._mailActionBusy = false;
+    }
+  }
+
+  private async _refreshMailCacheSilent(): Promise<void> {
+    try {
+      const res = await listMails();
+      this._mailCache = res.mails || [];
+      this._syncMailViewFromCache();
+    } catch {
+      // 静默对齐失败不影响已完成的乐观 UI
     }
   }
   private _buildSideShopEntry(root: Node): void {
@@ -519,7 +773,10 @@ export class PveLobbyController extends Component {
       for (const [iconNode, key] of this._navIconKeys) {
         const frame = getCachedSprite(key);
         if (!frame || !iconNode.isValid) continue;
-        const size = key === 'pve/lobby/icon_nav_expedition' ? 82 : 76;
+        const size =
+          key === 'pve/lobby/icon_nav_expedition' ? 82
+            : key === 'pve/lobby/icon_mail' ? 40
+              : 76;
         ensureArtChild(iconNode, 'IconArt', frame, size, size);
       }
       this._applyTopAssetBadgeIcons();
@@ -595,7 +852,7 @@ export class PveLobbyController extends Component {
       void flushPendingFloorSettlement().catch((err: unknown) => {
         console.warn('[PveLobby] pending settlement flush failed', err);
       });
-      // 档案/进行中挑战不依赖 resources 分包，尽早拉，点「远征」时可瞬时出选层。
+      // 档案/进行中挑战不依赖 resources 分包，尽早拉：营地/商会/远征选层可瞬时打开。
       const dataP = Promise.all([
         loadPveProfile()
           .then((res) => {
@@ -605,6 +862,10 @@ export class PveLobbyController extends Component {
             this._hasActiveChallenge = Boolean(
               this._warmedActive?.challenge ?? res.profile.activeChallengeId,
             );
+            // 装备图与远征场景同阶段后台预热，不挡进厅。
+            void ensureEquipmentAssetsForFloor(res.profile.highestUnlockedFloor).catch((err: unknown) => {
+              console.warn('[PveLobby] equipment icon warm failed', err);
+            });
           })
           .catch((err: unknown) => {
             console.warn('[PveLobby] camp profile warm failed', err);
@@ -620,12 +881,12 @@ export class PveLobbyController extends Component {
             console.warn('[PveLobby] active challenge warm failed', err);
           }),
       ]);
-      const bundle = await ensureResourcesBundle();
-      if (!bundle) {
-        throw new Error('resources bundle not ready');
-      }
-      void playMainBgm(bundle);
-      await Promise.all([preloadPveCampUi(), dataP]);
+      const bundleP = ensureResourcesBundle().then((bundle) => {
+        if (!bundle) throw new Error('resources bundle not ready');
+        void playMainBgm(bundle);
+        return bundle;
+      });
+      await Promise.all([preloadPveCampUi(), dataP, bundleP]);
       void SceneLoader.preloadPveExpedition().catch((err: unknown) => {
         console.warn('[PveLobby] expedition scene preload failed', err);
       });
@@ -633,6 +894,24 @@ export class PveLobbyController extends Component {
       this._warmPromise = null;
       console.warn('[PveLobby] background warm failed', err);
     });
+  }
+
+  /** 营地/商会/伙伴：只等档案，不挡 resources 分包。 */
+  private async _ensureWarmedProfile(statusText: string): Promise<PveProfile | null> {
+    if (this._warmedProfile) return this._warmedProfile;
+    this._setStatus(statusText);
+    try {
+      await this._refreshExpeditionEntryCache();
+    } catch (err: unknown) {
+      this._setStatus(`${statusText.replace(/…$/, '')}失败：${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+    if (!this._warmedProfile) {
+      this._setStatus(`${statusText.replace(/…$/, '')}失败：未获取到档案`);
+      return null;
+    }
+    this._setStatus('');
+    return this._warmedProfile;
   }
 
   private async _ensureWarmReady(text: string): Promise<boolean> {
@@ -696,6 +975,7 @@ export class PveLobbyController extends Component {
           : `挑战第 ${profileRes.profile.highestUnlockedFloor} 层`;
       }
       void this._refreshMailBadge();
+      void this._refreshCheckInBadge();
     } catch (err: unknown) {
       this._setStatus(`大厅数据加载失败：${err instanceof Error ? err.message : String(err)}`);
     }
@@ -819,11 +1099,14 @@ export class PveLobbyController extends Component {
     const tip = this._makeLabel(panel, 'Tip', -120, 20, 540, 72);
     tip.color = new Color(210, 235, 255, 218);
 
-    const chapterTwoUnlocked = (profile.highestUnlockedFloor || 1) > CHAPTER_SIZE;
-    let currentChapter: 1 | 2 = activeFloor
+    const maxUnlockedFloor = Math.max(1, Math.min(MAX_READY_FLOOR, profile.highestUnlockedFloor || 1));
+    const latestChapter = maxUnlockedChapter(maxUnlockedFloor);
+    // 无进行中挑战时默认打开「最新解锁章节」；有续玩进度则落在该层所在章。
+    let currentChapter: ChapterId = activeFloor
       ? chapterIdForFloor(activeFloor)
-      : (chapterTwoUnlocked ? 2 : 1);
-    // 打开选层时就开始预热当前章分包（续玩第12层 = 第2章），缩短切场景后的等待。
+      : latestChapter;
+    if (currentChapter > latestChapter) currentChapter = latestChapter;
+    // 打开选层时就开始预热当前章分包，缩短切场景后的等待。
     preloadChapter(currentChapter);
 
     const paintChapterArrow = (node: Node, label: Label, enabled: boolean): void => {
@@ -849,12 +1132,12 @@ export class PveLobbyController extends Component {
     });
     this._bindButton(prevChapterBtn, () => {
       if (currentChapter <= 1) return;
-      currentChapter = 1;
+      currentChapter = (currentChapter - 1) as ChapterId;
       renderChapter();
     });
     this._bindButton(nextChapterBtn, () => {
-      if (currentChapter >= 2 || !chapterTwoUnlocked) return;
-      currentChapter = 2;
+      if (currentChapter >= latestChapter || currentChapter >= MAX_READY_CHAPTER) return;
+      currentChapter = (currentChapter + 1) as ChapterId;
       renderChapter();
     });
 
@@ -862,22 +1145,34 @@ export class PveLobbyController extends Component {
       floorGrid.destroyAllChildren();
       preloadChapter(currentChapter);
 
-      const maxUnlockedFloor = Math.max(1, Math.min(MAX_READY_FLOOR, profile.highestUnlockedFloor || 1));
-      const chapterStart = currentChapter === 1 ? 1 : CHAPTER_SIZE + 1;
-      const chapterEnd = Math.min(chapterStart + CHAPTER_SIZE - 1, MAX_READY_FLOOR);
-      const highestUnlockedChapterFloor = Math.max(1, chapterFloorOf(maxUnlockedFloor));
+      const chapterStart = chapterStartFloor(currentChapter);
+      const chapterEnd = chapterEndFloor(currentChapter);
+      const unlockedInView = maxUnlockedFloor < chapterStart
+        ? 0
+        : maxUnlockedFloor >= chapterEnd
+          ? CHAPTER_SIZE
+          : chapterFloorOf(maxUnlockedFloor);
+      const latestChapterFloor = chapterFloorOf(maxUnlockedFloor);
 
-      chapterTitle.string = currentChapter === 1 ? '第一章' : '第二章';
+      chapterTitle.string = chapterDisplayName(currentChapter);
       subtitle.string = activeFloor
         ? `当前有第 ${activeFloor} 层挑战进度；选择其他楼层会放弃该进度`
-        : currentChapter === 1
-          ? `已解锁到第一章第 ${Math.min(CHAPTER_SIZE, highestUnlockedChapterFloor)} 层`
-          : `已解锁到第二章第 ${highestUnlockedChapterFloor} 层`;
-      tip.string = currentChapter === 1
-        ? '第一章共 7 层；完成第一章后解锁第二章。'
-        : '第二章共 7 层；未开放的新章节暂不可进入。';
+        : `已解锁到${chapterDisplayName(latestChapter)}第 ${latestChapterFloor} 层`;
+      if (currentChapter >= MAX_READY_CHAPTER) {
+        tip.string = `${chapterDisplayName(currentChapter)}共 ${CHAPTER_SIZE} 层；已是当前全部远征内容。`;
+      } else if (currentChapter < latestChapter) {
+        tip.string = `${chapterDisplayName(currentChapter)}共 ${CHAPTER_SIZE} 层；可翻页查看更新章节。`;
+      } else if (unlockedInView >= CHAPTER_SIZE && latestChapter < MAX_READY_CHAPTER) {
+        tip.string = `${chapterDisplayName(currentChapter)}共 ${CHAPTER_SIZE} 层；通关本章后解锁下一章。`;
+      } else {
+        tip.string = `${chapterDisplayName(currentChapter)}共 ${CHAPTER_SIZE} 层；未解锁楼层暂不可进入。`;
+      }
       paintChapterArrow(prevChapterBtn, prevChapterLabel, currentChapter > 1);
-      paintChapterArrow(nextChapterBtn, nextChapterLabel, currentChapter < 2 && chapterTwoUnlocked);
+      paintChapterArrow(
+        nextChapterBtn,
+        nextChapterLabel,
+        currentChapter < latestChapter && currentChapter < MAX_READY_CHAPTER,
+      );
 
       const cols = 4;
       const btnW = 126;
@@ -907,7 +1202,6 @@ export class PveLobbyController extends Component {
       }
     };
 
-    if (currentChapter === 2 && !chapterTwoUnlocked) currentChapter = 1;
     renderChapter();
 
     this._makeTransparentButton(panel, '取消', 0, -310, 180, 58, () => this._closeFloorSelectModal());
@@ -1032,10 +1326,11 @@ export class PveLobbyController extends Component {
     if (this._busy) return;
     this._busy = true;
     try {
-      const ok = await this._ensureWarmReady('正在加载营地资源…');
-      if (!ok) return;
+      const profile = await this._ensureWarmedProfile('正在读取营地…');
+      if (!profile) return;
+      void this._warmLobbyBackground();
       const controller = this.node.getComponent(CampController) ?? this.node.addComponent(CampController);
-      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, profile);
     } finally {
       this._busy = false;
     }
@@ -1045,10 +1340,11 @@ export class PveLobbyController extends Component {
     if (this._busy) return;
     this._busy = true;
     try {
-      const ok = await this._ensureWarmReady('正在加载伙伴…');
-      if (!ok) return;
+      const profile = await this._ensureWarmedProfile('正在读取伙伴…');
+      if (!profile) return;
+      void this._warmLobbyBackground();
       const controller = this.node.getComponent(PartnerController) ?? this.node.addComponent(PartnerController);
-      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, profile);
     } finally {
       this._busy = false;
     }
@@ -1058,11 +1354,12 @@ export class PveLobbyController extends Component {
     if (this._busy) return;
     this._busy = true;
     try {
-      const ok = await this._ensureWarmReady('正在打开今日商会…');
-      if (!ok) return;
+      const profile = await this._ensureWarmedProfile('正在打开今日商会…');
+      if (!profile) return;
+      void this._warmLobbyBackground();
       const controller = this.node.getComponent(MinghenShopController)
         ?? this.node.addComponent(MinghenShopController);
-      controller.open(this.node, () => { void this._refreshLobbyData(); }, this._warmedProfile);
+      controller.open(this.node, () => { void this._refreshLobbyData(); }, profile);
     } finally {
       this._busy = false;
     }
@@ -1567,7 +1864,7 @@ export class PveLobbyController extends Component {
     const strip = root.getChildByName('TopAssetStrip');
     if (!strip) return;
     const iconMap: Record<string, { key: string; size: number }> = {
-      Diamond: { key: 'pve/lobby/icon_chip_stardust', size: 44 },
+      StardustChip: { key: 'pve/lobby/icon_chip_stardust', size: 44 },
       StaminaChip: { key: 'pve/lobby/icon_chip_stamina', size: 42 },
     };
     for (const [name, config] of Object.entries(iconMap)) {
