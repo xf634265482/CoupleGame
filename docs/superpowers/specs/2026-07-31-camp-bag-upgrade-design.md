@@ -1,7 +1,7 @@
 # 营地背包扩容（虚空革）
 
 日期：2026-07-31  
-状态：已确认；待写实现计划  
+状态：已确认；实现计划见 `docs/superpowers/plans/2026-07-31-camp-bag-upgrade.md`  
 关联：`CampView` 共用背包、`PveCamp`、`PveProfile`、`2026-07-31-camp-materials-v1-design.md`、`2026-07-31-camp-ui-glyph-inventory-design.md`  
 主文档同步：实现时更新 `specs/260608-pve-destiny-expedition/design.md`
 
