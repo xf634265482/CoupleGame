@@ -253,15 +253,15 @@ export class CampView {
 
     const resultY = metrics.synthResultY;
     const inputY = metrics.synthInputY;
-    this._minghenGlyphSlot(parent, 0, resultY, L.synthSlotSize, null, () => undefined, true, true);
+    this._minghenGlyphSlot(parent, 0, resultY, L.synthSlotSize, null, () => undefined, true, true, 'SYNTH');
     this._minghenGlyphSlot(parent, metrics.synthInputLeftX, inputY, L.synthSlotSize, left, () => {
       this._synthSlots[0] = null;
       this.showSection('MINGHEN');
-    }, !left);
+    }, !left, false, 'SYNTH');
     this._minghenGlyphSlot(parent, metrics.synthInputRightX, inputY, L.synthSlotSize, right, () => {
       this._synthSlots[1] = null;
       this.showSection('MINGHEN');
-    }, !right);
+    }, !right, false, 'SYNTH');
 
     const hint = makeLabel(parent, 0, metrics.synthButtonY - L.synthButtonHeight / 2 - 18, 280, 24, 16, DIM, Label.HorizontalAlign.CENTER);
     hint.string = canSynth && sameId ? `${getMinghenDefinition(sameId).name} II` : (left || right ? '需同名 I×2' : '');
@@ -446,8 +446,8 @@ export class CampView {
       size,
       size,
       onClick,
-      new Color(13, 47, 92, 210),
-      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : BORDER },
+      new Color(48, 28, 14, 255),
+      { noArt: true, border: dashed ? new Color(255, 200, 110, 220) : new Color(210, 150, 70, 230) },
     );
     const label = card.getChildByName('Label')?.getComponent(Label);
     if (item) {
@@ -919,7 +919,14 @@ export class CampView {
     onClick: () => void,
     empty: boolean,
     dashed = false,
+    tone: 'BAG' | 'SYNTH' = 'BAG',
   ): void {
+    const fill = tone === 'SYNTH'
+      ? (empty ? new Color(10, 26, 52, 255) : new Color(12, 36, 68, 255))
+      : (empty ? new Color(33, 53, 77, 150) : new Color(25, 75, 110, 205));
+    const border = tone === 'SYNTH'
+      ? (dashed ? new Color(180, 240, 255, 220) : (empty ? new Color(120, 200, 240, 210) : new Color(160, 230, 255, 230)))
+      : (dashed ? new Color(255, 214, 110, 140) : (empty ? new Color(90, 125, 155) : BORDER));
     const card = makeFlatButton(
       parent,
       '',
@@ -928,8 +935,8 @@ export class CampView {
       size,
       size,
       onClick,
-      empty ? new Color(33, 53, 77, 150) : new Color(25, 75, 110, 205),
-      { noArt: true, border: dashed ? new Color(255, 214, 110, 140) : (empty ? new Color(90, 125, 155) : BORDER) },
+      fill,
+      { noArt: true, border },
     );
     const button = card.getComponent(Button);
     if (button) button.interactable = !empty;
