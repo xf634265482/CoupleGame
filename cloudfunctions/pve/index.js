@@ -20,6 +20,7 @@ const {
   deleteMailForUser,
   markMailReadForUser,
 } = require('./common/pve/PveMailService');
+const { handleCheckInAction } = require('./common/pve/PveCheckIn');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -111,6 +112,15 @@ exports.main = async (event = {}) => {
 
     if (action === 'markMailRead') {
       const result = await markMailReadForUser(user.id, event.mailId || event.request?.mailId);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'checkIn') {
+      const result = await handleCheckInAction(user, event.request || {
+        action: event.checkInAction,
+        day: event.day,
+        days: event.days,
+      });
       return { ok: true, ...result };
     }
 

@@ -93,6 +93,13 @@ export interface MinghenDailyShopState {
   adRefreshUsed: number;
 }
 
+export interface PveCheckInState {
+  monthKey: string;
+  signedDays: number[];
+  claimedMilestones: number[];
+  makeupCards: number;
+}
+
 export interface PveProfile {
   version: typeof PVE_PROFILE_VERSION;
   highestUnlockedFloor: number;
@@ -131,6 +138,8 @@ export interface PveProfile {
   staminaUpdatedAt?: number;
   staminaNextRecoveryAt?: number | null;
   tutorialFreeChallengeConsumed?: boolean;
+  /** 大厅月签到状态；缺省由云端 normalize 补全。 */
+  checkIn?: PveCheckInState;
   updatedAt: number;
 }
 

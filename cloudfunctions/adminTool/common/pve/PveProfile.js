@@ -1,5 +1,6 @@
 const { resolveStamina } = require('./PveStamina');
 const { createDefaultPartnersMap, normalizePartnersMap } = require('./PvePartner');
+const { normalizeCheckIn } = require('./PveCheckIn');
 
 const PROFILE_VERSION = 1;
 const MAX_READY_FLOOR = 35;
@@ -51,6 +52,7 @@ function createDefaultProfile(now = Date.now()) {
     staminaUpdatedAt: stamina.updatedAt,
     staminaNextRecoveryAt: stamina.nextRecoveryAt,
     tutorialFreeChallengeConsumed: false,
+    checkIn: normalizeCheckIn(null, now),
     updatedAt: now,
   };
 }
@@ -154,6 +156,7 @@ function normalizeProfile(value, now = Date.now()) {
     tutorialFreeChallengeConsumed:
       value.tutorialFreeChallengeConsumed === true
       || defaults.tutorialFreeChallengeConsumed,
+    checkIn: normalizeCheckIn(value.checkIn, now),
     updatedAt: nonNegativeInt(value.updatedAt, now),
   };
 }
