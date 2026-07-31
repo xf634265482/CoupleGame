@@ -17,10 +17,19 @@ const BORDER = new Color(255, 214, 110, 210);
 const PANEL_W = 640;
 const PANEL_H = 900;
 
+const ATTACH_LABELS: Record<string, string> = {
+  stardust: '星尘',
+  stamina: '体力',
+  quenchSand: '淬星砂',
+  fusionCore: '聚星核',
+  voidHide: '虚空革',
+  makeupCards: '补签卡',
+};
+
 function attachmentSummary(mail: MailItem): string {
   if (!mail.attachments.length) return '通知';
   return mail.attachments
-    .map((item) => (item.type === 'stardust' ? `星尘×${item.amount}` : `体力×${item.amount}`))
+    .map((item) => `${ATTACH_LABELS[item.type] || item.type}×${item.amount}`)
     .join(' · ');
 }
 

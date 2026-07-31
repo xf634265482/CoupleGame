@@ -323,6 +323,15 @@ const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
   makeupCards: '补签卡',
 };
 
+const MAIL_ATTACHMENT_LABELS: Record<Exclude<MailAttachmentType, 'none'>, string> = {
+  stardust: '星尘',
+  stamina: '体力',
+  quenchSand: '淬星砂',
+  fusionCore: '聚星核',
+  voidHide: '虚空革',
+  makeupCards: '补签卡',
+};
+
 const CLASS_LABELS: Record<string, string> = {
   ADVENTURER: '冒险者',
   BERSERKER: '狂战士',
@@ -984,6 +993,10 @@ function renderDashboard(): void {
                   <option value="none" ${mailForm.attachmentType === 'none' ? 'selected' : ''}>纯通知</option>
                   <option value="stardust" ${mailForm.attachmentType === 'stardust' ? 'selected' : ''}>星尘</option>
                   <option value="stamina" ${mailForm.attachmentType === 'stamina' ? 'selected' : ''}>体力</option>
+                  <option value="quenchSand" ${mailForm.attachmentType === 'quenchSand' ? 'selected' : ''}>淬星砂</option>
+                  <option value="fusionCore" ${mailForm.attachmentType === 'fusionCore' ? 'selected' : ''}>聚星核</option>
+                  <option value="voidHide" ${mailForm.attachmentType === 'voidHide' ? 'selected' : ''}>虚空革</option>
+                  <option value="makeupCards" ${mailForm.attachmentType === 'makeupCards' ? 'selected' : ''}>补签卡</option>
                 </select>
               </div>
               <div>
@@ -1002,7 +1015,7 @@ function renderDashboard(): void {
             <div class="button-row">
               <button id="sendMailBtn" ${mailForm.broadcast || currentPlayer ? '' : 'disabled'}>发送邮件</button>
             </div>
-            <p class="muted">星尘附件入账到玩家档案星尘；未领取的附件邮件玩家无法删除。</p>
+            <p class="muted">附件领取后入账对应档案字段；未领取的附件邮件玩家无法删除。</p>
           </div>
           <div class="panel" style="margin-top:16px;">
             <h2>重置操作</h2>
@@ -1205,11 +1218,14 @@ function bindDashboardEvents(): void {
     if (!mailForm.title.trim()) return setFeedback('请填写邮件标题', 'error');
     if (!mailForm.body.trim()) return setFeedback('请填写邮件正文', 'error');
     if (!mailForm.reason.trim()) return setFeedback('请填写发信原因', 'error');
-    const attachments: Array<{ type: 'stardust' | 'stamina'; amount: number }> = [];
+    const attachments: Array<{ type: Exclude<MailAttachmentType, 'none'>; amount: number }> = [];
     if (mailForm.attachmentType !== 'none') {
       const amount = Number(mailForm.attachmentAmount.trim());
       if (!mailForm.attachmentAmount.trim() || !Number.isInteger(amount) || amount <= 0) {
         return setFeedback('附件数量必须是正整数', 'error');
+      }
+      if (mailForm.attachmentType === 'makeupCards' && amount > 999) {
+        return setFeedback('补签卡单次附件数量不能超过 999', 'error');
       }
       attachments.push({ type: mailForm.attachmentType, amount });
     }
@@ -1217,7 +1233,7 @@ function bindDashboardEvents(): void {
       ? '全服玩家'
       : `${currentPlayer!.nickname}（${currentPlayer!.userId}）`;
     const attachLabel = attachments.length
-      ? attachments.map((item) => `${RESOURCE_TYPE_LABELS[item.type]}×${item.amount}`).join('、')
+      ? attachments.map((item) => `${MAIL_ATTACHMENT_LABELS[item.type]}×${item.amount}`).join('、')
       : '纯通知';
     if (!window.confirm(`确认向 ${targetLabel} 发送邮件？\n附件：${attachLabel}`)) return;
     if (mailForm.broadcast) {

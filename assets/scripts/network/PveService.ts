@@ -66,7 +66,13 @@ export async function updatePveMeta(report: UpdateMetaReport): Promise<CloudOk> 
   );
 }
 
-export type MailAttachmentType = 'stardust' | 'stamina';
+export type MailAttachmentType =
+  | 'stardust'
+  | 'stamina'
+  | 'quenchSand'
+  | 'fusionCore'
+  | 'voidHide'
+  | 'makeupCards';
 
 export interface MailAttachment {
   type: MailAttachmentType;

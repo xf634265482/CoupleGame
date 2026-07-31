@@ -20,7 +20,14 @@ export type AdminAction =
   | 'syncBalanceDocsLog';
 
 export type ResourceType = 'stardust' | 'stamina' | 'makeupCards';
-export type MailAttachmentType = 'none' | 'stardust' | 'stamina';
+export type MailAttachmentType =
+  | 'none'
+  | 'stardust'
+  | 'stamina'
+  | 'quenchSand'
+  | 'fusionCore'
+  | 'voidHide'
+  | 'makeupCards';
 export type BalanceScopeType = 'global' | 'chapter' | 'unit';
 export type BalanceUnitType = 'player' | 'monster' | 'boss' | 'equipment';
 
