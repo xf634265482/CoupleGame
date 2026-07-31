@@ -40,10 +40,14 @@ function equipmentEntries(profile: PveProfile): CampBagEntry[] {
 
 function materialEntries(profile: PveProfile): CampBagEntry[] {
   const mats = normalizeCampMaterials(profile.materials);
-  return [
-    { kind: 'MATERIAL' as const, materialId: 'QUENCH_SAND' as const, amount: mats.quenchSand },
-    { kind: 'MATERIAL' as const, materialId: 'FUSION_CORE' as const, amount: mats.fusionCore },
-  ];
+  const rows: CampBagEntry[] = [];
+  if (mats.quenchSand > 0) {
+    rows.push({ kind: 'MATERIAL', materialId: 'QUENCH_SAND', amount: mats.quenchSand });
+  }
+  if (mats.fusionCore > 0) {
+    rows.push({ kind: 'MATERIAL', materialId: 'FUSION_CORE', amount: mats.fusionCore });
+  }
+  return rows;
 }
 
 export function buildCampSharedBagEntries(profile: PveProfile, filter: CampBagFilter): CampBagEntry[] {

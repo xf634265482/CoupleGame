@@ -37,7 +37,6 @@ import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
 const MAT_ICON_FUSION_CORE = 'pve/lobby/icon_mat_fusion_core';
-const MAT_ICON_SIZE = 28;
 
 export type CampSection = 'MINGHEN' | 'EQUIPMENT' | 'INTEL' | 'PROFESSION';
 export interface CampViewCallbacks {
@@ -344,9 +343,7 @@ export class CampView {
 
     const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
     const summary = makeLabel(content, 0, metrics.summaryY, 540, 28, 18, TEXT, Label.HorizontalAlign.LEFT);
-    const mats = normalizeCampMaterials(profile.materials);
     summary.string = `永久背包 ${profile.equipmentInventory.length}/60    背包 ${bagEntries.length}/${CAMP_BAG_SLOTS}    星尘：${profile.gold}`;
-    this._renderMaterialSummary(content, -270, metrics.summaryY - 30, mats);
 
     const loadoutTitle = makeLabel(content, 0, metrics.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     loadoutTitle.isBold = true;
@@ -370,42 +367,6 @@ export class CampView {
     bagTitle.node.setSiblingIndex(content.children.length - 1);
 
     this._renderEquipmentSynth(content, profile, metrics, iconRevision);
-  }
-
-    private _renderMaterialSummary(
-    parent: Node,
-    leftX: number,
-    y: number,
-    mats: ReturnType<typeof normalizeCampMaterials>,
-  ): void {
-    const place = (key: string, name: string, x: number, label: string): void => {
-      const icon = new Node(name);
-      icon.setParent(parent);
-      icon.setPosition(x + MAT_ICON_SIZE / 2, y, 0);
-      icon.addComponent(UITransform).setContentSize(MAT_ICON_SIZE, MAT_ICON_SIZE);
-      const cached = getCachedSprite(key);
-      if (cached) {
-        ensureArtChild(icon, 'Art', cached, MAT_ICON_SIZE, MAT_ICON_SIZE);
-      } else {
-        void loadUiSprite(key).then((frame) => {
-          if (!frame || !icon.isValid) return;
-          ensureArtChild(icon, 'Art', frame, MAT_ICON_SIZE, MAT_ICON_SIZE);
-        }).catch(() => null);
-      }
-      const text = makeLabel(
-        parent,
-        x + MAT_ICON_SIZE + 8 + 70,
-        y,
-        140,
-        28,
-        18,
-        TEXT,
-        Label.HorizontalAlign.LEFT,
-      );
-      text.string = label;
-    };
-    place(MAT_ICON_QUENCH_SAND, 'QuenchSandIcon', leftX, `淬星砂 ×${mats.quenchSand}`);
-    place(MAT_ICON_FUSION_CORE, 'FusionCoreIcon', leftX + 220, `聚星核 ×${mats.fusionCore}`);
   }
 
   private _renderEquipmentSynth(
@@ -868,7 +829,7 @@ export class CampView {
       this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
       return;
     }
-    const name = entry.materialId === 'QUENCH_SAND' ? '砂' : '核';
+    const iconKey = entry.materialId === 'QUENCH_SAND' ? MAT_ICON_QUENCH_SAND : MAT_ICON_FUSION_CORE;
     const card = makeFlatButton(
       parent,
       '',
@@ -877,14 +838,26 @@ export class CampView {
       size,
       size,
       () => this._showMaterialDetail(entry.materialId, entry.amount),
-      new Color(60, 40, 28, 210),
+      new Color(25, 75, 110, 205),
       { noArt: true, border: new Color(220, 170, 100) },
     );
     const label = card.getChildByName('Label');
     if (label) label.active = false;
-    const tag = makeLabel(card, 0, 8, size - 8, 28, 22, new Color(255, 220, 160), Label.HorizontalAlign.CENTER);
-    tag.string = name;
-    const amt = makeLabel(card, 0, -18, size - 8, 24, 18, TEXT, Label.HorizontalAlign.CENTER);
+    const iconSize = size - 18;
+    const iconHost = new Node('MatIcon');
+    iconHost.setParent(card);
+    iconHost.setPosition(0, 4);
+    iconHost.addComponent(UITransform).setContentSize(iconSize, iconSize);
+    const cached = getCachedSprite(iconKey);
+    if (cached) {
+      ensureArtChild(iconHost, 'Art', cached, iconSize, iconSize);
+    } else {
+      void loadUiSprite(iconKey).then((frame) => {
+        if (!frame || !iconHost.isValid) return;
+        ensureArtChild(iconHost, 'Art', frame, iconSize, iconSize);
+      }).catch(() => null);
+    }
+    const amt = makeLabel(card, size / 2 - 22, -size / 2 + 14, 40, 22, 16, new Color(255, 230, 140), Label.HorizontalAlign.RIGHT);
     amt.string = `×${entry.amount}`;
   }
 

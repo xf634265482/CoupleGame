@@ -76,12 +76,12 @@ describe('CampSharedBag', () => {
     expect(entries).toEqual([{ kind: 'EQUIPMENT', instanceId: 'b' }]);
   });
 
-  test('material filter always lists both materials', () => {
+  test('material filter only lists materials with amount > 0', () => {
     const profile = stubProfile({ materials: { quenchSand: 3, fusionCore: 0 } });
     expect(buildCampSharedBagEntries(profile, 'MATERIAL')).toEqual([
       { kind: 'MATERIAL', materialId: 'QUENCH_SAND', amount: 3 },
-      { kind: 'MATERIAL', materialId: 'FUSION_CORE', amount: 0 },
     ]);
+    expect(buildCampSharedBagEntries(stubProfile({ materials: { quenchSand: 0, fusionCore: 0 } }), 'MATERIAL')).toEqual([]);
   });
 
   test('ALL concatenates minghen, equipment, materials', () => {
