@@ -91,6 +91,8 @@ function buildUserRewardPatch(userDoc, applied, now) {
   const profile = {
     ...normalizeProfile(userDoc.pveProfile, now),
     gold: applied.profile.gold,
+    materials: applied.profile.materials,
+    checkIn: applied.profile.checkIn,
     stamina: applied.stamina,
     staminaUpdatedAt: applied.staminaUpdatedAt,
     staminaNextRecoveryAt: applied.staminaNextRecoveryAt,
