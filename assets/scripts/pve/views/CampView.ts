@@ -22,7 +22,8 @@ import { ensureEquipmentAssetsForFloor } from '../EquipmentResourceLoader';
 import { loadPveEquipSprite } from '../SpecialItemResourceLoader';
 import { ensureArtChild } from '../../ui/UiSprite';
 import { getCachedSprite, loadUiSprite } from '../../ui/UiAssets';
-import { CAMP_BAG_SLOTS, CAMP_SLOT_GAP, CAMP_SLOT_SIZE, campBagBlockHeight } from './CampLayoutConstants';
+import { CAMP_SLOT_GAP, CAMP_SLOT_SIZE, campBagBlockHeight } from './CampLayoutConstants';
+import { bagUpgradeCost, nextBagCapacity, normalizeBagCapacity } from '../core/CampBagUpgrade';
 import { CAMP_MINGHEN_LAYOUT, minghenContentMetrics } from './CampMinghenLayout';
 import { CAMP_EQUIPMENT_LAYOUT, equipmentContentMetrics } from './CampEquipmentLayout';
 import {
@@ -37,6 +38,7 @@ import { makeFlatButton, makeLabel } from './pveUiKit';
 
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
 const MAT_ICON_FUSION_CORE = 'pve/lobby/icon_mat_fusion_core';
+const MAT_ICON_VOID_HIDE = 'pve/lobby/icon_mat_void_hide';
 
 export type CampSection = 'MINGHEN' | 'EQUIPMENT' | 'INTEL' | 'PROFESSION';
 export interface CampViewCallbacks {
@@ -49,6 +51,7 @@ export interface CampViewCallbacks {
   onToggleEquipment(instanceId: string): void;
   onManageEquipment(action: 'TOGGLE_LOCK' | 'ENHANCE' | 'SELL', instanceId: string): void;
   onSynthesizeEquipmentSlots(instanceIds: [string, string, string]): void;
+  onUpgradeBag(): void;
   onSectionChanged?(section: CampSection): void;
 }
 
@@ -183,7 +186,8 @@ export class CampView {
 
   private _renderMinghen(profile: PveProfile): void {
     const L = CAMP_MINGHEN_LAYOUT;
-    const metrics = minghenContentMetrics();
+    const bagSlots = normalizeBagCapacity(profile.bagCapacity);
+    const metrics = minghenContentMetrics(bagSlots);
 
     const scrollNode = new Node('MinghenScroll');
     scrollNode.setParent(this._body);
@@ -220,11 +224,8 @@ export class CampView {
     }
 
     this._renderBagFilters(content, metrics.filterY, 'MINGHEN');
-    this._renderSharedBag(content, profile, metrics.bagFirstRowY, 0);
-    const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
-    bagTitle.isBold = true;
-    bagTitle.string = '背包';
-    bagTitle.node.setSiblingIndex(content.children.length - 1);
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, 0, bagSlots);
+    this._renderBagTitleRow(content, profile, metrics.bagTitleY);
 
     this._renderMinghenSynth(content, profile, metrics);
   }
@@ -311,7 +312,8 @@ export class CampView {
     const iconRevision = this._equipmentIconRevision;
     void ensureEquipmentAssetsForFloor(profile.highestUnlockedFloor);
     const L = CAMP_EQUIPMENT_LAYOUT;
-    const metrics = equipmentContentMetrics();
+    const bagSlots = normalizeBagCapacity(profile.bagCapacity);
+    const metrics = equipmentContentMetrics(bagSlots);
 
     const scrollNode = new Node('EquipmentScroll');
     scrollNode.setParent(this._body);
@@ -346,11 +348,8 @@ export class CampView {
     });
 
     this._renderBagFilters(content, metrics.filterY, 'EQUIPMENT');
-    this._renderSharedBag(content, profile, metrics.bagFirstRowY, iconRevision);
-    const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
-    bagTitle.isBold = true;
-    bagTitle.string = '背包';
-    bagTitle.node.setSiblingIndex(content.children.length - 1);
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, iconRevision, bagSlots);
+    this._renderBagTitleRow(content, profile, metrics.bagTitleY);
 
     this._renderEquipmentSynth(content, profile, metrics, iconRevision);
   }
@@ -714,12 +713,66 @@ export class CampView {
     });
   }
 
-  private _renderSharedBag(parent: Node, profile: PveProfile, firstRowY: number, iconRevision: number): void {
+  private _renderBagTitleRow(parent: Node, profile: PveProfile, titleY: number): void {
+    const bagTitle = makeLabel(parent, -90, titleY, 280, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    bagTitle.isBold = true;
+    bagTitle.string = '背包';
+    const from = normalizeBagCapacity(profile.bagCapacity);
+    const next = nextBagCapacity(from);
+    const expandBtn = makeFlatButton(
+      parent,
+      next ? '扩容' : '已满',
+      210,
+      titleY,
+      100,
+      36,
+      () => {
+        if (!next) return;
+        this._showBagUpgradeConfirm(profile);
+      },
+      new Color(25, 75, 110, 190),
+      { noArt: true, border: BORDER },
+    );
+    const btn = expandBtn.getComponent(Button);
+    if (btn) btn.interactable = !!next;
+    bagTitle.node.setSiblingIndex(parent.children.length - 1);
+    expandBtn.setSiblingIndex(parent.children.length - 1);
+  }
+
+  private _showBagUpgradeConfirm(profile: PveProfile): void {
+    const from = normalizeBagCapacity(profile.bagCapacity);
+    const next = nextBagCapacity(from);
+    const cost = next ? bagUpgradeCost(from) : null;
+    if (!next || !cost) {
+      this.showResultPopup('背包已满', '当前已是最大容量 60');
+      return;
+    }
+    const mats = normalizeCampMaterials(profile.materials);
+    const can = profile.gold >= cost.stardust && mats.voidHide >= cost.voidHide;
+    const body = `${from} → ${next}\n消耗星尘 ${cost.stardust}、虚空革 ${cost.voidHide}\n`
+      + `持有星尘 ${profile.gold}、虚空革 ${mats.voidHide}`
+      + (can ? '' : '\n（材料或星尘不足）');
+    this._showDetail('扩容背包', body, [
+      {
+        text: '确认扩容',
+        action: () => this._callbacks.onUpgradeBag(),
+        disabled: !can,
+      },
+    ]);
+  }
+
+  private _renderSharedBag(
+    parent: Node,
+    profile: PveProfile,
+    firstRowY: number,
+    iconRevision: number,
+    bagSlots: number,
+  ): void {
     const entries = buildCampSharedBagEntries(profile, this._bagFilter);
     const cols = CAMP_MINGHEN_LAYOUT.bagColumns;
     const size = CAMP_SLOT_SIZE;
     const gap = CAMP_SLOT_GAP;
-    const outerH = campBagBlockHeight();
+    const outerH = campBagBlockHeight(bagSlots);
     const totalW = cols * size + (cols - 1) * gap;
 
     const host = new Node('SharedBagHost');
@@ -728,7 +781,7 @@ export class CampView {
     host.addComponent(UITransform).setContentSize(totalW + 8, outerH + 8);
 
     let gridParent = host;
-    if (entries.length > CAMP_BAG_SLOTS) {
+    if (entries.length > bagSlots) {
       const scrollNode = new Node('BagInnerScroll');
       scrollNode.setParent(host);
       scrollNode.setPosition(0, 0);
@@ -755,7 +808,7 @@ export class CampView {
       return;
     }
 
-    for (let i = 0; i < CAMP_BAG_SLOTS; i += 1) {
+    for (let i = 0; i < bagSlots; i += 1) {
       const entry = entries[i];
       if (entry) {
         this._placeBagEntry(gridParent, entry, i, cols, size, gap, outerH / 2 - size / 2, profile, iconRevision);
@@ -821,7 +874,11 @@ export class CampView {
       this._attachEquipmentIcon(card, item, iconRevision, size - 10, true);
       return;
     }
-    const iconKey = entry.materialId === 'QUENCH_SAND' ? MAT_ICON_QUENCH_SAND : MAT_ICON_FUSION_CORE;
+    const iconKey = entry.materialId === 'QUENCH_SAND'
+      ? MAT_ICON_QUENCH_SAND
+      : entry.materialId === 'FUSION_CORE'
+        ? MAT_ICON_FUSION_CORE
+        : MAT_ICON_VOID_HIDE;
     const card = makeFlatButton(
       parent,
       '',
@@ -887,9 +944,20 @@ export class CampView {
     paintMinghenGlyph(g, buildMinghenGlyph(minghenId), size - 12);
   }
 
-  private _showMaterialDetail(materialId: 'QUENCH_SAND' | 'FUSION_CORE', amount: number): void {
-    const title = materialId === 'QUENCH_SAND' ? '淬星砂' : '聚星核';
-    const use = materialId === 'QUENCH_SAND' ? '用途：装备强化' : '用途：装备三合一升品';
+  private _showMaterialDetail(
+    materialId: 'QUENCH_SAND' | 'FUSION_CORE' | 'VOID_HIDE',
+    amount: number,
+  ): void {
+    const title = materialId === 'QUENCH_SAND'
+      ? '淬星砂'
+      : materialId === 'FUSION_CORE'
+        ? '聚星核'
+        : '虚空革';
+    const use = materialId === 'QUENCH_SAND'
+      ? '用途：装备强化'
+      : materialId === 'FUSION_CORE'
+        ? '用途：装备三合一升品'
+        : '用途：背包扩容';
     this._showDetail(title, `${use}\n持有：${amount}`, []);
   }
 

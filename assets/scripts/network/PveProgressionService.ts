@@ -84,7 +84,8 @@ export type ManageCampRequest =
   | { type: 'MINGHEN_BUY_STARDUST'; slotId: string }
   | { type: 'MINGHEN_EXCHANGE'; recipeId: string }
   | { type: 'MINGHEN_REFRESH_SHOP' }
-  | { type: 'PARTNER'; action: 'EVOLVE'; partnerId: string };
+  | { type: 'PARTNER'; action: 'EVOLVE'; partnerId: string }
+  | { type: 'UPGRADE_BAG' };
 
 export async function manageCamp(request: ManageCampRequest): Promise<LoadPveProfileResponse> {
   return ensureOk(await callFunction<LoadPveProfileResponse>('pve', { action: 'manageCamp', request }), 'PVE_MANAGE_CAMP_FAILED');

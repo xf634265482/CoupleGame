@@ -3,8 +3,10 @@ import { loadPveProfile, manageCamp, startMinghenTracking, updateCampConfigurati
 import { CampView } from '../views/CampView';
 import { getFixedEquipmentDefinition } from '../core/equipment/EquipmentDefinition';
 import {
+  SYNTH_FUSION_CORE,
   SYNTH_STARDUST,
   nextEquipQuality,
+  normalizeCampMaterials,
 } from '../core/equipment/EquipmentProgression';
 import { getMinghenDefinition } from '../core/minghen/MinghenCatalog';
 import { canSynthesizeMinghenToII } from '../core/minghen/MinghenLoadout';
@@ -33,6 +35,7 @@ export class CampController extends Component {
       onToggleEquipment: (id) => void this._toggleEquipment(id),
       onManageEquipment: (action, id) => void this._manageEquipment(action, id),
       onSynthesizeEquipmentSlots: (ids) => void this._synthesizeEquipmentSlots(ids),
+      onUpgradeBag: () => void this._upgradeBag(),
       onSectionChanged: (section) => {
         if (section === 'EQUIPMENT' && this._profile) {
           void ensureEquipmentAssetsForFloor(this._profile.highestUnlockedFloor);
@@ -43,7 +46,7 @@ export class CampController extends Component {
       this._profile = initialProfile;
       void ensureEquipmentAssetsForFloor(initialProfile.highestUnlockedFloor);
       this._view.setProfile(initialProfile);
-      void this.refresh(false);
+      // 大厅已预热档案：立刻可用，不再后台 refresh 占住 _busy 挡住装配操作。
       return;
     }
     this._view.showLoading();
@@ -174,6 +177,7 @@ export class CampController extends Component {
       return;
     }
     const beforeGold = this._profile.gold;
+    const beforeMats = normalizeCampMaterials(this._profile.materials);
     const beforeLevel = before.enhanceLevel;
     this._busy = true;
     try {
@@ -181,20 +185,31 @@ export class CampController extends Component {
       this._profile = profile;
       if (!this._view.node.isValid) return;
       this._view.setProfile(profile);
+      const afterMats = normalizeCampMaterials(profile.materials);
       if (action === 'ENHANCE') {
         const after = profile.equipmentInventory.find((x) => x.instanceId === instanceId) ?? before;
         const name = getFixedEquipmentDefinition(before.definitionId).name;
         const cost = Math.max(0, beforeGold - profile.gold);
+        const sand = Math.max(0, beforeMats.quenchSand - afterMats.quenchSand);
         this._view.showResultPopup(
           '强化成功',
-          `${name}\n强化等级 +${beforeLevel} → +${after.enhanceLevel}\n消耗星尘 ${cost}\n剩余星尘 ${profile.gold}`,
+          `${name}\n强化等级 +${beforeLevel} → +${after.enhanceLevel}\n`
+          + `消耗星尘 ${cost}、淬星砂 ${sand}\n剩余星尘 ${profile.gold}、淬星砂 ${afterMats.quenchSand}`,
         );
         return;
       }
       if (action === 'SELL') {
         const name = getFixedEquipmentDefinition(before.definitionId).name;
         const gained = Math.max(0, profile.gold - beforeGold);
-        this._view.showResultPopup('出售成功', `${name}\n获得星尘 ${gained}\n剩余星尘 ${profile.gold}`);
+        const sandGain = Math.max(0, afterMats.quenchSand - beforeMats.quenchSand);
+        const coreGain = Math.max(0, afterMats.fusionCore - beforeMats.fusionCore);
+        this._view.showResultPopup(
+          '出售成功',
+          `${name}\n获得星尘 ${gained}`
+          + (sandGain > 0 ? `、淬星砂 ${sandGain}` : '')
+          + (coreGain > 0 ? `、聚星核 ${coreGain}` : '')
+          + `\n剩余星尘 ${profile.gold}`,
+        );
         return;
       }
       if (action === 'TOGGLE_LOCK') {
@@ -226,12 +241,18 @@ export class CampController extends Component {
     }
     const nextQuality = nextEquipQuality(primary.quality);
     const cost = SYNTH_STARDUST[primary.quality as keyof typeof SYNTH_STARDUST];
-    if (!nextQuality || cost == null) {
+    const coreCost = SYNTH_FUSION_CORE[primary.quality as keyof typeof SYNTH_FUSION_CORE];
+    if (!nextQuality || cost == null || coreCost == null) {
       this._view.showResultPopup('无法合成', '传奇装备无法继续合成');
       return;
     }
+    const beforeMats = normalizeCampMaterials(this._profile.materials);
     if (this._profile.gold < cost) {
       this._view.showResultPopup('无法合成', '星尘不足');
+      return;
+    }
+    if (beforeMats.fusionCore < coreCost) {
+      this._view.showResultPopup('无法合成', '聚星核不足');
       return;
     }
     const qualityNames = { COMMON: '普通', FINE: '精良', RARE: '稀有', EPIC: '史诗', LEGENDARY: '传说' } as const;
@@ -249,14 +270,49 @@ export class CampController extends Component {
       this._view.clearEquipmentSynthSlots();
       this._view.setProfile(profile);
       const spent = Math.max(0, beforeGold - profile.gold);
+      const afterMats = normalizeCampMaterials(profile.materials);
+      const coreSpent = Math.max(0, beforeMats.fusionCore - afterMats.fusionCore);
       this._view.showResultPopup(
         '合成成功',
-        `${name}\n${qualityNames[primary.quality]} ×3 → ${qualityNames[nextQuality]} ×1\n消耗星尘 ${spent}\n剩余星尘 ${profile.gold}`,
+        `${name}\n${qualityNames[primary.quality]} ×3 → ${qualityNames[nextQuality]} ×1\n`
+        + `消耗星尘 ${spent}、聚星核 ${coreSpent}\n剩余星尘 ${profile.gold}、聚星核 ${afterMats.fusionCore}`,
       );
     } catch (err: unknown) {
       if (this._view?.node.isValid) {
         this._view.showResultPopup(
           '合成失败',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private async _upgradeBag(): Promise<void> {
+    if (this._busy || !this._view || !this._profile) return;
+    const beforeCap = this._profile.bagCapacity ?? 25;
+    const beforeGold = this._profile.gold;
+    const beforeMats = normalizeCampMaterials(this._profile.materials);
+    this._busy = true;
+    try {
+      const { profile } = await manageCamp({ type: 'UPGRADE_BAG' });
+      this._profile = profile;
+      if (!this._view.node.isValid) return;
+      this._view.setProfile(profile);
+      const afterMats = normalizeCampMaterials(profile.materials);
+      const spentGold = Math.max(0, beforeGold - profile.gold);
+      const spentHide = Math.max(0, beforeMats.voidHide - afterMats.voidHide);
+      this._view.showResultPopup(
+        '扩容成功',
+        `背包 ${beforeCap} → ${profile.bagCapacity ?? beforeCap}\n`
+        + `消耗星尘 ${spentGold}、虚空革 ${spentHide}\n`
+        + `剩余星尘 ${profile.gold}、虚空革 ${afterMats.voidHide}`,
+      );
+    } catch (err: unknown) {
+      if (this._view?.node.isValid) {
+        this._view.showResultPopup(
+          '扩容失败',
           err instanceof Error ? err.message : String(err),
         );
       }
