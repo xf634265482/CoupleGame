@@ -10,6 +10,7 @@ import {
   CAMP_STARCHART_STAGE_HEIGHT,
   CAMP_SYNTH_STAGE_WIDTH,
   starchartSlotLocals,
+  synthTitleLocalY,
 } from './CampSynthStageLayout';
 
 export interface LayoutRect {
@@ -112,7 +113,7 @@ export function minghenContentMetrics(bagCapacity: number = CAMP_BAG_DEFAULT_SLO
     bagFirstRowY: toY(bagFirstRowFromTop),
     bagSlots,
     synthStageY,
-    synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
+    synthTitleY: synthStageY + synthTitleLocalY(L.synthStageHeight),
     synthResultY: synthStageY + locals.result.y,
     synthInputY: synthStageY + locals.inputs[0]!.y,
     synthInputLeftX: locals.inputs[0]!.x,

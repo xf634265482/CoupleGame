@@ -714,7 +714,7 @@ export class CampView {
   }
 
   private _renderBagTitleRow(parent: Node, profile: PveProfile, titleY: number): void {
-    const bagTitle = makeLabel(parent, -90, titleY, 280, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    const bagTitle = makeLabel(parent, 0, titleY, 200, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.CENTER);
     bagTitle.isBold = true;
     bagTitle.string = '背包';
     const from = normalizeBagCapacity(profile.bagCapacity);
@@ -722,7 +722,7 @@ export class CampView {
     const expandBtn = makeFlatButton(
       parent,
       next ? '扩容' : '已满',
-      210,
+      220,
       titleY,
       100,
       36,

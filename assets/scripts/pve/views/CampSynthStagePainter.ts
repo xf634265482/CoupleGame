@@ -1,4 +1,5 @@
 import { Color, Graphics } from 'cc';
+import { CAMP_SLOT_SIZE } from './CampLayoutConstants';
 import { furnaceSlotLocals } from './CampSynthStageLayout';
 
 function roundRect(g: Graphics, x: number, y: number, w: number, h: number, r: number): void {
@@ -54,9 +55,9 @@ export function paintFurnaceStage(g: Graphics, width: number, height: number): v
   g.circle(0, -height * 0.28, Math.min(width, height) * 0.16);
   g.fill();
 
-  // Furnace mouth.
-  const mouthY = -height / 2 + 36;
-  const mouthR = width * 0.12;
+  // Furnace mouth — kept fully inside the bottom pad (no overflow past frame).
+  const mouthY = -height / 2 + 40;
+  const mouthR = 28;
   g.fillColor = new Color(255, 120, 40, 40);
   g.circle(0, mouthY, mouthR);
   g.fill();
@@ -65,10 +66,10 @@ export function paintFurnaceStage(g: Graphics, width: number, height: number): v
   g.circle(0, mouthY, mouthR);
   g.stroke();
 
-  // Short heat bar under result slot.
+  // Short heat bar under result slot (clip to slot band).
   const locals = furnaceSlotLocals();
-  const heatTop = locals.result.y - 52;
-  const heatBottom = locals.inputs[1]!.y + 52;
+  const heatTop = locals.result.y - CAMP_SLOT_SIZE / 2 - 4;
+  const heatBottom = locals.inputs[1]!.y + CAMP_SLOT_SIZE / 2 + 4;
   g.strokeColor = new Color(255, 140, 60, 55);
   g.lineWidth = 8;
   g.moveTo(0, heatBottom);

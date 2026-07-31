@@ -10,6 +10,7 @@ import {
   CAMP_FURNACE_STAGE_HEIGHT,
   CAMP_SYNTH_STAGE_WIDTH,
   furnaceSlotLocals,
+  synthTitleLocalY,
 } from './CampSynthStageLayout';
 
 export interface LayoutBounds {
@@ -94,7 +95,7 @@ export function equipmentContentMetrics(bagCapacity: number = CAMP_BAG_DEFAULT_S
     bagFirstRowY: toY(bagFirstRowFromTop),
     bagSlots,
     synthStageY,
-    synthTitleY: synthStageY + L.synthStageHeight / 2 - 22,
+    synthTitleY: synthStageY + synthTitleLocalY(L.synthStageHeight),
     synthResultY: synthStageY + locals.result.y,
     synthInputY: synthStageY + locals.inputs[0]!.y,
     synthInputXs: [locals.inputs[0]!.x, locals.inputs[1]!.x, locals.inputs[2]!.x] as const,
