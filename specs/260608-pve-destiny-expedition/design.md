@@ -60,7 +60,7 @@
 - 掉落、Boss 战利品、营地库存和战斗装配都必须引用同一 `definitionId`。
 - 装备品质、强化等级、固定几何和生效数值由 `core/equipment/` 统一计算。
 - 营地强化消耗**星尘 + 淬星砂**；合成升品消耗**星尘 + 聚星核**（`materials.quenchSand` / `materials.fusionCore`）。
-- 营地支持 **三合一升品**：三件同名同品质、未锁未穿装备 → 一件高一阶品质（强化归零，`baseStat` 取平均）；按材料品质扣星尘与聚星核；传奇不可再合成。营地装备台提供显式合成区（上 1 结果、下 3 材料；格子与背包同尺寸、无连线、结果格不预告文案）；背包详情用「投入合成」，不再一键自动挑料。权威在 `PveCamp` `SYNTHESIZE`。
+- 营地支持 **三合一升品**：三件同名同品质、未锁未穿装备 → 一件高一阶品质（强化归零，`baseStat` 取平均）；按材料品质扣星尘与聚星核；传奇不可再合成。营地装备台提供显式合成区（上 1 结果、下 3 材料；格子与背包同尺寸、无连线、结果格不预告文案）；显式合成区以代码绘制**熔炉台**展示；背包详情用「投入合成」，不再一键自动挑料。权威在 `PveCamp` `SYNTHESIZE`。
 - 材料可通过通关结算与出售装备获得。营地 **命痕台 / 装备台** 下方为**共用背包 UI**（滤镜：命痕 / 装备 / 材料 / 全部）；格子与装配区统一正方形；淬星砂/聚星核仅数量 > 0 时入包（材料图标 + 右下角数量），装备台顶部不另挂材料摘要。背包外层固定按 **25** 格占位（防版面跳动；>25 时区内滚动）；扩容经济（25→35→45→60）留后。细则见 `docs/superpowers/specs/2026-07-31-camp-ui-glyph-inventory-design.md` 与 `2026-07-31-camp-materials-v1-design.md`、`equipment-catalog.md` §1.4–1.5。
 - 任何无法在固定目录解析的装备都不得进入挑战快照。
 - 第二章入口护甲软着陆（普通甲 4 / 精英 8 / Boss 10 等）见 `docs/superpowers/specs/2026-07-18-ch2-armor-softland-craft-v1-design.md`，不改 `chapterScaling` 总表。
@@ -71,7 +71,7 @@
 - 营地命痕装配槽上限为 **10**；首通通关命痕弹窗固定 **三选一**（楼层主题池可更长，展示截取前 3 个）。
 - 完整机制、数值与试炼文案以 `specs/260712-pve-persistent-floor-progression/minghen-catalog.md` 与客户端 `core/minghen/MinghenCatalog.ts` 为权威；V3 已扩容至 M56；**楼层主题池**以各章 `*FloorCatalog.minghenIds` 与云端 `PveMinghen.MINGHEN_SOURCES`（1–35）为准。M39–M50 已挂入第五章主题池；M51–M56 仍为通用命痕（商会软补）。
 - 命痕收集、装配、方案、追踪、试炼和战斗效果是当前系统；数据由 `PveMinghen.js`、`PveProgression.js` 与客户端 `core/minghen/` 共同维护。
-- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（M51–M56 等未入主题池者）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格，广告刷新 ≤1 次/日；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片。营地命痕台负责装配/合成；未装配剩余命痕进入共用库存（装上 1 枚则 ×−1，无剩余不列出）；格子内用代码绘制象形星座符（无孤立星点、同 id 稳定），点击看详情，小格不写名称。方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md`、`2026-07-28-minghen-camp-synth-ui-design.md`（合成规则）与 `2026-07-31-camp-ui-glyph-inventory-design.md`（展示）；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
+- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（M51–M56 等未入主题池者）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格（格子尺寸/字形与营地命痕格一致）；广告刷新 ≤1 次/日（UI 暂隐藏，接入激励视频后再展示）；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片；显式合成区以代码绘制**星盘台**展示（荧光实线光晕，无折线）。营地命痕台负责装配/合成；未装配剩余命痕进入共用库存（装上 1 枚则 ×−1，无剩余不列出）；格子内用代码绘制象形星座符（无孤立星点、同 id 稳定），点击看详情，小格不写名称。方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md`、`2026-07-28-minghen-camp-synth-ui-design.md`（合成规则）与 `2026-07-31-camp-ui-glyph-inventory-design.md`（展示）；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
 - 楼层与命痕的掉落接入、主题池与关卡标签适配见各章 content 文档，不在本文件展开。
 - 星尘是营地统一货币；结算产生的命痕粉尘在入账时统一折算为星尘。
 

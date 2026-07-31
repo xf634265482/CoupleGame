@@ -1,7 +1,7 @@
 # 营地合成台视觉：熔炉 / 星盘（代码绘制）
 
 日期：2026-07-31  
-状态：已确认，待写实现计划  
+状态：实现完成  
 关联：`CampView` 合成区、`CampMinghenLayout` / `CampEquipmentLayout`  
 前置：`2026-07-28-minghen-camp-synth-ui-design.md`、`2026-07-28-equipment-camp-synth-ui-design.md`、`2026-07-31-camp-ui-glyph-inventory-design.md`
 
