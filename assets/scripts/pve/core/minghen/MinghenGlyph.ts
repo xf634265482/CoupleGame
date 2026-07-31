@@ -23,127 +23,74 @@ interface GlyphTemplate {
   strokes: readonly MinghenGlyphStroke[];
 }
 
-/** Fully connected pictograph skeletons (every point degree ≥ 1). */
+/** 14 fully-connected pictographs × 4 rotations = 56 unique assignments for M01–M56. */
 const TEMPLATES: readonly GlyphTemplate[] = [
-  // staff / person
-  {
-    points: [
-      { x: 0, y: 0.85 },
-      { x: -0.55, y: 0.25 },
-      { x: 0.55, y: 0.25 },
-      { x: 0, y: -0.05 },
-      { x: -0.4, y: -0.75 },
-      { x: 0.4, y: -0.75 },
-      { x: 0, y: -0.75 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 0, b: 2 }, { a: 0, b: 3 },
-      { a: 3, b: 4 }, { a: 3, b: 5 }, { a: 3, b: 6 },
-    ],
+  { // staff
+    points: [{ x: 0, y: 0.85 }, { x: -0.55, y: 0.25 }, { x: 0.55, y: 0.25 }, { x: 0, y: -0.05 }, { x: -0.4, y: -0.75 }, { x: 0.4, y: -0.75 }, { x: 0, y: -0.75 }],
+    strokes: [{ a: 0, b: 1 }, { a: 0, b: 2 }, { a: 0, b: 3 }, { a: 3, b: 4 }, { a: 3, b: 5 }, { a: 3, b: 6 }],
   },
-  // eye
-  {
-    points: [
-      { x: -0.85, y: 0 },
-      { x: 0.85, y: 0 },
-      { x: 0, y: 0.45 },
-      { x: 0, y: -0.45 },
-      { x: 0, y: 0 },
-    ],
-    strokes: [
-      { a: 0, b: 2 }, { a: 2, b: 1 }, { a: 1, b: 3 }, { a: 3, b: 0 },
-      { a: 2, b: 4 }, { a: 4, b: 3 },
-    ],
+  { // eye
+    points: [{ x: -0.85, y: 0 }, { x: 0.85, y: 0 }, { x: 0, y: 0.45 }, { x: 0, y: -0.45 }, { x: 0, y: 0 }],
+    strokes: [{ a: 0, b: 2 }, { a: 2, b: 1 }, { a: 1, b: 3 }, { a: 3, b: 0 }, { a: 2, b: 4 }, { a: 4, b: 3 }],
   },
-  // mountain / M
-  {
-    points: [
-      { x: -0.85, y: -0.55 },
-      { x: -0.35, y: 0.65 },
-      { x: 0, y: -0.05 },
-      { x: 0.35, y: 0.75 },
-      { x: 0.85, y: -0.55 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 },
-    ],
+  { // mountain
+    points: [{ x: -0.85, y: -0.55 }, { x: -0.35, y: 0.65 }, { x: 0, y: -0.05 }, { x: 0.35, y: 0.75 }, { x: 0.85, y: -0.55 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }],
   },
-  // hook spiral
-  {
-    points: [
-      { x: -0.45, y: 0.7 },
-      { x: 0.5, y: 0.7 },
-      { x: 0.65, y: 0.05 },
-      { x: 0, y: -0.55 },
-      { x: -0.6, y: -0.15 },
-      { x: -0.35, y: 0.25 },
-      { x: 0.25, y: 0.25 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 },
-      { a: 4, b: 5 }, { a: 5, b: 6 },
-    ],
+  { // hook
+    points: [{ x: -0.45, y: 0.7 }, { x: 0.5, y: 0.7 }, { x: 0.65, y: 0.05 }, { x: 0, y: -0.55 }, { x: -0.6, y: -0.15 }, { x: -0.35, y: 0.25 }, { x: 0.25, y: 0.25 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }, { a: 4, b: 5 }, { a: 5, b: 6 }],
   },
-  // angle / chevron stack
-  {
-    points: [
-      { x: -0.55, y: 0.15 },
-      { x: 0, y: 0.8 },
-      { x: 0.55, y: 0.15 },
-      { x: -0.45, y: -0.65 },
-      { x: 0, y: -0.15 },
-      { x: 0.45, y: -0.65 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 },
-      { a: 3, b: 4 }, { a: 4, b: 5 },
-      { a: 4, b: 1 },
-    ],
+  { // chevron
+    points: [{ x: -0.55, y: 0.15 }, { x: 0, y: 0.8 }, { x: 0.55, y: 0.15 }, { x: -0.45, y: -0.65 }, { x: 0, y: -0.15 }, { x: 0.45, y: -0.65 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 3, b: 4 }, { a: 4, b: 5 }, { a: 4, b: 1 }],
   },
-  // gate / house
-  {
-    points: [
-      { x: -0.65, y: -0.55 },
-      { x: -0.65, y: 0.2 },
-      { x: 0, y: 0.8 },
-      { x: 0.65, y: 0.2 },
-      { x: 0.65, y: -0.55 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }, { a: 4, b: 0 },
-    ],
+  { // gate
+    points: [{ x: -0.65, y: -0.55 }, { x: -0.65, y: 0.2 }, { x: 0, y: 0.8 }, { x: 0.65, y: 0.2 }, { x: 0.65, y: -0.55 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }, { a: 4, b: 0 }],
   },
-  // bow / arc
-  {
-    points: [
-      { x: -0.75, y: -0.2 },
-      { x: -0.25, y: 0.7 },
-      { x: 0.25, y: 0.7 },
-      { x: 0.75, y: -0.2 },
-      { x: 0, y: -0.65 },
-      { x: 0, y: 0.15 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 },
-      { a: 0, b: 4 }, { a: 3, b: 4 }, { a: 4, b: 5 }, { a: 5, b: 1 },
-    ],
+  { // bow
+    points: [{ x: -0.75, y: -0.2 }, { x: -0.25, y: 0.7 }, { x: 0.25, y: 0.7 }, { x: 0.75, y: -0.2 }, { x: 0, y: -0.65 }, { x: 0, y: 0.15 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 0, b: 4 }, { a: 3, b: 4 }, { a: 4, b: 5 }, { a: 5, b: 1 }],
   },
-  // trident
-  {
-    points: [
-      { x: 0, y: -0.8 },
-      { x: 0, y: 0.1 },
-      { x: -0.65, y: 0.7 },
-      { x: 0, y: 0.75 },
-      { x: 0.65, y: 0.7 },
-    ],
-    strokes: [
-      { a: 0, b: 1 }, { a: 1, b: 2 }, { a: 1, b: 3 }, { a: 1, b: 4 },
-    ],
+  { // trident
+    points: [{ x: 0, y: -0.8 }, { x: 0, y: 0.1 }, { x: -0.65, y: 0.7 }, { x: 0, y: 0.75 }, { x: 0.65, y: 0.7 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 1, b: 3 }, { a: 1, b: 4 }],
+  },
+  { // zigzag N
+    points: [{ x: -0.7, y: -0.7 }, { x: -0.7, y: 0.7 }, { x: 0.1, y: -0.35 }, { x: 0.7, y: 0.7 }, { x: 0.7, y: -0.7 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }],
+  },
+  { // diamond cross
+    points: [{ x: 0, y: 0.8 }, { x: 0.7, y: 0 }, { x: 0, y: -0.8 }, { x: -0.7, y: 0 }, { x: 0, y: 0 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 0 }, { a: 0, b: 4 }, { a: 2, b: 4 }],
+  },
+  { // fork
+    points: [{ x: 0, y: -0.75 }, { x: 0, y: 0 }, { x: -0.7, y: 0.55 }, { x: -0.2, y: 0.75 }, { x: 0.2, y: 0.75 }, { x: 0.7, y: 0.55 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 1, b: 3 }, { a: 1, b: 4 }, { a: 1, b: 5 }],
+  },
+  { // ladder
+    points: [{ x: -0.55, y: 0.75 }, { x: 0.55, y: 0.75 }, { x: -0.55, y: 0 }, { x: 0.55, y: 0 }, { x: -0.55, y: -0.75 }, { x: 0.55, y: -0.75 }],
+    strokes: [{ a: 0, b: 1 }, { a: 0, b: 2 }, { a: 1, b: 3 }, { a: 2, b: 3 }, { a: 2, b: 4 }, { a: 3, b: 5 }, { a: 4, b: 5 }],
+  },
+  { // crescent path
+    points: [{ x: 0.55, y: 0.7 }, { x: -0.15, y: 0.55 }, { x: -0.65, y: 0 }, { x: -0.15, y: -0.55 }, { x: 0.55, y: -0.7 }, { x: 0.25, y: 0 }],
+    strokes: [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 4 }, { a: 1, b: 5 }, { a: 5, b: 3 }],
+  },
+  { // arrow
+    points: [{ x: 0, y: 0.85 }, { x: -0.55, y: 0.2 }, { x: 0.55, y: 0.2 }, { x: 0, y: 0.2 }, { x: 0, y: -0.8 }],
+    strokes: [{ a: 0, b: 1 }, { a: 0, b: 2 }, { a: 0, b: 3 }, { a: 3, b: 4 }],
   },
 ];
 
 const TINTS: readonly MinghenGlyphTint[] = ['cyan', 'violet', 'gold'];
+const ROTATION_STEPS = 4; // 0 / 90 / 180 / 270
+
+function parseMinghenIndex(id: string): number {
+  const digits = id.replace(/\D/g, '');
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) && n > 0 ? n : (hashId(id) % 56) + 1;
+}
 
 function hashId(id: string): number {
   let h = 2166136261;
@@ -154,21 +101,28 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
-function cloneTemplate(t: GlyphTemplate): MinghenGlyphData {
+function rotatePoint(p: MinghenGlyphPoint, quarterTurns: number): MinghenGlyphPoint {
+  let { x, y } = p;
+  const turns = ((quarterTurns % 4) + 4) % 4;
+  for (let i = 0; i < turns; i += 1) {
+    const nx = -y;
+    const ny = x;
+    x = nx;
+    y = ny;
+  }
+  return { x, y };
+}
+
+function cloneTransformed(t: GlyphTemplate, quarterTurns: number, mirrorX: boolean): MinghenGlyphData {
+  const points = t.points.map((p) => {
+    const rotated = rotatePoint(p, quarterTurns);
+    return mirrorX ? { x: -rotated.x, y: rotated.y } : rotated;
+  });
   return {
-    points: t.points.map((p) => ({ x: p.x, y: p.y })),
+    points,
     strokes: t.strokes.map((s) => ({ a: s.a, b: s.b })),
     tint: 'cyan',
   };
-}
-
-function applyJitter(data: MinghenGlyphData, hash: number): MinghenGlyphData {
-  const points = data.points.map((p, i) => {
-    const sx = 1 + (((hash >>> (i * 3)) & 7) - 3) * 0.012;
-    const sy = 1 + (((hash >>> (i * 3 + 1)) & 7) - 3) * 0.012;
-    return { x: p.x * sx, y: p.y * sy };
-  });
-  return { points, strokes: data.strokes.map((s) => ({ ...s })), tint: data.tint };
 }
 
 export function glyphPointDegrees(data: MinghenGlyphData): number[] {
@@ -185,13 +139,21 @@ export function isGlyphFullyConnected(data: MinghenGlyphData): boolean {
   return glyphPointDegrees(data).every((d) => d >= 1);
 }
 
+/**
+ * M01–M56 each get a unique (template, rotation) pair.
+ * Extra ids fall back to hash mixing with the same uniqueness constraints.
+ */
 export function buildMinghenGlyph(id: string): MinghenGlyphData {
-  const hash = hashId(id);
-  const template = TEMPLATES[hash % TEMPLATES.length]!;
-  const base = cloneTemplate(template);
-  base.tint = TINTS[hash % TINTS.length]!;
-  const jittered = applyJitter(base, hash >>> 8);
-  jittered.tint = base.tint;
-  if (isGlyphFullyConnected(jittered)) return jittered;
+  const index = parseMinghenIndex(id); // 1-based
+  const slot = (index - 1) % (TEMPLATES.length * ROTATION_STEPS);
+  const template = TEMPLATES[slot % TEMPLATES.length]!;
+  const quarterTurns = Math.floor(slot / TEMPLATES.length) % ROTATION_STEPS;
+  const base = cloneTransformed(template, quarterTurns, false);
+  base.tint = TINTS[(index + quarterTurns) % TINTS.length]!;
+  if (!isGlyphFullyConnected(base)) {
+    const fallback = cloneTransformed(TEMPLATES[0]!, 0, false);
+    fallback.tint = base.tint;
+    return fallback;
+  }
   return base;
 }

@@ -23,10 +23,8 @@ describe('MinghenGlyph', () => {
     }
   });
 
-  test('different ids are not all identical', () => {
-    const a = JSON.stringify(buildMinghenGlyph('M01'));
-    const b = JSON.stringify(buildMinghenGlyph('M16'));
-    const c = JSON.stringify(buildMinghenGlyph('M40'));
-    expect(new Set([a, b, c]).size).toBe(3);
+  test('every catalog id has a unique glyph shape', () => {
+    const shapes = MINGHEN_CATALOG.map((def) => JSON.stringify(buildMinghenGlyph(def.id)));
+    expect(new Set(shapes).size).toBe(MINGHEN_CATALOG.length);
   });
 });

@@ -6,7 +6,7 @@ import {
 } from '../../assets/scripts/pve/views/CampMinghenLayout';
 
 describe('camp Minghen layout geometry', () => {
-  test('ten equipped slots use two square rows and stay above fixed bag/synth', () => {
+  test('ten equipped slots use two square rows and stay above bag/synth', () => {
     const cards = Array.from({ length: CAMP_MINGHEN_LAYOUT.equippedSlots }, (_, index) => cardBounds(index));
     const rowCenters = [...new Set(cards.map((card) => card.centerY))];
     const metrics = minghenContentMetrics();
@@ -24,11 +24,17 @@ describe('camp Minghen layout geometry', () => {
       expect(card.right).toBeLessThanOrEqual(CAMP_MINGHEN_LAYOUT.viewportWidth / 2);
     }
 
+    expect(metrics.summaryY).toBeGreaterThan(metrics.equippedTitleY);
     expect(metrics.filterY).toBeGreaterThan(metrics.bagTitleY);
-    expect(metrics.bagTitleY).toBeGreaterThan(metrics.synthTitleY);
+    expect(metrics.bagTitleY).toBeGreaterThan(metrics.bagFirstRowY);
+    // Title must sit fully above the first bag row (no overlap).
+    expect(metrics.bagTitleY - 15).toBeGreaterThan(metrics.bagFirstRowY + CAMP_MINGHEN_LAYOUT.bagSize / 2);
     expect(metrics.synthResultY).toBeGreaterThan(metrics.synthInputY);
     expect(metrics.synthInputY).toBeGreaterThan(metrics.synthButtonY);
     expect(metrics.contentHeight).toBeGreaterThanOrEqual(CAMP_MINGHEN_LAYOUT.viewportHeight);
+
+    // No large empty band above summary inside content.
+    expect(metrics.contentHeight / 2 - metrics.summaryY).toBeLessThan(80);
 
     const leftInput = {
       left: -CAMP_MINGHEN_LAYOUT.synthInputX - CAMP_MINGHEN_LAYOUT.synthSlotSize / 2,

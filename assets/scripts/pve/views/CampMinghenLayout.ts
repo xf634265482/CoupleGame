@@ -21,7 +21,7 @@ export interface LayoutBounds {
   centerY: number;
 }
 
-/** 命痕台：装配 + 共用库存(固定25) + 合成；整页 ScrollView。格子统一正方形 96。 */
+/** 命痕台：装配 + 背包(固定25) + 合成；整页 ScrollView。格子统一正方形 96。 */
 export const CAMP_MINGHEN_LAYOUT = {
   viewportWidth: 570,
   viewportHeight: 720,
@@ -34,17 +34,12 @@ export const CAMP_MINGHEN_LAYOUT = {
   bagColumns: CAMP_BAG_COLS,
   bagSize: CAMP_SLOT_SIZE,
   bagGap: CAMP_SLOT_GAP,
-  contentTop: 320,
-  summaryY: 320,
-  equippedTitleY: 270,
-  firstRowY: 200,
-  filterYOffset: 28,
-  bagTitleYOffset: 36,
   synthSlotSize: CAMP_SLOT_SIZE,
   synthInputX: 110,
   synthButtonWidth: 160,
   synthButtonHeight: 48,
-  contentBottomPadding: 100,
+  contentTopPadding: 18,
+  contentBottomPadding: 80,
 } as const;
 
 export function equippedGridHeight(): number {
@@ -52,9 +47,15 @@ export function equippedGridHeight(): number {
   return 2 * cardHeight + cardGap;
 }
 
-/** Content Y positions from top of scroll content (positive up in Cocos). Fixed bag = 25 slots. */
+/**
+ * Pack layout from content top so ScrollView has no empty band above summary.
+ * Returned Y values are center-origin (Cocos content node).
+ */
 export function minghenContentMetrics(): {
   contentHeight: number;
+  summaryY: number;
+  equippedTitleY: number;
+  firstRowY: number;
   filterY: number;
   bagTitleY: number;
   bagFirstRowY: number;
@@ -64,26 +65,50 @@ export function minghenContentMetrics(): {
   synthButtonY: number;
 } {
   const L = CAMP_MINGHEN_LAYOUT;
-  const equippedBottom = L.firstRowY - equippedGridHeight() - 8;
-  const filterY = equippedBottom - L.filterYOffset;
-  const bagTitleY = filterY - L.bagTitleYOffset;
-  const bagFirstRowY = bagTitleY - 44;
-  const bagBottom = bagFirstRowY - campBagBlockHeight();
-  const synthTitleY = bagBottom - 28;
-  const synthResultY = synthTitleY - (L.synthSlotSize / 2 + 28);
-  const synthInputY = synthResultY - (L.synthSlotSize + 16);
-  const synthButtonY = synthInputY - (L.synthSlotSize / 2 + L.synthButtonHeight / 2 + 20);
-  const top = L.summaryY + 36;
-  const bottom = synthButtonY - L.synthButtonHeight / 2 - L.contentBottomPadding;
+  let fromTop = L.contentTopPadding;
+  const summaryFromTop = fromTop + 22;
+  fromTop += 54;
+  fromTop += 10;
+  const equippedTitleFromTop = fromTop + 12;
+  fromTop += 28;
+  fromTop += 6;
+  const firstRowFromTop = fromTop + L.cardHeight / 2;
+  fromTop += equippedGridHeight();
+  fromTop += 18;
+  const filterFromTop = fromTop + 20;
+  fromTop += 44;
+  fromTop += 10;
+  const bagTitleFromTop = fromTop + 12;
+  fromTop += 28;
+  fromTop += 18; // clear title before first bag row
+  const bagFirstRowFromTop = fromTop + L.bagSize / 2;
+  fromTop += campBagBlockHeight();
+  fromTop += 24;
+  const synthTitleFromTop = fromTop + 12;
+  fromTop += 28;
+  fromTop += L.synthSlotSize / 2 + 20;
+  const synthResultFromTop = fromTop;
+  fromTop += L.synthSlotSize + 16;
+  const synthInputFromTop = fromTop;
+  fromTop += L.synthSlotSize / 2 + L.synthButtonHeight / 2 + 20;
+  const synthButtonFromTop = fromTop;
+  fromTop += L.synthButtonHeight / 2 + L.contentBottomPadding;
+
+  const contentHeight = Math.max(L.viewportHeight, fromTop);
+  const toY = (distanceFromTop: number): number => contentHeight / 2 - distanceFromTop;
+
   return {
-    contentHeight: Math.max(L.viewportHeight, top - bottom),
-    filterY,
-    bagTitleY,
-    bagFirstRowY,
-    synthTitleY,
-    synthResultY,
-    synthInputY,
-    synthButtonY,
+    contentHeight,
+    summaryY: toY(summaryFromTop),
+    equippedTitleY: toY(equippedTitleFromTop),
+    firstRowY: toY(firstRowFromTop),
+    filterY: toY(filterFromTop),
+    bagTitleY: toY(bagTitleFromTop),
+    bagFirstRowY: toY(bagFirstRowFromTop),
+    synthTitleY: toY(synthTitleFromTop),
+    synthResultY: toY(synthResultFromTop),
+    synthInputY: toY(synthInputFromTop),
+    synthButtonY: toY(synthButtonFromTop),
   };
 }
 
@@ -98,13 +123,14 @@ export function rectBounds(rect: LayoutRect): LayoutBounds {
 }
 
 export function cardBounds(index: number): LayoutBounds {
-  const { columns, cardWidth, cardHeight, cardGap, firstRowY } = CAMP_MINGHEN_LAYOUT;
+  const metrics = minghenContentMetrics();
+  const { columns, cardWidth, cardHeight, cardGap } = CAMP_MINGHEN_LAYOUT;
   const totalWidth = columns * cardWidth + (columns - 1) * cardGap;
   const column = index % columns;
   const row = Math.floor(index / columns);
   return rectBounds({
     x: -totalWidth / 2 + cardWidth / 2 + column * (cardWidth + cardGap),
-    y: firstRowY - row * (cardHeight + cardGap),
+    y: metrics.firstRowY - row * (cardHeight + cardGap),
     width: cardWidth,
     height: cardHeight,
   });

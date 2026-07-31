@@ -206,11 +206,11 @@ export class CampView {
 
     const ownedCount = Object.keys(profile.minghenCollection).length;
     const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
-    const summary = makeLabel(content, 0, L.summaryY, 540, 54, 22, TEXT, Label.HorizontalAlign.LEFT);
+    const summary = makeLabel(content, 0, metrics.summaryY, 540, 54, 22, TEXT, Label.HorizontalAlign.LEFT);
     summary.verticalAlign = Label.VerticalAlign.TOP;
-    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    库存 ${bagEntries.length}/${CAMP_BAG_SLOTS}\n星尘：${profile.gold}`;
+    summary.string = `已收集 ${ownedCount}/56    已装配 ${profile.minghenLoadout.length}/${MINGHEN_LOADOUT_SLOTS}    背包 ${bagEntries.length}/${CAMP_BAG_SLOTS}\n星尘：${profile.gold}`;
 
-    const equippedTitle = makeLabel(content, 0, L.equippedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    const equippedTitle = makeLabel(content, 0, metrics.equippedTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     equippedTitle.isBold = true;
     equippedTitle.string = '已装配命痕';
 
@@ -220,17 +220,18 @@ export class CampView {
       const row = Math.floor(index / L.columns);
       const total = L.columns * L.cardWidth + (L.columns - 1) * L.cardGap;
       const x = -total / 2 + L.cardWidth / 2 + col * (L.cardWidth + L.cardGap);
-      const y = L.firstRowY - row * (L.cardHeight + L.cardGap);
+      const y = metrics.firstRowY - row * (L.cardHeight + L.cardGap);
       this._minghenGlyphSlot(content, x, y, L.cardWidth, entry?.id, () => {
         if (entry) this._showMinghenDetail(entry.id, entry.level, true);
       }, !entry);
     }
 
     this._renderBagFilters(content, metrics.filterY, 'MINGHEN');
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, 0);
     const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     bagTitle.isBold = true;
-    bagTitle.string = '共用库存';
-    this._renderSharedBag(content, profile, metrics.bagFirstRowY, 0);
+    bagTitle.string = '背包';
+    bagTitle.node.setSiblingIndex(content.children.length - 1);
 
     this._renderMinghenSynth(content, profile, metrics);
   }
@@ -342,12 +343,12 @@ export class CampView {
     scroll.content = content;
 
     const bagEntries = buildCampSharedBagEntries(profile, this._bagFilter);
-    const summary = makeLabel(content, 0, L.summaryY, 540, 28, 18, TEXT, Label.HorizontalAlign.LEFT);
+    const summary = makeLabel(content, 0, metrics.summaryY, 540, 28, 18, TEXT, Label.HorizontalAlign.LEFT);
     const mats = normalizeCampMaterials(profile.materials);
-    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    库存 ${bagEntries.length}/${CAMP_BAG_SLOTS}    星尘：${profile.gold}`;
-    this._renderMaterialSummary(content, -270, L.summaryY - 30, mats);
+    summary.string = `永久背包 ${profile.equipmentInventory.length}/60    背包 ${bagEntries.length}/${CAMP_BAG_SLOTS}    星尘：${profile.gold}`;
+    this._renderMaterialSummary(content, -270, metrics.summaryY - 30, mats);
 
-    const loadoutTitle = makeLabel(content, 0, L.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
+    const loadoutTitle = makeLabel(content, 0, metrics.loadoutTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     loadoutTitle.isBold = true;
     loadoutTitle.string = '已穿戴装备';
 
@@ -356,16 +357,17 @@ export class CampView {
       const instanceId = profile.equipmentLoadout[slot];
       const item = instanceId ? profile.equipmentInventory.find((entry) => entry.instanceId === instanceId) : undefined;
       const x = -slotTotal / 2 + L.loadoutSlotSize / 2 + index * (L.loadoutSlotSize + L.loadoutSlotGap);
-      this._equipSquareSlot(content, SLOT_NAMES[slot], x, L.loadoutY, L.loadoutSlotSize, item, iconRevision, () => {
+      this._equipSquareSlot(content, SLOT_NAMES[slot], x, metrics.loadoutY, L.loadoutSlotSize, item, iconRevision, () => {
         if (item) this._showEquipmentDetail(item, true);
       });
     });
 
     this._renderBagFilters(content, metrics.filterY, 'EQUIPMENT');
+    this._renderSharedBag(content, profile, metrics.bagFirstRowY, iconRevision);
     const bagTitle = makeLabel(content, 0, metrics.bagTitleY, 540, 30, 21, new Color(255, 220, 100), Label.HorizontalAlign.LEFT);
     bagTitle.isBold = true;
-    bagTitle.string = '共用库存';
-    this._renderSharedBag(content, profile, metrics.bagFirstRowY, iconRevision);
+    bagTitle.string = '背包';
+    bagTitle.node.setSiblingIndex(content.children.length - 1);
 
     this._renderEquipmentSynth(content, profile, metrics, iconRevision);
   }
