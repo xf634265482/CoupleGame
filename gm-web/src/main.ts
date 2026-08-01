@@ -307,6 +307,7 @@ const ADMIN_ACTION_LABELS: Record<string, string> = {
   sendMailBroadcast: '全服发信',
   resetExpedition: '重置远征',
   resetTutorial: '重置新手教程',
+  unlockAllPartners: '解锁全部伙伴',
   resetLeaderboardGlobal: '全服重置排行榜',
   listLogs: '查看日志',
   listBalanceConfigs: '读取数值配置列表',
@@ -1031,12 +1032,13 @@ function renderDashboard(): void {
                 </div>
               </div>
               <div class="button-row">
+                <button id="unlockAllPartnersBtn" ${currentPlayer ? '' : 'disabled'}>解锁全部伙伴</button>
                 <button class="danger" id="resetExpeditionBtn" ${currentPlayer ? '' : 'disabled'}>重置当前远征</button>
                 <button class="danger" id="resetCampInventoryBtn" ${currentPlayer ? '' : 'disabled'}>重置命痕与装备</button>
                 <button class="danger" id="resetTutorialBtn" ${currentPlayer ? '' : 'disabled'}>重置新手教程</button>
                 <button class="danger" id="resetLeaderboardBtn">全服重置排行榜</button>
               </div>
-              <p class="help">重置远征的含义：直接删除该玩家当前远征存档，所以下次进入会从第 1 层重新开始。</p>
+              <p class="help">解锁全部伙伴：只开锁、不改等级/进化、不切 legacy；重置远征后仍会恢复锁定。下方重置远征会删除当前远征存档，下次从第 1 层重新开始。</p>
             </div>
           </div>
         </div>
@@ -1282,6 +1284,20 @@ function bindDashboardEvents(): void {
   bindReset('#resetExpeditionBtn', 'resetExpedition', '确认重置当前远征？将清除活跃挑战、楼层进度、永久命痕、装备和职业熟练度，恢复为全新 PVE 档案。');
   bindReset('#resetCampInventoryBtn', 'resetCampInventory', '确认清空该玩家的全部命痕、命痕方案和装备，并结束当前活跃挑战？已通关楼层与职业熟练度不会变化。');
   bindReset('#resetTutorialBtn', 'resetTutorial', '确认重置新手教程？');
+
+  document.querySelector<HTMLButtonElement>('#unlockAllPartnersBtn')?.addEventListener('click', async () => {
+    if (!currentPlayer) return setFeedback('请先查询玩家', 'error');
+    if (!resetForm.reason.trim()) return setFeedback('请填写操作原因', 'error');
+    if (!window.confirm(`确认解锁 ${currentPlayer.nickname} 的全部伙伴？\n仅开锁，不改等级/进化；重置远征后仍会恢复锁定。`)) return;
+    const userId = currentPlayer.userId;
+    await withTool('unlockAllPartners', {
+      userId,
+      reason: resetForm.reason.trim(),
+    }, async () => {
+      await fetchPlayer(userId);
+      setFeedback('已解锁全部伙伴', 'info');
+    }, false);
+  });
 
   document.querySelector<HTMLButtonElement>('#resetLeaderboardBtn')?.addEventListener('click', async () => {
     if (!resetForm.reason.trim()) return setFeedback('请填写重置原因', 'error');

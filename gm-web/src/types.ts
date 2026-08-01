@@ -7,6 +7,7 @@ export type AdminAction =
   | 'resetExpedition'
   | 'resetCampInventory'
   | 'resetTutorial'
+  | 'unlockAllPartners'
   | 'resetLeaderboardGlobal'
   | 'listLogs'
   | 'listBalanceConfigs'

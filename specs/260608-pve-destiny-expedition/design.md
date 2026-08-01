@@ -29,6 +29,7 @@
 - 消耗：每次创建楼层挑战消耗 5 点。
 - 首次教程楼层免费一次；退出、死亡或再次挑战都按新的楼层挑战处理。
 - 未完成教程（`tutorialCompleted !== true`）时，第 1 层注入战士脚本关：蓄力 / 破阵先弹机制说明（换行或框内滚动），再引导操作；点格击杀步骤同时允许「攻击」按钮。
+- 中段在击杀第一只怪后进入 `partner_blink`：先弹**伙伴对话框**（闪狐形象 + 同伴语气文案 +「好，走吧」），再强制点「伙伴」闪现至 `(3,2)`（切比雪夫距离 2）；第二只怪在 `(4,2)`。蓄力/破阵仍用机制说明窗；伙伴步不用说明书口吻。细则见 `docs/superpowers/specs/2026-07-31-tutorial-partner-blink-design.md`。
 - 教程说明弹窗不得改写 `_busy`；若在 `_apply` 回放中进入说明步，须等回放结束再弹窗，避免与 `_apply.finally` 竞态导致蓄力后点怪/攻击静默失效。
 - 取钥匙步骤须高亮走廊全程（含中间格），点格步骤同时允许方向键，但落点仍受引导格约束，避免只高亮钥匙导致无法走近。
 - 广告层只保留通用平台能力；PVE 不直接依赖任何广告业务入口。
@@ -71,7 +72,7 @@
 - 营地命痕装配槽上限为 **10**；首通通关命痕弹窗固定 **三选一**（楼层主题池可更长，展示截取前 3 个）。
 - 完整机制、数值与试炼文案以 `specs/260712-pve-persistent-floor-progression/minghen-catalog.md` 与客户端 `core/minghen/MinghenCatalog.ts` 为权威；V3 已扩容至 M56；**楼层主题池**以各章 `*FloorCatalog.minghenIds` 与云端 `PveMinghen.MINGHEN_SOURCES`（1–35）为准。M39–M50 已挂入第五章主题池；M51–M56 仍为通用命痕（商会软补）。
 - 命痕收集、装配、方案、追踪、试炼和战斗效果是当前系统；数据由 `PveMinghen.js`、`PveProgression.js` 与客户端 `core/minghen/` 共同维护。
-- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（M51–M56 等未入主题池者）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格（格子尺寸/字形与营地命痕格一致）；广告刷新 ≤1 次/日（UI 暂隐藏，接入激励视频后再展示）；兑换只消耗升级里程碑之外的多余副本。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片；显式合成区以代码绘制**星盘台**展示（荧光实线光晕，无折线）。营地命痕台负责装配/合成；未装配剩余命痕进入共用库存（装上 1 枚则 ×−1，无剩余不列出）；格子内用代码绘制象形星座符（无孤立星点、同 id 稳定），点击看详情，小格不写名称。方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md`、`2026-07-28-minghen-camp-synth-ui-design.md`（合成规则）与 `2026-07-31-camp-ui-glyph-inventory-design.md`（展示）；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
+- **获取分层**：楼层教学命痕走首通/追踪（主题池 ID）；通用工具（M51–M56 等未入主题池者）由大厅「今日商会」弹窗软补货——星尘池约 4 格 + 兑换配方 3 格（格子尺寸/字形与营地命痕格一致）；广告刷新 ≤1 次/日（UI 暂隐藏，接入激励视频后再展示）；兑换只消耗升级里程碑之外的多余副本。minghenDailyShop 永不写云库 null（清档用空店占位；loadProfile 先 remove 再 set），避免 CloudBase 无法在 null 上创建 adRefreshUsed。同名 I→II 须在营地命痕台显式合成（不自动升 II），不做异名随机合成与残片；显式合成区以代码绘制**星盘台**展示（荧光实线光晕，无折线）。营地命痕台负责装配/合成；未装配剩余命痕进入共用库存（展示 = 未装配实体 1 + 超出当前等级材料门槛的多余副本；装上则实体不计，无剩余不列出；2×I→II 后背包为 1 枚 II）；格子内用代码绘制象形星座符（无孤立星点、同 id 稳定），点击看详情，小格不写名称。方案入口本期隐藏。权威细则见 `docs/superpowers/specs/2026-07-18-minghen-acquisition-economy-design.md`、`2026-07-28-minghen-camp-synth-ui-design.md`（合成规则）与 `2026-07-31-camp-ui-glyph-inventory-design.md`（展示）；云端 `PveMinghenShop.js` + `SYNTHESIZE_MINGHEN` + 大厅侧边入口 `MinghenShopController`。
 - 楼层与命痕的掉落接入、主题池与关卡标签适配见各章 content 文档，不在本文件展开。
 - 星尘是营地统一货币；结算产生的命痕粉尘在入账时统一折算为星尘。
 
@@ -82,6 +83,12 @@
 - 大厅底栏「伙伴」入口；战斗 HUD 左下「伙伴」按钮；右上去掉星尘/职业标与钥匙角标，「角色」移至右上；蓄力文案为 `蓄力 N`。
 - 档案字段 `partners` + `equippedPartnerId`；开局快照冻结；通关经验 `30 + floor`。
 - **逐步解锁（progressive）**：新档/清档默认全锁；进入第 1 层教程发放并装备 `MOBILITY`；通关 3/5/7/10/17 分别解锁守护/治疗/破阵/控场/灵气；面板灰态展示条件；老档 `legacy` 不倒扣。细则见 `docs/superpowers/specs/2026-07-29-partner-progressive-unlock-design.md`。
+- **GM**：`unlockAllPartners` 可将六只伙伴全部开锁（保留养成进度，不切 `legacy`）；通关条件再达成时幂等跳过；`resetExpedition` 清档后仍回全锁按条件解锁。
+- **同伴名**：闪狐 / 岩盾 / 愈羽 / 裂爪 / 霜缚 / 灵萤；职能（位移/守护…）仅作副标，不用「XX伙伴」主标题。
+- **解锁揭晓**：通关奖励选择并云端 settle 后，按顺序逐个弹「新同伴加入」揭晓窗（认识一下）；教程闪狐强制闪现已展示则不再揭晓闪狐。细则见 `docs/superpowers/specs/2026-08-01-partner-unlock-reveal-design.md`。
+- **技能演出**：六只主动技能确认后播剪影出场 + 专属轻量程序特效（约 0.5～0.7s，走 `PartnerSkillFx` + `Effects`）；闪狐先离场再结算再落格成形；岩盾为荧光石环；演出期间 `_busy` 锁输入。细则见 `docs/superpowers/specs/2026-08-01-partner-skill-fx-design.md`。
+- **护盾 HUD**：玩家血条护盾段靠右叠层；护盾数值用高对比青色单独标注（`盾N`），避免压在白条上不可读。
+- 教程内强制体验一次位移：`partner_blink` 步（伙伴对话框 + 强制闪现），见 `docs/superpowers/specs/2026-07-31-tutorial-partner-blink-design.md`。
 - 权威实现：`core/partner/` + `PartnerController`/`PartnerView`；细则见 `docs/superpowers/specs/2026-07-18-partner-system-design.md`。
 
 ## 8. 云端数据
