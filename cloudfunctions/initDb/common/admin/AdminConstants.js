@@ -22,6 +22,7 @@ const ADMIN_ACTIONS = {
   RESET_EXPEDITION: 'resetExpedition',
   RESET_CAMP_INVENTORY: 'resetCampInventory',
   RESET_TUTORIAL: 'resetTutorial',
+  UNLOCK_ALL_PARTNERS: 'unlockAllPartners',
   RESET_LEADERBOARD_GLOBAL: 'resetLeaderboardGlobal',
   LIST_LOGS: 'listLogs',
 };

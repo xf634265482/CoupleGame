@@ -4,6 +4,7 @@ const {
   equipPartnerOnProfile,
   applyPartnerUnlocksOnProfile,
   grantStarterPartnerOnProfile,
+  unlockAllPartnersOnProfile,
 } = require('../pve/PvePartner');
 
 describe('PvePartner', () => {
@@ -69,5 +70,28 @@ describe('PvePartner', () => {
     expect(p.equippedPartnerId).toBe('GUARD');
     p = equipPartnerOnProfile(p, null);
     expect(p.equippedPartnerId).toBeNull();
+  });
+
+  test('unlockAllPartners opens all and keeps progressive + progress', () => {
+    let p = normalizeProfile({ version: 1 });
+    p = grantStarterPartnerOnProfile(p).profile;
+    p.partners.MOBILITY.level = 8;
+    p.partners.MOBILITY.evolutionStage = 2;
+    p = unlockAllPartnersOnProfile(p);
+    expect(p.partnerUnlockScheme).toBe('progressive');
+    for (const id of ['MOBILITY', 'GUARD', 'BREAKER', 'CONTROL', 'ANIMA', 'HEAL']) {
+      expect(p.partners[id].unlocked).toBe(true);
+    }
+    expect(p.partners.MOBILITY.level).toBe(8);
+    expect(p.partners.MOBILITY.evolutionStage).toBe(2);
+    expect(p.equippedPartnerId).toBe('MOBILITY');
+  });
+
+  test('unlockAllPartners then clear unlock is idempotent', () => {
+    let p = unlockAllPartnersOnProfile(normalizeProfile({ version: 1 }));
+    const { profile, newlyUnlockedPartnerIds } = applyPartnerUnlocksOnProfile(p, 17);
+    expect(newlyUnlockedPartnerIds).toEqual([]);
+    expect(profile.partners.ANIMA.unlocked).toBe(true);
+    expect(profile.partnerUnlockScheme).toBe('progressive');
   });
 });

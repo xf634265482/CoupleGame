@@ -296,6 +296,32 @@ function grantClearExpOnProfile(profile, partnerId, clearedFloor) {
   };
 }
 
+/** GM：六只全开锁；保留养成；不切 legacy。 */
+function unlockAllPartnersOnProfile(profile) {
+  const { partners, equippedPartnerId, partnerUnlockScheme } = normalizePartnersMap(
+    profile.partners,
+    profile.equippedPartnerId,
+    {
+      partnerUnlockScheme: profile.partnerUnlockScheme || 'progressive',
+      highestClearedFloor: profile.highestClearedFloor,
+    },
+  );
+  const nextPartners = {};
+  for (const id of PARTNER_IDS) {
+    const cur = partners[id] || lockedProgress();
+    nextPartners[id] = { ...cur, unlocked: true };
+  }
+  const nextEquipped = equippedPartnerId && nextPartners[equippedPartnerId]?.unlocked
+    ? equippedPartnerId
+    : 'MOBILITY';
+  return {
+    ...profile,
+    partners: nextPartners,
+    equippedPartnerId: nextEquipped,
+    partnerUnlockScheme: partnerUnlockScheme === 'legacy' ? 'legacy' : 'progressive',
+  };
+}
+
 module.exports = {
   PARTNER_IDS,
   PARTNER_EVOLVE_STARDUST,
@@ -307,6 +333,7 @@ module.exports = {
   applyPartnerUnlocks,
   applyPartnerUnlocksOnProfile,
   grantStarterPartnerOnProfile,
+  unlockAllPartnersOnProfile,
   grantPartnerExp,
   partnerClearExp,
   evolvePartnerOnProfile,

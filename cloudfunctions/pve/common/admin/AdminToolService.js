@@ -3,12 +3,14 @@
   getUserById,
   getUserByOpenId,
   serverDate,
+  updateUserPveProfile,
 } = require('../db');
 const {
   COLLECTIONS,
 } = require('../constants');
 const { STAMINA_MAX } = require('../pve/PveStamina');
 const { normalizeProfile, resetCampInventory, resetExpeditionProgress } = require('../pve/PveProfile');
+const { unlockAllPartnersOnProfile } = require('../pve/PvePartner');
 const {
   ADMIN_ACTIONS,
   RESOURCE_TYPES,
@@ -166,7 +168,9 @@ async function overwriteUserDocsByIds(docIds, data) {
 
 async function overwriteUserDocsWithPveProfile(docIds, profile, extra = {}, removeFields = []) {
   const uniqueDocIds = [...new Set((docIds || []).filter(Boolean))];
-  const normalizedProfile = normalizeProfile(profile);
+  const { sanitizePveProfileForDb } = require('../db');
+  // 清档不得写入 minghenDailyShop:null，否则大厅 loadProfile 补 shop 时云库无法在 null 上建子字段
+  const normalizedProfile = sanitizePveProfileForDb(normalizeProfile(profile));
   const docs = await getUserDocsByDocIds(uniqueDocIds);
   await Promise.all(docs.map((doc) => {
     const { _id, ...docData } = doc;
@@ -393,12 +397,7 @@ async function adjustResourcesAction(account, payload, requestSource) {
       throw err;
     }
     const nextProfile = { ...profile, gold: nextValue, updatedAt: Date.now() };
-    await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
-      data: {
-        pveProfile: nextProfile,
-        updatedDate: serverDate(),
-      },
-    });
+    await updateUserPveProfile(user._id, nextProfile, { updatedDate: serverDate() });
     before = { stardust: currentValue };
     after = { stardust: nextValue };
   } else if (resourceType === RESOURCE_TYPES.STAMINA) {
@@ -419,13 +418,10 @@ async function adjustResourcesAction(account, payload, requestSource) {
       staminaNextRecoveryAt: capped >= STAMINA_MAX ? null : now,
       updatedAt: now,
     };
-    await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
-      data: {
-        pveProfile: nextProfile,
-        pveStamina: capped,
-        pveStaminaUpdatedAt: now,
-        updatedDate: serverDate(),
-      },
+    await updateUserPveProfile(user._id, nextProfile, {
+      pveStamina: capped,
+      pveStaminaUpdatedAt: now,
+      updatedDate: serverDate(),
     });
 
     before = { stamina: currentValue };
@@ -445,12 +441,7 @@ async function adjustResourcesAction(account, payload, requestSource) {
       checkIn: { ...checkIn, makeupCards: nextValue },
       updatedAt: Date.now(),
     };
-    await getDb().collection(COLLECTIONS.USERS).doc(user._id).update({
-      data: {
-        pveProfile: nextProfile,
-        updatedDate: serverDate(),
-      },
-    });
+    await updateUserPveProfile(user._id, nextProfile, { updatedDate: serverDate() });
     before = { makeupCards: currentValue };
     after = { makeupCards: nextValue };
   } else {
@@ -1069,6 +1060,42 @@ async function resetTutorialAction(account, payload, requestSource) {
   };
 }
 
+async function unlockAllPartnersAction(account, payload, requestSource) {
+  const reason = ensureReason(payload?.reason);
+  const user = await getTargetUser(payload || {});
+  const beforeProfile = normalizeProfile(user.pveProfile);
+  const before = {
+    partnerUnlockScheme: beforeProfile.partnerUnlockScheme,
+    unlockedCount: Object.values(beforeProfile.partners || {})
+      .filter((p) => p && p.unlocked === true).length,
+    equippedPartnerId: beforeProfile.equippedPartnerId,
+  };
+  const nextProfile = {
+    ...unlockAllPartnersOnProfile(beforeProfile),
+    updatedAt: Date.now(),
+  };
+  await updateUserPveProfile(user._id, nextProfile, { updatedDate: serverDate() });
+  const userAfter = await getUserById(user.id);
+  const afterProfile = normalizeProfile(userAfter?.pveProfile);
+  await writeAdminLog({
+    account,
+    targetUser: user,
+    action: ADMIN_ACTIONS.UNLOCK_ALL_PARTNERS,
+    payload: {},
+    before,
+    after: {
+      partnerUnlockScheme: afterProfile.partnerUnlockScheme,
+      unlockedCount: Object.values(afterProfile.partners || {})
+        .filter((p) => p && p.unlocked === true).length,
+      equippedPartnerId: afterProfile.equippedPartnerId,
+    },
+    reason,
+    requestSource,
+    success: true,
+  });
+  return { ok: true, player: toPlayerView(userAfter) };
+}
+
 async function resetLeaderboardGlobalAction(account, payload, requestSource) {
   const reason = ensureReason(payload?.reason);
   const confirmText = String(payload?.confirmText || '').trim();
@@ -1156,6 +1183,8 @@ async function handleAdminAction({ account, action, payload, requestSource }) {
     return resetCampInventoryAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_TUTORIAL:
     return resetTutorialAction(account, payload, requestSource);
+  case ADMIN_ACTIONS.UNLOCK_ALL_PARTNERS:
+    return unlockAllPartnersAction(account, payload, requestSource);
   case ADMIN_ACTIONS.RESET_LEADERBOARD_GLOBAL:
     return resetLeaderboardGlobalAction(account, payload, requestSource);
   case ADMIN_ACTIONS.LIST_LOGS:
