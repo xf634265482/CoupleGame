@@ -7,7 +7,6 @@ import {
   IMPLICIT_WEAPON_SWORD,
   IMPLICIT_ARMOR_PLATE,
   IMPLICIT_HELMET_HEAVY,
-  IMPLICIT_TRINKET_GOLD,
 } from '../EquipmentSystem';
 import { findBossSpoilByName } from '../bosses/BossSpoils';
 
@@ -82,9 +81,7 @@ export function classicTemplateToCombatDefinition(
         ? { firstMoveApPenalty: 1 }
         : tpl.implicit === IMPLICIT_HELMET_HEAVY
           ? { fogRadius: 1 }
-          : tpl.implicit === IMPLICIT_TRINKET_GOLD
-            ? { spiritGain: 0.1 }
-            : {};
+          : {};
   return {
     id: tpl.name,
     name: tpl.name,
@@ -92,7 +89,7 @@ export function classicTemplateToCombatDefinition(
     sourceFloor,
     scalable: {
       power: tpl.slot === 'WEAPON' ? tpl.baseStatMax : undefined,
-      maxHp: tpl.slot === 'HELMET' || tpl.slot === 'SHOES' || tpl.slot === 'TRINKET' ? tpl.baseStatMax : undefined,
+      maxHp: tpl.slot === 'HELMET' || tpl.slot === 'SHOES' ? tpl.baseStatMax : undefined,
       armor: tpl.slot === 'ARMOR' ? tpl.baseStatMax : undefined,
     },
     fixed,

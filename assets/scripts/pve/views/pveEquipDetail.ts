@@ -1,6 +1,7 @@
 import type { EquipItem, EquipSlot } from '../core/PveTypes';
 import {
   resolveShoesStageEffectsFromItem,
+  resolveTrinketStageEffectsFromItem,
 } from '../core/EquipmentSystem';
 import { legendaryDescription } from '../core/LegendarySystem';
 import { equipPrimaryStatDescription } from '../core/equipment/EquipmentProgression';
@@ -28,7 +29,9 @@ const IMPLICIT_CN: Record<string, string> = {
   weapon_spear:  '攻击范围+1 / 伤略低',
   armor_plate:   '高防 / 移动AP+1',
   helmet_heavy:  '高HP / 警戒范围+1',
-  trinket_gold:  '星尘获取加成',
+  trinket_gold:  '财运 · 星尘收益（稀有起）',
+  trinket_spirit: '灵气 · 击杀充能（稀有起）',
+  trinket_luck:  '幸运 · 输出偶然（稀有起）',
   shoes_light:   '轻靴 · 机动与视野（稀有起）',
   shoes_war:     '战靴 · 节奏与爆发（稀有起）',
   shoes_iron:    '铁靴 · 续航与硬抗（稀有起）',
@@ -83,6 +86,17 @@ function shoesExtraDesc(item: EquipItem): string {
   return parts.join(' · ');
 }
 
+function trinketExtraDesc(item: EquipItem): string {
+  const fx = resolveTrinketStageEffectsFromItem(item);
+  const parts: string[] = [];
+  if (fx.killSpiritFlat > 0) parts.push(`击杀+${fx.killSpiritFlat}灵气`);
+  if (fx.spiritBurstHeal > 0) parts.push(`爆发回${fx.spiritBurstHeal}HP`);
+  if (fx.critChance > 0) parts.push(`暴击${Math.round(fx.critChance * 100)}%`);
+  if (fx.stardustBonusRatio > 0) parts.push(`星尘+${Math.round(fx.stardustBonusRatio * 100)}%`);
+  if (parts.length === 0) parts.push('分支效果：稀有品质起生效');
+  return parts.join(' · ');
+}
+
 export function formatEquipDetailBody(item: EquipItem): string {
   const qualityStr = QUALITY_LABEL[item.quality] ?? item.quality;
   const slotStr = SLOT_LABEL[item.slot];
@@ -92,7 +106,9 @@ export function formatEquipDetailBody(item: EquipItem): string {
 
   const primary = item.slot === 'SHOES'
     ? `${equipPrimaryStatDescription(item)} · ${shoesExtraDesc(item)}`
-    : equipPrimaryStatDescription(item);
+    : item.slot === 'TRINKET'
+      ? `${equipPrimaryStatDescription(item)} · ${trinketExtraDesc(item)}`
+      : equipPrimaryStatDescription(item);
 
   const lines = [
     `${slotStr} · ${qualityStr}`,

@@ -1,4 +1,5 @@
 import type { ApplyResult, ExpeditionState } from './PveTypes';
+import { effectiveTrinketSpiritPercent } from './equipment/EquipmentProgression';
 
 export function traitCount(traits: readonly string[], id: string): number {
   let count = 0;
@@ -9,7 +10,7 @@ export function traitCount(traits: readonly string[], id: string): number {
 /** Adds spirit energy outside permanent-floor mode. Permanent floors settle spirit separately. */
 export function addAnima(state: ExpeditionState, amount: number): ApplyResult {
   if (amount <= 0 || state.persistentFloorMode) return { state, events: [] };
-  const trinketBonus = state.player.equipment.TRINKET?.baseStat ?? 0;
+  const trinketBonus = effectiveTrinketSpiritPercent(state.player.equipment.TRINKET);
   const actualAmount = trinketBonus > 0 ? Math.round(amount * (1 + trinketBonus / 100)) : amount;
   return {
     state: {

@@ -239,7 +239,7 @@ export function scaledEquipmentStats(instance: PveEquipmentInstance) {
   const def = getFixedEquipmentDefinition(instance.definitionId);
   return {
     power: tpl.slot === 'WEAPON' ? scaled : 0,
-    maxHp: tpl.slot === 'HELMET' || tpl.slot === 'SHOES' || tpl.slot === 'TRINKET' ? scaled : 0,
+    maxHp: tpl.slot === 'HELMET' || tpl.slot === 'SHOES' ? scaled : 0,
     armor: tpl.slot === 'ARMOR' ? scaled : 0,
     fixed: { ...def.fixed },
   };
@@ -279,6 +279,12 @@ export function scaledStatsForEquipItem(item: EquipItem) {
   return scaledEquipmentStats(instance);
 }
 
+/** 饰品生效灵气获取百分比（主数值；非生命）。 */
+export function effectiveTrinketSpiritPercent(item: EquipItem | undefined | null): number {
+  if (!item || item.slot !== 'TRINKET') return 0;
+  return effectiveEquipPrimaryRange(item).current;
+}
+
 
 /** 局内 EquipItem：保留原始浮动 baseStat，战斗/UI 再按品质·强化缩放。 */
 export function toFixedEquipItem(instance: PveEquipmentInstance): EquipItem {
@@ -299,7 +305,7 @@ export function toFixedEquipItem(instance: PveEquipmentInstance): EquipItem {
   };
 }
 
-/** 已穿戴装备提供的最大生命加成（旧库头盔/鞋/饰品 + 固定缩放）。 */
+/** 已穿戴装备提供的最大生命加成（头盔/鞋；饰品不计入生命）。 */
 export function equipmentMaxHpBonus(equipment: Equipment): number {
   let total = 0;
   for (const slot of PVE_EQUIPMENT_SLOTS) {

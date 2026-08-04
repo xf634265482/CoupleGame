@@ -12,7 +12,8 @@ import { addAnima } from './AnimaSystem';
 import { applyInteractionExposure } from './AlertSystem';
 import { canAfford, spend } from './ApSystem';
 import { equipItem, putInBag } from './EquipHelper';
-import { rollEquipment, rollRandomSlot } from './EquipmentSystem';
+import { resolveTrinketStageEffectsFromItem, rollEquipment, rollRandomSlot } from './EquipmentSystem';
+import { legFortuneBlessingGoldBonus } from './LegendarySystem';
 import {
   rollBossExtraFloorEquip,
   rollPersistentEliteEquip,
@@ -34,10 +35,24 @@ import { createRng } from './rng';
 import type { Rng } from './rng';
 import type { ApplyResult, EquipItem, ExpeditionState, PveEvent } from './PveTypes';
 
-/** 永久层：击杀/宝箱星尘为原金币量的 50%（至少 1，若原额>0）。 */
+/** 永久层：击杀/宝箱星尘为原金币量的 50%（至少 1，若原额>0）；再乘饰品/传奇星尘加成。 */
 function thinPersistentStardust(amount: number, state: ExpeditionState): number {
   if (!state.persistentFloorMode || amount <= 0) return amount;
   return Math.max(1, Math.floor(amount * 0.5));
+}
+
+function applyStardustGainBonus(amount: number, state: ExpeditionState): number {
+  if (amount <= 0) return amount;
+  const stage = resolveTrinketStageEffectsFromItem(state.player.equipment.TRINKET).stardustBonusRatio;
+  const legendary = legFortuneBlessingGoldBonus(state.player.equipment);
+  const bonus = stage + legendary;
+  if (bonus <= 0) return amount;
+  return Math.max(0, Math.round(amount * (1 + bonus)));
+}
+
+function resolveLootGold(amount: number | undefined, state: ExpeditionState): number | undefined {
+  if (amount == null) return undefined;
+  return applyStardustGainBonus(thinPersistentStardust(amount, state), state);
 }
 
 export interface DropResult {
@@ -201,7 +216,7 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
 
   // 鍛借繍鏍?C2 瀹濈鑰佹墜锛氬疂绠遍噾甯?+chestGoldBonusPct锛堝彇鏁达級
   const actualGoldRaw = drop.gold;
-  const actualGold = actualGoldRaw != null ? thinPersistentStardust(actualGoldRaw, state) : undefined;
+  const actualGold = resolveLootGold(actualGoldRaw, state);
 
   const slotOccupied = equip ? !!next.player.equipment[equip.slot] : false;
   const lootEvent: PveEvent = {
@@ -263,7 +278,7 @@ function applySimpleDrop(
   };
 
   const actualGoldRaw = drop.gold;
-  const actualGold = actualGoldRaw != null ? thinPersistentStardust(actualGoldRaw, state) : undefined;
+  const actualGold = resolveLootGold(actualGoldRaw, state);
 
   const slotOccupiedForDrop = drop.equip ? !!next.player.equipment[drop.equip.slot] : false;
   const lootEvent: PveEvent = {
@@ -384,7 +399,7 @@ function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: Bo
   const extraRoll = rollBossExtraFloorEquip(rng, { ...state, lootSeq });
   if (extraRoll) lootSeq = extraRoll.nextLootSeq;
 
-  const scaledGold = thinPersistentStardust(scaled.gold, state);
+  const scaledGold = resolveLootGold(scaled.gold, state) ?? 0;
   let next: ExpeditionState = {
     ...state,
     floorState: { ...floor, rngState: rng.state() },

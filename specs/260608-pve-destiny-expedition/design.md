@@ -63,6 +63,7 @@
 - 掉落、Boss 战利品、营地库存和战斗装配都必须引用同一 `definitionId`。
 - 装备品质、强化等级、固定几何和生效数值由 `core/equipment/` 统一计算。
 - **鞋子三岔**：`shoes_light`（轻靴·机动视野）/ `shoes_war`（战靴·节奏爆发）/ `shoes_iron`（铁靴·续航硬抗）。主数值为最大生命；类型效果由实例品质查阶段表（白/绿仅薄生命，稀有起身份，史诗起专精；铁靴史诗起首步 +1 AP）。细则见 `docs/superpowers/specs/2026-08-04-shoes-type-quality-design.md` 与 `equipment-catalog.md`。
+- **饰品三岔**：`trinket_spirit`（灵气）/ `trinket_luck`（幸运）/ `trinket_gold`（财运）。主数值为灵气获取 %（不计入生命）；白/绿仅薄灵气%，稀有起分支专精。细则见 `docs/superpowers/specs/2026-08-04-trinket-type-quality-design.md`。
 - 营地强化消耗**星尘 + 淬星砂**；合成升品消耗**星尘 + 聚星核**（`materials.quenchSand` / `materials.fusionCore`）。
 - 营地支持 **三合一升品**：三件同名同品质、未锁未穿装备 → 一件高一阶品质（强化归零，`baseStat` 取平均）；按材料品质扣星尘与聚星核；传奇不可再合成。营地装备台提供显式合成区（上 1 结果、下 3 材料；格子与背包同尺寸、无连线、结果格不预告文案）；显式合成区以代码绘制**熔炉台**展示；背包详情用「投入合成」，不再一键自动挑料。权威在 `PveCamp` `SYNTHESIZE`。
 - 材料可通过通关结算与出售装备获得。营地 **命痕台 / 装备台** 下方为**共用背包 UI**（滤镜：命痕 / 装备 / 材料 / 全部）；格子与装配区统一正方形；淬星砂/聚星核/虚空革仅数量 > 0 时入包（材料图标 + 右下角数量），装备台顶部不另挂材料摘要。共用背包容量默认 **25**，可花**星尘 + 虚空革**升级至 35/45/60（标题行「扩容」）；虚空革 Boss 通关 +2、精英目标层 +1（CLEAR）；权威 `PveCamp` `UPGRADE_BAG` / `bagCapacity`。细则见 `docs/superpowers/specs/2026-07-31-camp-ui-glyph-inventory-design.md`、`2026-07-31-camp-bag-upgrade-design.md`、`2026-07-31-camp-materials-v1-design.md`、`equipment-catalog.md` §1.4–1.5。

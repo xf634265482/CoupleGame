@@ -30,16 +30,19 @@ import {
 } from './LegendarySystem';
 import { applyMonsterKillDrop } from './LootSystem';
 import {
-  bossCritMult,
   bossDamageReducePct,
   bossKillHeal,
   bossLifesteal,
   bossOnHitDebuffPatch,
   bossStunOnHurt,
   bossTryRevive,
+  CRIT_CHANCE,
+  hasBossTrait,
   hasWarHornTrait,
   STUN_ROUNDS,
+  T_CRIT,
 } from './BossEquipTraitEffects';
+import { resolveTrinketStageEffectsFromItem } from './EquipmentSystem';
 import {
   CHAPTER3_ICE_WALL_DROP_ANIMA,
   CHAPTER3_ICE_WALL_HP,
@@ -110,7 +113,7 @@ function knockbackBlocker(
   if (isBlockedByRock(floor, pos)) return 'ROCK';
   if (isBlockedByIceWall(floor, pos)) return 'WALL';
   const enemy = floor.monsters.find(
-    (m) => m.aiState !== 'DEAD' && m.id !== ignoreMonsterId && m.pos.x === pos.x && m.pos.y === pos.y,
+    (m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.id !== ignoreMonsterId && m.pos.x === pos.x && m.pos.y === pos.y,
   );
   if (enemy) return 'ENEMY';
   return null;
@@ -130,7 +133,7 @@ function countKnockbackSpaces(
     const block = knockbackBlocker(floor, next, movingId);
     if (block) {
       const hitEnemy = block === 'ENEMY'
-        ? floor.monsters.find((m) => m.aiState !== 'DEAD' && m.id !== movingId && m.pos.x === next.x && m.pos.y === next.y)
+        ? floor.monsters.find((m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.id !== movingId && m.pos.x === next.x && m.pos.y === next.y)
         : undefined;
       return { spaces, hitEnemyId: hitEnemy?.id ?? null, blocker: block };
     }
@@ -219,7 +222,7 @@ function monsterArmorPenetration(monster: Monster, chapter: number): number {
 function isMonsterLandingBlocked(floor: FloorState, pos: Coord, movingMonsterId: string): boolean {
   if (pos.x < 0 || pos.y < 0 || pos.x >= floor.size || pos.y >= floor.size) return true;
   if (floor.player.x === pos.x && floor.player.y === pos.y) return true;
-  if (floor.monsters.some((m) => m.id !== movingMonsterId && m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y)) {
+  if (floor.monsters.some((m) => m.id !== movingMonsterId && m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y)) {
     return true;
   }
   return floor.entities.some(
@@ -450,7 +453,7 @@ function shatterCellsAroundWall(floor: FloorState, wallId: string): { entities: 
   const cells = candidates.filter((pos) => {
     if (pos.x < 0 || pos.y < 0 || pos.x >= floor.size || pos.y >= floor.size) return false;
     if (pos.x === floor.player.x && pos.y === floor.player.y) return false;
-    if (floor.monsters.some((monster) => monster.aiState !== 'DEAD' && monster.pos.x === pos.x && monster.pos.y === pos.y)) return false;
+    if (floor.monsters.some((monster) => monster.aiState !== 'DEAD' && !monster.isBurrowed && monster.pos.x === pos.x && monster.pos.y === pos.y)) return false;
     return !floor.entities.some((entity) => !entity.consumed && entity.pos.x === pos.x && entity.pos.y === pos.y);
   });
 
@@ -495,7 +498,7 @@ function frostGiantRangedWall(floor: FloorState, monster: Monster): { entityId: 
     : { x: floor.player.x, y: floor.player.y + Math.sign(dy) };
   if (pos.x < 0 || pos.y < 0 || pos.x >= floor.size || pos.y >= floor.size) return null;
   if (pos.x === floor.player.x && pos.y === floor.player.y) return null;
-  if (floor.monsters.some((m) => m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y)) return null;
+  if (floor.monsters.some((m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y)) return null;
   if (floor.entities.some((e) => !e.consumed && e.pos.x === pos.x && e.pos.y === pos.y)) return null;
 
   return { entityId: `frost_boss_wall_${floor.floor}_${floor.turn}_${floor.entities.length}`, pos };
@@ -746,7 +749,12 @@ function resolveHit(
   }
 
   if (dead) {
-    events.push({ type: 'KILL', monsterId: targetId, monsterType: monster.type });
+    events.push({
+      type: 'KILL',
+      monsterId: targetId,
+      monsterType: monster.type,
+      ...(attackerId !== 'PLAYER' ? { killerId: attackerId } : {}),
+    });
     if (grantPlayerKillRewards) {
       next = applyKillApRefund(next, monster, events);
       next = applyGlacierShaperCounterReward(next, monster, events);
@@ -1000,17 +1008,31 @@ export function playerAttack(state: ExpeditionState, monsterId: string, context?
   }
 
   // ── 概率词条（消耗 rngState，始终推进以保证 AC-13 确定性；rng 在上方范围检查后创建）──
-  // 传奇：噬魂战斧 击杀后必暴击（始终消耗 RNG 以保证 AC-13）
+  // 暴击来源（噬魂斧 / 幸运饰 / Boss 命运之刃）独立掷骰，任一触发仅 ×2，不叠乘
   const legSoulAxeCrit = playerHasLegendary(state.player.equipment, 'leg_soul_axe') && (floor.legSoulAxePending ?? false);
-  const critTriggered = legSoulAxeCrit;
-  if (critTriggered) {
-    damage *= 2; // 暴击：双倍伤害
+  const trinketFx = resolveTrinketStageEffectsFromItem(state.player.equipment.TRINKET);
+  let didCrit = false;
+  if (legSoulAxeCrit) {
+    damage *= 2;
+    didCrit = true;
   }
+  if (trinketFx.critChance > 0) {
+    const luckCrit = rng.chance(trinketFx.critChance);
+    if (luckCrit && !didCrit) {
+      damage *= 2;
+      didCrit = true;
+    }
+  }
+  if (hasBossTrait(state.player.equipment, T_CRIT)) {
+    const bossCrit = rng.chance(CRIT_CHANCE);
+    if (bossCrit && !didCrit) {
+      damage *= 2;
+      didCrit = true;
+    }
+  }
+  const critTriggered = legSoulAxeCrit;
   // 传奇：幸运女神眼 20% 连击概率（始终消耗 RNG 保证 AC-13）
   const legLuckyEyeProc = playerHasLegendary(state.player.equipment, 'leg_lucky_eye') && rng.chance(0.20);
-
-  // Boss 装备 trait: boss_crit_15（命运之刃 15% 暴击 ×2，始终消耗 RNG 一次）
-  damage *= bossCritMult(state.player.equipment, rng);
 
   // 屠戮型仅处决普通怪/精英怪；Boss 永远不会被直接处决。
 

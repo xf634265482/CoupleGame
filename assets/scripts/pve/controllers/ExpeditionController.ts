@@ -2,7 +2,7 @@
 // 三层结构落地：Controller 仅做编排与输入处理，规则全部委托 pve/core 纯函数，渲染委托 views/*。
 // M1 垂直切片：第一章 1~5 层端到端打通；存档/云端校验留待 P3（见 specs/260608-pve-destiny-expedition）。
 
-import { _decorator, Color, Component, EventKeyboard, Graphics, Input, input, KeyCode, Node, Sprite, sys, tween, UIOpacity, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, EventKeyboard, Graphics, Input, input, KeyCode, Node, Sprite, SpriteFrame, sys, tween, UIOpacity, UITransform, Vec3 } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
 import {
@@ -14,7 +14,7 @@ import { resolveAttackHitPos } from '../core/AttackPresentation';
 import {
   isCellRevealed,
   moveGhostRestoreMode,
-  shouldHideOccupantForMoveGhost,
+  resolveMoveGhostAnimStart,
 } from '../core/MoveGhostVisibility';
 import {
   aimNodeToward,
@@ -51,11 +51,14 @@ import {
   syncRuntimeFromExpedition,
   type PersistentExpeditionRuntime,
 } from '../core/PersistentExpeditionRuntime';
-import { getPartnerDefinition } from '../core/partner/PartnerCatalog';
-import type { PartnerId } from '../core/partner/PartnerTypes';
+import { getStageSkillConfig } from '../core/partner/PartnerCatalog';
+import { getPartnerRevealCopy, orderNewlyUnlockedPartnerIds } from '../core/partner/PartnerReveal';
+import { listTeleportCells } from '../core/partner/PartnerTeleport';
 import { PersistentFloorFlow } from '../core/PersistentFloorFlow';
 import { localPendingSettlementStore } from '../PendingSettlementStore';
+import { seedLobbyProgressionCache } from '../LobbyProgressionCache';
 import { activateSpiritBurst } from '../core/SpiritBurstSystem';
+import { resolveTrinketStageEffectsFromItem } from '../core/EquipmentSystem';
 import { commitRangerFinisher } from '../core/professions/ProfessionActionSystem';
 import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
 import { WARRIOR_MAX_CHARGE_AP } from '../core/professions/WarriorSystem';
@@ -73,6 +76,7 @@ import {
   startFloorChallenge,
 } from '../../network/PveProgressionService';
 import { FogMapView } from '../views/FogMapView';
+import { playPartnerSkillFx } from '../views/PartnerSkillFx';
 import { PveCharacterPanel } from '../views/PveCharacterPanel';
 import { PVE_HUD_INFO_H, PveHudView } from '../views/PveHudView';
 import type { LogKind } from '../views/PveMessageLog';
@@ -82,11 +86,15 @@ import { getCachedSprite, loadUiSprite, preloadPveUi } from '../../ui/UiAssets';
 import { ensureChapterAssets, isChapterReady, preloadChapter } from '../ChapterResourceLoader';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { Effects } from '../../fx/Effects';
+import { PERF_MEM_TRACE_ENABLED } from '../../core/Constants';
+import { logMem, dumpMemHistory } from '../../core/PerfMemTrace';
 import { playSfx, SFX_IDS } from '../../audio/AudioManager';
 import { formatMinghenChoice } from '../core/minghen/MinghenDisplay';
 import type { SettleFloorChallengeRequest } from '../core/PveProgressionTypes';
 import { TutorialGuideManager } from '../tutorial/TutorialGuideManager';
-import type { TutorialAdvanceContext } from '../tutorial/TutorialTypes';
+import type { TutorialAdvanceContext, TutorialStepConfig } from '../tutorial/TutorialTypes';
+import { loadPartnerSprite } from '../PartnerIconResourceLoader';
+import type { PartnerEvolutionStage, PartnerId } from '../core/partner/PartnerTypes';
 
 const { ccclass } = _decorator;
 
@@ -251,6 +259,11 @@ function describeForLog(
     case 'MOVE': {
       // 玩家移动方向信息冗余（地图已直观显示位置变化），不进战报，避免刷屏
       if (ev.entityId === 'PLAYER') return null;
+      const mover = state?.floorState.monsters.find((m) => m.id === ev.entityId);
+      // 友军移动：明确写「友军」，避免被当成敌怪靠近/玩家出手
+      if (mover?.side === 'ALLY') {
+        return { kind: 'ENEMY_ACT', text: '友军 移动' };
+      }
       // 怪物：按曼哈顿距离变化告诉玩家这只怪是靠近/远离/横向游走
       const player = state?.floorState.player;
       if (!player) return { kind: 'ENEMY_ACT', text: '怪 移动' };
@@ -274,16 +287,29 @@ function describeForLog(
       const names = found.map((m) => monsterName(m)).join('、');
       return { kind: 'ENEMY_ACT', text: `👀 发现 ${names}！` };
     }
-    case 'ATTACK':
-      // 玩家攻击 → 显示伤害与怪物剩余血量（让玩家知道还差多少能击杀）
-      // 怪物攻击由 PLAYER_DAMAGED 表达（避免重复）
-      if (ev.attackerId !== 'PLAYER') return null;
-      return {
-        kind: 'PLAYER_ACT',
-        text: ev.cause === 'COLLISION'
-          ? `撞碎 -${ev.damage}（敌剩 ${ev.targetHp} 血）`
-          : `攻击 -${ev.damage}（敌剩 ${ev.targetHp} 血）`,
-      };
+    case 'ATTACK': {
+      // 玩家攻击 → 显示伤害与怪物剩余血量
+      // 友军攻击 → 明确写「友军」，避免误读成玩家在结束回合出手
+      // 怪物攻击玩家由 PLAYER_DAMAGED 表达（避免重复）
+      if (ev.attackerId === 'PLAYER') {
+        return {
+          kind: 'PLAYER_ACT',
+          text: ev.cause === 'COLLISION'
+            ? `撞碎 -${ev.damage}（敌剩 ${ev.targetHp} 血）`
+            : `攻击 -${ev.damage}（敌剩 ${ev.targetHp} 血）`,
+        };
+      }
+      const attacker = state?.floorState.monsters.find((m) => m.id === ev.attackerId);
+      if (attacker?.side === 'ALLY') {
+        const target = state?.floorState.monsters.find((m) => m.id === ev.targetId);
+        const targetLabel = target ? monsterName(target) : '敌人';
+        return {
+          kind: 'ENEMY_ACT',
+          text: `友军 攻击 ${targetLabel} -${ev.damage}（敌剩 ${ev.targetHp} 血）`,
+        };
+      }
+      return null;
+    }
     case 'PLAYER_DAMAGED': {
       const attacker = state?.floorState.monsters.find((m) => m.id === ev.sourceId);
       const name = attacker ? monsterName(attacker) : '敌人';
@@ -294,8 +320,16 @@ function describeForLog(
     case 'KILL': {
       const monster = state?.floorState.monsters.find((m) => m.id === ev.monsterId);
       const name = monster ? monsterName(monster) : (MONSTER_TYPE_CN[ev.monsterType] ?? '敌人');
+      if (ev.killerId) {
+        const killer = state?.floorState.monsters.find((m) => m.id === ev.killerId);
+        if (killer?.side === 'ALLY') {
+          return { kind: 'ENEMY_ACT', text: `💀 友军击杀了 ${name}` };
+        }
+      }
       return { kind: 'PLAYER_ACT', text: `💀 击杀了 ${name}` };
     }
+    case 'WAR_HORN_SUMMONED':
+      return { kind: 'SYSTEM', text: '📯 战争号角召唤友军助战' };
     case 'LOOT': {
       const parts: string[] = [];
       if (ev.gold) parts.push(`星尘+${ev.gold}`);
@@ -438,6 +472,8 @@ function describeForLog(
       return { kind: 'ENEMY_ACT', text: `🌪️ 流沙巨蝎掀起沙暴！${ev.tiles.length} 格被沙暴笼罩` };
     case 'SANDSTORM_HIT':
       return { kind: 'PLAYER_HURT', text: `🌪️ 被沙暴击中！真实伤害 -${ev.damage} HP（剩余 ${ev.hp}）` };
+    case 'TIMED_ESCAPE_ENRAGED':
+      return { kind: 'SYSTEM', text: '⚠️ 追兵进入持续狂暴！攻击与移动翻倍，直到本层结束' };
     case 'ICE_WALL_BROKEN':
       return { kind: 'PLAYER_ACT', text: `❄️ 击碎冰墙！获得 ${ev.anima} 灵气` };
     case 'LAVA_TILE_DAMAGED':
@@ -601,6 +637,8 @@ function describeEvent(ev: PveEvent, state: ExpeditionState | null): string | nu
       return `🌪️ 流沙巨蝎掀起沙暴！${ev.tiles.length} 格被沙暴笼罩`;
     case 'SANDSTORM_HIT':
       return `🌪️ 被沙暴击中！真实伤害 -${ev.damage} HP（剩余 ${ev.hp}）`;
+    case 'TIMED_ESCAPE_ENRAGED':
+      return '⚠️ 追兵进入持续狂暴！攻击与移动翻倍，直到本层结束';
     case 'ICE_WALL_BROKEN':
       return `❄️ 击碎冰墙！获得 ${ev.anima} 灵气`;
     case 'LAVA_TILE_DAMAGED':
@@ -687,6 +725,8 @@ export class ExpeditionController extends Component {
   private _persistentSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private _persistentSaveQueued = false;
   private _persistentSaveInFlight = false;
+  /** FX/异步兜底 setTimeout，离开场景时统一 clear，避免回厅后幽灵回调。 */
+  private _trackedTimeouts = new Set<ReturnType<typeof setTimeout>>();
   /** 云端结算进行中：禁止再排队后台 runtime 存档。 */
   private _settlingCloud = false;
   private _cachedMoveTargets: Coord[] = [];
@@ -722,7 +762,10 @@ export class ExpeditionController extends Component {
     } else {
       this._map?.clearOccupantVisibilitySuppression(entry.finalTo);
     }
-    if (entry.restoreBossIcon) this._map?.setBossIconVisible(true);
+    if (entry.restoreBossIcon) {
+      this._map?.setBossIconLocked(false);
+      this._map?.setBossIconVisible(true);
+    }
     return toRevealed;
   }
 
@@ -745,52 +788,87 @@ export class ExpeditionController extends Component {
     this._moveGhosts.clear();
   }
 
-  private _registerMoveGhosts(oldState: ExpeditionState, events: PveEvent[]): void {
+  private _registerMoveGhosts(
+    oldState: ExpeditionState,
+    events: PveEvent[],
+    revealedForAnim: ReadonlyArray<ReadonlyArray<boolean>>,
+  ): void {
     if (!this._map) return;
     this._clearAllMoveGhosts();
 
-    const grouped = new Map<string, { from: Coord; finalTo: Coord }>();
+    const stepsByEntity = new Map<string, Array<{ from: Coord; to: Coord }>>();
+    const pushStep = (entityId: string, from: Coord, to: Coord) => {
+      const list = stepsByEntity.get(entityId);
+      if (list) list.push({ from, to });
+      else stepsByEntity.set(entityId, [{ from, to }]);
+    };
     for (const ev of events) {
       if (ev.type === 'MOVE') {
-        const existing = grouped.get(ev.entityId);
-        if (existing) existing.finalTo = ev.to;
-        else grouped.set(ev.entityId, { from: ev.from, finalTo: ev.to });
+        pushStep(ev.entityId, ev.from, ev.to);
         continue;
       }
-      // 沙漠跃蜥断尾/狂跃：同样是位移，需走滑步幽灵（否则看起来瞬移）。
       if (ev.type === 'HOPPER_REACTION_ADVANCED' || ev.type === 'HOPPER_FRENZY_TRIGGERED') {
-        const existing = grouped.get(ev.monsterId);
-        if (existing) existing.finalTo = ev.to;
-        else grouped.set(ev.monsterId, { from: ev.from, finalTo: ev.to });
+        pushStep(ev.monsterId, ev.from, ev.to);
+        continue;
+      }
+      // 命运镜像位移与普通 MOVE 同一套滑步，避免「镜像闪现、显得追击异常」。
+      if (ev.type === 'MIRROR_MOVED') {
+        pushStep(ev.mirrorId, ev.from, ev.to);
       }
     }
 
     const fxParent = this._map.getMoveFxParent();
-    for (const [entityId, path] of grouped) {
-      // 玩家始终可见；怪物若起点在迷雾中则跳过——雾中运动对玩家不可见，不应产生幽灵动画。
-      if (entityId !== 'PLAYER') {
-        const fromRevealed = oldState.floorState.revealed[path.from.y]?.[path.from.x] ?? false;
-        if (!fromRevealed) continue;
-      }
+    for (const [entityId, steps] of stepsByEntity) {
+      const pathFrom = steps[0]!.from;
+      const finalTo = steps[steps.length - 1]!.to;
+      // 玩家始终播；怪物/镜像：终点或路径曾进视野才播，避免雾中空转拉长 _busy。
+      const animFrom = entityId === 'PLAYER'
+        ? pathFrom
+        : resolveMoveGhostAnimStart(revealedForAnim, steps);
+      if (!animFrom) continue;
+
       const oldMonster = oldState.floorState.monsters.find((monster) => monster.id === entityId);
       const restoreBossIcon = Boolean(oldMonster?.bossId);
-      const ghost = oldMonster
-        ? (
-          restoreBossIcon
-            ? this._map.cloneBossIconForFx() ?? this._map.cloneMonsterForFx(oldMonster)
-            : this._map.cloneMonsterForFx(oldMonster)
-        )
-        : this._map.cloneOccupantForFx(path.from);
-      if (!ghost) continue;
-      // 挂地图 Content：与格子同坐标系、随镜头滚；勿挂 Canvas（第2章+大地图会错位看不见）。
+      // refresh 之前：起点 OccupantArt 仍在；失败则怪图缓存 / 占位圆，保证必有滑步体。
+      let ghost: Node | null = this._map.cloneOccupantForFx(pathFrom, { allowInactiveWithFrame: true });
+      if (!ghost && restoreBossIcon) {
+        ghost = this._map.cloneBossIconForFx();
+      }
+      if (!ghost && oldMonster) {
+        ghost = this._map.cloneMonsterForFx(oldMonster);
+      }
+      // 终点已在新 state 视野内时，也可从「即将画出的」旧怪缓存再试一次；仍失败则占位。
+      if (!ghost) {
+        ghost = this._map.createMoveFxPlaceholder(
+          animFrom,
+          entityId === 'PLAYER' ? new Color(120, 200, 255, 220) : undefined,
+        );
+      }
+
       ghost.setParent(fxParent);
-      ghost.setPosition(this._map.getCellLocalPosition(path.from));
+      ghost.setSiblingIndex(-1);
+      ghost.active = true;
+      const opacity = ghost.getComponent(UIOpacity) || ghost.addComponent(UIOpacity);
+      opacity.opacity = 255;
+      ghost.setPosition(this._map.getCellLocalPosition(animFrom));
       this._moveGhosts.set(entityId, {
         ghost,
-        current: path.from,
-        finalTo: path.finalTo,
+        current: animFrom,
+        finalTo,
         restoreBossIcon,
       });
+    }
+  }
+
+  /** 确保移动层与幽灵在雾/单位之上。 */
+  private _raiseMoveGhosts(): void {
+    const fxParent = this._map?.getMoveFxParent();
+    if (!fxParent) return;
+    for (const entry of this._moveGhosts.values()) {
+      if (!entry.ghost?.isValid) continue;
+      entry.ghost.active = true;
+      entry.ghost.setParent(fxParent);
+      entry.ghost.setSiblingIndex(-1);
     }
   }
 
@@ -806,25 +884,36 @@ export class ExpeditionController extends Component {
       }
       const entry = this._moveGhosts.get(ev.entityId);
       if (!entry?.ghost?.isValid) {
-        // ghost 丢失时仍要清 destination suppression，否则终点 OccupantArt 会永久不显示。
         if (entry) this._clearMoveGhost(ev.entityId);
         resolve();
         return;
       }
       if (ev.entityId === 'PLAYER') playSfx(SFX_IDS.PLAYER_MOVE);
-      const fromCell = entry.current;
-      const fromLocal = this._map.getCellLocalPosition(fromCell);
+      // 播前再藏一次终点：防止异步贴图/中途 refresh 把真身提前亮出 →「闪现」。
+      if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
+        this._map.setOccupantVisible(entry.finalTo, false);
+      }
+      if (entry.restoreBossIcon) {
+        this._map.setBossIconVisible(false);
+        this._map.setBossIconLocked(true);
+      }
+      // 直接按事件 from→to 滑，不依赖 current 对齐（避免雾前奏/合批打断导致整段被跳过）。
+      const fromLocal = this._map.getCellLocalPosition(ev.from);
       const toLocal = this._map.getCellLocalPosition(ev.to);
+      entry.ghost.setParent(this._map.getMoveFxParent());
       entry.ghost.setPosition(fromLocal);
-      const stepDist = Math.max(1, Math.abs(ev.to.x - fromCell.x) + Math.abs(ev.to.y - fromCell.y));
+      entry.ghost.setSiblingIndex(-1);
+      entry.ghost.active = true;
       entry.current = ev.to;
-      // 单格 0.08s；跨格（冲锋/collapseMoves）按距离拉长，避免「瞬移感」。
-      const dur = Math.min(0.28, 0.08 * stepDist);
+      const stepDist = Math.max(1, Math.abs(ev.to.x - ev.from.x) + Math.abs(ev.to.y - ev.from.y));
+      // 单格约 0.12s：保证看得见，又避免多怪合批把 _busy 拉太长（误感「怪不追了」）。
+      const dur = Math.min(0.36, Math.max(0.12, 0.12 * stepDist));
       let finished = false;
       const finish = (forceStop: boolean) => {
         if (finished) return;
         finished = true;
         clearTimeout(fallbackTimer);
+        this._trackedTimeouts.delete(fallbackTimer);
         if (forceStop && entry.ghost?.isValid) {
           entry.ghost.setPosition(toLocal);
         }
@@ -833,7 +922,7 @@ export class ExpeditionController extends Component {
         }
         resolve();
       };
-      const fallbackTimer = setTimeout(() => finish(true), dur * 1000 + 120);
+      const fallbackTimer = this._trackTimeout(() => finish(true), dur * 1000 + 200);
       tween(entry.ghost)
         .to(dur, { position: toLocal }, { easing: 'quadOut' })
         .call(() => finish(false))
@@ -1274,11 +1363,57 @@ export class ExpeditionController extends Component {
     }
     if (this._persistentSaveTimer) clearTimeout(this._persistentSaveTimer);
     this._persistentSaveTimer = null;
+    this._clearTrackedTimeouts();
+    this.unscheduleAllCallbacks();
+    this._clearAllAttackLunges();
+    this._clearAllMoveGhosts();
+    try {
+      Effects.stopAll(false);
+      Effects.setScreenRoot(null);
+    } catch {
+      // fx 清理失败不阻断场景销毁
+    }
     this._map?.destroy();
     this._hud?.destroy();
     this._toast?.destroy();
     this._log?.destroy();
     this._character?.destroy();
+    if (PERF_MEM_TRACE_ENABLED) {
+      logMem('expedition.destroy', this._memExtra(), true);
+      dumpMemHistory('expedition.destroy');
+    }
+  }
+
+  private _trackTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
+    const id = setTimeout(() => {
+      this._trackedTimeouts.delete(id);
+      if (!this.isValid) return;
+      fn();
+    }, ms);
+    this._trackedTimeouts.add(id);
+    return id;
+  }
+
+  private _clearTrackedTimeouts(): void {
+    for (const id of this._trackedTimeouts) clearTimeout(id);
+    this._trackedTimeouts.clear();
+  }
+
+  private _memExtra(): Record<string, number> {
+    const board = this._map?.getBoardDebugStats?.() ?? { units: 0, moveFxChildren: 0, pulses: 0 };
+    return {
+      floor: this._state?.floor ?? 0,
+      ghosts: this._moveGhosts.size,
+      lunges: this._attackLungeGhosts.size,
+      timers: this._trackedTimeouts.size,
+      units: board.units,
+      moveFx: board.moveFxChildren,
+      pulses: board.pulses,
+    };
+  }
+
+  private _tickMemTrace(): void {
+    logMem('expedition.tick', this._memExtra());
   }
 
   /**
@@ -1407,6 +1542,10 @@ export class ExpeditionController extends Component {
     // mapRoot 是普通子节点，position 变化能稳定生效；并且只震战场区域、UI 保持静止，
     // 也是格斗 / 动作类游戏的标准做法（Street Fighter 系列同款）。
     Effects.setScreenRoot(mapRoot);
+    if (PERF_MEM_TRACE_ENABLED) {
+      this.schedule(this._tickMemTrace, 60);
+      logMem('expedition.ready', this._memExtra(), true);
+    }
   }
 
   /** HUD「角色」按钮回调：弹出属性、职业与装备详情。 */
@@ -1469,6 +1608,13 @@ export class ExpeditionController extends Component {
 
   private async _quitToLobbyWithSave(): Promise<void> {
     await this._flushPersistentSave();
+    this._goLobby();
+  }
+
+  /** 回厅前写入跨场景缓存，大厅可立刻开营地/选层。 */
+  private _goLobby(): void {
+    const profile = this._floorFlow?.state?.profile;
+    if (profile) seedLobbyProgressionCache({ profile });
     SceneLoader.loadLobby();
   }
 
@@ -1563,7 +1709,10 @@ export class ExpeditionController extends Component {
       const selectedFloor = GameSession.pendingPveFloor ?? undefined;
       GameSession.pendingPveFloor = null;
       const warmChapter = chapterIdForFloor(selectedFloor ?? 1);
-      void preloadPveUi();
+      // 与大厅预热共用同一 Promise；未热完时在进战读条内补齐，避免地图红块。
+      const battleUiP = preloadPveUi().catch((err: unknown) => {
+        console.warn('[Expedition] battle ui warm failed', err);
+      });
 
       // 章节包与云端开局真正并行：共用同一条读条，避免云端结束后再弹一次「进入第N章」。
       const chapterP = ensureChapterAssets(warmChapter, (stage) => {
@@ -1609,6 +1758,7 @@ export class ExpeditionController extends Component {
           balanceSnapshot: this._balanceSnapshot,
         }),
         chapterP,
+        battleUiP,
       ]);
       this._runtime = flowState.runtime;
       this._state = flowState.runtime.battleState.expedition;
@@ -1656,12 +1806,12 @@ export class ExpeditionController extends Component {
         )
       : 'lobby';
     if (choice === 'retry') {
-      setTimeout(() => {
+      this._trackTimeout(() => {
         void this._bootstrap();
       }, 0);
       return;
     }
-    SceneLoader.loadLobby();
+    this._goLobby();
   }
 
   private _floorInChapter(floor: number): number {
@@ -1726,7 +1876,7 @@ export class ExpeditionController extends Component {
       LoadingOverlay.hide();
       this._toast?.toast(`第${chapter}章资源加载失败，请返回大厅重新进入远征`);
       await delay(1200);
-      SceneLoader.loadLobby();
+      this._goLobby();
       return false;
     }
     LoadingOverlay.update({
@@ -1776,9 +1926,28 @@ export class ExpeditionController extends Component {
     this._map?.refresh(this._state.floorState, this._state.player.classId);
     this._hud?.refresh(this._state);
     this._refreshPersistentHud();
-    this._map?.showMoveRange(this._cachedMoveTargets);
+    this._map?.showMoveRange(this._partnerAimRangeCells());
     this._syncSelectionHighlight();
     this._syncTutorialGuide([]);
+  }
+
+  /** 伙伴选格瞄准时高亮跃迁合法落点；否则高亮普通可走格。 */
+  private _partnerAimRangeCells(): Coord[] {
+    if (this._partnerAim?.mode !== 'CELL' || !this._runtime || !this._state) {
+      return this._cachedMoveTargets;
+    }
+    const ensured = ensurePartnerBattle(this._runtime);
+    const pb = ensured.battleState.partnerBattle;
+    if (!pb || pb.partnerId !== 'MOBILITY') return this._cachedMoveTargets;
+    const range = getStageSkillConfig(pb.partnerId, pb.evolutionStage).range ?? 2;
+    let cells = listTeleportCells(this._state.floorState, this._state.floorState.player, range);
+    if (this._tutorialGuide?.isActive(this._state)) {
+      const allowed = this._tutorialGuide.getAllowedCells();
+      if (allowed.length > 0) {
+        cells = cells.filter((c) => allowed.some((a) => a.x === c.x && a.y === c.y));
+      }
+    }
+    return cells;
   }
 
   private _refreshPersistentHud(): void {
@@ -1791,6 +1960,8 @@ export class ExpeditionController extends Component {
       && Number.isFinite(Number(objective.data.turnsLeft))
       ? Math.max(0, Math.trunc(Number(objective.data.turnsLeft)))
       : undefined;
+    const timedEscapeEnraged = this._state?.floor === 12
+      && this._state.floorState.timedEscapeEnraged === true;
     this._hud?.refreshPersistentControls(
       this._runtime.config.professionId,
       this._selectedChargeAp,
@@ -1803,6 +1974,7 @@ export class ExpeditionController extends Component {
         maxHp: this._runtime.resources.maxHp,
         hp: this._runtime.resources.hp,
         timedEscapeTurnsLeft,
+        timedEscapeEnraged,
       },
     );
     const pb = this._runtime.battleState.partnerBattle;
@@ -1872,11 +2044,39 @@ export class ExpeditionController extends Component {
   }
 
   private async _maybeShowTutorialExplain(
-    step: { id: string; onEnterExplain?: string } | null,
+    step: TutorialStepConfig | null,
   ): Promise<void> {
-    if (!step?.onEnterExplain || !this._toast) return;
+    if (!step || !this._toast) return;
     if (this._tutorialExplainShown.has(step.id)) return;
     if (this._tutorialExplainPending === step.id) return;
+
+    if (step.onEnterPartnerDialog) {
+      this._tutorialExplainPending = step.id;
+      try {
+        let iconFrame: SpriteFrame | null = null;
+        try {
+          iconFrame = await loadPartnerSprite(
+            step.onEnterPartnerDialog.partnerId,
+            1,
+          );
+        } catch {
+          iconFrame = null;
+        }
+        await this._toast.showPartnerDialog({
+          speakerName: step.onEnterPartnerDialog.speakerName,
+          body: step.onEnterPartnerDialog.body,
+          confirmLabel: step.onEnterPartnerDialog.confirmLabel,
+          iconFrame,
+        });
+        this._tutorialExplainShown.add(step.id);
+      } finally {
+        if (this._tutorialExplainPending === step.id) this._tutorialExplainPending = null;
+        this._refreshTutorialHudHighlights();
+      }
+      return;
+    }
+
+    if (!step.onEnterExplain) return;
     // 禁止改写 _busy：说明窗若在 _apply(busy=true) 期间弹出并保存 prevBusy，
     // _apply.finally 清 busy 后弹窗关闭会把 stale true 写回 → 点怪/攻击永久静默失败。
     this._tutorialExplainPending = step.id;
@@ -1892,16 +2092,21 @@ export class ExpeditionController extends Component {
     this._hud?.setTutorialButtonHighlight({
       charge: !!this._tutorialGuide?.shouldHighlightCharge(),
       spiritBurst: !!this._tutorialGuide?.shouldHighlightSpiritBurst(),
+      partnerSkill: !!this._tutorialGuide?.shouldHighlightPartnerSkill(),
     });
   }
 
   private _isTutorialBlocked(
-    action: 'MOVE' | 'ATTACK' | 'INTERACT' | 'TAP_CELL' | 'CHARGE' | 'SPIRIT_BURST',
+    action: 'MOVE' | 'ATTACK' | 'INTERACT' | 'TAP_CELL' | 'CHARGE' | 'SPIRIT_BURST' | 'PARTNER_SKILL',
     coord?: Coord,
   ): boolean {
     if (!this._state || !this._tutorialGuide || !this._tutorialGuide.isActive(this._state)) return false;
     if (this._tutorialExplainPending) {
-      this._toast?.toast('先阅读机制说明');
+      this._toast?.toast(
+        this._tutorialGuide.currentStep()?.onEnterPartnerDialog
+          ? '先听听闪狐怎么说'
+          : '先阅读机制说明',
+      );
       return true;
     }
     if (coord && this._tutorialGuide.shouldBlockCell(coord)) {
@@ -1909,7 +2114,11 @@ export class ExpeditionController extends Component {
       return true;
     }
     if (this._tutorialGuide.shouldBlockAction(action)) {
-      this._toast?.toast('先完成当前教学步骤');
+      this._toast?.toast(
+        this._tutorialGuide.shouldHighlightPartnerSkill()
+          ? '先点「伙伴」，让闪狐载你一程'
+          : '先完成当前教学步骤',
+      );
       return true;
     }
     return false;
@@ -2122,9 +2331,17 @@ export class ExpeditionController extends Component {
       }
       return;
     }
-    if (this._isTutorialBlocked('TAP_CELL', coord)) return;
+    if (this._isTutorialBlocked('TAP_CELL', coord) && !this._partnerAim) return;
 
     if (this._partnerAim?.mode === 'CELL') {
+      if (
+        this._state
+        && this._tutorialGuide?.isActive(this._state)
+        && this._tutorialGuide.shouldBlockCell(coord)
+      ) {
+        this._toast?.toast('先点高亮格，让闪狐载你过去');
+        return;
+      }
       this._confirmPartnerAim({ cell: coord });
       return;
     }
@@ -2132,7 +2349,9 @@ export class ExpeditionController extends Component {
     const floor = this._state.floorState;
     const cellRevealed = isRevealed(floor.revealed, coord);
 
-    // 点已揭示格上的物体：进入选中态，刷新左上角目标卡；不直接攻击/互动。
+    // 点已揭示格上的物体：
+    // - 射程内的敌怪 / 可破坏地形 → 选中并直接攻击（与底栏攻击按钮等价）
+    // - 射程外 → 只进入选中态，刷新左上角目标卡与准星
     // 教学步骤若要求「点击怪物普攻」，仍保持点怪即攻击，避免卡引导。
     if (cellRevealed) {
       const monster = floor.monsters.find(
@@ -2152,6 +2371,16 @@ export class ExpeditionController extends Component {
           this._attack(monster.id, true);
           return;
         }
+        const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
+        const inRange = monster.side !== 'ALLY' && manhattan(floor.player, monster.pos) <= range;
+        if (inRange) {
+          this._hud?.refresh(this._state);
+          this._refreshPersistentHud();
+          this._rebuildInputHints();
+          this._map?.showAttackTarget({ x: monster.pos.x, y: monster.pos.y });
+          this._attack(monster.id);
+          return;
+        }
         this._hud?.refresh(this._state);
         this._refreshPersistentHud();
         this._rebuildInputHints();
@@ -2165,10 +2394,16 @@ export class ExpeditionController extends Component {
       );
       if (entity) {
         this._hud?.focusEntity(entity.id);
+        const { range } = playerAttackPower(this._state.player, this._state.balanceSnapshot, this._state.chapter);
+        const destructible = (entity.type === 'ICE_WALL' || entity.type === 'ROCK')
+          && manhattan(floor.player, entity.pos) <= range;
         this._hud?.refresh(this._state);
         this._refreshPersistentHud();
         this._rebuildInputHints();
         this._map?.showAttackTarget({ x: entity.pos.x, y: entity.pos.y });
+        if (destructible) {
+          this._attackDestructible(entity.id, entity.type);
+        }
         return;
       }
     }
@@ -2319,6 +2554,25 @@ export class ExpeditionController extends Component {
     try {
       this._runtime = activateSpiritBurst(this._runtime);
       this._state = this._runtime.battleState.expedition;
+      const burstHeal = resolveTrinketStageEffectsFromItem(this._state.player.equipment.TRINKET).spiritBurstHeal;
+      if (burstHeal > 0) {
+        const hp = Math.min(this._state.player.maxHp, this._state.player.hp + burstHeal);
+        this._state = {
+          ...this._state,
+          player: { ...this._state.player, hp },
+        };
+        this._runtime = {
+          ...this._runtime,
+          resources: {
+            ...this._runtime.resources,
+            hp,
+          },
+          battleState: {
+            ...this._runtime.battleState,
+            expedition: this._state,
+          },
+        };
+      }
       this._floorFlow.updateRuntime(this._runtime);
       this._rebuildInputHints();
       this._refreshAll();
@@ -2342,6 +2596,7 @@ export class ExpeditionController extends Component {
 
   private _onPartnerSkill(): void {
     if (this._busy || !this._runtime || !this._floorFlow || !this._state) return;
+    if (this._isTutorialBlocked('PARTNER_SKILL')) return;
     if (this._partnerAim) {
       this._partnerAim = null;
       this._hud?.setPartnerSkillState({
@@ -2349,6 +2604,7 @@ export class ExpeditionController extends Component {
         used: !!this._runtime.battleState.partnerBattle?.skillUsed,
         selecting: false,
       });
+      this._map?.showMoveRange(this._cachedMoveTargets);
       this._toast?.toast('已取消伙伴技能');
       return;
     }
@@ -2365,7 +2621,11 @@ export class ExpeditionController extends Component {
     if (applied.result.needCellTarget) {
       this._partnerAim = { mode: 'CELL' };
       this._hud?.setPartnerSkillState({ available: true, used: false, selecting: true });
-      this._toast?.toast('请选择跃迁落点');
+      this._map?.showMoveRange(this._partnerAimRangeCells());
+      const tutorialBlink = !!this._tutorialGuide?.shouldHighlightPartnerSkill();
+      this._toast?.toast(
+        tutorialBlink ? '请点高亮格，让闪狐载你一程' : '请选择跃迁落点（高亮格均可）',
+      );
       return;
     }
     if (applied.result.needEnemyTarget) {
@@ -2374,51 +2634,173 @@ export class ExpeditionController extends Component {
       this._toast?.toast('请选择破阵目标');
       return;
     }
+    void this._finishPartnerSkillWithFx({
+      applied,
+      playerPos: { ...this._state.floorState.player },
+      toast: '伙伴技能已生效',
+    });
+  }
+
+  private async _loadPartnerSkillIcon(
+    partnerId: PartnerId,
+    stage: PartnerEvolutionStage,
+  ): Promise<SpriteFrame | null> {
+    try {
+      return await loadPartnerSprite(partnerId, stage);
+    } catch {
+      return null;
+    }
+  }
+
+  private _commitPartnerSkillApplied(
+    applied: ReturnType<typeof applyPartnerSkillToRuntime>,
+    opts?: { advanceTutorial?: boolean },
+  ): boolean {
+    if (!this._floorFlow || applied.result.ok === false) return false;
     this._runtime = applied.runtime;
     this._state = this._runtime.battleState.expedition;
     this._floorFlow.updateRuntime(this._runtime);
     this._partnerAim = null;
+    let advanced = false;
+    if (opts?.advanceTutorial) {
+      this._tutorialGuide ??= new TutorialGuideManager();
+      this._tutorialGuide.bind(this._state);
+      advanced = this._tutorialGuide.advanceIfNeeded(this._state, []);
+    }
     this._rebuildInputHints();
     this._refreshAll();
-    this._toast?.toastImportant('伙伴技能已生效', 1400);
     this._queuePersistentSave(300);
+    return advanced;
   }
 
-  private _toastPartnerUnlocks(rewards: Record<string, unknown> | null | undefined): void {
-    const ids = rewards?.newlyUnlockedPartnerIds;
-    if (!Array.isArray(ids) || ids.length === 0) return;
-    const names = ids
-      .filter((id): id is string => typeof id === 'string')
-      .map((id) => {
-        try {
-          return getPartnerDefinition(id as PartnerId).displayName;
-        } catch {
-          return id;
-        }
-      });
-    if (names.length === 0) return;
-    this._toast?.toastImportant(`解锁伙伴：${names.join('、')}`, 2200);
+  private async _finishPartnerSkillWithFx(opts: {
+    applied: ReturnType<typeof applyPartnerSkillToRuntime>;
+    playerPos: Coord;
+    targetCell?: Coord;
+    toast: string;
+    advanceTutorial?: boolean;
+  }): Promise<void> {
+    if (this._busy || opts.applied.result.ok === false) return;
+    const pb = opts.applied.runtime.battleState.partnerBattle;
+    if (!pb) {
+      this._commitPartnerSkillApplied(opts.applied, { advanceTutorial: opts.advanceTutorial });
+      this._toast?.toastImportant(opts.toast, 1400);
+      return;
+    }
+    this._busy = true;
+    try {
+      const prevHp = this._runtime?.resources.hp ?? 0;
+      const healAmount = pb.partnerId === 'HEAL'
+        ? Math.max(0, opts.applied.result.resources.hp - prevHp)
+        : undefined;
+      const iconFrame = await this._loadPartnerSkillIcon(pb.partnerId, pb.evolutionStage);
+      let advanced = false;
+      const commit = () => {
+        advanced = this._commitPartnerSkillApplied(opts.applied, {
+          advanceTutorial: opts.advanceTutorial,
+        });
+      };
+
+      const { w: screenW, h: screenH } = visibleDesignSize();
+      const fxUiRoot = this._toast?.overlayRoot ?? this.node;
+      if (!this._map) {
+        commit();
+      } else if (pb.partnerId === 'MOBILITY') {
+        await playPartnerSkillFx({
+          map: this._map,
+          uiRoot: fxUiRoot,
+          screenW,
+          screenH,
+          partnerId: pb.partnerId,
+          evolutionStage: pb.evolutionStage,
+          iconFrame,
+          playerPos: opts.playerPos,
+          targetCell: opts.targetCell,
+          applyAndRefresh: commit,
+        });
+      } else {
+        commit();
+        await playPartnerSkillFx({
+          map: this._map,
+          uiRoot: fxUiRoot,
+          screenW,
+          screenH,
+          partnerId: pb.partnerId,
+          evolutionStage: pb.evolutionStage,
+          iconFrame,
+          playerPos: opts.playerPos,
+          targetCell: opts.targetCell,
+          healAmount,
+          onSpiritPulse: () => this._hud?.pulseSpiritBar(),
+        });
+      }
+      this._toast?.toastImportant(
+        advanced ? '闪狐载你一程！' : opts.toast,
+        1400,
+      );
+    } catch (err) {
+      // 演出失败不阻断结算
+      if (!this._runtime || this._runtime !== opts.applied.runtime) {
+        this._commitPartnerSkillApplied(opts.applied, { advanceTutorial: opts.advanceTutorial });
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[PVE] partner skill fx failed:', message);
+      this._toast?.toastImportant(opts.toast, 1400);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  private async _revealPartnerUnlocks(
+    rewards: Record<string, unknown> | null | undefined,
+  ): Promise<void> {
+    if (!this._toast) return;
+    const skipMobility = this._tutorialExplainShown.has('partner_blink')
+      || (this._state?.isTutorialRun === true && this._state.floor === 1);
+    const raw = rewards?.newlyUnlockedPartnerIds;
+    const ids = orderNewlyUnlockedPartnerIds(
+      Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [],
+      { skipMobility },
+    );
+    for (const id of ids) {
+      const copy = getPartnerRevealCopy(id);
+      let iconFrame: SpriteFrame | null = null;
+      try {
+        iconFrame = await loadPartnerSprite(id, 1);
+      } catch {
+        iconFrame = null;
+      }
+      await this._toast.showPartnerReveal({ ...copy, iconFrame });
+    }
   }
 
   private _confirmPartnerAim(target: { cell?: Coord; monsterId?: string }): void {
-    if (!this._partnerAim || !this._runtime || !this._floorFlow) return;
+    if (this._busy || !this._partnerAim || !this._runtime || !this._floorFlow || !this._state) return;
     const applied = applyPartnerSkillToRuntime(this._runtime, {
       targetCell: target.cell,
       targetMonsterId: target.monsterId,
     });
     if (applied.result.ok === false) {
-      this._toast?.toast('目标无效');
+      const reason = applied.result.reason;
+      const msg = reason === 'PARTNER_TELEPORT_OUT_OF_RANGE' ? '超出跃迁范围'
+        : reason === 'PARTNER_TELEPORT_INVALID' ? '落点不可到达（阻挡/占用）'
+        : '目标无效';
+      this._toast?.toast(msg);
       return;
     }
     if (applied.result.needCellTarget || applied.result.needEnemyTarget) return;
-    this._runtime = applied.runtime;
-    this._state = this._runtime.battleState.expedition;
-    this._floorFlow.updateRuntime(this._runtime);
-    this._partnerAim = null;
-    this._rebuildInputHints();
-    this._refreshAll();
-    this._toast?.toastImportant('伙伴技能已生效', 1400);
-    this._queuePersistentSave(300);
+    let targetCell = target.cell ? { ...target.cell } : undefined;
+    if (!targetCell && target.monsterId) {
+      const mon = this._state.floorState.monsters.find((m) => m.id === target.monsterId && m.hp > 0);
+      if (mon) targetCell = { ...mon.pos };
+    }
+    void this._finishPartnerSkillWithFx({
+      applied,
+      playerPos: { ...this._state.floorState.player },
+      targetCell,
+      toast: '伙伴技能已生效',
+      advanceTutorial: true,
+    });
   }
 
   /** 攻击可破坏地形：冰墙 → attackIceWall；石块 → attackRock。 */
@@ -2552,36 +2934,33 @@ export class ExpeditionController extends Component {
     }
     spawnedPortalThisApply = result.events.some((event) => event.type === 'PORTAL_SPAWNED');
 
-    // fx 死亡退场：必须在 state 切换 + _refreshAll 之前，用旧 state 找怪物坐标，
-    // 复制当前 OccupantArt 画面成临时节点；refresh 把原节点隐藏后，临时节点继续飘走。
+    // fx 死亡退场：必须在 state 切换 + _refreshAll 之前，用旧 state 找怪物坐标。
     this._spawnKillFloaters(this._state, result.events);
+
+    // ★ 移动幽灵必须在 refresh 之前完成：
+    // 1) 从旧格克隆贴图  2) 写入隐藏标记  3) refresh 才不会把怪「瞬移」画到终点
+    this._registerMoveGhosts(this._state, result.events, result.state.floorState.revealed);
+    for (const entry of this._moveGhosts.values()) {
+      const toRevealed = isCellRevealed(result.state.floorState.revealed, entry.finalTo);
+      if (toRevealed) this._map?.setOccupantVisible(entry.finalTo, false);
+      if (entry.restoreBossIcon) {
+        this._map?.setBossIconVisible(false);
+        this._map?.setBossIconLocked(true);
+      }
+    }
 
     this._state = result.state;
     this._rebuildInputHints();
     const tRefresh = perfNow();
     this._refreshAll();
     perfMark('apply.refreshAll', tRefresh, `events=${result.events.length}`);
-
-    // 移动动画：_refreshAll 已把单位刷到终点，先藏终点真身，待幽灵滑到位后还原。
-    // 仅隐藏已揭露格：迷雾终点本就不画 OccupantArt，若仍写入 _hiddenOccupantCellKeys，
-    // 幽灵清理时又因「未揭露」跳过恢复，会永久泄漏（战士重击击退进雾 → 怪物图标消失）。
-    const finalMoveTargets = new Map<string, Coord>();
-    for (const ev of result.events) {
-      if (ev.type === 'MOVE') finalMoveTargets.set(ev.entityId, ev.to);
-      if (ev.type === 'HOPPER_REACTION_ADVANCED' || ev.type === 'HOPPER_FRENZY_TRIGGERED') {
-        finalMoveTargets.set(ev.monsterId, ev.to);
-      }
-    }
-    for (const [entityId, to] of finalMoveTargets) {
-      if (!this._moveGhosts.has(entityId)) continue;
-      const toRevealed = this._state.floorState.revealed[to.y]?.[to.x] ?? false;
-      if (toRevealed) this._map?.setOccupantVisible(to, false);
-      const movedBoss = this._state.floorState.monsters.find((monster) => monster.id === entityId && Boolean(monster.bossId));
-      if (movedBoss) this._map?.setBossIconVisible(false);
-    }
+    this._raiseMoveGhosts();
 
     const tEvents = perfNow();
     await this._playEvents(result.events);
+    // 兜底：回放结束务必解开 boss 锁、清幽灵隐藏，避免 Occupant 永久消失被误读成「怪不追了」。
+    this._clearAllMoveGhosts();
+    this._map?.setBossIconLocked(false);
     perfMark('apply.events', tEvents);
     // 位移回放结束后再钉一次准星：确保 focus 目标已走到新格，框不留在旧坐标。
     this._rebuildInputHints();
@@ -2731,6 +3110,7 @@ export class ExpeditionController extends Component {
   /**
    * 退场 fx：扫所有"对象消失"事件，refresh 之前克隆当前画面 → fire-and-forget 退场动画 → destroy。
    * 必须在 _refreshAll 之前调用（refresh 会把消失的目标节点 active=false / spriteFrame=null）。
+   * 移动幽灵改在 refresh 之后由 `_registerMoveGhosts` 单独注册（从终点贴图克隆更稳）。
    *
    * - KILL：怪物 OccupantArt → float（上飘 + 淡出）
    * - OPEN_CHEST：宝箱 EntityArt → shake + pop（开箱仪式感）
@@ -2801,7 +3181,6 @@ export class ExpeditionController extends Component {
         }
       }
     }
-    this._registerMoveGhosts(oldState, events);
   }
 
   /**
@@ -2822,6 +3201,13 @@ export class ExpeditionController extends Component {
       return;
     }
     const playerPos = this._state.floorState.player;
+    const attacker = ev.attackerId !== 'PLAYER'
+      ? this._state.floorState.monsters.find((m) => m.id === ev.attackerId)
+      : undefined;
+    // 友军/非玩家攻击：从攻击者格子出手，绝不能播玩家冲脸，否则结束回合会被误读成玩家出手
+    const attackerPos = attacker
+      ? (this._moveGhosts.get(ev.attackerId)?.finalTo ?? attacker.pos)
+      : playerPos;
     const monster = this._state.floorState.monsters.find((m) => m.id === ev.targetId);
     // 冰墙/石块等：ATTACK.targetId 是实体 id；击碎后 consumed=true，仍要用其 pos 播表现。
     const entity = monster
@@ -2832,7 +3218,7 @@ export class ExpeditionController extends Component {
     const hitPos = monster
       ? (resolveAttackHitPos(this._playbackEvents, ev.targetId, monster.pos) ?? monster.pos)
       : entity!.pos;
-    const dist = manhattan(playerPos, hitPos);
+    const dist = manhattan(attackerPos, hitPos);
     // 怪物优先 OccupantArt / MOVE ghost；地形用 EntityArt（击碎后可能已空）。
     let targetNode = monster
       ? (this._moveGhosts.get(ev.targetId)?.ghost
@@ -2865,6 +3251,12 @@ export class ExpeditionController extends Component {
         });
       }
     };
+    // 友军出手：近战冲脸 / 远程射箭，均从友军位置起算（不用玩家武器挥砍）
+    if (attacker) {
+      if (dist > 1) await this._playRangedShot(attackerPos, hitPos, onContact);
+      else await this._playMeleeLunge(attackerPos, hitPos, onContact);
+      return;
+    }
     // 只有游侠（ARCHER）用射箭；战士/潜行者即使射程>1 也走冲脸光剑。
     const useRangedArrow = this._runtime?.config.professionId === 'ARCHER' && dist > 1;
     if (useRangedArrow) {
@@ -3004,20 +3396,25 @@ export class ExpeditionController extends Component {
         }
         break;
       }
-      // ── 流沙巨蝎钻出：3×3 橙色预警圈展示 1.5s 后清除 + 全屏震屏 + 出土 pop ──
+      // ── 流沙巨蝎钻出：按 attackRadius 画切比雪夫橙圈（常态 3×3 / 狂暴 5×5），
+      //    展示 1.5s 后清除 + 全屏震屏 + 出土 pop ──
       case 'BOSS_EMERGED': {
         const node = this._map.getOccupantArtAt(ev.pos);
         if (node) void Effects.pop(node);
-        // 沙坑 + 周边 8 格 = 9 格 AOE 预警（设计指定的实际伤害范围）
+        const radius = Math.max(0, ev.attackRadius);
+        const size = this._state?.floorState.size;
         const damageCells: Coord[] = [];
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            damageCells.push({ x: ev.pos.x + dx, y: ev.pos.y + dy });
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const x = ev.pos.x + dx;
+            const y = ev.pos.y + dy;
+            if (size !== undefined && (x < 0 || y < 0 || x >= size || y >= size)) continue;
+            damageCells.push({ x, y });
           }
         }
         this._map.showAoeHit(damageCells);
         void Effects.cameraShake({ strength: 3.0, duration: 0.45 });
-        setTimeout(() => this._map?.clearAoeHit(), 1500);
+        this._trackTimeout(() => this._map?.clearAoeHit(), 1500);
         break;
       }
       // ── 冲锋实际命中：AOE overlay 已足够，不晃屏 ──
@@ -3223,19 +3620,19 @@ export class ExpeditionController extends Component {
 
         // 3) 200ms 辨识链条 → 0.25s 拉扯滑动（链条端点同步跟随玩家） + 0.45s 淡出
         const pullMs = 250;
-        setTimeout(() => {
+        this._trackTimeout(() => {
           if (ghost?.isValid) {
             const startMs = Date.now();
             // 每帧更新链条端点跟玩家走（quadIn 缓动与 ghost tween 同步，视觉一致）
             const tickChain = () => {
-              if (!chain.isValid) return;
+              if (!chain.isValid || !this.isValid) return;
               const elapsed = Date.now() - startMs;
               const rawT = Math.min(1, elapsed / pullMs);
               const eased = rawT * rawT; // quadIn
               const curX = fromWp.x + (toWp.x - fromWp.x) * eased;
               const curY = fromWp.y + (toWp.y - fromWp.y) * eased;
               updateChainEndpoint(curX, curY);
-              if (rawT < 1) setTimeout(tickChain, 16);
+              if (rawT < 1) this._trackTimeout(tickChain, 16);
             };
             tickChain();
 
@@ -3266,7 +3663,7 @@ export class ExpeditionController extends Component {
         // 真机上可能出现 ghost 残留 + 真身永久隐藏的"分身"现象。
         // 800ms 后无条件强制清理（覆盖 200ms 等待 + 250ms 位移 + 350ms 安全余量）；
         // 若 .call 已正常执行，items 已不在 set/map 里，下面全部 no-op。
-        setTimeout(() => {
+        this._trackTimeout(() => {
           if (ghost && this._attackLungeGhosts.has(ghost)) {
             this._attackLungeGhosts.delete(ghost);
             if (ghost.isValid) ghost.destroy();
@@ -3278,7 +3675,7 @@ export class ExpeditionController extends Component {
           }
         }, 800);
         // 链条兜底（淡出 0.45s 后理论上已销毁，900ms 安全余量）
-        setTimeout(() => {
+        this._trackTimeout(() => {
           if (chain && this._attackLungeGhosts.has(chain)) {
             this._attackLungeGhosts.delete(chain);
             if (chain.isValid) chain.destroy();
@@ -3395,6 +3792,9 @@ export class ExpeditionController extends Component {
       } else if (ev.type === 'HOPPER_REACTION_ADVANCED' || ev.type === 'HOPPER_FRENZY_TRIGGERED') {
         await flushPendingAttacks();
         pendingMoves.push({ entityId: ev.monsterId, from: ev.from, to: ev.to });
+      } else if (ev.type === 'MIRROR_MOVED') {
+        await flushPendingAttacks();
+        pendingMoves.push({ entityId: ev.mirrorId, from: ev.from, to: ev.to });
       } else if (ev.type === 'ATTACK') {
         await flushPendingMoves();
         pendingAttacks.push(ev);
@@ -3406,6 +3806,12 @@ export class ExpeditionController extends Component {
         || ev.type === 'PLAYER_EXPOSED'
         || ev.type === 'PLAYER_EXPOSURE_ENDED'
         || ev.type === 'STATIONARY_PRESSURE_CHANGED'
+        // 夹在追击 MOVE 之间不打断合批（镜像位移已并入 MOVE 批，不再列在这里）。
+        || ev.type === 'ANIMA_TRAP_SPAWNED'
+        || ev.type === 'FATE_WATCHER_ADAPTED'
+        || ev.type === 'MIRROR_BEHAVIOR_QUEUED'
+        || ev.type === 'TARGET_ESCAPED'
+        || ev.type === 'WAR_HORN_SUMMONED'
       ) {
         this._playFxFor(ev);
       } else {
@@ -3441,10 +3847,19 @@ export class ExpeditionController extends Component {
           'DESTINY_5X5_EXPLODED',
           'WAVE_INCOMING',
           'LOOT',
+          'TIMED_ESCAPE_ENRAGED',
         ]);
-        if (bossImportant.has(ev.type)) this._toast?.toastImportant(text);
+        if (bossImportant.has(ev.type)) this._toast?.toastImportant(text, ev.type === 'TIMED_ESCAPE_ENRAGED' ? 3600 : 2800);
         else this._toast?.toast(text);
         // 不再 await delay：避免 toast 阻塞事件回放主循环导致 fx 动画"卡一下"。
+        if (ev.type === 'TIMED_ESCAPE_ENRAGED' && this._toast) {
+          this._refreshPersistentHud();
+          await this._toast.showConfirm(
+            '追兵进入持续狂暴！\n攻击与移动已翻倍，直到本层通关或失败。请尽快突围。',
+            [{ label: '知道了', value: 'ok' }],
+            'danger',
+          );
+        }
       }
 
       // 3.5) 蓄力重击实际结算：以重击瞬间 boss 的位置为中心，标识真正命中的范围（橙圈），石块遮挡格标识为安全（绿）
@@ -3720,7 +4135,7 @@ export class ExpeditionController extends Component {
   private _withdrawFailMessage(): string {
     const objective = this._runtime?.battleState.objective;
     if (objective?.kind === 'TIMED_ESCAPE') {
-      return '时限已到，沙暴走廊突围失败';
+      return '已超过 30 回合时限，沙暴走廊突围失败';
     }
     if (objective?.status === 'FAILED') {
       return '本层目标失败';
@@ -3728,7 +4143,7 @@ export class ExpeditionController extends Component {
     return '本层挑战失败';
   }
 
-  /** 目标失败（如限时突围超时）→ runtime=WITHDRAW：结算并回大厅，避免卡在「能走棋盘但攻不动」。 */
+  /** 目标失败（如限时突围超时）→ runtime=WITHDRAW：弹窗确认后再结算回大厅。 */
   private async _handleWithdraw(): Promise<void> {
     if (!this._state || !this._runtime) return;
     if (this._handlingWithdraw) return;
@@ -3738,14 +4153,22 @@ export class ExpeditionController extends Component {
         this._runtime = { ...this._runtime, status: 'WITHDRAW' };
         this._floorFlow?.updateRuntime(this._runtime);
       }
-      this._toast?.toastImportant(this._withdrawFailMessage(), 1800);
-      await delay(1000);
+      const message = this._withdrawFailMessage();
+      if (this._toast) {
+        await this._toast.showConfirm(
+          `${message}\n进度将保存，请选择返回大厅。`,
+          [{ label: '返回大厅', value: 'quit' }],
+        );
+      } else {
+        this._toast?.toastImportant(message, 1800);
+        await delay(1000);
+      }
       await this._prepareCloudSettlement();
       this._floorFlow?.updateRuntime(this._runtime);
       this._floorFlow?.beginDeferredSettle();
       this._toast?.toast('进度已保存，正在返回大厅…');
       await delay(600);
-      SceneLoader.loadLobby();
+      this._goLobby();
     } finally {
       this._handlingWithdraw = false;
     }
@@ -3762,7 +4185,7 @@ export class ExpeditionController extends Component {
     this._floorFlow?.beginDeferredSettle();
     this._toast?.toast('进度已保存，正在返回大厅…');
     await delay(600);
-    SceneLoader.loadLobby();
+    this._goLobby();
   }
 
   private async _handleFloorCleared(): Promise<void> {
@@ -3771,6 +4194,7 @@ export class ExpeditionController extends Component {
     this._handlingFloorClear = true;
     const clearedFloor = this._state.floor;
     const oldChapter = this._state.chapter;
+    logMem('floor.clear', this._memExtra(), true);
     try {
     if (isBossFloor(clearedFloor)) {
       preloadChapter(oldChapter + 1);
@@ -3786,9 +4210,17 @@ export class ExpeditionController extends Component {
 
     this._toast?.toastImportant('本层通关！', 1200);
     const selection = await this._promptClearRewardSelection();
-    // 本地落单 + 后台 settle：不阻塞通关弹窗（方案 A）。
+    // 本地落单 + 等云端 settle，拿到 newlyUnlockedPartnerIds 后再揭晓。
     this._floorFlow.beginDeferredSettle(selection);
     this._toast?.toast('进度同步中…');
+    let settleRewards: Record<string, unknown> | null | undefined;
+    try {
+      const settled = await this._floorFlow.ensureSettled(selection);
+      settleRewards = settled?.rewards as Record<string, unknown> | undefined;
+    } catch {
+      settleRewards = undefined;
+    }
+    await this._revealPartnerUnlocks(settleRewards);
 
     const canContinue = clearedFloor < MAX_READY_FLOOR;
     const choice = this._toast
@@ -3818,7 +4250,7 @@ export class ExpeditionController extends Component {
 
     if (choice === 'quit') {
       void this._floorFlow.ensureSettled(selection).catch(() => undefined);
-      SceneLoader.loadLobby();
+      this._goLobby();
       return;
     }
 
@@ -3847,8 +4279,7 @@ export class ExpeditionController extends Component {
       );
       try {
         LoadingOverlay.update({ text: '正在同步本层结算…', progress: 0.35 });
-        const settled = await this._floorFlow.ensureSettled(selection);
-        this._toastPartnerUnlocks(settled?.rewards);
+        await this._floorFlow.ensureSettled(selection);
         LoadingOverlay.update({
           text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在进入下一层…',
           progress: 0.55,
@@ -3864,7 +4295,7 @@ export class ExpeditionController extends Component {
           LoadingOverlay.hide();
           this._toast?.toast(`第${nextChapter}章资源加载失败，请返回大厅重新进入远征`);
           await delay(1200);
-          SceneLoader.loadLobby();
+          this._goLobby();
           return;
         }
         next = flowNext;
@@ -3875,7 +4306,7 @@ export class ExpeditionController extends Component {
         if (err instanceof Error && err.message === 'ALL_READY_FLOORS_COMPLETE') {
           this._toast?.toast('当前已开放楼层已全部通关，返回大厅');
           await delay(1200);
-          SceneLoader.loadLobby();
+          this._goLobby();
           return;
         }
         const retryChoice = this._toast
@@ -3888,7 +4319,7 @@ export class ExpeditionController extends Component {
             )
           : 'lobby';
         if (retryChoice !== 'retry') {
-          SceneLoader.loadLobby();
+          this._goLobby();
           return;
         }
       }
@@ -4035,7 +4466,8 @@ export class ExpeditionController extends Component {
     const choiceIds = catalog.minghenIds.slice(0, FLOOR_CLEAR_MINGHEN_CHOICES);
     const options = choiceIds.map((id) => {
       try {
-        return formatMinghenChoice(id, profile?.minghenCollection?.[id]);
+        // 通关奖励固定展示 I 级；同名升 II 在营地显式合成，不在此处预览。
+        return formatMinghenChoice(id);
       } catch {
         return '未知命痕';
       }

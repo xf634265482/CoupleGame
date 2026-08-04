@@ -50,7 +50,7 @@
 | `weapon_spear` | 3 | 1–2 直线 | `LINE_PIERCE`（可穿透次目标） |
 | （无隐式近战） | 3 | 1 | 单体 |
 
-- 护甲槽主数值计入减伤；头盔/鞋/饰品主数值计入最大生命（见 `EquipmentProgression`）。
+- 护甲槽主数值计入减伤；头盔/鞋主数值计入最大生命；**饰品主数值为灵气获取 %**（不再计入生命）。
 - 板甲隐式可附加移动代价；重盔可附加迷雾揭示等固定效果。
 - **鞋子隐式与品质阶段**（`resolveShoesStageEffects`；废止旧 `baseStat` 档位阈值）：
 
@@ -61,6 +61,16 @@
 | `shoes_iron` | 铁靴 | 地形伤 -1 | 首步 +1 AP | 地形伤 -2（目录暂无铁靴橙） |
 
 白/绿鞋子只有生命（同阶铁 > 战 > 轻），无分支机动效果。详情见 `docs/superpowers/specs/2026-08-04-shoes-type-quality-design.md`。
+
+- **饰品隐式与品质阶段**（`resolveTrinketStageEffects`）：
+
+| 隐式 | 身份 | 稀有起 | 史诗起 | 传说 |
+|---|---|---|---|---|
+| `trinket_spirit` | 灵气 | 击杀 +5 灵气 | 击杀 +8、爆发回 8 HP | 击杀 +10、爆发回 12 + 传奇 |
+| `trinket_luck` | 幸运 | 暴击 5% | 暴击 10% | 暴击 12% + 传奇连击 |
+| `trinket_gold` | 财运 | 星尘 +15% | 星尘 +25% | 阶段 +30% + 传奇 |
+
+白/绿饰品只有薄灵气%；同阶灵气% 灵气饰 ≥ 幸运 ≥ 财运。详见 `docs/superpowers/specs/2026-08-04-trinket-type-quality-design.md`。
 
 ### 1.3 品质
 
