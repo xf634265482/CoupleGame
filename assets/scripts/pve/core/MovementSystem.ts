@@ -1,5 +1,5 @@
 // 网格移动系统（design §4 AP / §5 地图 / AC-16 M2）：玩家按方向移动一格，消耗 AP，揭示周边迷雾。
-// 纯函数：越界 / AP 不足 / 目标格被存活怪物占据 时拒绝移动 —— 原样返回 state，不产生事件（no-op）。
+// 纯函数：越界 / AP 不足 / 目标格被存活且未潜地的怪物占据 时拒绝移动 —— 原样返回 state，不产生事件（no-op）。
 //
 // M2 词条效果（AC-16）：
 //   疾步(swift)   — ROGUE：移动消耗 AP 由 2 降为 1
@@ -7,7 +7,7 @@
 
 import { revealAround } from './FogSystem';
 import { AP_COST, CHAPTER2_SAND_PIT_MOVE_PENALTY, CHAPTER4_LAVA_TILE_DAMAGE, FOG_REVEAL_RADIUS, FROST_GIANT_SHATTERED_ICE_DAMAGE } from './PveConstants';
-import { SHOES_FIRST_MOVE_THRESHOLD, SHOES_REVEAL_BONUS_THRESHOLD } from './EquipmentSystem';
+import { resolveShoesStageEffectsFromItem } from './EquipmentSystem';
 import { fixedHelmetFogBonus, fixedShoesMoveCostReduction } from './equipment/EquipmentProgression';
 import { legGaleBootsFirstMoveFree, legShadowBootsMoveCostReduction } from './LegendarySystem';
 import { bossSandImmune } from './BossEquipTraitEffects';
@@ -34,7 +34,7 @@ export function inBounds(size: number, pos: Coord): boolean {
 
 export function isBlockedByMonster(floor: FloorState, pos: Coord): boolean {
   return floor.monsters.some(
-    (m) => m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y,
+    (m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y,
   );
 }
 
@@ -114,14 +114,15 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
   }
 
   const shoes = state.player.equipment.SHOES;
-  const shoesBaseStat = shoes?.baseStat ?? 0;
+  const shoesFx = resolveShoesStageEffectsFromItem(shoes);
   const fixedShoesReduction = fixedShoesMoveCostReduction(shoes);
+  const isFirstMoveOfTurn = (floor.playerStepsThisTurn ?? 0) === 0;
 
-  // RARE+(baseStat≥3)：每回合首次移动免费（0 AP）；传奇：疾风之靴忽略 baseStat 门槛永久生效
-  const firstMoveFree = (shoesBaseStat >= SHOES_FIRST_MOVE_THRESHOLD || legGaleBootsFirstMoveFree(state.player.equipment))
-    && !(floor.shoesFirstMoveDone ?? false);
-  // 靴子减耗：固定鞋履读 moveCostReduction；旧随机鞋 baseStat>0 时 -1 AP/步
-  const shoesReduction = Math.max(fixedShoesReduction, shoesBaseStat > 0 ? 1 : 0);
+  // 战靴稀有起 / 疾风之靴：每回合首次移动免费
+  const firstMoveFree = (shoesFx.firstMoveFree || legGaleBootsFirstMoveFree(state.player.equipment))
+    && isFirstMoveOfTurn;
+  // 靴子减耗：阶段表 + 固定鞋履字段（取较大）
+  const shoesReduction = Math.max(fixedShoesReduction, shoesFx.moveCostReduction);
   const configuredMoveCost = getBalancedActionCost(state.balanceSnapshot, state.chapter, 'MOVE');
   const baseCost = configuredMoveCost;
   // 冰霜/AOE 减速：移动AP+1（>0时叠加）
@@ -134,22 +135,24 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
   const sandPitPenalty = sandPitEntity && !bossSandImmune(state.player.equipment) ? CHAPTER2_SAND_PIT_MOVE_PENALTY : 0;
   // 基础款优缺点：板甲移动消耗额外 AP+1（AC-EQ-3）
   const platePenalty = state.player.equipment.ARMOR?.implicit === 'armor_plate' ? 1 : 0;
+  // 铁靴史诗起：本回合首步 +1 AP（首步免费时不收）
+  const ironFirstPenalty = isFirstMoveOfTurn && !firstMoveFree ? shoesFx.firstMoveApPenalty : 0;
   // 传奇：影踪战靴 每步移动额外 -1 AP
   const shadowBootsReduction = legShadowBootsMoveCostReduction(state.player.equipment);
   const cost = opts?.freeMove
     ? 0
     : firstMoveFree
       ? 0
-      : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty - shoesReduction - shadowBootsReduction);
+      : Math.max(0, baseCost + slowPenalty + sandPitPenalty + platePenalty + ironFirstPenalty - shoesReduction - shadowBootsReduction);
 
   if (floor.ap < cost) return noop(state);
   if (isBlockedByMonster(floor, to)) return noop(state);
   if (isBlockedByRock(floor, to)) return noop(state);
   if (isBlockedByIceWall(floor, to)) return noop(state);
 
-  // FINE+(baseStat≥2)：揭示半径 +1；固定头盔可读 fogRadius
+  // 轻靴稀有起：揭示半径 +1；固定头盔可读 fogRadius
   const revealRadius = FOG_REVEAL_RADIUS
-    + (shoesBaseStat >= SHOES_REVEAL_BONUS_THRESHOLD ? 1 : 0)
+    + shoesFx.fogBonus
     + fixedHelmetFogBonus(state.player.equipment.HELMET);
   const revealedNext = floor.revealed.map((row) => row.slice());
   const newlyRevealed = revealAround(revealedNext, to, revealRadius);
@@ -158,14 +161,19 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
   const shatteredIce = floor.entities.find(
     (e) => e.type === 'SHATTERED_ICE' && !e.consumed && e.pos.x === to.x && e.pos.y === to.y,
   );
-  const shatteredHp = shatteredIce ? Math.max(0, state.player.hp - FROST_GIANT_SHATTERED_ICE_DAMAGE) : state.player.hp;
+  const terrainReduce = shoesFx.terrainDamageReduction;
+  const shatteredDmg = shatteredIce
+    ? Math.max(0, FROST_GIANT_SHATTERED_ICE_DAMAGE - terrainReduce)
+    : 0;
+  const shatteredHp = shatteredIce ? Math.max(0, state.player.hp - shatteredDmg) : state.player.hp;
   const shatteredDead = shatteredIce ? shatteredHp <= 0 : false;
 
   // 熔岩领主 LAVA_TILE（第4章）：踩入立即扣血，地块不消失（与 SHATTERED_ICE 不同）。
   const lavaTile = !shatteredDead
     ? floor.entities.find((e) => e.type === 'LAVA_TILE' && !e.consumed && e.pos.x === to.x && e.pos.y === to.y)
     : undefined;
-  const lavaHp = lavaTile ? Math.max(0, shatteredHp - CHAPTER4_LAVA_TILE_DAMAGE) : shatteredHp;
+  const lavaDmg = lavaTile ? Math.max(0, CHAPTER4_LAVA_TILE_DAMAGE - terrainReduce) : 0;
+  const lavaHp = lavaTile ? Math.max(0, shatteredHp - lavaDmg) : shatteredHp;
   const lavaDead = lavaTile ? lavaHp <= 0 : shatteredDead;
   const finalHp = lavaHp;
   const finalDead = lavaDead;
@@ -204,11 +212,11 @@ export function applyMove(state: ExpeditionState, dir: Direction, opts?: { freeM
     events.push({ type: 'SAND_PIT_STEPPED', entityId: sandPitEntity.id });
   }
   if (shatteredIce) {
-    events.push({ type: 'PLAYER_DAMAGED', damage: FROST_GIANT_SHATTERED_ICE_DAMAGE, hp: shatteredHp, sourceId: shatteredIce.id });
+    events.push({ type: 'PLAYER_DAMAGED', damage: shatteredDmg, hp: shatteredHp, sourceId: shatteredIce.id });
     if (shatteredDead) events.push({ type: 'PLAYER_DEAD' });
   }
   if (lavaTile) {
-    events.push({ type: 'LAVA_TILE_DAMAGED', entityId: lavaTile.id, damage: CHAPTER4_LAVA_TILE_DAMAGE });
+    events.push({ type: 'LAVA_TILE_DAMAGED', entityId: lavaTile.id, damage: lavaDmg });
     if (lavaDead) events.push({ type: 'PLAYER_DEAD' });
   }
 

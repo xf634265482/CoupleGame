@@ -17,7 +17,10 @@ import {
 import { VARIANT_GOBLIN_SENTINEL, VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
 import { VARIANT_DESERT_HOPPER_LIZARD, VARIANT_DESERT_RAIDER, VARIANT_DUNE_SENTINEL } from './Chapter2Monsters';
 import { VARIANT_FROST_SPRITE, VARIANT_GLACIER_SHAPER, VARIANT_SNOW_WOLF } from './Chapter3Monsters';
+import { isControlRageActive } from './chapter3/ControlPointRage';
 import { VARIANT_ASH_HOUND, VARIANT_FIRE_ELEMENTAL } from './Chapter4Monsters';
+import { F24_ESCORT_CORE } from './chapter4/Chapter4FloorCatalog';
+import { stepEscortCore } from './chapter4/EscortCore';
 import { VARIANT_FATE_WATCHER, VARIANT_SHADOW_ASSASSIN } from './Chapter5Monsters';
 import {
   VARIANT_SPIRIT_BEETLE,
@@ -28,11 +31,12 @@ import {
   ANIMA_BEETLE_TRAP_DURATION,
   ANIMA_ELF_TRAP_DURATION,
   CHAPTER3_ICE_WALL_HP,
+  CHAPTER3_CONTROL_RAGE_MOVE_BONUS,
   GLACIER_SHAPER_ICE_WALL_HP,
   GLACIER_SHAPER_WALLS_PER_CAST,
 } from './PveConstants';
 import type { FixedEntity } from './PveTypes';
-import { shoesStealthReduction } from './EquipmentSystem';
+import { resolveShoesStageEffectsFromItem } from './EquipmentSystem';
 import { legSwallowStepsStealthBonus } from './LegendarySystem';
 import {
   fateGuardianAttack,
@@ -98,7 +102,7 @@ function isOccupied(floor: FloorState, pos: Coord, excludeId: string): boolean {
     return true;
   }
   return floor.monsters.some(
-    (m) => m.id !== excludeId && m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y,
+    (m) => m.id !== excludeId && m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y,
   );
 }
 
@@ -189,7 +193,7 @@ function isBlockingEntityType(type: FixedEntity['type']): boolean {
 function isBlockedForPlayer(floor: FloorState, pos: Coord, extraWall?: Coord): boolean {
   if (!inBounds(floor.size, pos)) return true;
   if (extraWall && pos.x === extraWall.x && pos.y === extraWall.y) return true;
-  if (floor.monsters.some((m) => m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y)) return true;
+  if (floor.monsters.some((m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y)) return true;
   return floor.entities.some(
     (e) => !e.consumed && isBlockingEntityType(e.type) && e.pos.x === pos.x && e.pos.y === pos.y,
   );
@@ -632,6 +636,9 @@ function chaseMoveOnly(state: ExpeditionState, monsterId: string): ApplyResult {
 }
 
 function stepOneAlly(state: ExpeditionState, monsterId: string): ApplyResult {
+  if (monsterId === F24_ESCORT_CORE) {
+    return stepEscortCore(state, monsterId);
+  }
   const ally = state.floorState.monsters.find((monster) => monster.id === monsterId);
   if (!ally || ally.aiState === 'DEAD' || !isAllyMonster(ally)) return { state, events: [] };
   const enemies = livingEnemyMonsters(state.floorState);
@@ -862,10 +869,10 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
 
   const primaryTarget = primaryEnemyTarget(floor, monster);
   const dist = manhattan(monster.pos, primaryTarget.pos);
-  // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；EPIC+靴子：额外缩小 2~3（叠加）
+  // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；轻靴史诗起：额外缩小（叠加）
   // 基础款优缺点：重盔 helmet_heavy 使怪物警戒范围 +1（等同于减少潜行收益，AC-EQ-3）
   const helmetAggroPenalty = state.player.equipment.HELMET?.implicit === 'helmet_heavy' ? 1 : 0;
-  const stealthReduction = shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0)
+  const stealthReduction = resolveShoesStageEffectsFromItem(state.player.equipment.SHOES).stealthReduction
     + legSwallowStepsStealthBonus(state.player.equipment)
     - helmetAggroPenalty;
   // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
@@ -899,6 +906,9 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   }
 
   if (floor.floor === 11 && monsterId === 'CHASE_TARGET') {
+    return stepChapter1Floor4Sentinel(state, monsterId);
+  }
+  if (floor.floor === 17 && monsterId === 'CHASE_TARGET') {
     return stepChapter1Floor4Sentinel(state, monsterId);
   }
 
@@ -1022,7 +1032,15 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
     : watcherAction === 'MOVE'
       ? 3
       : 1;
-  const maxMoveSteps = baseMoveSteps + (monster.frenzied ? 1 : 0);
+  const floor12SandstormMoveBonus = floor.floor === 12 ? 4 : 0;
+  let maxMoveSteps = baseMoveSteps
+    + floor12SandstormMoveBonus
+    + (monster.frenzied ? 1 : 0)
+    + (isControlRageActive(floor) ? CHAPTER3_CONTROL_RAGE_MOVE_BONUS : 0);
+  // 第 12 层第 19 回合后追兵狂暴：移动翻倍。
+  if (floor.floor === 12 && floor.timedEscapeEnraged) {
+    maxMoveSteps *= 2;
+  }
   let current = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
   const allEvents: PveEvent[] = [];
   if (watcherAction) allEvents.push({ type: 'FATE_WATCHER_ADAPTED', monsterId, action: watcherAction });

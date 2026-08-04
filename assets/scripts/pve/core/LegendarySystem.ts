@@ -181,7 +181,7 @@ export function legShadowBootsMoveCostReduction(equipment: Equipment): number {
   return playerHasLegendary(equipment, 'leg_shadow_boots') ? 1 : 0;
 }
 
-/** 疾风之靴：每回合首步免费（不依赖靴子 baseStat 档位）。 */
+/** 疾风之靴：每回合首步免费（不依赖战靴品质阶段）。 */
 export function legGaleBootsFirstMoveFree(equipment: Equipment): boolean {
   return playerHasLegendary(equipment, 'leg_gale_boots');
 }
