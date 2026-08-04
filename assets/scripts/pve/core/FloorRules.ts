@@ -7,6 +7,7 @@
 
 import { canAfford, spend } from './ApSystem';
 import { applyInteractionExposure } from './AlertSystem';
+import { reveal } from './FogSystem';
 import { rushMonstersTowardPlayer } from './MonsterAI';
 import type { ApplyResult, Coord, ExpeditionState, FixedEntity, FloorState, PveEvent } from './PveTypes';
 
@@ -48,7 +49,8 @@ export function openExit(state: ExpeditionState, entityId: string): ApplyResult 
   const entity = floor.entities.find((e) => e.id === entityId);
   if (!entity || entity.type !== 'EXIT' || entity.consumed) return noop(state);
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
-  if (!floor.hasKey) return noop(state);
+  const keylessTimedEscape = Boolean(state.persistentFloorMode) && floor.floor === 12;
+  if (!floor.hasKey && !keylessTimedEscape) return noop(state);
   const freeOpen = Boolean(state.persistentFloorMode);
   if (!freeOpen && !canAfford(floor.ap, 'OPEN_EXIT')) return noop(state);
 
@@ -102,23 +104,42 @@ export function spawnPortal(state: ExpeditionState, bossMonsterId: string): Appl
 /** 永久楼层：任意目标完成后在指定格生成通关传送门，不立即结算。 */
 export function spawnObjectivePortal(state: ExpeditionState, pos: Coord, id = `portal_${state.floorState.floor}`): ApplyResult {
   const floor = state.floorState;
-  if (floor.entities.some((e) => e.type === 'PORTAL' && !e.consumed)) return noop(state);
+  const existingPortal = floor.entities.find((e) => e.type === 'PORTAL' && !e.consumed);
+  if (existingPortal) {
+    const revealedExisting = reveal(floor.revealed, existingPortal.pos, 0);
+    if (revealedExisting.cells.length === 0) return noop(state);
+    return {
+      state: {
+        ...state,
+        floorState: {
+          ...floor,
+          revealed: revealedExisting.revealed,
+        },
+      },
+      events: [{ type: 'REVEAL', cells: revealedExisting.cells }],
+    };
+  }
+  const revealedPortal = reveal(floor.revealed, pos, 0);
   const portal: FixedEntity = {
     id,
     type: 'PORTAL',
     pos: { ...pos },
     consumed: false,
   };
+  const events: PveEvent[] = [];
+  if (revealedPortal.cells.length > 0) events.push({ type: 'REVEAL', cells: revealedPortal.cells });
+  events.push({ type: 'PORTAL_SPAWNED', entityId: portal.id, pos: portal.pos });
   return {
     state: {
       ...state,
       floorState: {
         ...floor,
+        revealed: revealedPortal.revealed,
         status: floor.status === 'CLEARED' ? 'EXPLORING' : floor.status,
         entities: [...floor.entities, portal],
       },
     },
-    events: [{ type: 'PORTAL_SPAWNED', entityId: portal.id, pos: portal.pos }],
+    events,
   };
 }
 
@@ -151,13 +172,13 @@ export function activateGunpowderBarrel(state: ExpeditionState, entityId: string
   const entity = floor.entities.find((e) => e.id === entityId);
   if (!entity || entity.type !== 'GUNPOWDER_BARREL' || entity.consumed) return noop(state);
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
-  if (!canAfford(floor.ap, 'USE_IDOL')) return noop(state);
+  if (!canAfford(floor.ap, 'USE_INTERACT')) return noop(state);
 
   const alarmed: ExpeditionState = {
     ...state,
     floorState: {
       ...floor,
-      ap: spend(floor.ap, 'USE_IDOL'),
+      ap: spend(floor.ap, 'USE_INTERACT'),
       entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
       monsters: floor.monsters.map((monster) => {
         if (monster.aiState === 'DEAD' || monster.hp <= 0 || monster.frenzied) return monster;
@@ -171,8 +192,8 @@ export function activateGunpowderBarrel(state: ExpeditionState, entityId: string
       }),
     },
   };
-  // 警报瞬间：全体存活怪向玩家冲锋最多 2 格，进入射程则立刻攻击一次。
-  const rush = rushMonstersTowardPlayer(alarmed, 2);
+  // 警报瞬间：全体存活怪向玩家冲锋最多 3 格，进入射程则立刻攻击一次。
+  const rush = rushMonstersTowardPlayer(alarmed, 3);
   return {
     state: rush.state,
     events: [
@@ -188,19 +209,94 @@ export function detonateBlastTarget(state: ExpeditionState, entityId: string): A
   if (!entity || entity.type !== 'BLAST_TARGET' || entity.consumed) return noop(state);
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
   if (!floor.entities.some((e) => e.type === 'GUNPOWDER_BARREL' && e.consumed)) return noop(state);
-  if (!canAfford(floor.ap, 'USE_IDOL')) return noop(state);
+  if (!canAfford(floor.ap, 'USE_INTERACT')) return noop(state);
 
   return {
     state: {
       ...state,
       floorState: {
         ...floor,
-        ap: spend(floor.ap, 'USE_IDOL'),
+        ap: spend(floor.ap, 'USE_INTERACT'),
         entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
       },
     },
     events: [{ type: 'BLAST_TARGET_DETONATED', entityId, pos: { ...entity.pos } }],
   };
+}
+
+function manhattanAdjacent(a: Coord, b: Coord): boolean {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) <= 1;
+}
+
+/** 第 23 层：相邻格互动封印熔岩 vent。 */
+export function sealLavaVent(state: ExpeditionState, entityId: string): ApplyResult {
+  const floor = state.floorState;
+  const entity = floor.entities.find((e) => e.id === entityId);
+  if (!entity || entity.type !== 'LAVA_VENT' || entity.consumed) return noop(state);
+  if (!manhattanAdjacent(floor.player, entity.pos)) return noop(state);
+  if (!canAfford(floor.ap, 'USE_INTERACT')) return noop(state);
+
+  return {
+    state: {
+      ...state,
+      floorState: {
+        ...floor,
+        ap: spend(floor.ap, 'USE_INTERACT'),
+        entities: floor.entities.map((e) => (
+          e.id === entityId || e.id === `${entityId}_WARN`
+            ? { ...e, consumed: true }
+            : e
+        )),
+      },
+    },
+    events: [{ type: 'VENT_SEALED', entityId, pos: { ...entity.pos } }],
+  };
+}
+
+/** 查找玩家相邻（含同格）可封印的 vent。 */
+export function findAdjacentLavaVent(floor: FloorState): FixedEntity | undefined {
+  return floor.entities.find((entity) => (
+    !entity.consumed
+    && entity.type === 'LAVA_VENT'
+    && manhattanAdjacent(floor.player, entity.pos)
+  ));
+}
+
+/** 第 31 层：相邻互动命运封印，选择试炼分支。 */
+export function interactFateSeal(state: ExpeditionState, entityId: string): ApplyResult {
+  const floor = state.floorState;
+  const entity = floor.entities.find((e) => e.id === entityId);
+  if (!entity || entity.type !== 'FATE_SEAL' || entity.consumed) return noop(state);
+  if (!manhattanAdjacent(floor.player, entity.pos)) return noop(state);
+  if (!canAfford(floor.ap, 'USE_INTERACT')) return noop(state);
+  const choiceBySeal: Record<string, 'HUNT' | 'ESCAPE' | 'HOLD'> = {
+    F31_SEAL_1: 'HUNT',
+    F31_SEAL_2: 'ESCAPE',
+    F31_SEAL_3: 'HOLD',
+  };
+  const choice = choiceBySeal[entityId];
+  if (!choice) return noop(state);
+  return {
+    state: {
+      ...state,
+      floorState: {
+        ...floor,
+        ap: spend(floor.ap, 'USE_INTERACT'),
+        entities: floor.entities.map((e) => (
+          e.type === 'FATE_SEAL' ? { ...e, consumed: true } : e
+        )),
+      },
+    },
+    events: [{ type: 'FATE_CHOICE_SELECTED', sealId: entityId, choice, pos: { ...entity.pos } }],
+  };
+}
+
+export function findAdjacentFateSeal(floor: FloorState): FixedEntity | undefined {
+  return floor.entities.find((entity) => (
+    !entity.consumed
+    && entity.type === 'FATE_SEAL'
+    && manhattanAdjacent(floor.player, entity.pos)
+  ));
 }
 
 /** 楼层是否已通关（出口门已开启 / Boss 层传送门已生成）。 */

@@ -281,7 +281,7 @@ describe('FloorRules — 楼层通关（AC-8, AC-9）', () => {
       expect(result.events[0]).toEqual({ type: 'GUNPOWDER_BARREL_ACTIVATED', entityId: 'F5_BARREL', pos: { x: 4, y: 6 } });
     });
 
-    it('alarm rush moves living monsters up to 2 cells toward the player and attacks when in range', () => {
+    it('alarm rush moves living monsters up to 3 cells toward the player and attacks when in range', () => {
       const state = makeExpeditionState({
         floor: 5,
         playerOverrides: { hp: 100, maxHp: 100 },
@@ -291,8 +291,8 @@ describe('FloorRules — 楼层通关（AC-8, AC-9）', () => {
           ap: 8,
           entities: [makeEntity('F5_BARREL', 'GUNPOWDER_BARREL', { x: 4, y: 6 })],
           monsters: [
-            // 距玩家曼哈顿 4 → 冲 2 格后到 (4,4)，近战仍够不着，只 MOVE
-            makeMonster('far', { x: 4, y: 2 }, { attack: 5, range: 1, aggroRadius: 8 }),
+            // 距玩家曼哈顿 5 → 冲 3 格后到 (4,4)，近战仍够不着，只 MOVE
+            makeMonster('far', { x: 4, y: 1 }, { attack: 5, range: 1, aggroRadius: 8 }),
             // 已在射程内 → 不移动，直接 ATTACK（翻倍后 10 伤）
             makeMonster('near', { x: 5, y: 6 }, { attack: 5, range: 1, aggroRadius: 8 }),
           ],
@@ -303,7 +303,7 @@ describe('FloorRules — 楼层通关（AC-8, AC-9）', () => {
       const far = result.state.floorState.monsters.find((monster) => monster.id === 'far');
       expect(far?.pos).toEqual({ x: 4, y: 4 });
       expect(far?.frenzied).toBe(true);
-      expect(result.events.filter((event) => event.type === 'MOVE' && event.entityId === 'far')).toHaveLength(2);
+      expect(result.events.filter((event) => event.type === 'MOVE' && event.entityId === 'far')).toHaveLength(3);
       expect(result.events.some((event) => event.type === 'PLAYER_DAMAGED' && event.sourceId === 'near' && event.damage === 10)).toBe(true);
       expect(result.state.player.hp).toBe(90);
     });

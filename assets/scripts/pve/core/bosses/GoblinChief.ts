@@ -54,8 +54,7 @@ import { BOSS_ARMOR_PENETRATION, GOBLIN_CHIEF_SUMMON_CAP, HORN_WARRIOR_COUNT, HO
 
 function bossPhysicalDamage(state: ExpeditionState, rawAttack: number, multiplier = 1): number {
   const player = state.player;
-  const armor = (player.equipment.ARMOR?.baseStat ?? 0)
-    + (player.idolArmorBonus ?? 0);
+  const armor = player.equipment.ARMOR?.baseStat ?? 0;
   const effectiveArmor = Math.floor(Math.max(0, armor) * (1 - BOSS_ARMOR_PENETRATION));
   return Math.max(1, Math.round(Math.max(0, rawAttack - effectiveArmor) * multiplier));
 }
@@ -71,11 +70,11 @@ export const HORN_INTERVAL_NORMAL = 3;
 /** 增援号角间隔（狂暴后）：每 2 个怪物回合。 */
 export const HORN_INTERVAL_ENRAGED = 2;
 /** 蓄力重击内圈伤害倍率（距离 ≤ HEAVY_STRIKE_INNER_RANGE）。 */
-export const HEAVY_STRIKE_MULTIPLIER = 1.5;
+export const HEAVY_STRIKE_MULTIPLIER = 2;
 /** 蓄力重击内圈半径（距离 ≤ 2 触发内圈伤害）。 */
 export const HEAVY_STRIKE_INNER_RANGE = 2;
 /** 蓄力重击外圈伤害倍率（距离 HEAVY_STRIKE_INNER_RANGE+1 到 HEAVY_STRIKE_RANGE）。 */
-export const HEAVY_STRIKE_OUTER_MULTIPLIER = 1.5;
+export const HEAVY_STRIKE_OUTER_MULTIPLIER = 1.75;
 /** 蓄力重击外圈最大半径（整体 AOE 半径）。2026-06-15 曾由 4→3，同日改为「重击回合站桩」后又改回 4
  *  （站桩后红圈=橙圈，无需靠缩小半径来腾出躲避空间，半径放大回 4 保持威慑）。 */
 export const HEAVY_STRIKE_RANGE = 4;
@@ -188,7 +187,7 @@ function getAdjacentFreeCells(floor: FloorState, center: Coord, count: number): 
  * - 普通回合（奇数）：普通攻击范围 GOBLIN_CHIEF_RANGE（2），单目标
  * - 重击回合（偶数）：同心圆 AOE，内圈(≤2格)×3，外圈(3-4格)×2
  *   - 石块在 boss→player 路径上时吸收伤害并消失
- * - 狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）：基础攻击+10
+ * - 狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）：基础攻击+15
  */
 export function goblinChiefAttack(state: ExpeditionState, bossId: string): ApplyResult {
   const floor = state.floorState;
@@ -199,7 +198,7 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 
   const heavy = isHeavyStrikeTurn(floor.turn);
   const enraged = boss.hp <= GOBLIN_CHIEF_ENRAGE_HP;
-  const baseAttack = enraged ? boss.attack + 10 : boss.attack;
+  const baseAttack = enraged ? boss.attack + 15 : boss.attack;
 
   if (!heavy) {
     // ── 普通攻击（单目标）───────────────────────────────

@@ -67,6 +67,7 @@ import {
 } from './chapter5/Chapter5FloorCatalog';
 import { CHAPTER5_FATE_REWRITE_INTERVAL } from './PveConstants';
 import { applyLightSandstorm } from './chapter2/LightSandstorm';
+import { applyTimedEscapeEnrage } from './chapter2/TimedEscapeEnrage';
 import { expandSandPitsWithTiles } from './chapter2/SandPitExpansion';
 import {
   markSandPitStepWaived,
@@ -76,8 +77,14 @@ import {
 import { CHAPTER2_SAND_PIT_MOVE_PENALTY } from './PveConstants';
 import { rushMonstersTowardPlayer } from './MonsterAI';
 
-/** 第 6 / 13 层夜袭：整波刷出后立刻朝玩家冲锋格数。 */
+/** 第 6 / 13 层夜袭：整波刷出后立刻朝玩家冲锋格数（默认）。 */
 export const WAVE_SPAWN_RUSH_STEPS = 4;
+
+/** 第 6 层后半波（≥3）冲锋加长；其余楼层/波次保持默认。 */
+export function waveSpawnRushSteps(floor: number, wave: number): number {
+  if (floor === 6 && wave >= 3) return 5;
+  return WAVE_SPAWN_RUSH_STEPS;
+}
 
 function getFloorObjective(floor: number): ObjectiveDefinition {
   const chapter = chapterIdForFloor(floor);
@@ -852,9 +859,9 @@ function waveKindsForFloor(floor: number, wave: number): string[] {
   const waves: Record<number, string[]> = {
     1: ['GOBLIN_WARRIOR', 'GOBLIN_WARRIOR'],
     2: ['GOBLIN_WARRIOR', 'GOBLIN_ARCHER'],
-    3: ['GOBLIN_WARRIOR', 'GOBLIN_WARRIOR', 'GOBLIN_ARCHER'],
-    4: ['FROST_GOBLIN', 'GOBLIN_WARRIOR', 'GOBLIN_ARCHER'],
-    5: ['FIRE_GOBLIN', 'FROST_GOBLIN', 'GOBLIN_WARRIOR', 'GOBLIN_ARCHER'],
+    3: ['GOBLIN_WARRIOR', 'GOBLIN_ARCHER', 'GOBLIN_ARCHER'],
+    4: ['FROST_GOBLIN', 'GOBLIN_ARCHER', 'GOBLIN_ARCHER'],
+    5: ['FIRE_GOBLIN', 'FROST_GOBLIN', 'GOBLIN_ARCHER', 'GOBLIN_ARCHER'],
   };
   return waves[wave] ?? [];
 }
@@ -919,8 +926,8 @@ function spawnWave(
       monsters: [...current.floorState.monsters, ...monsters],
     },
   };
-  // 整波同时刷出后立刻朝玩家冲锋 4 格，落点更靠近中场，避免玩家四角来回清剿。
-  const rush = rushMonstersTowardPlayer(expedition, WAVE_SPAWN_RUSH_STEPS, {
+  // 整波同时刷出后立刻朝玩家冲锋；第 6 层后半波加长。
+  const rush = rushMonstersTowardPlayer(expedition, waveSpawnRushSteps(current.floor, wave), {
     monsterIds: spawnedIds,
     attackIfInRange: false,
     collapseMoves: true,
@@ -1110,9 +1117,13 @@ export function applyPersistentBattleResult(
     const completedTurn = turnEvent && 'turn' in turnEvent ? Number(turnEvent.turn) : extended.expedition.floorState.turn - 1;
     const special = getChapter2FloorDefinition(12).special ?? {};
     const interval = Number(special.sandstormIntervalTurns ?? 2);
+    let floor12State = extended.expedition;
+    const enrage = applyTimedEscapeEnrage(floor12State, completedTurn);
+    floor12State = enrage.state;
+    const enrageEvents = enrage.events;
     if (completedTurn > 0 && completedTurn % interval === 0) {
-      const rng = createRng(extended.expedition.floorState.rngState);
-      const storm = applyLightSandstorm(extended.expedition, rng, {
+      const rng = createRng(floor12State.floorState.rngState);
+      const storm = applyLightSandstorm(floor12State, rng, {
         cellCount: Number(special.sandstormCells ?? 4),
         damage: Number(special.sandstormDamage ?? 10),
       }, {
@@ -1121,7 +1132,7 @@ export function applyPersistentBattleResult(
       });
       result = {
         state: storm.state,
-        events: [...result.events, ...storm.events],
+        events: [...result.events, ...enrageEvents, ...storm.events],
       };
       if (storm.memory) {
         professionRuntime = {
@@ -1130,7 +1141,10 @@ export function applyPersistentBattleResult(
         };
       }
     } else {
-      result = { ...result, state: extended.expedition };
+      result = {
+        state: floor12State,
+        events: [...result.events, ...enrageEvents],
+      };
     }
   } else if (runtime.floor === 18 && result.events.some((event) => event.type === 'TURN_END')) {
     const turnEvent = result.events.find((event) => event.type === 'TURN_END');

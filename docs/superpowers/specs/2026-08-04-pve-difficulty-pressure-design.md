@@ -1,7 +1,7 @@
 # PVE 关卡压力与节奏设计
 
 > 日期：2026-08-04  
-> 状态：已确认原则；第一章试点待实现  
+> 状态：第一章试点已实现，待自测  
 > 关联：`specs/260712-pve-persistent-floor-progression/`（各章内容表）、`specs/260608-pve-destiny-expedition/design.md`
 
 ## 1. 问题与目标
