@@ -21,6 +21,100 @@ export const IMPLICIT_ARMOR_PLATE = 'armor_plate';
 export const IMPLICIT_HELMET_HEAVY = 'helmet_heavy';
 /** 财运饰品：星尘获取量加成（字段仍名 gold；永久逐层新装不洗炼 trait）。 */
 export const IMPLICIT_TRINKET_GOLD = 'trinket_gold';
+/** 轻靴：机动与视野（稀有起：移速减耗 / 揭示 / 潜行）。 */
+export const IMPLICIT_SHOES_LIGHT = 'shoes_light';
+/** 战靴：节奏与爆发（稀有起：首步免费；史诗起叠加移速减耗）。 */
+export const IMPLICIT_SHOES_WAR = 'shoes_war';
+/** 铁靴：续航与硬抗（稀有起：地形减伤；史诗起首步 +1 AP）。 */
+export const IMPLICIT_SHOES_IRON = 'shoes_iron';
+
+export type ShoesImplicit =
+  | typeof IMPLICIT_SHOES_LIGHT
+  | typeof IMPLICIT_SHOES_WAR
+  | typeof IMPLICIT_SHOES_IRON;
+
+export interface ShoesStageEffects {
+  type: ShoesImplicit | null;
+  moveCostReduction: number;
+  fogBonus: number;
+  firstMoveFree: boolean;
+  stealthReduction: number;
+  terrainDamageReduction: number;
+  firstMoveApPenalty: number;
+}
+
+const EMPTY_SHOES_STAGE: ShoesStageEffects = {
+  type: null,
+  moveCostReduction: 0,
+  fogBonus: 0,
+  firstMoveFree: false,
+  stealthReduction: 0,
+  terrainDamageReduction: 0,
+  firstMoveApPenalty: 0,
+};
+
+const QUALITY_RANK: Record<EquipQuality, number> = {
+  COMMON: 0,
+  FINE: 1,
+  RARE: 2,
+  EPIC: 3,
+  LEGENDARY: 4,
+};
+
+function qualityAtLeast(quality: EquipQuality, min: EquipQuality): boolean {
+  return QUALITY_RANK[quality] >= QUALITY_RANK[min];
+}
+
+/** 按鞋子类型 + 实例品质解析阶段效果（白/绿无分支；蓝起身份）。 */
+export function resolveShoesStageEffects(
+  implicit: string | undefined,
+  quality: EquipQuality,
+): ShoesStageEffects {
+  if (implicit === IMPLICIT_SHOES_LIGHT) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_SHOES_STAGE, type: IMPLICIT_SHOES_LIGHT };
+    return {
+      type: IMPLICIT_SHOES_LIGHT,
+      moveCostReduction: 1,
+      fogBonus: 1,
+      firstMoveFree: false,
+      stealthReduction: qualityAtLeast(quality, 'LEGENDARY') ? 3 : qualityAtLeast(quality, 'EPIC') ? 2 : 0,
+      terrainDamageReduction: 0,
+      firstMoveApPenalty: 0,
+    };
+  }
+  if (implicit === IMPLICIT_SHOES_WAR) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_SHOES_STAGE, type: IMPLICIT_SHOES_WAR };
+    return {
+      type: IMPLICIT_SHOES_WAR,
+      moveCostReduction: qualityAtLeast(quality, 'EPIC') ? 1 : 0,
+      fogBonus: 0,
+      firstMoveFree: true,
+      stealthReduction: 0,
+      terrainDamageReduction: 0,
+      firstMoveApPenalty: 0,
+    };
+  }
+  if (implicit === IMPLICIT_SHOES_IRON) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_SHOES_STAGE, type: IMPLICIT_SHOES_IRON };
+    return {
+      type: IMPLICIT_SHOES_IRON,
+      moveCostReduction: 0,
+      fogBonus: 0,
+      firstMoveFree: false,
+      stealthReduction: 0,
+      terrainDamageReduction: qualityAtLeast(quality, 'LEGENDARY') ? 2 : 1,
+      firstMoveApPenalty: qualityAtLeast(quality, 'EPIC') ? 1 : 0,
+    };
+  }
+  return { ...EMPTY_SHOES_STAGE };
+}
+
+export function resolveShoesStageEffectsFromItem(
+  item: Pick<EquipItem, 'implicit' | 'quality'> | undefined | null,
+): ShoesStageEffects {
+  if (!item) return { ...EMPTY_SHOES_STAGE };
+  return resolveShoesStageEffects(item.implicit, item.quality);
+}
 
 interface EquipTemplate {
   name: string;
@@ -129,34 +223,34 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
     ],
   },
 
-  // ─ 靴子（baseStat 控制档位阈值：≥2 揭示+1 / ≥3 首步免费 / ≥4 潜行-aggroRadius）────
+  // ─ 靴子（baseStat → 最大生命；类型 implicit + 品质阶段表，见 resolveShoesStageEffects）────
   SHOES: {
     COMMON: [
-      { name: '布靴',       baseStatMin: 1, baseStatMax: 1 },
-      { name: '皮靴',       baseStatMin: 1, baseStatMax: 1 },
-      { name: '沙地靴',     baseStatMin: 1, baseStatMax: 1 },
+      { name: '布靴',       baseStatMin: 10, baseStatMax: 14, implicit: IMPLICIT_SHOES_LIGHT },
+      { name: '皮靴',       baseStatMin: 12, baseStatMax: 16, implicit: IMPLICIT_SHOES_WAR },
+      { name: '沙地靴',     baseStatMin: 15, baseStatMax: 20, implicit: IMPLICIT_SHOES_IRON },
     ],
     FINE: [
-      { name: '旅行皮靴',   baseStatMin: 1, baseStatMax: 2 }, // 可能达到揭示阈值
-      { name: '轻便皮靴',   baseStatMin: 2, baseStatMax: 2 }, // 稳定揭示
-      { name: '铁制战靴',   baseStatMin: 2, baseStatMax: 2 },
+      { name: '旅行皮靴',   baseStatMin: 20, baseStatMax: 28, implicit: IMPLICIT_SHOES_LIGHT },
+      { name: '轻便皮靴',   baseStatMin: 20, baseStatMax: 28, implicit: IMPLICIT_SHOES_LIGHT },
+      { name: '铁制战靴',   baseStatMin: 24, baseStatMax: 32, implicit: IMPLICIT_SHOES_WAR },
     ],
     RARE: [
-      { name: '猎手软靴',   baseStatMin: 2, baseStatMax: 3 }, // 可能首步免费
-      { name: '精制战靴',   baseStatMin: 3, baseStatMax: 3 }, // 稳定首步免费
-      { name: '精钢铁靴',   baseStatMin: 2, baseStatMax: 3 },
+      { name: '猎手软靴',   baseStatMin: 32, baseStatMax: 42, implicit: IMPLICIT_SHOES_LIGHT },
+      { name: '精制战靴',   baseStatMin: 38, baseStatMax: 48, implicit: IMPLICIT_SHOES_WAR },
+      { name: '精钢铁靴',   baseStatMin: 48, baseStatMax: 58, implicit: IMPLICIT_SHOES_IRON },
     ],
     EPIC: [
-      { name: '英雄战靴',   baseStatMin: 3, baseStatMax: 4 }, // 可能潜行
-      { name: '游侠软靴',   baseStatMin: 3, baseStatMax: 4 },
-      { name: '隐足战靴',   baseStatMin: 4, baseStatMax: 4 }, // 稳定潜行
-      { name: '猎风铁靴',   baseStatMin: 3, baseStatMax: 4 },
-      { name: '疾行套靴',   baseStatMin: 4, baseStatMax: 4 },
+      { name: '英雄战靴',   baseStatMin: 62, baseStatMax: 78, implicit: IMPLICIT_SHOES_WAR },
+      { name: '游侠软靴',   baseStatMin: 52, baseStatMax: 68, implicit: IMPLICIT_SHOES_LIGHT },
+      { name: '隐足战靴',   baseStatMin: 62, baseStatMax: 78, implicit: IMPLICIT_SHOES_WAR },
+      { name: '猎风铁靴',   baseStatMin: 78, baseStatMax: 94, implicit: IMPLICIT_SHOES_IRON },
+      { name: '疾行套靴',   baseStatMin: 52, baseStatMax: 68, implicit: IMPLICIT_SHOES_LIGHT },
     ],
     LEGENDARY: [
-      { name: '疾风之靴',   baseStatMin: 4, baseStatMax: 5, legendaryId: 'leg_gale_boots'    },
-      { name: '飞燕步履',   baseStatMin: 5, baseStatMax: 5, legendaryId: 'leg_swallow_steps' },
-      { name: '影踪战靴',   baseStatMin: 4, baseStatMax: 5, legendaryId: 'leg_shadow_boots'  },
+      { name: '疾风之靴',   baseStatMin: 95, baseStatMax: 115, implicit: IMPLICIT_SHOES_WAR, legendaryId: 'leg_gale_boots' },
+      { name: '飞燕步履',   baseStatMin: 80, baseStatMax: 100, implicit: IMPLICIT_SHOES_LIGHT, legendaryId: 'leg_swallow_steps' },
+      { name: '影踪战靴',   baseStatMin: 80, baseStatMax: 100, implicit: IMPLICIT_SHOES_LIGHT, legendaryId: 'leg_shadow_boots' },
     ],
   },
 
@@ -193,20 +287,6 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
 };
 
 const EQUIP_SLOTS: readonly EquipSlot[] = ['WEAPON', 'ARMOR', 'HELMET', 'SHOES', 'TRINKET'];
-
-// ── 靴子品质效果阈值 ─────────────────────────────────────
-/** FINE+(baseStat≥2)：移动后视野揭示半径 +1。 */
-export const SHOES_REVEAL_BONUS_THRESHOLD = 2;
-/** RARE+(baseStat≥3)：每回合首次移动免费（0 AP）。 */
-export const SHOES_FIRST_MOVE_THRESHOLD = 3;
-/** EPIC+(baseStat≥4)：怪物仇恨半径缩小；EPIC→-2，LEGENDARY→-3。 */
-export const SHOES_STEALTH_THRESHOLD = 4;
-
-/** 靴子提供的怪物仇恨半径缩减量（类似 ROGUE 潜行词条，叠加生效）。 */
-export function shoesStealthReduction(baseStat: number): number {
-  if (baseStat < SHOES_STEALTH_THRESHOLD) return 0;
-  return baseStat - 2; // EPIC(4)→2, LEGENDARY(5)→3
-}
 
 /**
  * 生成指定槽位与品质的装备实例（AC-EQ-1/2/3）：
