@@ -73,7 +73,7 @@ const TRAIT_DESC: Record<string, string> = {
   boss_show_intent: '显示 Boss 下一回合的行动意图',
 };
 
-function shoesExtraDesc(item: EquipItem): string {
+export function shoesStageEffectsDesc(item: EquipItem): string {
   const fx = resolveShoesStageEffectsFromItem(item);
   const parts: string[] = [];
   if (fx.moveCostReduction > 0) parts.push(`移动消耗 -${fx.moveCostReduction} AP`);
@@ -86,7 +86,7 @@ function shoesExtraDesc(item: EquipItem): string {
   return parts.join(' · ');
 }
 
-function trinketExtraDesc(item: EquipItem): string {
+export function trinketStageEffectsDesc(item: EquipItem): string {
   const fx = resolveTrinketStageEffectsFromItem(item);
   const parts: string[] = [];
   if (fx.killSpiritFlat > 0) parts.push(`击杀+${fx.killSpiritFlat}灵气`);
@@ -97,17 +97,23 @@ function trinketExtraDesc(item: EquipItem): string {
   return parts.join(' · ');
 }
 
+/** 隐式类型短标签（营地/战斗详情共用）。 */
+export function equipImplicitLabel(implicit: string | undefined): string {
+  if (!implicit) return '';
+  return IMPLICIT_CN[implicit] ?? '';
+}
+
 export function formatEquipDetailBody(item: EquipItem): string {
   const qualityStr = QUALITY_LABEL[item.quality] ?? item.quality;
   const slotStr = SLOT_LABEL[item.slot];
   const traitName = item.trait ? (TRAIT_CN[item.trait] ?? '特殊词条') : '';
   const traitDesc = item.trait ? (TRAIT_DESC[item.trait] ?? '特殊效果') : '';
-  const implicitDesc = item.implicit ? (IMPLICIT_CN[item.implicit] ?? '特殊特性') : '';
+  const implicitDesc = equipImplicitLabel(item.implicit);
 
   const primary = item.slot === 'SHOES'
-    ? `${equipPrimaryStatDescription(item)} · ${shoesExtraDesc(item)}`
+    ? `${equipPrimaryStatDescription(item)} · ${shoesStageEffectsDesc(item)}`
     : item.slot === 'TRINKET'
-      ? `${equipPrimaryStatDescription(item)} · ${trinketExtraDesc(item)}`
+      ? `${equipPrimaryStatDescription(item)} · ${trinketStageEffectsDesc(item)}`
       : equipPrimaryStatDescription(item);
 
   const lines = [

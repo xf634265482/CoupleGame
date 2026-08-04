@@ -35,6 +35,11 @@ import {
 import { paintMinghenGlyph } from './MinghenGlyphPainter';
 import { paintFurnaceStage, paintStarchartStage } from './CampSynthStagePainter';
 import { makeFlatButton, makeLabel } from './pveUiKit';
+import {
+  equipImplicitLabel,
+  shoesStageEffectsDesc,
+  trinketStageEffectsDesc,
+} from './pveEquipDetail';
 
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
 const MAT_ICON_FUSION_CORE = 'pve/lobby/icon_mat_fusion_core';
@@ -1097,11 +1102,16 @@ export class CampView {
         : slot === 'SHOES' ? '生命'
           : slot === 'TRINKET' ? '灵气'
             : '生命';
+    const statSuffix = slot === 'TRINKET' ? '%' : '';
     const lines = [
       definition.name,
       `${SLOT_NAMES[slot]} · ${QUALITY_NAMES[item.quality]}`,
-      `${statLabel} ${current}/${max}`,
+      `${statLabel} ${current}/${max}${statSuffix}`,
     ];
+    const typeLabel = equipImplicitLabel(equipItem.implicit);
+    if (typeLabel) lines.push(`类型：${typeLabel}`);
+    if (slot === 'SHOES') lines.push(`效果：${shoesStageEffectsDesc(equipItem)}`);
+    if (slot === 'TRINKET') lines.push(`效果：${trinketStageEffectsDesc(equipItem)}`);
     if (slot === 'WEAPON') {
       const minRange = definition.fixed.minRange ?? 1;
       const maxRange = definition.fixed.maxRange ?? minRange;
