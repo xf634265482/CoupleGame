@@ -2,7 +2,7 @@
 // 三层结构落地：Controller 仅做编排与输入处理，规则全部委托 pve/core 纯函数，渲染委托 views/*。
 // M1 垂直切片：第一章 1~5 层端到端打通；存档/云端校验留待 P3（见 specs/260608-pve-destiny-expedition）。
 
-import { _decorator, Color, Component, EventKeyboard, Graphics, Input, input, KeyCode, Node, Sprite, SpriteFrame, sys, tween, UIOpacity, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, EventKeyboard, Graphics, Input, input, KeyCode, Node, Sprite, SpriteFrame, sys, Tween, tween, UIOpacity, UITransform, Vec3 } from 'cc';
 import { SceneLoader } from '../../core/SceneLoader';
 import { lockPortrait } from '../../platform/wechat/WxLandscape';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../../platform/wechat/ViewAdapt';
 import { resolveAttackHitPos } from '../core/AttackPresentation';
 import {
+  expandOrthogonalMoveSteps,
   isCellRevealed,
   moveGhostRestoreMode,
   resolveMoveGhostAnimStart,
@@ -97,6 +98,12 @@ import { loadPartnerSprite } from '../PartnerIconResourceLoader';
 import type { PartnerEvolutionStage, PartnerId } from '../core/partner/PartnerTypes';
 
 const { ccclass } = _decorator;
+
+/** 单格滑步时长。
+ * 注意：git 里合批路径曾是 0.08s（注释写「每步 80ms」），旧 _playFxFor 玩家分支才是 0.15s；
+ * 两者都偏短且配 quadOut 会前冲，观感接近瞬移。这里用可读的匀速滑步。
+ */
+const MOVE_CELL_DURATION_SEC = 0.30;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -817,7 +824,6 @@ export class ExpeditionController extends Component {
       }
     }
 
-    const fxParent = this._map.getMoveFxParent();
     for (const [entityId, steps] of stepsByEntity) {
       const pathFrom = steps[0]!.from;
       const finalTo = steps[steps.length - 1]!.to;
@@ -837,7 +843,6 @@ export class ExpeditionController extends Component {
       if (!ghost && oldMonster) {
         ghost = this._map.cloneMonsterForFx(oldMonster);
       }
-      // 终点已在新 state 视野内时，也可从「即将画出的」旧怪缓存再试一次；仍失败则占位。
       if (!ghost) {
         ghost = this._map.createMoveFxPlaceholder(
           animFrom,
@@ -845,12 +850,15 @@ export class ExpeditionController extends Component {
         );
       }
 
-      ghost.setParent(fxParent);
+      // ★ 挂到场景根（与近战 lunge / 远程箭矢同一套）：
+      // 曾挂 MoveFxLayer(0×0 UITransform) + Content 本地坐标，在 FogMap Mask 下常不渲染，
+      // 只剩终点真身出现 → 观感就是「瞬移」。世界坐标换算后镜头滚动也正确。
+      ghost.setParent(this.node);
       ghost.setSiblingIndex(-1);
       ghost.active = true;
       const opacity = ghost.getComponent(UIOpacity) || ghost.addComponent(UIOpacity);
       opacity.opacity = 255;
-      ghost.setPosition(this._map.getCellLocalPosition(animFrom));
+      ghost.setPosition(this._worldToFxLocal(this._map.getCellWorldPosition(animFrom)));
       this._moveGhosts.set(entityId, {
         ghost,
         current: animFrom,
@@ -860,15 +868,22 @@ export class ExpeditionController extends Component {
     }
   }
 
-  /** 确保移动层与幽灵在雾/单位之上。 */
+  /** 格子世界坐标 → ExpeditionController 本地（移动幽灵 / 与攻击 fx 一致）。 */
+  private _worldToFxLocal(world: Vec3): Vec3 {
+    const transform = this.node.getComponent(UITransform);
+    if (!transform) return new Vec3(world.x, world.y, world.z);
+    return transform.convertToNodeSpaceAR(world);
+  }
+
+  /** 确保移动幽灵在 UI 最上层可见；refresh 滚镜头后按当前格重钉世界坐标。 */
   private _raiseMoveGhosts(): void {
-    const fxParent = this._map?.getMoveFxParent();
-    if (!fxParent) return;
+    if (!this._map) return;
     for (const entry of this._moveGhosts.values()) {
       if (!entry.ghost?.isValid) continue;
       entry.ghost.active = true;
-      entry.ghost.setParent(fxParent);
+      entry.ghost.setParent(this.node);
       entry.ghost.setSiblingIndex(-1);
+      entry.ghost.setPosition(this._worldToFxLocal(this._map.getCellWorldPosition(entry.current)));
     }
   }
 
@@ -877,81 +892,148 @@ export class ExpeditionController extends Component {
     from: Coord;
     to: Coord;
   }): Promise<void> {
-    return new Promise((resolve) => {
-      if (!this._map) {
-        resolve();
-        return;
-      }
-      const entry = this._moveGhosts.get(ev.entityId);
-      if (!entry?.ghost?.isValid) {
-        if (entry) this._clearMoveGhost(ev.entityId);
-        resolve();
-        return;
-      }
-      if (ev.entityId === 'PLAYER') playSfx(SFX_IDS.PLAYER_MOVE);
-      // 播前再藏一次终点：防止异步贴图/中途 refresh 把真身提前亮出 →「闪现」。
-      if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
-        this._map.setOccupantVisible(entry.finalTo, false);
-      }
-      if (entry.restoreBossIcon) {
-        this._map.setBossIconVisible(false);
-        this._map.setBossIconLocked(true);
-      }
-      // 直接按事件 from→to 滑，不依赖 current 对齐（避免雾前奏/合批打断导致整段被跳过）。
-      const fromLocal = this._map.getCellLocalPosition(ev.from);
-      const toLocal = this._map.getCellLocalPosition(ev.to);
-      entry.ghost.setParent(this._map.getMoveFxParent());
-      entry.ghost.setPosition(fromLocal);
-      entry.ghost.setSiblingIndex(-1);
-      entry.ghost.active = true;
-      entry.current = ev.to;
-      const stepDist = Math.max(1, Math.abs(ev.to.x - ev.from.x) + Math.abs(ev.to.y - ev.from.y));
-      // 单格约 0.12s：保证看得见，又避免多怪合批把 _busy 拉太长（误感「怪不追了」）。
-      const dur = Math.min(0.36, Math.max(0.12, 0.12 * stepDist));
-      let finished = false;
-      const finish = (forceStop: boolean) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(fallbackTimer);
-        this._trackedTimeouts.delete(fallbackTimer);
-        if (forceStop && entry.ghost?.isValid) {
-          entry.ghost.setPosition(toLocal);
-        }
-        if (entry.current.x === entry.finalTo.x && entry.current.y === entry.finalTo.y) {
-          this._clearMoveGhost(ev.entityId);
-        }
-        resolve();
-      };
-      const fallbackTimer = this._trackTimeout(() => finish(true), dur * 1000 + 200);
-      tween(entry.ghost)
-        .to(dur, { position: toLocal }, { easing: 'quadOut' })
-        .call(() => finish(false))
-        .start();
-    });
+    if (!ev || !ev.entityId || !ev.from || !ev.to) return Promise.resolve();
+    return this._playEntityMovePath([ev]);
   }
 
   /**
-   * 连续 MOVE 回放：同实体多步仍串行，不同实体并行。
-   * 第 10 层等「无迷雾 + 多怪」场景下，串行 await 每步 80ms 会把 _busy 拉到数秒，
-   * 表现为移动/蓄力/交互全部延迟；并行后总时长≈最慢那条路径。
+   * 同一实体路径：多格先拆成正交单格，再逐步 await 滑步。
+   * 单格固定 MOVE_CELL_DURATION_SEC + sineInOut（匀速进出，避免 quadOut 前冲像瞬移）。
    */
-  private async _playMoveBatch(moves: Array<{ entityId: string; from: Coord; to: Coord }>): Promise<void> {
-    if (moves.length === 0) return;
-    if (moves.length === 1) {
-      await this._playMoveFx(moves[0]!);
+  private async _playEntityMovePath(
+    stepsInput: Array<{ entityId: string; from: Coord; to: Coord }> | {
+      entityId: string;
+      from: Coord;
+      to: Coord;
+    } | null | undefined,
+  ): Promise<void> {
+    const rawSteps = Array.isArray(stepsInput)
+      ? stepsInput
+      : (stepsInput && typeof stepsInput === 'object' && 'entityId' in stepsInput
+        ? [stepsInput]
+        : []);
+    const steps = rawSteps.filter(
+      (step): step is { entityId: string; from: Coord; to: Coord } => Boolean(
+        step
+        && typeof step.entityId === 'string'
+        && step.from
+        && step.to
+        && Number.isFinite(step.from.x)
+        && Number.isFinite(step.from.y)
+        && Number.isFinite(step.to.x)
+        && Number.isFinite(step.to.y),
+      ),
+    );
+    if (!this._map || steps.length === 0) return;
+
+    const entityId = steps[0]!.entityId;
+    const entry = this._moveGhosts.get(entityId);
+    if (!entry?.ghost?.isValid) {
+      if (entry) this._clearMoveGhost(entityId);
       return;
     }
+
+    if (entityId === 'PLAYER') playSfx(SFX_IDS.PLAYER_MOVE);
+    if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
+      this._map.setOccupantVisible(entry.finalTo, false);
+    }
+    if (entry.restoreBossIcon) {
+      this._map.setBossIconVisible(false);
+      this._map.setBossIconLocked(true);
+    }
+
+    const ghost = entry.ghost;
+    ghost.setParent(this.node);
+    ghost.setSiblingIndex(-1);
+    ghost.active = true;
+    const opacity = ghost.getComponent(UIOpacity) || ghost.addComponent(UIOpacity);
+    opacity.opacity = 255;
+
+    let playSteps = steps;
+    const cur = entry.current;
+    if (cur) {
+      const startIdx = steps.findIndex(
+        (step) => step.from.x === cur.x && step.from.y === cur.y,
+      );
+      if (startIdx > 0) playSteps = steps.slice(startIdx);
+    }
+    // 多格 MOVE（collapse / 冲锋）拆成单格；已是单格则保持一步。
+    const unitSteps: Array<{ from: Coord; to: Coord }> = [];
+    for (const step of playSteps) {
+      const expanded = expandOrthogonalMoveSteps(step.from, step.to);
+      if (expanded.length === 0) continue;
+      unitSteps.push(...expanded);
+    }
+    if (unitSteps.length === 0) return;
+
+    const dur = MOVE_CELL_DURATION_SEC;
+    for (const step of unitSteps) {
+      if (!ghost.isValid) break;
+      // 每步独立 tween：上一步必须先停干净，再从 from 滑到 to。
+      Tween.stopAllByTarget(ghost);
+      if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
+        this._map.setOccupantVisible(entry.finalTo, false);
+      }
+      // refresh/镜头之后再取世界坐标，保证大地图滚动后仍对准格子。
+      const fromLocal = this._worldToFxLocal(this._map.getCellWorldPosition(step.from));
+      const toLocal = this._worldToFxLocal(this._map.getCellWorldPosition(step.to));
+      ghost.setPosition(fromLocal.x, fromLocal.y, 0);
+      ghost.setSiblingIndex(-1);
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = (forceStop: boolean) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(fallbackTimer);
+          this._trackedTimeouts.delete(fallbackTimer);
+          if (forceStop && ghost.isValid) {
+            ghost.setPosition(toLocal.x, toLocal.y, 0);
+          }
+          resolve();
+        };
+        const fallbackTimer = this._trackTimeout(() => finish(true), dur * 1000 + 180);
+        if (!ghost.isValid) {
+          finish(true);
+          return;
+        }
+        tween(ghost)
+          .to(dur, { position: new Vec3(toLocal.x, toLocal.y, 0) }, { easing: 'sineInOut' })
+          .call(() => finish(false))
+          .start();
+      });
+      entry.current = { x: step.to.x, y: step.to.y };
+    }
+
+    const last = unitSteps[unitSteps.length - 1]!;
+    if (last.to.x === entry.finalTo.x && last.to.y === entry.finalTo.y) {
+      this._clearMoveGhost(entityId);
+    }
+  }
+
+  /**
+   * 连续 MOVE 回放：同实体多步串行滑完；不同实体并行。
+   */
+  private async _playMoveBatch(moves: Array<{ entityId: string; from: Coord; to: Coord }>): Promise<void> {
+    const validMoves = (moves ?? []).filter(
+      (move) => move
+        && typeof move.entityId === 'string'
+        && move.from
+        && move.to,
+    );
+    if (validMoves.length === 0) return;
     const byEntity = new Map<string, Array<{ entityId: string; from: Coord; to: Coord }>>();
-    for (const move of moves) {
+    for (const move of validMoves) {
       const list = byEntity.get(move.entityId);
       if (list) list.push(move);
       else byEntity.set(move.entityId, [move]);
     }
-    await Promise.all(
-      [...byEntity.values()].map(async (steps) => {
-        for (const step of steps) await this._playMoveFx(step);
-      }),
-    );
+    const paths = [...byEntity.values()].filter((steps) => steps.length > 0);
+    if (paths.length === 0) return;
+    if (paths.length === 1) {
+      await this._playEntityMovePath(paths[0]!);
+      return;
+    }
+    await Promise.all(paths.map((steps) => this._playEntityMovePath(steps)));
   }
 
   /**
@@ -1842,49 +1924,58 @@ export class ExpeditionController extends Component {
   /**
    * 进入/恢复到指定章节前，确保该章资源 bundle + 背景已就绪。
    * reuseOverlay：进战读条已在显示时只 update，勿再 show 一次「进入第N章」造成二次加载感。
+   * silentRetry：失败时遮罩内重试，不 toast、不赶回大厅。
    */
   private async _ensureChapterReady(
     chapter: number,
-    opts?: { reuseOverlay?: boolean },
+    opts?: { reuseOverlay?: boolean; silentRetry?: boolean },
   ): Promise<boolean> {
     if (isChapterReady(chapter)) return true;
     const reuse = opts?.reuseOverlay === true || LoadingOverlay.isActive();
-    if (!reuse) {
-      LoadingOverlay.show(this.node, `正在进入第${chapter}章…`, {
-        mode: 'chapter',
-        title: `进入第${chapter}章`,
-        subtitle: '迷雾正在向更深处散去',
-        hint: '远征之路正在向前延伸',
-        progress: 0.1,
-        timeoutMs: 15000,
-        hideOnTimeout: false,
-        onTimeout: () => LoadingOverlay.update({
-          text: `第${chapter}章加载较慢，仍在继续准备…`,
-          subtitle: '更深处的道路仍在显现',
-        }),
-      });
-    } else {
-      LoadingOverlay.update({
-        text: `正在加载第${chapter}章资源…`,
-        subtitle: '迷雾正在向更深处散去',
-        hint: '请稍候',
-        progress: 0.6,
-      });
+    const silentRetry = opts?.silentRetry === true;
+    const maxAttempts = silentRetry ? 8 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (!reuse && attempt === 1) {
+        LoadingOverlay.show(this.node, `正在进入第${chapter}章…`, {
+          mode: 'chapter',
+          title: `进入第${chapter}章`,
+          subtitle: '迷雾正在向更深处散去',
+          hint: '远征之路正在向前延伸',
+          progress: 0.1,
+          timeoutMs: 15000,
+          hideOnTimeout: false,
+          onTimeout: () => LoadingOverlay.update({
+            text: `第${chapter}章加载较慢，仍在继续准备…`,
+            subtitle: '更深处的道路仍在显现',
+          }),
+        });
+      } else {
+        LoadingOverlay.update({
+          text: `正在加载第${chapter}章资源…`,
+          subtitle: attempt > 1 ? '仍在加载，请稍候…' : '迷雾正在向更深处散去',
+          hint: '请稍候',
+          progress: Math.min(0.8, 0.5 + attempt * 0.05),
+        });
+      }
+      const ready = await ensureChapterAssets(chapter, (stage) => LoadingOverlay.update(stage)).catch(() => false);
+      if (ready) {
+        LoadingOverlay.update({
+          text: `正在绘制第${chapter}章战场…`,
+          progress: 0.88,
+          subtitle: '新的命运篇章已经展开',
+        });
+        return true;
+      }
+      if (!silentRetry || attempt === maxAttempts) break;
+      console.warn('[PVE] ensureChapterReady retry', chapter, attempt);
+      await delay(Math.min(4000, 800 + attempt * 400));
     }
-    const ready = await ensureChapterAssets(chapter, (stage) => LoadingOverlay.update(stage)).catch(() => false);
-    if (!ready) {
+    if (!silentRetry) {
       LoadingOverlay.hide();
-      this._toast?.toast(`第${chapter}章资源加载失败，请返回大厅重新进入远征`);
+      this._toast?.toast(`第${chapter}章资源加载失败，请稍后重试`);
       await delay(1200);
-      this._goLobby();
-      return false;
     }
-    LoadingOverlay.update({
-      text: `正在绘制第${chapter}章战场…`,
-      progress: 0.88,
-      subtitle: '新的命运篇章已经展开',
-    });
-    return true;
+    return false;
   }
 
   /**
@@ -1962,6 +2053,32 @@ export class ExpeditionController extends Component {
       : undefined;
     const timedEscapeEnraged = this._state?.floor === 12
       && this._state.floorState.timedEscapeEnraged === true;
+    const pressureLines: string[] = [];
+    if (objective.kind === 'BREAKTHROUGH'
+      && objective.status === 'ACTIVE'
+      && objective.data.barrelActivated
+      && !objective.data.detonated
+      && Number.isFinite(Number(objective.data.blastTurnsLeft))) {
+      pressureLines.push(`引爆剩余：${Math.max(0, Math.trunc(Number(objective.data.blastTurnsLeft)))} 回合`);
+    }
+    if (objective.kind === 'WAVE_SURVIVAL'
+      && objective.status === 'ACTIVE'
+      && Number(objective.data.forceSpawnTurns ?? 0) > 0) {
+      pressureLines.push(`下一波：${Math.trunc(Number(objective.data.forceSpawnTurns))} 回合后强制刷新`);
+    }
+    if (objective.kind === 'CHASE' && objective.status === 'ACTIVE' && this._state) {
+      const sentinel = this._state.floorState.monsters.find(
+        (monster) => monster.id === 'GOBLIN_SENTINEL' && monster.hp > 0 && monster.aiState !== 'DEAD',
+      );
+      const escape = this._state.floorState.entities.find(
+        (entity) => entity.type === 'ESCAPE_MARKER' && !entity.consumed,
+      );
+      if (sentinel && escape) {
+        const dist = Math.abs(sentinel.pos.x - escape.pos.x) + Math.abs(sentinel.pos.y - escape.pos.y);
+        const moves = Math.max(1, Math.ceil(dist / 2));
+        pressureLines.push(`逃离约 ${moves} 回合`);
+      }
+    }
     this._hud?.refreshPersistentControls(
       this._runtime.config.professionId,
       this._selectedChargeAp,
@@ -1975,6 +2092,7 @@ export class ExpeditionController extends Component {
         hp: this._runtime.resources.hp,
         timedEscapeTurnsLeft,
         timedEscapeEnraged,
+        pressureLines: pressureLines.length > 0 ? pressureLines : undefined,
       },
     );
     const pb = this._runtime.battleState.partnerBattle;
@@ -2993,8 +3111,8 @@ export class ExpeditionController extends Component {
       this._flushTutorialExplainAfterApply();
     }
 
-    // 刚刷出通关门时丢弃排队互动：否则「开门/目标完成」动画期间的连点会立刻踏门通关，
-    // 剥夺继续探索的选择；通关门必须由玩家再点一次「互动」确认。
+    // 排队互动仅用于「动画占 busy 时点过互动」补一次；通关门绝不自动踏入。
+    // 刚刷门 / 已站在未消耗传送门上时丢弃排队，必须玩家再点一次「互动」。
     if (
       this._pendingInteract
       && !spawnedPortalThisApply
@@ -3003,11 +3121,30 @@ export class ExpeditionController extends Component {
       && this._state?.floorState.status === 'EXPLORING'
     ) {
       this._pendingInteract = false;
+      if (this._playerStandingOnUnconsumedPortal()) {
+        this._toast?.toast('传送门已就绪，请点击「互动」进入下一层');
+        return;
+      }
       this._onInteract(true);
       return;
     }
     this._pendingInteract = false;
+    if (spawnedPortalThisApply && this._playerStandingOnUnconsumedPortal()) {
+      this._toast?.toast('传送门已出现，请点击「互动」进入下一层');
+    }
     void this._maybeAutoEndTurn();
+  }
+
+  private _playerStandingOnUnconsumedPortal(): boolean {
+    const floor = this._state?.floorState;
+    if (!floor) return false;
+    return floor.entities.some(
+      (entity) =>
+        entity.type === 'PORTAL'
+        && !entity.consumed
+        && entity.pos.x === floor.player.x
+        && entity.pos.y === floor.player.y,
+    );
   }
 
   /** 原始交互结果是否为「踏入传送门通关」（尚未经 persistent 桥接改写）。 */
@@ -3478,6 +3615,7 @@ export class ExpeditionController extends Component {
           void Effects.pop(node, { strength: 1.4 });
         }
         playSfx(SFX_IDS.DOOR_OPEN);
+        this._toast?.toast('传送门已出现：走到门上，再点「互动」通关');
         break;
       }
       case 'WAVE_INCOMING': {
@@ -3763,6 +3901,11 @@ export class ExpeditionController extends Component {
     this._consumedCollisionAttacks.clear();
     const pendingMoves: Array<{ entityId: string; from: Coord; to: Coord }> = [];
     const pendingAttacks: Extract<PveEvent, { type: 'ATTACK' }>[] = [];
+    const queueMove = (entityId: string | undefined, from: Coord | undefined, to: Coord | undefined) => {
+      if (!entityId || !from || !to) return;
+      if (!Number.isFinite(from.x) || !Number.isFinite(from.y) || !Number.isFinite(to.x) || !Number.isFinite(to.y)) return;
+      pendingMoves.push({ entityId, from, to });
+    };
     const flushPendingMoves = async () => {
       if (pendingMoves.length === 0) return;
       const batch = pendingMoves.splice(0, pendingMoves.length);
@@ -3788,13 +3931,13 @@ export class ExpeditionController extends Component {
       // 其它事件（含会 await 的 Boss 演出）前先 flush，保证顺序。
       if (ev.type === 'MOVE') {
         await flushPendingAttacks();
-        pendingMoves.push({ entityId: ev.entityId, from: ev.from, to: ev.to });
+        queueMove(ev.entityId, ev.from, ev.to);
       } else if (ev.type === 'HOPPER_REACTION_ADVANCED' || ev.type === 'HOPPER_FRENZY_TRIGGERED') {
         await flushPendingAttacks();
-        pendingMoves.push({ entityId: ev.monsterId, from: ev.from, to: ev.to });
+        queueMove(ev.monsterId, ev.from, ev.to);
       } else if (ev.type === 'MIRROR_MOVED') {
         await flushPendingAttacks();
-        pendingMoves.push({ entityId: ev.mirrorId, from: ev.from, to: ev.to });
+        queueMove(ev.mirrorId, ev.from, ev.to);
       } else if (ev.type === 'ATTACK') {
         await flushPendingMoves();
         pendingAttacks.push(ev);
@@ -4137,6 +4280,12 @@ export class ExpeditionController extends Component {
     if (objective?.kind === 'TIMED_ESCAPE') {
       return '已超过 30 回合时限，沙暴走廊突围失败';
     }
+    if (objective?.kind === 'BREAKTHROUGH' && objective.status === 'FAILED') {
+      return '火药桶激活后未及时引爆，突围失败';
+    }
+    if (objective?.kind === 'CHASE' && objective.status === 'FAILED') {
+      return '哨兵已抵达逃离点，追逃失败';
+    }
     if (objective?.status === 'FAILED') {
       return '本层目标失败';
     }
@@ -4210,30 +4359,8 @@ export class ExpeditionController extends Component {
 
     this._toast?.toastImportant('本层通关！', 1200);
     const selection = await this._promptClearRewardSelection();
-    // 本地落单 + 等云端 settle，拿到 newlyUnlockedPartnerIds 后再揭晓。
+    // 本地落单 + 后台 settle；失败不弹窗、不赶回大厅。
     this._floorFlow.beginDeferredSettle(selection);
-    this._toast?.toast('进度同步中…');
-    let settleRewards: Record<string, unknown> | null | undefined;
-    try {
-      const settled = await this._floorFlow.ensureSettled(selection);
-      settleRewards = settled?.rewards as Record<string, unknown> | undefined;
-    } catch {
-      settleRewards = undefined;
-    }
-    await this._revealPartnerUnlocks(settleRewards);
-
-    const canContinue = clearedFloor < MAX_READY_FLOOR;
-    const choice = this._toast
-      ? await this._toast.showConfirm(
-          `第${oldChapter}章 · 第${clearedFloor}层通关！`,
-          canContinue
-            ? [
-                { label: '继续远征 →', value: 'continue' },
-                { label: '返回大厅', value: 'quit' },
-              ]
-            : [{ label: '返回大厅', value: 'quit' }],
-        )
-      : (canContinue ? 'continue' : 'quit');
 
     const completedTutorialFloor = this._state.isTutorialRun && this._state.floor === 1;
     if (completedTutorialFloor) {
@@ -4244,44 +4371,90 @@ export class ExpeditionController extends Component {
       try {
         await updatePveMeta({ tutorialCompleted: true });
       } catch (err) {
-        this._toast?.toast(`教学完成标记保存失败：${err instanceof Error ? err.message : String(err)}`);
+        console.warn('[PVE] tutorialCompleted meta save failed', err);
       }
     }
 
-    if (choice === 'quit') {
+    const canContinue = clearedFloor < MAX_READY_FLOOR;
+    if (!canContinue) {
+      // 已无下一层：等结算尽量完成后再回厅（失败也静默，仍回厅）。
+      let settleRewards: Record<string, unknown> | null | undefined;
+      try {
+        const settled = await this._floorFlow.ensureSettled(selection);
+        settleRewards = settled?.rewards as Record<string, unknown> | undefined;
+      } catch (err) {
+        console.warn('[PVE] ensureSettled at content end', err);
+        settleRewards = undefined;
+      }
+      await this._revealPartnerUnlocks(settleRewards);
+      if (this._toast) {
+        await this._toast.showConfirm(
+          `第${oldChapter}章 · 第${clearedFloor}层通关！\n当前已开放楼层已全部通关。`,
+          [{ label: '返回大厅', value: 'quit' }],
+        );
+      }
       void this._floorFlow.ensureSettled(selection).catch(() => undefined);
       this._goLobby();
       return;
     }
 
+    // 有下一层：不弹「继续 / 返回大厅」，直接加载下一层；结算失败只在遮罩内静默重试。
     const nextChapter = oldChapter + (isBossFloor(clearedFloor) ? 1 : 0);
     const crossingChapter = nextChapter > oldChapter;
     let next;
+    let attempt = 0;
+    let partnerUnlockDone = false;
     while (true) {
+      attempt += 1;
       LoadingOverlay.show(
         this.node,
-        crossingChapter ? `正在进入第${nextChapter}章…` : '正在同步进度…',
+        crossingChapter ? `正在进入第${nextChapter}章…` : '正在加载下一层…',
         {
           mode: crossingChapter ? 'chapter' : 'default',
-          title: crossingChapter ? `进入第${nextChapter}章` : '同步进度',
-          subtitle: crossingChapter ? '迷雾正在向更深处散去' : '正在确认本层结算',
-          hint: '本地进度已保留，正在与云端同步',
-          progress: 0.2,
+          title: crossingChapter ? `进入第${nextChapter}章` : '加载下一层',
+          subtitle: crossingChapter ? '迷雾正在向更深处散去' : '正在准备下一层战场',
+          hint: attempt > 1 ? '仍在加载，请稍候…' : '请稍候，不要重复点击',
+          progress: Math.min(0.85, 0.2 + attempt * 0.08),
           hideOnTimeout: false,
-          timeoutMs: 60000,
+          timeoutMs: 90000,
           onTimeout: () => LoadingOverlay.update({
             text: crossingChapter
               ? `第${nextChapter}章加载较慢，仍在继续准备…`
-              : '同步较慢，仍在继续…',
+              : '下一层加载较慢，仍在继续…',
             subtitle: '请稍候，不要重复点击',
+            hint: '正在确认进度',
           }),
         },
       );
       try {
-        LoadingOverlay.update({ text: '正在同步本层结算…', progress: 0.35 });
-        await this._floorFlow.ensureSettled(selection);
         LoadingOverlay.update({
-          text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在进入下一层…',
+          text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在加载下一层…',
+          subtitle: '正在确认本层进度',
+          progress: 0.35,
+        });
+        const settled = await this._floorFlow.ensureSettled(selection);
+        if (!partnerUnlockDone) {
+          // 伙伴揭晓需短暂隐藏加载层，避免模态被遮罩挡住。
+          LoadingOverlay.hide();
+          await this._revealPartnerUnlocks(settled?.rewards as Record<string, unknown> | undefined);
+          partnerUnlockDone = true;
+          LoadingOverlay.show(
+            this.node,
+            crossingChapter ? `正在进入第${nextChapter}章…` : '正在加载下一层…',
+            {
+              mode: crossingChapter ? 'chapter' : 'default',
+              title: crossingChapter ? `进入第${nextChapter}章` : '加载下一层',
+              subtitle: '战场生成中',
+              hint: '请稍候',
+              progress: 0.55,
+              hideOnTimeout: false,
+              timeoutMs: 90000,
+            },
+          );
+        }
+        LoadingOverlay.update({
+          text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在加载下一层…',
+          subtitle: '战场生成中',
           progress: 0.55,
         });
         const assetsP = crossingChapter
@@ -4292,42 +4465,43 @@ export class ExpeditionController extends Component {
           this._floorFlow.continueNextFloor(),
         ]);
         if (crossingChapter && !assetsOk) {
-          LoadingOverlay.hide();
-          this._toast?.toast(`第${nextChapter}章资源加载失败，请返回大厅重新进入远征`);
-          await delay(1200);
-          this._goLobby();
-          return;
+          console.warn('[PVE] chapter assets not ready, retrying', nextChapter);
+          LoadingOverlay.update({
+            text: `正在进入第${nextChapter}章…`,
+            subtitle: '资源准备中',
+            hint: '仍在加载，请稍候…',
+            progress: 0.45,
+          });
+          await delay(Math.min(4000, 800 + attempt * 400));
+          continue;
         }
         next = flowNext;
         break;
       } catch (err) {
-        LoadingOverlay.hide();
-        const message = this._formatUserFacingError(err);
         if (err instanceof Error && err.message === 'ALL_READY_FLOORS_COMPLETE') {
-          this._toast?.toast('当前已开放楼层已全部通关，返回大厅');
+          LoadingOverlay.hide();
+          this._toast?.toast('当前已开放楼层已全部通关');
           await delay(1200);
           this._goLobby();
           return;
         }
-        const retryChoice = this._toast
-          ? await this._toast.showConfirm(
-              `同步失败\n${message}\n本地进度已保留，可重试同步或返回大厅。`,
-              [
-                { label: '再试一次', value: 'retry' },
-                { label: '返回大厅', value: 'lobby' },
-              ],
-            )
-          : 'lobby';
-        if (retryChoice !== 'retry') {
-          this._goLobby();
-          return;
-        }
+        console.warn('[PVE] continueNextFloor retry', attempt, err);
+        LoadingOverlay.update({
+          text: crossingChapter ? `正在进入第${nextChapter}章…` : '正在加载下一层…',
+          subtitle: '正在确认进度',
+          hint: '仍在加载，请稍候…',
+          progress: Math.min(0.7, 0.3 + (attempt % 5) * 0.08),
+        });
+        await delay(Math.min(5000, 1000 + attempt * 500));
       }
     }
     this._runtime = next.runtime;
     this._state = next.runtime.battleState.expedition;
     if (this._state.chapter > oldChapter) {
-      if (!(await this._ensureChapterReady(this._state.chapter))) return;
+      if (!(await this._ensureChapterReady(this._state.chapter, { silentRetry: true }))) {
+        // silentRetry 耗尽仍失败时继续用当前已创建的 runtime 尝试进层，避免赶回大厅。
+        console.warn('[PVE] chapter assets still not ready after retries', this._state.chapter);
+      }
     }
     LoadingOverlay.update({
       text: '战场准备完成',
@@ -4421,7 +4595,7 @@ export class ExpeditionController extends Component {
     while (this._persistentSaveInFlight) await delay(120);
   }
 
-  /** 每完成一层自动存档；失败不阻塞继续游玩，仅提示（→ AC-11）。 */
+  /** 每完成一层自动存档；失败静默重试，不向玩家暴露存档错误。 */
   private async _autoSaveCurrentFloor(): Promise<void> {
     if (!this._state || !this._runtime || !this._floorFlow) return;
     if (this._settlingCloud && this._runtime.status !== 'ACTIVE') return;
@@ -4430,8 +4604,8 @@ export class ExpeditionController extends Component {
       this._floorFlow.updateRuntime(this._runtime);
       await this._floorFlow.save();
     } catch (err) {
-      this._toast?.toast(`存档失败：${this._formatUserFacingError(err)}`);
-      await delay(600);
+      console.warn('[PVE] autosave failed, will retry', err);
+      this._queuePersistentSave(2200);
     }
   }
 

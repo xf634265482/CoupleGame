@@ -6,6 +6,7 @@ import {
   type ObjectiveDefinition,
   type ObjectiveEvent,
 } from './FloorObjective';
+import { CHAPTER1_BLAST_TURN_LIMIT, CHAPTER1_WAVE_FORCE_SPAWN_TURNS } from '../PveConstants';
 import { CHAPTER1_FLOOR3_BLOCKER_IDS } from '../chapter1/Chapter1FloorCatalog';
 
 const base = (
@@ -96,7 +97,7 @@ export function createChaseObjective(): ObjectiveDefinition {
     floor: 4,
     kind: 'CHASE',
     title: '截获哨兵军令',
-    description: '追上携令逃跑的哨兵并击败它。哨兵抵达闪烁逃离点即挑战失败——勿犹豫绕路。',
+    description: '在错口石墙间追上携令哨兵并击败它。守卫会阻挠追击；哨兵抵达闪烁逃离点即失败。',
     create: () => base(4, 'CHASE', 1, { targetId: 'GOBLIN_SENTINEL' }),
     apply(state, event) {
       const t = terminal(state, event);
@@ -129,42 +130,70 @@ export function createWaveSurvivalObjective(): ObjectiveDefinition {
     floor: 6,
     kind: 'WAVE_SURVIVAL',
     title: '守住五波夜袭',
-    description: '四角刷怪点整波召唤敌人并立刻压向中场；清空五波夜袭后出现传送门。',
-    create: () => base(6, 'WAVE_SURVIVAL', 5, { currentWave: 0, aliveIds: [], preparationTurns: 0 }),
+    description: '四角刷怪点整波压向中场。第 3 波起若未及时清空，会按回合强制刷下一波；清空五波后出现传送门。',
+    create: () => base(6, 'WAVE_SURVIVAL', 5, {
+      currentWave: 0,
+      aliveIds: [],
+      preparationTurns: 0,
+      forceSpawnTurns: 0,
+    }),
     apply(state, event) {
       const t = terminal(state, event);
       if (t) return t;
       let currentWave = Number(state.data.currentWave ?? 0);
       let aliveIds = stringList(state.data.aliveIds);
       let preparationTurns = Number(state.data.preparationTurns ?? 0);
+      let forceSpawnTurns = Number(state.data.forceSpawnTurns ?? 0);
       const commands: ObjectiveApplyResult['commands'] = [];
       if (event.type === 'WAVE_SPAWNED') {
         if (event.wave !== currentWave + 1) return { state, commands: [] };
         currentWave = event.wave;
         aliveIds = [...new Set(event.entityIds)];
         preparationTurns = 0;
+        // 第 3–4 波刷出后开始强制刷下一波倒计时；第 5 波无下一波。
+        forceSpawnTurns = currentWave >= 3 && currentWave < 5
+          ? CHAPTER1_WAVE_FORCE_SPAWN_TURNS
+          : 0;
       } else if (event.type === 'ENTITY_KILLED' && aliveIds.includes(event.entityId)) {
         aliveIds = aliveIds.filter((id) => id !== event.entityId);
         if (aliveIds.length === 0) {
           if (currentWave >= 5) {
-            return complete({ ...state, progress: 5, data: { currentWave, aliveIds, preparationTurns: 0 } });
+            return complete({
+              ...state,
+              progress: 5,
+              data: { currentWave, aliveIds, preparationTurns: 0, forceSpawnTurns: 0 },
+            });
           }
-          // 清波后立刻预警并刷下一波（不再等玩家再结束回合）。
+          // 清波后立刻预警并刷下一波。
           preparationTurns = 0;
+          forceSpawnTurns = 0;
           const nextWave = currentWave + 1;
           commands.push({ type: 'WARN_WAVE', wave: nextWave });
           commands.push({ type: 'SPAWN_WAVE', wave: nextWave });
         }
-      } else if (event.type === 'PLAYER_TURN_ENDED' && preparationTurns > 0) {
-        // 旧档兼容：若仍残留 preparationTurns，结束回合时刷下一波。
-        preparationTurns -= 1;
-        if (preparationTurns === 0) {
-          commands.push({ type: 'WARN_WAVE', wave: currentWave + 1 });
-          commands.push({ type: 'SPAWN_WAVE', wave: currentWave + 1 });
+      } else if (event.type === 'PLAYER_TURN_ENDED') {
+        if (forceSpawnTurns > 0 && currentWave >= 3 && currentWave < 5) {
+          forceSpawnTurns -= 1;
+          if (forceSpawnTurns === 0) {
+            const nextWave = currentWave + 1;
+            commands.push({ type: 'WARN_WAVE', wave: nextWave });
+            commands.push({ type: 'SPAWN_WAVE', wave: nextWave });
+          }
+        } else if (preparationTurns > 0) {
+          // 旧档兼容：若仍残留 preparationTurns，结束回合时刷下一波。
+          preparationTurns -= 1;
+          if (preparationTurns === 0) {
+            commands.push({ type: 'WARN_WAVE', wave: currentWave + 1 });
+            commands.push({ type: 'SPAWN_WAVE', wave: currentWave + 1 });
+          }
         }
       }
       return {
-        state: { ...state, progress: currentWave, data: { currentWave, aliveIds, preparationTurns } },
+        state: {
+          ...state,
+          progress: currentWave,
+          data: { currentWave, aliveIds, preparationTurns, forceSpawnTurns },
+        },
         commands,
       };
     },
@@ -177,14 +206,30 @@ export function createBreakthroughObjective(): ObjectiveDefinition {
     floor: 5,
     kind: 'BREAKTHROUGH',
     title: '爆破碎石封锁',
-    description: '先激活火药桶，再抵达爆破点引爆。',
-    create: () => base(5, 'BREAKTHROUGH', 2, { barrelActivated: false, detonated: false, barrelId: 'F5_BARREL', blastId: 'F5_BLAST_TARGET' }),
+    description: `先激活火药桶，再在 ${CHAPTER1_BLAST_TURN_LIMIT} 个玩家回合内抵达爆破点引爆；超时失败。`,
+    create: () => base(5, 'BREAKTHROUGH', 2, {
+      barrelActivated: false,
+      detonated: false,
+      barrelId: 'F5_BARREL',
+      blastId: 'F5_BLAST_TARGET',
+      blastTurnsLeft: null,
+      blastTurnLimit: CHAPTER1_BLAST_TURN_LIMIT,
+    }),
     apply(state, event) {
       const t = terminal(state, event);
       if (t) return t;
+      const limit = Number(state.data.blastTurnLimit ?? CHAPTER1_BLAST_TURN_LIMIT);
       if (event.type === 'GUNPOWDER_ACTIVATED' && event.entityId === state.data.barrelId) {
         return {
-          state: { ...state, progress: Math.max(state.progress, 1), data: { ...state.data, barrelActivated: true } },
+          state: {
+            ...state,
+            progress: Math.max(state.progress, 1),
+            data: {
+              ...state.data,
+              barrelActivated: true,
+              blastTurnsLeft: limit,
+            },
+          },
           commands: [],
         };
       }
@@ -193,7 +238,32 @@ export function createBreakthroughObjective(): ObjectiveDefinition {
         && event.entityId === state.data.blastId
         && state.data.barrelActivated
       ) {
-        return complete({ ...state, progress: 2, data: { ...state.data, detonated: true } });
+        return complete({
+          ...state,
+          progress: 2,
+          data: { ...state.data, detonated: true, blastTurnsLeft: 0 },
+        });
+      }
+      if (
+        event.type === 'PLAYER_TURN_ENDED'
+        && state.data.barrelActivated
+        && !state.data.detonated
+      ) {
+        const left = Math.max(0, Number(state.data.blastTurnsLeft ?? limit) - 1);
+        if (left <= 0) {
+          return {
+            state: {
+              ...state,
+              status: 'FAILED',
+              data: { ...state.data, blastTurnsLeft: 0 },
+            },
+            commands: [{ type: 'OBJECTIVE_FAILED', reason: 'BLAST_TURN_LIMIT' }],
+          };
+        }
+        return {
+          state: { ...state, data: { ...state.data, blastTurnsLeft: left } },
+          commands: [],
+        };
       }
       return { state, commands: [] };
     },

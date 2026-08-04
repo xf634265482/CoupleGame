@@ -12,7 +12,7 @@ export const AP_COST = {
   ATTACK: 3, // 鏅€氭敾鍑伙紙鍐嶈皟楂樹负 3 杩涗竴姝ラ檺鍒舵瘡鍥炲悎鏀诲嚮娆℃暟锛屽己鍖栬祫婧愬喅绛栵級
   OPEN_CHEST: 1, // 寮€鍚疂绠?
   OPEN_EXIT: 1, // 寮€鍚嚭鍙ｉ棬
-  USE_IDOL: 1, // 浣跨敤绁炲儚
+  USE_INTERACT: 1, // 通用剧情交互（火药桶、爆破点等）
   USE_HOT_SPRING: 1, // 浣跨敤娓╂硥
   USE_ALTAR: 1, // 浣跨敤绁潧锛堥搧鍖犱笉鍦ㄦ琛細閾佸尃鍙敹閲戝竵锛屼笉娑堣€?AP锛?
 } as const;
@@ -22,10 +22,8 @@ export const AP_COST = {
 export const AP_CARRY_CAP = 3;
 
 // 鈹€鈹€ 涓珛浜や簰瀹炰綋鏁堟灉锛圡1 鍗犱綅鏁板€硷紝寰呬笌璁捐甯堝榻愬洖鍐?design.md锛?鈹€鈹€
-export const IDOL_MAX_HP_BONUS = 10;    // 绁炲儚绁濈锛氭案涔?+10 maxHp
-export const IDOL_ATTACK_BONUS = 2;     // 绁炲儚绁濈锛氭案涔?+2 鏀诲嚮
-export const IDOL_ARMOR_BONUS = 2;      // 绁炲儚绁濈锛氭案涔?+2 鎶ょ敳锛堝噺灏戞€墿瀵圭帺瀹剁殑浼ゅ锛?
-export const HOT_SPRING_HEAL_RATIO = 0.5; // 娓╂硥锛氭仮澶?maxHp 鐨?50%
+export const HOT_SPRING_SHIELD_RATIO = 0.2; // 温泉护泉：获得 maxHp 20% 的临时护盾
+export const HOT_SPRING_SPIRIT_GAIN = 15; // 温泉净泉：净化 1 个负面状态并获得灵气
 
 // 鈹€鈹€ 鍦板浘灏哄锛坉esign 搂3 / 搂5锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const MAP_SIZE = {
@@ -84,7 +82,11 @@ export const SPECIAL_MONSTER_RETREAT_STEPS = 3;
 // 鈹€鈹€ 鐏垫皵锛坉esign 搂9锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const ANIMA_PROGRESS_CAP = 100;
 export const ANIMA_THRESHOLD_MULTIPLIER = 1.35; // 姣忔瑙﹀彂鍚庨槇鍊?脳 姝ょ郴鏁帮紙V3 搂4b.1锛?.5鈫?.35锛屽欢缂撳悗鏈熸柇渚涳級
-export const STRENGTHEN_CHOICES = 3; // 3 閫?1
+export const STRENGTHEN_CHOICES = 3; // 3 选 1
+/** 首通通关命痕弹窗固定选项数（主题池可更长，展示截取前 N 个）。 */
+export const FLOOR_CLEAR_MINGHEN_CHOICES = 3;
+/** 营地命痕装配槽上限。 */
+export const MINGHEN_LOADOUT_SLOTS = 10;
 
 // 鈹€鈹€ 鎴樻枟鍩虹鍊硷紙M1锛氬啋闄╄€呮棤姝﹀櫒鍩虹鏀诲嚮锛涜澶囧悗鍙犲姞锛?鈹€鈹€
 export const BASE_ATTACK = 10; // M1 鍐掗櫓鑰呭熀纭€鏅敾锛埫?0 鍩哄噯锛屽師 1锛涘悗缁敱瑁呭/鑱屼笟璋冩暣锛?
@@ -265,36 +267,32 @@ export const ALTAR_ANIMA_MIN = 20;
 /** 绁潧锛氭瘡娆′娇鐢ㄩ殢鏈鸿幏寰楃伒姘旂殑鏈€澶у€笺€?*/
 export const ALTAR_ANIMA_MAX = 35;
 
-// 鈹€鈹€ 閾佸尃鏈嶅姟璐圭敤锛坉esign 搂3 涓€у尯鍩燂級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-/** 閾佸尃寮哄寲鍩虹璐圭敤锛堟瘡娆″疄闄呰垂鐢?= BASE 脳 upgradeStep 脳 (enhanceLevel + 1)锛屾寜鍝佽川鍒嗙骇閫掑锛夈€?*/
-export const BLACKSMITH_UPGRADE_COST = 20;
-/** 寮哄寲浠庣鍑犵骇璧峰紑濮嬫湁澶辫触姒傜巼锛?5 = 10%锛?6 = 15%锛屾瘡绾?+5%锛屼笂闄?80%锛夈€?*/
-export const BLACKSMITH_FAIL_THRESHOLD = 5;
-export const BLACKSMITH_FAIL_BASE = 0.10;
-export const BLACKSMITH_FAIL_STEP = 0.05;
-export const BLACKSMITH_FAIL_CAP = 0.80;
-/**
- * 閾佸尃寮哄寲姣忔鎻愬崌 baseStat 鐨勫閲忥紝鎸夎澶囧搧璐ㄥ垎绾э紙脳10 鍩哄噯锛夈€?
- * WEAPON / ARMOR / HELMET 浣跨敤姝よ〃锛汼HOES / TRINKET 鍥哄畾 +1銆?
- * 绀轰緥锛欳OMMON 姝﹀櫒锛堝熀纭€10锛夋瘡娆?1锛汧INE锛堝熀纭€20锛夋瘡娆?2锛汱EGENDARY锛堝熀纭€80锛夋瘡娆?8銆?
- */
-export const BLACKSMITH_ENHANCE_STEP: Record<string, number> = {
-  COMMON:    1,
-  FINE:      2,
-  RARE:      3,
-  EPIC:      5,
-  LEGENDARY: 8,
-};
-
 // ── 第2-5章 Boss 专属机制常量（260613 内容深化）────────────────
 /** 绗?绔?QuicksandScorpion Boss 鎴块潤鎬佹矙鍧戞暟閲忥紙寮€鎴挎椂鍒凤紝姘镐箙锛涢捇鍦颁紭鍏堝嚭鐩搁偦娌欏潙浣嶏級銆?*/
 export const CHAPTER2_SAND_PIT_COUNT = 8;
 /** 娌欏潙绉诲姩 AP 棰濆娑堣€楋紙鍙犲姞鍦ㄥ熀纭€ MOVE 涓婏紱闈欐€?鍔ㄦ€佹矙鍧戝叡鐢級銆?*/
 export const CHAPTER2_SAND_PIT_MOVE_PENALTY = 2;
+/** 第 12 层沙暴走廊：玩家回合上限（超时弹窗失败）。 */
+export const CHAPTER2_TIMED_ESCAPE_TURN_LIMIT = 30;
+/** 第 12 层：从该回合起追兵持续狂暴（攻击/移动翻倍，直到本层结束）。 */
+export const CHAPTER2_TIMED_ESCAPE_ENRAGE_TURN = 19;
 /** 绗?绔?FrostGiant Boss 鎴垮啺澧欐暟閲忋€?*/
 export const CHAPTER3_ICE_WALL_COUNT = 3;
 /** 鍐板 HP锛堢帺瀹跺彲鏀诲嚮鐮村潖锛孒P=0 鏃舵秷澶卞苟鎺夌伒姘旓級銆?*/
 export const CHAPTER3_ICE_WALL_HP = 100;
+/** 第 16 层悬赏单位相对原型的 HP / 攻击倍率（同 AI，不新增怪物类型）。 */
+export const CHAPTER3_BOUNTY_HP_MULT = 1.75;
+export const CHAPTER3_BOUNTY_ATK_MULT = 1.25;
+/** 第 18 层冰川阵核基础 HP；霜甲晶柱存活时额外减伤比例。 */
+export const CHAPTER3_CORE_HP = 480;
+export const CHAPTER3_CORE_ARMOR_PILLAR_REDUCTION = 0.35;
+/** 第 18 层辅助晶柱周期（回合间隔）。 */
+export const CHAPTER3_PILLAR_INTERVAL_TURNS = 3;
+/** 第 19 层控制点完成所需玩家回合占领进度。 */
+export const CHAPTER3_CONTROL_POINT_PROGRESS = 5;
+/** 第 19 层夺控狂暴：站在未完成控制点时怪物移动 / 攻击加成。 */
+export const CHAPTER3_CONTROL_RAGE_MOVE_BONUS = 2;
+export const CHAPTER3_CONTROL_RAGE_ATTACK_BONUS = 5;
 /** 鍐板鐮村潖鏃舵帀钀界伒姘斻€?*/
 export const CHAPTER3_ICE_WALL_DROP_ANIMA = 2;
 /** 鍐板窛濉戝舰鑰呭吋瀹瑰埆鍚嶏細褰撳墠鎵€鏈夌涓夌珷 ICE_WALL 缁熶竴浣跨敤 CHAPTER3_ICE_WALL_HP銆?*/
@@ -305,7 +303,29 @@ export const GLACIER_SHAPER_WALLS_PER_CAST = 3;
 export const GLACIER_SHAPER_ICE_WALL_DROP_ANIMA = CHAPTER3_ICE_WALL_DROP_ANIMA;
 /** 姣忓眰閫氳繃鍑荤鍐板鏈€澶氳幏寰楃殑鐏垫皵锛岄槻姝㈠埛澧欏吇鎴愩€?*/
 export const GLACIER_SHAPER_ICE_WALL_FLOOR_ANIMA_CAP = 12;
-/** 绗?绔?LavaLord 闃舵浜岋細瀹氬悜鐔斿博娼睈姣忛殧澶氬皯 Boss 鍥炲悎鎺ㄨ繘涓€鎺掞紙2026-06-15 鐢?闅忔満鎾掔偣"閲嶅仛涓?瀹氬悜鏁存帓"锛夈€?*/
+/** 第 23 层熔岩 vent 喷发周期（玩家回合）。 */
+export const CHAPTER4_VENT_INTERVAL = 3;
+/** 第 25 层安全区迁移周期（玩家回合）。 */
+export const CHAPTER4_SAFE_ZONE_INTERVAL = 2;
+/** 第 25 层需坚持的玩家回合数。 */
+export const CHAPTER4_SAFE_ZONE_SURVIVE_TURNS = 8;
+/** 第 25 层安全区外环境伤害（每玩家回合结束）。 */
+export const CHAPTER4_SAFE_ZONE_OUTSIDE_DAMAGE = 8;
+/** 第 27 层熔岩潮汐推进周期（玩家回合）。 */
+export const CHAPTER4_TIDE_INTERVAL = 2;
+/** 第 32 层预言之眼固定预言伤害（非 Boss 攻击）。 */
+export const CHAPTER5_PROPHECY_FIXED_DAMAGE = 12;
+/** 第 32 层：双预言之眼存活时的预言间隔（玩家回合）。 */
+export const CHAPTER5_PROPHECY_INTERVAL_TWO = 2;
+/** 第 32 层：单预言之眼存活时的预言间隔（玩家回合）。 */
+export const CHAPTER5_PROPHECY_INTERVAL_ONE = 3;
+/** 第 31 层命运抉择「坚守」需坚持的玩家回合数。 */
+export const CHAPTER5_FATE_CHOICE_HOLD_TURNS = 6;
+/** 第 34 层改写试炼需坚持的玩家回合数。 */
+export const CHAPTER5_FATE_REWRITE_SURVIVE_TURNS = 6;
+/** 第 34 层改写命运预告间隔（玩家回合）。 */
+export const CHAPTER5_FATE_REWRITE_INTERVAL = 2;
+/** 第 4 章 LavaLord 阶段二：定向熔岩潮汐每隔多少 Boss 回合推进一排（Boss 战专用）。 */
 export const CHAPTER4_LAVA_TIDE_INTERVAL = 3;
 /** 瀹氬悜鐔斿博娼睈鏈€澶氭帹杩涚殑鎺掓暟锛堣揪鍒板悗鍋滄鎺ㄨ繘锛屽凡鐢熸垚鏍煎瓙姘镐箙淇濈暀锛夈€?*/
 export const CHAPTER4_LAVA_TIDE_ROW_MAX = 3;
@@ -367,6 +387,10 @@ export const DESTINY_5X5_DMG_MULT = 1.2;
 // 鈹€鈹€ 绗竴绔犱笓灞炴満鍒跺父閲?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 /** 绗竴绔?Boss 鎴块殢鏈虹煶鍧楁暟閲忋€?*/
 export const CHAPTER1_BOSS_ROCK_COUNT = 5;
+/** 第 5 层：激活火药桶后，必须在该玩家回合数内引爆，否则失败。 */
+export const CHAPTER1_BLAST_TURN_LIMIT = 7;
+/** 第 6 层：第 3 波起，刷出后若未清完，经过该玩家回合数强制刷下一波。 */
+export const CHAPTER1_WAVE_FORCE_SPAWN_TURNS = 4;
 /** 鐭冲潡 HP锛堝彲鐮村潖锛岀帺瀹舵櫘鏀诲彲鍑荤锛夈€?*/
 export const ROCK_HP = 350;
 /** 澧炴彺鍙疯姣忔鍙敜鍝ュ竷鏋楁垬澹暟锛堥潪鐙傛毚锛夈€?*/
@@ -402,7 +426,7 @@ export const ANIMA_ELF_TRAP_DURATION = 6;
 /** 鐏垫皵鐐庨瓊锛圕H4锛夛細鐜╁鍑绘潃鏃跺湪鍗佸瓧 4 鏍肩敓鎴愮殑鐔斿博瀛樼画鍥炲悎鏁般€?*/
 export const ANIMA_EMBER_LAVA_DURATION = 3;
 /** 鐏垫皵骞昏薄锛圕H5锛塀uff/Debuff 姹?id锛氶殢鏈轰竴椤圭珛鍗崇敓鏁堛€?*/
-export const ANIMA_MIRAGE_BUFF_IDS = ['HEAL_30', 'AP_PLUS_3', 'ANIMA_PLUS_60', 'GOLD_PLUS_60', 'ATTACK_UP'] as const;
+export const ANIMA_MIRAGE_BUFF_IDS = ['HEAL_30', 'AP_PLUS_3', 'ANIMA_PLUS_60', 'GOLD_PLUS_60'] as const;
 export const ANIMA_MIRAGE_DEBUFF_IDS = ['HURT_20', 'FIRE_BURN_2', 'SLOW_2', 'AP_MINUS_3', 'ANIMA_PROGRESS_MINUS_30'] as const;
 export type AnimaMirageBuffId = (typeof ANIMA_MIRAGE_BUFF_IDS)[number];
 export type AnimaMirageDebuffId = (typeof ANIMA_MIRAGE_DEBUFF_IDS)[number];

@@ -28,6 +28,7 @@ import { getChapter4Objective } from '../core/chapter4/Chapter4Objectives';
 import { getChapter5Objective } from '../core/chapter5/Chapter5Objectives';
 import type { ObjectiveDefinition } from '../core/objectives/FloorObjective';
 import { CLASS_DISPLAY_NAMES } from '../core/professions/ProfessionDisplayNames';
+import { Effects } from '../../fx/Effects';
 import { makeLabel } from './pveUiKit';
 
 export type PveHudCallbacks = {
@@ -61,7 +62,7 @@ const PANEL = new Color(7, 31, 70, 170);
 const PANEL_LIGHT = new Color(16, 57, 98, 245);
 const PANEL_BORDER = new Color(84, 200, 239, 240);
 const HP_COLOR = new Color(230, 82, 100, 255);
-const SHIELD_COLOR = new Color(245, 250, 255, 230);
+const SHIELD_COLOR = new Color(150, 158, 168, 230);
 const AP_COLOR = new Color(72, 174, 229, 255);
 const TYPE_BADGE_BLUE_FILL = new Color(20, 72, 120, 228);
 const TYPE_BADGE_BLUE_BORDER = new Color(126, 203, 242, 255);
@@ -430,7 +431,12 @@ export class PveHudView {
   private _persistentSpirit: number | null = null;
   private _tutorialChargeHighlight = false;
   private _tutorialSpiritBurstHighlight = false;
+  private _tutorialPartnerSkillHighlight = false;
   private _chargeHighlighting = false;
+  private _partnerSkillHighlighting = false;
+  private _enrageBanner: Node | null = null;
+  private _enrageBannerLabel: Label | null = null;
+  private _enrageBannerBlinking = false;
 
   constructor(parent: Node, screenW: number, screenH: number, callbacks: PveHudCallbacks) {
     this._root = new Node('PveHudView');
@@ -470,6 +476,36 @@ export class PveHudView {
     this._bossBadge = bossPanel;
     this._bossBadgeLabel = addText(this._bossBadge, '首领回合', 0, 0, bossBadgeW - 10, 36, 18, new Color(255, 236, 188, 255));
     this._bossBadge.active = false;
+
+    // 第 12 层追兵狂暴：顶部醒目常驻横幅（闪烁）。
+    const enrageW = Math.min(screenW - 48, 620);
+    const enrageBanner = new Node('TimedEscapeEnrageBanner');
+    enrageBanner.setParent(this._root);
+    enrageBanner.layer = Layers.Enum.UI_2D;
+    enrageBanner.setPosition(0, runY + 58, 0);
+    enrageBanner.addComponent(UITransform).setContentSize(enrageW, 46);
+    enrageBanner.addComponent(UIOpacity);
+    const enrageG = enrageBanner.addComponent(Graphics);
+    enrageG.fillColor = new Color(140, 24, 24, 235);
+    enrageG.roundRect(-enrageW / 2, -23, enrageW, 46, 12);
+    enrageG.fill();
+    enrageG.strokeColor = new Color(255, 210, 90, 255);
+    enrageG.lineWidth = 3;
+    enrageG.roundRect(-enrageW / 2 + 1.5, -21.5, enrageW - 3, 43, 11);
+    enrageG.stroke();
+    this._enrageBannerLabel = addText(
+      enrageBanner,
+      '⚠️ 追兵狂暴中 · 攻击与移动翻倍',
+      0,
+      0,
+      enrageW - 24,
+      36,
+      22,
+      new Color(255, 236, 180, 255),
+    );
+    this._enrageBannerLabel.isBold = true;
+    enrageBanner.active = false;
+    this._enrageBanner = enrageBanner;
 
     const targetPanel = addPanel(
       this._root,
@@ -632,8 +668,14 @@ export class PveHudView {
     const playerX = -screenW / 2 + 20 + logW + infoGap + playerW / 2;
     const playerPanel = addPanel(this._root, 'PlayerStatusCard', playerX, infoY, playerW, INFO_H);
     const statBoxW = 84;
-    const barW = playerW - statBoxW - 36;
-    const barCenterX = -37;
+    // 血/AP 条：吃满左侧到属性栏之间的宽度，左右各留边，不越框。
+    const barLeftPad = 12;
+    const barRightGap = 8;
+    const statBoxCenterX = playerW / 2 - statBoxW / 2 - 8;
+    const barAreaLeft = -playerW / 2 + barLeftPad;
+    const barAreaRight = statBoxCenterX - statBoxW / 2 - barRightGap;
+    const barW = Math.max(80, barAreaRight - barAreaLeft);
+    const barCenterX = (barAreaLeft + barAreaRight) / 2;
     addText(playerPanel, '玩家状态', barCenterX, 43, barW, 28, 22, GOLD);
     const hpBar = new Node('PlayerHpBar');
     hpBar.setParent(playerPanel);
@@ -645,6 +687,7 @@ export class PveHudView {
     hpShield.setPosition(0, 0, 0);
     hpShield.addComponent(UITransform).setContentSize(barW, 26);
     this._hpShieldG = hpShield.addComponent(Graphics);
+    // 与 AP 同字号/同布局：居中铺满条宽
     this._hpLabel = addText(hpBar, 'HP', 0, 0, barW - 4, 26, 19, WHITE);
 
     const apBar = new Node('PlayerApBar');
@@ -755,8 +798,8 @@ export class PveHudView {
         lines.push(hasKey ? '进度：已取得钥匙，传送门已出现。' : '进度：尚未取得钥匙。');
       }
       if (def.kind === 'TIMED_ESCAPE') {
-        lines.push('说明：本层开局即有出口，需在时限内抵达并互动；勿与通关传送门混淆。');
-        lines[2] = '失败条件：超过回合时限、生命归零或中途撤离。';
+        lines.push('说明：本层开局即有出口，需在 30 回合内抵达并互动；第 19 回合起追兵持续狂暴。勿与通关传送门混淆。');
+        lines[2] = '失败条件：超过 30 回合时限、生命归零或中途撤离。';
       }
       return lines;
     } catch {
@@ -922,14 +965,36 @@ export class PveHudView {
       maxHp?: number;
       hp?: number;
       timedEscapeTurnsLeft?: number;
+      timedEscapeEnraged?: boolean;
+      /** 动态压力行（引爆倒计时 / 逃离估计 / 下一波等），会替换同前缀旧行。 */
+      pressureLines?: string[];
     },
   ): void {
+    const pressurePrefixes = [
+      '剩余回合：',
+      '⚠️ 追兵狂暴',
+      '引爆剩余：',
+      '逃离约',
+      '下一波：',
+    ];
+    if (opts?.pressureLines && opts.pressureLines.length > 0) {
+      this._objectiveLines = this._objectiveLines
+        .filter((line) => !pressurePrefixes.some((prefix) => line.startsWith(prefix)))
+        .concat(opts.pressureLines);
+      this._refreshObjectivePopup();
+    }
     if (opts?.timedEscapeTurnsLeft != null && Number.isFinite(opts.timedEscapeTurnsLeft)) {
       const left = Math.max(0, Math.trunc(opts.timedEscapeTurnsLeft));
+      const enraged = opts.timedEscapeEnraged === true;
       this._objectiveLines = this._objectiveLines
-        .filter((line) => !line.startsWith('剩余回合：'))
-        .concat([`剩余回合：${left}`]);
+        .filter((line) => !line.startsWith('剩余回合：') && !line.startsWith('⚠️ 追兵狂暴'))
+        .concat(enraged
+          ? [`⚠️ 追兵狂暴中：攻击与移动翻倍`, `剩余回合：${left}`]
+          : [`剩余回合：${left}`]);
       this._refreshObjectivePopup();
+      this.setTimedEscapeEnrageWarning(enraged, left);
+    } else if (!opts?.pressureLines?.some((line) => line.startsWith('⚠️ 追兵狂暴'))) {
+      this.setTimedEscapeEnrageWarning(false);
     }
     if (this._chargeButton) this._chargeButton.active = true;
     if (this._chargeButtonLabel) {
@@ -974,7 +1039,19 @@ export class PveHudView {
     }
   }
 
-  setTutorialButtonHighlight(opts: { charge?: boolean; spiritBurst?: boolean }): void {
+  /** 灵萤技能：灵气条短暂高亮（不改数值）。 */
+  pulseSpiritBar(): void {
+    const bar = this._animaG?.node;
+    if (!bar?.isValid) return;
+    void Effects.flash(bar, { color: new Color(230, 200, 255, 255), duration: 0.35, times: 2 });
+    void Effects.punch(bar, { strength: 0.35, duration: 0.28 });
+  }
+
+  setTutorialButtonHighlight(opts: {
+    charge?: boolean;
+    spiritBurst?: boolean;
+    partnerSkill?: boolean;
+  }): void {
     if (opts.charge !== undefined && opts.charge !== this._tutorialChargeHighlight) {
       this._tutorialChargeHighlight = opts.charge;
       this._setChargeHighlight(this._tutorialChargeHighlight);
@@ -983,6 +1060,42 @@ export class PveHudView {
       this._tutorialSpiritBurstHighlight = opts.spiritBurst;
       this._setSpiritBurstBlink(this._spiritFull || this._tutorialSpiritBurstHighlight);
     }
+    if (opts.partnerSkill !== undefined && opts.partnerSkill !== this._tutorialPartnerSkillHighlight) {
+      this._tutorialPartnerSkillHighlight = opts.partnerSkill;
+      this._setPartnerSkillHighlight(this._tutorialPartnerSkillHighlight);
+    }
+  }
+
+  private _setPartnerSkillHighlight(active: boolean): void {
+    const button = this._partnerSkillButton;
+    if (!button) return;
+    const opacity = button.getComponent(UIOpacity) || button.addComponent(UIOpacity);
+    if (active) {
+      if (this._partnerSkillHighlighting) return;
+      this._partnerSkillHighlighting = true;
+      Tween.stopAllByTarget(button);
+      Tween.stopAllByTarget(opacity);
+      button.setScale(1, 1, 1);
+      opacity.opacity = 255;
+      tween(button)
+        .repeatForever(
+          tween()
+            .to(0.34, { scale: new Vec3(1.08, 1.08, 1) }, { easing: 'sineOut' })
+            .to(0.34, { scale: new Vec3(1, 1, 1) }, { easing: 'sineIn' }),
+        )
+        .start();
+      return;
+    }
+    if (!this._partnerSkillHighlighting) {
+      opacity.opacity = 255;
+      button.setScale(1, 1, 1);
+      return;
+    }
+    this._partnerSkillHighlighting = false;
+    Tween.stopAllByTarget(button);
+    Tween.stopAllByTarget(opacity);
+    button.setScale(1, 1, 1);
+    opacity.opacity = 255;
   }
 
   private _setChargeHighlight(active: boolean): void {
@@ -1014,6 +1127,53 @@ export class PveHudView {
     Tween.stopAllByTarget(button);
     Tween.stopAllByTarget(opacity);
     button.setScale(1, 1, 1);
+    opacity.opacity = 255;
+  }
+
+  /** 第 12 层追兵狂暴常驻提醒：顶部横幅闪烁，直到本层结束。 */
+  setTimedEscapeEnrageWarning(active: boolean, turnsLeft?: number): void {
+    const banner = this._enrageBanner;
+    if (!banner?.isValid) return;
+    if (this._enrageBannerLabel) {
+      const left = turnsLeft != null && Number.isFinite(turnsLeft) ? Math.max(0, Math.trunc(turnsLeft)) : null;
+      this._enrageBannerLabel.string = left != null
+        ? `⚠️ 追兵狂暴中 · 攻击与移动翻倍 · 剩余 ${left} 回合`
+        : '⚠️ 追兵狂暴中 · 攻击与移动翻倍';
+    }
+    banner.active = active;
+    const opacity = banner.getComponent(UIOpacity) || banner.addComponent(UIOpacity);
+    if (active) {
+      if (this._enrageBannerBlinking) return;
+      this._enrageBannerBlinking = true;
+      Tween.stopAllByTarget(banner);
+      Tween.stopAllByTarget(opacity);
+      banner.setScale(1, 1, 1);
+      opacity.opacity = 255;
+      tween(banner)
+        .repeatForever(
+          tween()
+            .to(0.4, { scale: new Vec3(1.03, 1.06, 1) }, { easing: 'sineOut' })
+            .to(0.4, { scale: new Vec3(1, 1, 1) }, { easing: 'sineIn' }),
+        )
+        .start();
+      tween(opacity)
+        .repeatForever(
+          tween()
+            .to(0.4, { opacity: 170 }, { easing: 'sineOut' })
+            .to(0.4, { opacity: 255 }, { easing: 'sineIn' }),
+        )
+        .start();
+      return;
+    }
+    if (!this._enrageBannerBlinking) {
+      opacity.opacity = 255;
+      banner.setScale(1, 1, 1);
+      return;
+    }
+    this._enrageBannerBlinking = false;
+    Tween.stopAllByTarget(banner);
+    Tween.stopAllByTarget(opacity);
+    banner.setScale(1, 1, 1);
     opacity.opacity = 255;
   }
 
@@ -1105,11 +1265,13 @@ export class PveHudView {
   private _drawPlayerHpBar(width: number, hp: number, maxHp: number, shield: number, animate = true): void {
     const safeMax = Math.max(1, maxHp);
     this._drawAnimatedBar('playerHp', this._hpG, width, 26, hp / safeMax, HP_COLOR, animate);
-    // 白色护盾条叠在红血条左侧，长度按 shield/maxHp（不超过满条）。
+    // 灰色护盾条叠在红血条右侧，长度按 shield/maxHp（不超过满条）。
     this._drawAnimatedShieldOverlay(width, 26, Math.min(1, Math.max(0, shield) / safeMax), animate);
     this._hpLabel.string = shield > 0
-      ? `HP ${hp} / ${maxHp} (${shield})`
+      ? `HP ${hp} / ${maxHp} (${Math.round(shield)})`
       : `HP ${hp} / ${maxHp}`;
+    this._hpLabel.color = WHITE;
+    this._hpLabel.fontSize = this._apLabel?.fontSize ?? 19;
   }
 
   private _drawAnimatedShieldOverlay(width: number, height: number, pct: number, animate = true): void {
@@ -1139,7 +1301,8 @@ export class PveHudView {
     const shieldW = Math.max(0, (width - 4) * Math.max(0, Math.min(1, pct)));
     if (shieldW <= 0) return;
     g.fillColor = SHIELD_COLOR;
-    g.roundRect(-width / 2 + 2, -height / 2 + 2, shieldW, height - 4, 5);
+    // 靠右对齐：从血条右端向左铺护盾段
+    g.roundRect(width / 2 - 2 - shieldW, -height / 2 + 2, shieldW, height - 4, 5);
     g.fill();
   }
 
@@ -1380,6 +1543,11 @@ export class PveHudView {
   destroy(): void {
     this._clearObjectiveAutoHide();
     Object.values(this._barTweenState).forEach((state) => Tween.stopAllByTarget(state));
+    if (this._enrageBanner?.isValid) {
+      Tween.stopAllByTarget(this._enrageBanner);
+      const opacity = this._enrageBanner.getComponent(UIOpacity);
+      if (opacity) Tween.stopAllByTarget(opacity);
+    }
     this._root.destroy();
   }
 }
