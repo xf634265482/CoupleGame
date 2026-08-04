@@ -39,6 +39,7 @@ import { makeFlatButton, makeLabel } from './pveUiKit';
 const MAT_ICON_QUENCH_SAND = 'pve/lobby/icon_mat_quench_sand';
 const MAT_ICON_FUSION_CORE = 'pve/lobby/icon_mat_fusion_core';
 const MAT_ICON_VOID_HIDE = 'pve/lobby/icon_mat_void_hide';
+const MAT_ICON_BOND_CORE = 'pve/lobby/icon_mat_bond_core';
 
 export type CampSection = 'MINGHEN' | 'EQUIPMENT' | 'INTEL' | 'PROFESSION';
 export interface CampViewCallbacks {
@@ -886,7 +887,9 @@ export class CampView {
       ? MAT_ICON_QUENCH_SAND
       : entry.materialId === 'FUSION_CORE'
         ? MAT_ICON_FUSION_CORE
-        : MAT_ICON_VOID_HIDE;
+        : entry.materialId === 'BOND_CORE'
+          ? MAT_ICON_BOND_CORE
+          : MAT_ICON_VOID_HIDE;
     const card = makeFlatButton(
       parent,
       '',
@@ -960,19 +963,23 @@ export class CampView {
   }
 
   private _showMaterialDetail(
-    materialId: 'QUENCH_SAND' | 'FUSION_CORE' | 'VOID_HIDE',
+    materialId: 'QUENCH_SAND' | 'FUSION_CORE' | 'VOID_HIDE' | 'BOND_CORE',
     amount: number,
   ): void {
     const title = materialId === 'QUENCH_SAND'
       ? '淬星砂'
       : materialId === 'FUSION_CORE'
         ? '聚星核'
-        : '虚空革';
+        : materialId === 'BOND_CORE'
+          ? '契核'
+          : '虚空革';
     const use = materialId === 'QUENCH_SAND'
       ? '用途：装备强化'
       : materialId === 'FUSION_CORE'
         ? '用途：装备三合一升品'
-        : '用途：背包扩容';
+        : materialId === 'BOND_CORE'
+          ? '用途：伙伴进化'
+          : '用途：背包扩容';
     this._showDetail(title, `${use}\n持有：${amount}`, []);
   }
 
@@ -1087,7 +1094,7 @@ export class CampView {
     const slot = equipItem.slot;
     const statLabel = slot === 'WEAPON' ? '攻击'
       : slot === 'ARMOR' ? '护甲'
-        : slot === 'SHOES' ? '档位'
+        : slot === 'SHOES' ? '生命'
           : slot === 'TRINKET' ? '灵气'
             : '生命';
     const lines = [
@@ -1127,7 +1134,7 @@ export class CampView {
       '目标：击败毒蝎精英\n完成条件：找到并击败本层精英。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：解毒/高护甲，优先处理护卫。',
       '目标：清除沙暴警戒者\n完成条件：消灭全部沙暴警戒者后开启传送门；清警戒者后围猎压力会下降。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：优先集火沙暴警戒者，再清理杂兵。',
       '目标：截获沙漠逃兵\n完成条件：追上携令逃跑的目标；若其抵达逃离点则失败。\n失败条件：目标逃离，或角色生命降为零 / 中途撤离。\n推荐准备：高机动、击退或截击。',
-      '目标：沙暴走廊突围\n完成条件：在 20 个回合内抵达出口并互动通关。\n失败条件：超时、角色死亡或中途撤离。\n推荐准备：保留 AP 应对沙暴与沙坑，不必清怪。',
+      '目标：沙暴走廊突围\n完成条件：在 30 个回合内抵达出口并互动通关；第 19 回合起追兵攻击与移动持续翻倍。\n失败条件：超过 30 回合、角色死亡或中途撤离（超时会弹窗确认后回大厅）。\n推荐准备：保留 AP 应对沙暴与沙坑，不必清怪。',
       '目标：守住流沙潮汐\n完成条件：清空 4 波敌人并存活；波次清空后出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：范围攻击与走位，注意动态沙坑扩张。',
       '目标：击败流沙巨蝎\n完成条件：利用沙坑与走位击败流沙巨蝎 Boss。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：高生命、护甲与爆发，注意潜地与沙暴。',
       '目标：取得钥匙\n完成条件：穿越冰墙迷径取得钥匙；可绕路、拆墙或战斗突破；完成后钥匙位置出现传送门。\n失败条件：角色生命降为零或中途撤离。\n推荐准备：破甲或单体输出，学会拆冰墙捷径。',

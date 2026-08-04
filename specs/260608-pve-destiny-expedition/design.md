@@ -37,6 +37,8 @@
 ## 4. 战斗与章节
 
 - 采用格子移动、AP 回合、迷雾、即时攻击、怪物 AI、楼层目标和 Boss 机制。
+- 战斗点选：射程内点敌怪（或可破坏石块/冰墙）即攻击，与底栏攻击按钮等价；射程外只选中目标卡。
+- 战争号角友军在怪物回合可攻击敌怪；攻击表现与战报归属友军，不得播成玩家出手。
 - 流沙巨蝎潜地（`isBurrowed`）期间不占格挡路，细则见第二章内容文档。
 - 第一章内容见 `../260712-pve-persistent-floor-progression/chapter-1-content.md`。
 - 第二章内容见 `../260712-pve-persistent-floor-progression/chapter-2-content.md`。
@@ -60,6 +62,7 @@
 - 装备唯一目录为 `equipment-catalog.md` 对应的 85 件固定装备。
 - 掉落、Boss 战利品、营地库存和战斗装配都必须引用同一 `definitionId`。
 - 装备品质、强化等级、固定几何和生效数值由 `core/equipment/` 统一计算。
+- **鞋子三岔**：`shoes_light`（轻靴·机动视野）/ `shoes_war`（战靴·节奏爆发）/ `shoes_iron`（铁靴·续航硬抗）。主数值为最大生命；类型效果由实例品质查阶段表（白/绿仅薄生命，稀有起身份，史诗起专精；铁靴史诗起首步 +1 AP）。细则见 `docs/superpowers/specs/2026-08-04-shoes-type-quality-design.md` 与 `equipment-catalog.md`。
 - 营地强化消耗**星尘 + 淬星砂**；合成升品消耗**星尘 + 聚星核**（`materials.quenchSand` / `materials.fusionCore`）。
 - 营地支持 **三合一升品**：三件同名同品质、未锁未穿装备 → 一件高一阶品质（强化归零，`baseStat` 取平均）；按材料品质扣星尘与聚星核；传奇不可再合成。营地装备台提供显式合成区（上 1 结果、下 3 材料；格子与背包同尺寸、无连线、结果格不预告文案）；显式合成区以代码绘制**熔炉台**展示；背包详情用「投入合成」，不再一键自动挑料。权威在 `PveCamp` `SYNTHESIZE`。
 - 材料可通过通关结算与出售装备获得。营地 **命痕台 / 装备台** 下方为**共用背包 UI**（滤镜：命痕 / 装备 / 材料 / 全部）；格子与装配区统一正方形；淬星砂/聚星核/虚空革仅数量 > 0 时入包（材料图标 + 右下角数量），装备台顶部不另挂材料摘要。共用背包容量默认 **25**，可花**星尘 + 虚空革**升级至 35/45/60（标题行「扩容」）；虚空革 Boss 通关 +2、精英目标层 +1（CLEAR）；权威 `PveCamp` `UPGRADE_BAG` / `bagCapacity`。细则见 `docs/superpowers/specs/2026-07-31-camp-ui-glyph-inventory-design.md`、`2026-07-31-camp-bag-upgrade-design.md`、`2026-07-31-camp-materials-v1-design.md`、`equipment-catalog.md` §1.4–1.5。
@@ -81,13 +84,14 @@
 - 伙伴是**主动战术技能陪伴**：每场携带 1 名，不占棋盘/不参与 AI/不自动攻击，每层主动技能基础 1 次。
 - 首批六类：位移 / 守护 / 破阵 / 控场 / 灵气 / 治疗；四阶段进化（Lv5/15/30 + 星尘；试炼接口首版恒通过）。
 - 大厅底栏「伙伴」入口；战斗 HUD 左下「伙伴」按钮；右上去掉星尘/职业标与钥匙角标，「角色」移至右上；蓄力文案为 `蓄力 N`。
-- 档案字段 `partners` + `equippedPartnerId`；开局快照冻结；通关经验 `30 + floor`。
+- 档案字段 `partners` + `equippedPartnerId`；开局快照冻结；通关经验 `30 + floor`（含重复通关）。
+- **等级软顶**：`maxLevel = min(99, highestClearedFloor + 1)`；超额 XP 可囤，软顶抬高后再升级。进化保留 Lv/星尘门槛，并消耗专属材料 **契核**（2/3/4 阶：5/15/40）；精英 CLEAR 20%×1、Boss CLEAR 必掉 2；签到累计 7/15/20 附 +1/+2/+3。细则见 `docs/superpowers/specs/2026-08-03-partner-level-cap-bond-core-design.md`。
 - **逐步解锁（progressive）**：新档/清档默认全锁；进入第 1 层教程发放并装备 `MOBILITY`；通关 3/5/7/10/17 分别解锁守护/治疗/破阵/控场/灵气；面板灰态展示条件；老档 `legacy` 不倒扣。细则见 `docs/superpowers/specs/2026-07-29-partner-progressive-unlock-design.md`。
 - **GM**：`unlockAllPartners` 可将六只伙伴全部开锁（保留养成进度，不切 `legacy`）；通关条件再达成时幂等跳过；`resetExpedition` 清档后仍回全锁按条件解锁。
-- **同伴名**：闪狐 / 岩盾 / 愈羽 / 裂爪 / 霜缚 / 灵萤；职能（位移/守护…）仅作副标，不用「XX伙伴」主标题。
+- **同伴名**：闪狐 / 岩盾 / 愈羽 / 裂爪 / 眠枭 / 灵萤；职能（位移/守护…）仅作副标，不用「XX伙伴」主标题。
 - **解锁揭晓**：通关奖励选择并云端 settle 后，按顺序逐个弹「新同伴加入」揭晓窗（认识一下）；教程闪狐强制闪现已展示则不再揭晓闪狐。细则见 `docs/superpowers/specs/2026-08-01-partner-unlock-reveal-design.md`。
-- **技能演出**：六只主动技能确认后播剪影出场 + 专属轻量程序特效（约 0.5～0.7s，走 `PartnerSkillFx` + `Effects`）；闪狐先离场再结算再落格成形；岩盾为荧光石环；演出期间 `_busy` 锁输入。细则见 `docs/superpowers/specs/2026-08-01-partner-skill-fx-design.md`。
-- **护盾 HUD**：玩家血条护盾段靠右叠层；护盾数值用高对比青色单独标注（`盾N`），避免压在白条上不可读。
+- **技能演出**：六只主动技能确认后，屏幕右侧矮透明板（约 2.5×1.05 格、靠右）自右向左滑入；左侧温情技能短句、右侧伙伴大图底在板内头顶可露外，停约 2.5s 后淡出；并行播棋盘专属特效（`PartnerSkillFx` + `Effects`）；闪狐先离场再结算再落格成形；岩盾软光石障成形后丝滑淡出；眠枭单色细荧光环伸展到位后立刻淡出；灵萤为软光团+萤火（无光柱）；演出期间 `_busy` 锁输入。细则见 `docs/superpowers/specs/2026-08-01-partner-skill-fx-design.md`。
+- **护盾 HUD**：玩家血条右侧叠灰色护盾段；数值写在 HP 文案括号内如 `HP 369 / 369 (55)`，白色字。
 - 教程内强制体验一次位移：`partner_blink` 步（伙伴对话框 + 强制闪现），见 `docs/superpowers/specs/2026-07-31-tutorial-partner-blink-design.md`。
 - 权威实现：`core/partner/` + `PartnerController`/`PartnerView`；细则见 `docs/superpowers/specs/2026-07-18-partner-system-design.md`。
 
@@ -121,6 +125,7 @@
 
 - 楼层中立交互只保留当前关卡需要的宝箱、温泉、祭坛、火药桶、爆破点、传送门等。
 - 旧楼层神像与旧楼层铁匠已退役，不再进入地图生成、HUD/迷雾图标、远征弹窗 UI 或主包预加载。
+- 微信主包 4MB：大厅首屏保留大厅 UI/BGM，以及启动/远征 `LoadingOverlay` 所需转场图（须早于 `resources` 分包）；战斗地图图与第1章战场背景留在 `resources` 分包。大厅 UI 就绪后立刻预热战斗资源；玩家点进远征时若预热未完成则短等同一预热 Promise，避免进厅后立刻开战出现长时间加载或红块。
 - 装备强化仅保留营地成长线。
 ## 12. 2026-07-18 战斗内设置与重开本层
 
@@ -128,5 +133,7 @@
 - 设置弹窗包含「继续冒险」「重新挑战本层」「返回大厅」。
 - 返回大厅会先保存当前 ACTIVE 楼层运行时，之后可从大厅继续。
 - 重新挑战本层会二次确认，放弃当前同配置 ACTIVE 挑战并创建新的同层挑战；不重复扣除体力，本层未结算的临时进度、临时掉落和战斗状态全部丢弃。
-- 云端 `startFloorChallenge` 使用 `abandonActive + forceRestart` 表示同配置重开；只有请求与当前 ACTIVE 挑战配置一致时才允许免体力重开，防止借重开切职业、装备或命痕。
-- 战斗内重开必须以当前 ACTIVE challenge 的开局配置快照为准，不能使用营地当前配置；云端在 `abandonActive + forceRestart` 且同楼层/同模式时也以 ACTIVE challenge 配置重建，避免玩家在营地调整配置后无法重开旧运行时。
+- 云端 `startFloorChallenge` 使用 `abandonActive + forceRestart` 表示同层免体力重开；职业 / 装备 / 命痕仍冻结为 ACTIVE 开局快照，防止借重开换装。
+- **伙伴例外**：重新挑战时伙伴取自当前档案 `equippedPartnerId`（及对应进化阶段），不冻结旧挑战里的伙伴。
+- **大厅换伴后再进同层**：若 ACTIVE 挑战伙伴与档案装备不一致，客户端免体力 `forceRestart` 重开（不再静默续玩旧伙伴）；战斗内「重新挑战」同理。
+- 战斗内重开对职业 / 装备 / 命痕仍以 ACTIVE challenge 开局快照为准；云端在 `abandonActive + forceRestart` 且同楼层/同模式时按上述规则重建。

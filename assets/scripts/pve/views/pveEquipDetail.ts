@@ -1,12 +1,9 @@
 import type { EquipItem, EquipSlot } from '../core/PveTypes';
 import {
-  SHOES_FIRST_MOVE_THRESHOLD,
-  SHOES_REVEAL_BONUS_THRESHOLD,
-  SHOES_STEALTH_THRESHOLD,
-  shoesStealthReduction,
+  resolveShoesStageEffectsFromItem,
 } from '../core/EquipmentSystem';
 import { legendaryDescription } from '../core/LegendarySystem';
-import { effectiveEquipPrimaryRange, equipPrimaryStatDescription } from '../core/equipment/EquipmentProgression';
+import { equipPrimaryStatDescription } from '../core/equipment/EquipmentProgression';
 
 const QUALITY_LABEL: Record<string, string> = {
   COMMON: '普通',
@@ -32,6 +29,9 @@ const IMPLICIT_CN: Record<string, string> = {
   armor_plate:   '高防 / 移动AP+1',
   helmet_heavy:  '高HP / 警戒范围+1',
   trinket_gold:  '星尘获取加成',
+  shoes_light:   '轻靴 · 机动与视野（稀有起）',
+  shoes_war:     '战靴 · 节奏与爆发（稀有起）',
+  shoes_iron:    '铁靴 · 续航与硬抗（稀有起）',
 };
 
 const TRAIT_CN: Record<string, string> = {
@@ -66,25 +66,29 @@ const TRAIT_DESC: Record<string, string> = {
   boss_kill_heal_8: '击杀目标后回复 8 点生命',
   boss_crit_15: '主动攻击有 15% 概率造成 2 倍暴击',
   boss_revive_50: '致死时自动复活并回复 50% HP，每场远征仅 1 次',
-  boss_summon_warrior: '每 5 回合主动召唤 1 名哥布林战士助战',
+  boss_summon_warrior: '每 5 回合召唤 1 名哥布林战士友军；友军在怪物回合自行追击敌怪（战报/动画归属友军，不会表现为玩家出手）',
   boss_show_intent: '显示 Boss 下一回合的行动意图',
 };
 
 function shoesExtraDesc(item: EquipItem): string {
-  const { current } = effectiveEquipPrimaryRange(item);
-  const parts: string[] = ['移动消耗 -1 AP'];
-  if (current >= SHOES_REVEAL_BONUS_THRESHOLD) parts.push('视野+1');
-  if (current >= SHOES_FIRST_MOVE_THRESHOLD) parts.push('首步免费');
-  if (current >= SHOES_STEALTH_THRESHOLD) parts.push(`潜行-${shoesStealthReduction(current)}`);
+  const fx = resolveShoesStageEffectsFromItem(item);
+  const parts: string[] = [];
+  if (fx.moveCostReduction > 0) parts.push(`移动消耗 -${fx.moveCostReduction} AP`);
+  if (fx.fogBonus > 0) parts.push(`视野+${fx.fogBonus}`);
+  if (fx.firstMoveFree) parts.push('首步免费');
+  if (fx.stealthReduction > 0) parts.push(`潜行-${fx.stealthReduction}`);
+  if (fx.terrainDamageReduction > 0) parts.push(`地形伤-${fx.terrainDamageReduction}`);
+  if (fx.firstMoveApPenalty > 0) parts.push(`首步+${fx.firstMoveApPenalty} AP`);
+  if (parts.length === 0) parts.push('分支效果：稀有品质起生效');
   return parts.join(' · ');
 }
 
 export function formatEquipDetailBody(item: EquipItem): string {
   const qualityStr = QUALITY_LABEL[item.quality] ?? item.quality;
   const slotStr = SLOT_LABEL[item.slot];
-  const traitName = item.trait ? (TRAIT_CN[item.trait] ?? item.trait) : '';
-  const traitDesc = item.trait ? (TRAIT_DESC[item.trait] ?? traitName) : '';
-  const implicitDesc = item.implicit ? (IMPLICIT_CN[item.implicit] ?? item.implicit) : '';
+  const traitName = item.trait ? (TRAIT_CN[item.trait] ?? '特殊词条') : '';
+  const traitDesc = item.trait ? (TRAIT_DESC[item.trait] ?? '特殊效果') : '';
+  const implicitDesc = item.implicit ? (IMPLICIT_CN[item.implicit] ?? '特殊特性') : '';
 
   const primary = item.slot === 'SHOES'
     ? `${equipPrimaryStatDescription(item)} · ${shoesExtraDesc(item)}`

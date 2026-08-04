@@ -43,7 +43,12 @@ export const SYNTH_STARDUST = { COMMON: 10, FINE: 20, RARE: 40, EPIC: 80 } as co
 export const SYNTH_FUSION_CORE = { COMMON: 1, FINE: 2, RARE: 3, EPIC: 5 } as const;
 export const QUALITY_ORDER = ['COMMON', 'FINE', 'RARE', 'EPIC', 'LEGENDARY'] as const;
 
-export type CampMaterials = { quenchSand: number; fusionCore: number; voidHide: number };
+export type CampMaterials = {
+  quenchSand: number;
+  fusionCore: number;
+  voidHide: number;
+  bondCore: number;
+};
 
 export function normalizeCampMaterials(
   value?: Partial<CampMaterials> | null,
@@ -58,6 +63,9 @@ export function normalizeCampMaterials(
     voidHide: Number.isInteger(value?.voidHide) && (value?.voidHide ?? 0) >= 0
       ? (value!.voidHide as number)
       : 0,
+    bondCore: Number.isInteger(value?.bondCore) && (value?.bondCore ?? 0) >= 0
+      ? (value!.bondCore as number)
+      : 0,
   };
 }
 
@@ -69,6 +77,7 @@ export function sellMaterialGrants(instance: PveEquipmentInstance): CampMaterial
     quenchSand: 1 + Math.max(0, instance.enhanceLevel),
     fusionCore: fusionByQuality[instance.quality] ?? 0,
     voidHide: 0,
+    bondCore: 0,
   };
 }
 
@@ -98,7 +107,7 @@ export function synthesizeEquipment(
   instanceIds: readonly string[],
   gold: number,
   newInstanceId: string,
-  materials: CampMaterials = { quenchSand: 0, fusionCore: 999, voidHide: 0 },
+  materials: CampMaterials = { quenchSand: 0, fusionCore: 999, voidHide: 0, bondCore: 0 },
 ): {
   inventory: PveEquipmentInstance[];
   gold: number;
@@ -308,7 +317,7 @@ export function equipmentMaxHpBonus(equipment: Equipment): number {
   return total;
 }
 
-/** 固定鞋履的移动 AP 减免（旧随机鞋仍看 baseStat>0）。 */
+/** 固定鞋履的移动 AP 减免（定义表字段；经典鞋以品质阶段表为准）。 */
 export function fixedShoesMoveCostReduction(item: EquipItem | undefined): number {
   if (!item?.name) return 0;
   try {
@@ -337,7 +346,7 @@ function primaryStatLabel(slot: EquipSlot): string {
     case 'ARMOR':
       return '护甲';
     case 'SHOES':
-      return '档位';
+      return '生命';
     case 'TRINKET':
       return '灵气';
   }
@@ -363,7 +372,7 @@ export function equipPrimaryStatDescription(item: EquipItem): string {
     case 'ARMOR':
       return `护甲 +${current} / ${max}`;
     case 'SHOES':
-      return `档位 ${current} / ${max}`;
+      return `最大HP +${current} / ${max}`;
     case 'TRINKET':
       return `灵气 +${current} / ${max}%`;
   }
@@ -372,7 +381,7 @@ export function equipPrimaryStatDescription(item: EquipItem): string {
 export function enhanceEquipment(
   instance: PveEquipmentInstance,
   gold: number,
-  materials: CampMaterials = { quenchSand: 999, fusionCore: 0, voidHide: 0 },
+  materials: CampMaterials = { quenchSand: 999, fusionCore: 0, voidHide: 0, bondCore: 0 },
 ) {
   if (instance.enhanceLevel >= 5) throw new Error('EQUIPMENT_MAX_ENHANCE');
   const nextLevel = instance.enhanceLevel + 1;
