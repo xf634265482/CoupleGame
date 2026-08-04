@@ -19,8 +19,12 @@ export const IMPLICIT_WEAPON_SPEAR = 'weapon_spear';
 export const IMPLICIT_ARMOR_PLATE = 'armor_plate';
 /** 重盔：怪物警戒范围 +1（高 HP / 更易被发现）。 */
 export const IMPLICIT_HELMET_HEAVY = 'helmet_heavy';
-/** 财运饰品：星尘获取量加成（字段仍名 gold；永久逐层新装不洗炼 trait）。 */
+/** 财运饰品：星尘获取加成（品质阶段表；见 resolveTrinketStageEffects）。 */
 export const IMPLICIT_TRINKET_GOLD = 'trinket_gold';
+/** 灵气饰品：击杀灵气 / 爆发回血（稀有起）。 */
+export const IMPLICIT_TRINKET_SPIRIT = 'trinket_spirit';
+/** 幸运饰品：暴击（稀有起）。 */
+export const IMPLICIT_TRINKET_LUCK = 'trinket_luck';
 /** 轻靴：机动与视野（稀有起：移速减耗 / 揭示 / 潜行）。 */
 export const IMPLICIT_SHOES_LIGHT = 'shoes_light';
 /** 战靴：节奏与爆发（稀有起：首步免费；史诗起叠加移速减耗）。 */
@@ -114,6 +118,72 @@ export function resolveShoesStageEffectsFromItem(
 ): ShoesStageEffects {
   if (!item) return { ...EMPTY_SHOES_STAGE };
   return resolveShoesStageEffects(item.implicit, item.quality);
+}
+
+export type TrinketImplicit =
+  | typeof IMPLICIT_TRINKET_GOLD
+  | typeof IMPLICIT_TRINKET_SPIRIT
+  | typeof IMPLICIT_TRINKET_LUCK;
+
+export interface TrinketStageEffects {
+  type: TrinketImplicit | null;
+  killSpiritFlat: number;
+  spiritBurstHeal: number;
+  critChance: number;
+  stardustBonusRatio: number;
+}
+
+const EMPTY_TRINKET_STAGE: TrinketStageEffects = {
+  type: null,
+  killSpiritFlat: 0,
+  spiritBurstHeal: 0,
+  critChance: 0,
+  stardustBonusRatio: 0,
+};
+
+/** 按饰品类型 + 实例品质解析阶段效果（白/绿无分支；蓝起身份）。 */
+export function resolveTrinketStageEffects(
+  implicit: string | undefined,
+  quality: EquipQuality,
+): TrinketStageEffects {
+  if (implicit === IMPLICIT_TRINKET_SPIRIT) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_TRINKET_STAGE, type: IMPLICIT_TRINKET_SPIRIT };
+    return {
+      type: IMPLICIT_TRINKET_SPIRIT,
+      killSpiritFlat: qualityAtLeast(quality, 'LEGENDARY') ? 10 : qualityAtLeast(quality, 'EPIC') ? 8 : 5,
+      spiritBurstHeal: qualityAtLeast(quality, 'LEGENDARY') ? 12 : qualityAtLeast(quality, 'EPIC') ? 8 : 0,
+      critChance: 0,
+      stardustBonusRatio: 0,
+    };
+  }
+  if (implicit === IMPLICIT_TRINKET_LUCK) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_TRINKET_STAGE, type: IMPLICIT_TRINKET_LUCK };
+    return {
+      type: IMPLICIT_TRINKET_LUCK,
+      killSpiritFlat: 0,
+      spiritBurstHeal: 0,
+      critChance: qualityAtLeast(quality, 'LEGENDARY') ? 0.12 : qualityAtLeast(quality, 'EPIC') ? 0.10 : 0.05,
+      stardustBonusRatio: 0,
+    };
+  }
+  if (implicit === IMPLICIT_TRINKET_GOLD) {
+    if (!qualityAtLeast(quality, 'RARE')) return { ...EMPTY_TRINKET_STAGE, type: IMPLICIT_TRINKET_GOLD };
+    return {
+      type: IMPLICIT_TRINKET_GOLD,
+      killSpiritFlat: 0,
+      spiritBurstHeal: 0,
+      critChance: 0,
+      stardustBonusRatio: qualityAtLeast(quality, 'LEGENDARY') ? 0.30 : qualityAtLeast(quality, 'EPIC') ? 0.25 : 0.15,
+    };
+  }
+  return { ...EMPTY_TRINKET_STAGE };
+}
+
+export function resolveTrinketStageEffectsFromItem(
+  item: Pick<EquipItem, 'implicit' | 'quality'> | undefined | null,
+): TrinketStageEffects {
+  if (!item) return { ...EMPTY_TRINKET_STAGE };
+  return resolveTrinketStageEffects(item.implicit, item.quality);
 }
 
 interface EquipTemplate {
@@ -254,34 +324,34 @@ const EQUIPMENT_POOL: Readonly<Record<EquipSlot, Readonly<Record<EquipQuality, r
     ],
   },
 
-  // ─ 饰品（TRINKET.baseStat → 灵气获取量 +N%）─────────────────────────────────────────
+  // ─ 饰品（baseStat → 灵气获取 +N%；类型 implicit + 品质阶段表）────────────────────────
   TRINKET: {
     COMMON: [
-      { name: '幸运铜币',   baseStatMin:  3, baseStatMax:  7 },
-      { name: '灵力宝珠',   baseStatMin:  3, baseStatMax:  7 },
-      { name: '财运符',     baseStatMin:  3, baseStatMax:  7, implicit: IMPLICIT_TRINKET_GOLD }, // Phase 4 金币加成
+      { name: '幸运铜币',   baseStatMin: 3, baseStatMax: 7, implicit: IMPLICIT_TRINKET_LUCK },
+      { name: '灵力宝珠',   baseStatMin: 5, baseStatMax: 9, implicit: IMPLICIT_TRINKET_SPIRIT },
+      { name: '财运符',     baseStatMin: 2, baseStatMax: 6, implicit: IMPLICIT_TRINKET_GOLD },
     ],
     FINE: [
-      { name: '聚灵碧玉',   baseStatMin:  7, baseStatMax: 13 },
-      { name: '财运挂件',   baseStatMin:  7, baseStatMax: 13, implicit: IMPLICIT_TRINKET_GOLD },
-      { name: '幸运吊坠',   baseStatMin:  7, baseStatMax: 13 },
+      { name: '聚灵碧玉',   baseStatMin: 10, baseStatMax: 16, implicit: IMPLICIT_TRINKET_SPIRIT },
+      { name: '财运挂件',   baseStatMin: 5, baseStatMax: 11, implicit: IMPLICIT_TRINKET_GOLD },
+      { name: '幸运吊坠',   baseStatMin: 7, baseStatMax: 13, implicit: IMPLICIT_TRINKET_LUCK },
     ],
     RARE: [
-      { name: '聚财宝石',   baseStatMin: 12, baseStatMax: 18 },
-      { name: '灵魂宝珠',   baseStatMin: 12, baseStatMax: 18 },
-      { name: '财运宝玉',   baseStatMin: 12, baseStatMax: 18, implicit: IMPLICIT_TRINKET_GOLD },
+      { name: '聚财宝石',   baseStatMin: 9, baseStatMax: 15, implicit: IMPLICIT_TRINKET_GOLD },
+      { name: '灵魂宝珠',   baseStatMin: 16, baseStatMax: 22, implicit: IMPLICIT_TRINKET_SPIRIT },
+      { name: '财运宝玉',   baseStatMin: 9, baseStatMax: 15, implicit: IMPLICIT_TRINKET_GOLD },
     ],
     EPIC: [
-      { name: '英雄徽章',   baseStatMin: 17, baseStatMax: 24 },
-      { name: '幸运宝典',   baseStatMin: 17, baseStatMax: 24 },
-      { name: '财神徽章',   baseStatMin: 17, baseStatMax: 24, implicit: IMPLICIT_TRINKET_GOLD },
-      { name: '幸运圆盘',   baseStatMin: 17, baseStatMax: 24 },
-      { name: '命运碎晶',   baseStatMin: 17, baseStatMax: 24 },
+      { name: '英雄徽章',   baseStatMin: 22, baseStatMax: 30, implicit: IMPLICIT_TRINKET_SPIRIT },
+      { name: '幸运宝典',   baseStatMin: 17, baseStatMax: 24, implicit: IMPLICIT_TRINKET_LUCK },
+      { name: '财神徽章',   baseStatMin: 13, baseStatMax: 20, implicit: IMPLICIT_TRINKET_GOLD },
+      { name: '幸运圆盘',   baseStatMin: 17, baseStatMax: 24, implicit: IMPLICIT_TRINKET_LUCK },
+      { name: '命运碎晶',   baseStatMin: 22, baseStatMax: 30, implicit: IMPLICIT_TRINKET_SPIRIT },
     ],
     LEGENDARY: [
-      { name: '命运护符',   baseStatMin: 27, baseStatMax: 35, legendaryId: 'leg_fate_amulet'      },
-      { name: '财神赐福',   baseStatMin: 27, baseStatMax: 35, implicit: IMPLICIT_TRINKET_GOLD, legendaryId: 'leg_fortune_blessing' },
-      { name: '幸运女神眼', baseStatMin: 27, baseStatMax: 35, legendaryId: 'leg_lucky_eye'         },
+      { name: '命运护符',   baseStatMin: 32, baseStatMax: 40, implicit: IMPLICIT_TRINKET_SPIRIT, legendaryId: 'leg_fate_amulet' },
+      { name: '财神赐福',   baseStatMin: 22, baseStatMax: 30, implicit: IMPLICIT_TRINKET_GOLD, legendaryId: 'leg_fortune_blessing' },
+      { name: '幸运女神眼', baseStatMin: 27, baseStatMax: 35, implicit: IMPLICIT_TRINKET_LUCK, legendaryId: 'leg_lucky_eye' },
     ],
   },
 };
