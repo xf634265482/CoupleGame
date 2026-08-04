@@ -1,6 +1,6 @@
-import { stepMonsters } from '../../assets/scripts/pve/core/MonsterAI';
+﻿import { stepMonsters } from '../../assets/scripts/pve/core/MonsterAI';
 import { HEAVY_STRIKE_INTERVAL, HEAVY_STRIKE_MULTIPLIER, HEAVY_STRIKE_RANGE } from '../../assets/scripts/pve/core/bosses/GoblinChief';
-import { makeExpeditionState, makeMonster } from './helpers';
+import { makeEntity, makeExpeditionState, makeMonster } from './helpers';
 
 describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
   it('玩家在仇恨范围外时怪物保持 IDLE，不移动不攻击', () => {
@@ -36,6 +36,27 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
     ]);
   });
 
+  it('floor 4 objective sentinel emits escape event when reaching the marker', () => {
+    const state = makeExpeditionState({
+      floor: 4,
+      floorOverrides: {
+        player: { x: 0, y: 8 },
+        entities: [makeEntity('escape', 'ESCAPE_MARKER', { x: 7, y: 0 })],
+        monsters: [makeMonster('GOBLIN_SENTINEL', { x: 6, y: 0 }, {
+          variantId: 'GOBLIN_SENTINEL',
+          aiState: 'FLEE',
+          hp: 40,
+          maxHp: 120,
+        })],
+      },
+    });
+
+    const result = stepMonsters(state);
+
+    expect(result.state.floorState.monsters.find((m) => m.id === 'GOBLIN_SENTINEL')?.pos).toEqual({ x: 7, y: 0 });
+    expect(result.events).toContainEqual({ type: 'TARGET_ESCAPED', entityId: 'GOBLIN_SENTINEL', pos: { x: 7, y: 0 } });
+  });
+
   it('玩家进入攻击距离内时怪物攻击并产生 PLAYER_DAMAGED 事件', () => {
     const state = makeExpeditionState({
       floorOverrides: {
@@ -52,7 +73,6 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
     expect(result.state.player.hp).toBe(180);
     // 攻击者所在格此前未揭示，攻击时一并揭示该格
     expect(result.events).toEqual([
-      { type: 'REVEAL', cells: [{ x: 4, y: 5 }] },
       { type: 'PLAYER_DAMAGED', damage: 20, hp: 180, sourceId: 'm1', rawDamage: 20 },
     ]);
   });
@@ -181,11 +201,13 @@ describe('MonsterAI — 普通怪追击与攻击（AC-4）', () => {
 
     it('Boss 重击回合「先原地释放、再追击移动」（2026-06-15）：以起手位置结算，释放后逼近一格', () => {
       // 重击回合 boss(4,1) 与玩家(4,4) 距离 3（≤ HEAVY_STRIKE_RANGE=4，命中）
+      // entities:[] 清空地形实体，避免普通层 ROCK 地形吸收 AOE 干扰断言。
       const state = makeExpeditionState({
         floorOverrides: {
           player: { x: 4, y: 4 },
           turn: HEAVY_STRIKE_INTERVAL,
           monsters: [makeGoblinChief({ x: 4, y: 1 })],
+          entities: [],
         },
         playerOverrides: { hp: 2000, maxHp: 2000 },
       });

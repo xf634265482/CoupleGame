@@ -10,6 +10,7 @@ import {
   makeFireGoblin,
   makeFrostGoblin,
   makeGoblinArcher,
+  makeGoblinSentinel,
   makeGoblinWarrior,
   makeSpiritRat,
 } from './Chapter1Monsters';
@@ -19,10 +20,10 @@ import {
   makeSpiritEmber,
   makeSpiritMirage,
 } from './ChapterAnimaMonsters';
-import { makeDesertRaider, makeSandwormLarva, makePoisonScorpion } from './Chapter2Monsters';
-import { makeSnowWolf, makeIceSlime, makeFrostSprite } from './Chapter3Monsters';
-import { makeLavaGrunt, makeLavaCrab, makeFireElemental } from './Chapter4Monsters';
-import { makeShadowAssassin, makeFateWatcher, makeVoidWorm } from './Chapter5Monsters';
+import { makeDesertRaider, makeDesertHopperLizard, makeDuneSentinel, makePoisonScorpion } from './Chapter2Monsters';
+import { makeSnowWolf, makeFrostspikePorcupine, makeFrostSprite, makeGlacierShaper } from './Chapter3Monsters';
+import { makeAshHound, makeLavaCrab, makeFireElemental } from './Chapter4Monsters';
+import { makeShadowAssassin, makeFateWatcher, makeFateWheelBeast } from './Chapter5Monsters';
 import type { Coord, Monster, MonsterAiState } from './PveTypes';
 
 /** 单层怪物配比：各章填具体变体字段，通用 normal/elite/anima 仅作备用回退。 */
@@ -34,28 +35,31 @@ export interface MonsterFloorRule {
   // ── 第 1 章 ──
   goblinWarrior?: number;
   goblinArcher?: number;
+  goblinSentinel?: number;
   fireGoblin?: number;
   frostGoblin?: number;
   spiritRat?: number;
   // ── 第 2 章 ──
   desertRaider?: number;
-  sandwormLarva?: number;
+  desertHopperLizard?: number;
+  duneSentinel?: number;
   poisonScorpion?: number;
   spiritBeetle?: number;
   // ── 第 3 章 ──
   snowWolf?: number;
-  iceSlime?: number;
+  frostspikePorcupine?: number;
   frostSprite?: number;
+  glacierShaper?: number;
   spiritElf?: number;
   // ── 第 4 章 ──
-  lavaGrunt?: number;
+  ashHound?: number;
   lavaCrab?: number;
   fireElemental?: number;
   spiritEmber?: number;
   // ── 第 5 章 ──
   shadowAssassin?: number;
   fateWatcher?: number;
-  voidWorm?: number;
+  fateWheelBeast?: number;
   spiritMirage?: number;
 }
 
@@ -65,37 +69,53 @@ export interface MonsterFloorRule {
  * - chapter 2-5 fl 1-4：P0 阶段统一为 normal=4, elite=1, anima=1（与重构前等价）
  *   ↑ 待 P1 按章节主题（沙漠/冰原/熔岩/命运回廊）填新变体与逐层差异
  */
+/**
+ * 章节×章内层号 → 怪物配比表。V3（260628）：每章扩到章内 1-6（Boss 在章内 7）。
+ * - 章内 1-2：探索铺垫，新怪登场，密度低
+ * - 章内 3：精英关卡（精英怪 ≥ 2），章中记忆点
+ * - 章内 4-6：机关地形主场，本章 gimmick 全开
+ */
 export const CHAPTER_MONSTER_RULES: Record<number, Record<number, MonsterFloorRule>> = {
   1: {
     1: { goblinWarrior: 3, spiritRat: 1 },
     2: { goblinWarrior: 2, goblinArcher: 2, spiritRat: 1 },
-    3: { goblinWarrior: 3, fireGoblin: 1, spiritRat: 1 },
-    4: { goblinArcher: 3, frostGoblin: 1, spiritRat: 1 },
+    3: { goblinWarrior: 2, fireGoblin: 2, spiritRat: 1 },            // 精英关卡：2× fireGoblin(ELITE)
+    4: { goblinArcher: 2, goblinSentinel: 1, frostGoblin: 1, spiritRat: 1 },
+    5: { goblinWarrior: 1, goblinSentinel: 1, fireGoblin: 1, frostGoblin: 1, spiritRat: 1 }, // 火/冰机关全开
+    6: { goblinWarrior: 1, goblinArcher: 2, goblinSentinel: 1, fireGoblin: 1, frostGoblin: 1, spiritRat: 1 },
   },
-  // P1 完整变体（260616 落地）
+  // P1 完整变体（260616 落地）+ V3 扩层（260628）
   2: {
     1: { desertRaider: 3, spiritBeetle: 1 },
-    2: { desertRaider: 2, sandwormLarva: 2, spiritBeetle: 1 },
-    3: { sandwormLarva: 2, spiritBeetle: 1 },
-    4: { desertRaider: 2, sandwormLarva: 2, poisonScorpion: 1, spiritBeetle: 1 },
+    2: { desertRaider: 2, desertHopperLizard: 1, duneSentinel: 1, spiritBeetle: 1 },
+    3: { desertRaider: 1, duneSentinel: 1, poisonScorpion: 2, spiritBeetle: 1 },      // 精英关卡 + 危险单位教学
+    4: { desertRaider: 1, desertHopperLizard: 2, duneSentinel: 1, poisonScorpion: 1, spiritBeetle: 1 },
+    5: { desertHopperLizard: 2, duneSentinel: 1, poisonScorpion: 2, spiritBeetle: 1 }, // 沙坑/毒机关全开
+    6: { desertRaider: 1, desertHopperLizard: 2, duneSentinel: 1, poisonScorpion: 2, spiritBeetle: 1 },
   },
   3: {
     1: { snowWolf: 2, spiritElf: 1 },
-    2: { snowWolf: 2, iceSlime: 2, spiritElf: 1 },
-    3: { iceSlime: 2, spiritElf: 1 },
-    4: { snowWolf: 2, iceSlime: 2, frostSprite: 1, spiritElf: 1 },
+    2: { snowWolf: 2, frostspikePorcupine: 2, spiritElf: 1 },
+    3: { snowWolf: 2, frostSprite: 1, glacierShaper: 1, spiritElf: 1 },                // 精英关卡：远程压制 + 封路教学
+    4: { snowWolf: 2, frostspikePorcupine: 2, glacierShaper: 1, spiritElf: 1 },
+    5: { frostspikePorcupine: 2, frostSprite: 1, glacierShaper: 1, spiritElf: 1 },     // 冰面机关全开
+    6: { snowWolf: 2, frostspikePorcupine: 2, frostSprite: 1, glacierShaper: 1, spiritElf: 1 },
   },
   4: {
-    1: { lavaGrunt: 3, spiritEmber: 1 },
-    2: { lavaGrunt: 2, lavaCrab: 2, spiritEmber: 1 },
-    3: { lavaCrab: 1, spiritEmber: 1 },
-    4: { lavaGrunt: 2, lavaCrab: 1, fireElemental: 1, spiritEmber: 1 },
+    1: { ashHound: 3, spiritEmber: 1 },
+    2: { ashHound: 2, lavaCrab: 2, spiritEmber: 1 },
+    3: { ashHound: 1, fireElemental: 2, spiritEmber: 1 },            // 精英关卡：先学“点燃区域”
+    4: { ashHound: 2, lavaCrab: 1, fireElemental: 1, spiritEmber: 1 },
+    5: { ashHound: 1, lavaCrab: 1, fireElemental: 2, spiritEmber: 1 }, // 熔岩机关全开
+    6: { ashHound: 2, lavaCrab: 1, fireElemental: 2, spiritEmber: 1 },
   },
   5: {
     1: { fateWatcher: 2, spiritMirage: 1 },
-    2: { shadowAssassin: 2, fateWatcher: 2, spiritMirage: 1 },
-    3: { shadowAssassin: 1, spiritMirage: 1 },
-    4: { shadowAssassin: 2, fateWatcher: 1, voidWorm: 1, spiritMirage: 1 },
+    2: { shadowAssassin: 1, fateWatcher: 3, spiritMirage: 1 },
+    3: { shadowAssassin: 1, fateWatcher: 2, fateWheelBeast: 1, spiritMirage: 1 },    // 精英关卡：先读守望者，再承受精英残局
+    4: { shadowAssassin: 2, fateWatcher: 2, fateWheelBeast: 1, spiritMirage: 1 },
+    5: { shadowAssassin: 1, fateWatcher: 2, fateWheelBeast: 2, spiritMirage: 1 },    // 命运机关全开
+    6: { shadowAssassin: 2, fateWatcher: 3, fateWheelBeast: 1, spiritMirage: 1 },
   },
 };
 
@@ -140,6 +160,9 @@ export function generateChapterMonsters(
   for (let i = 0; i < (rule.goblinArcher ?? 0) && pool.length > 0; i++) {
     monsters.push(makeGoblinArcher(nextMonsterId(), pool.shift() as Coord));
   }
+  for (let i = 0; i < (rule.goblinSentinel ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeGoblinSentinel(nextMonsterId(), pool.shift() as Coord));
+  }
   for (let i = 0; i < (rule.fireGoblin ?? 0) && pool.length > 0; i++) {
     monsters.push(makeFireGoblin(nextMonsterId(), pool.shift() as Coord));
   }
@@ -154,8 +177,11 @@ export function generateChapterMonsters(
   for (let i = 0; i < (rule.desertRaider ?? 0) && pool.length > 0; i++) {
     monsters.push(makeDesertRaider(nextMonsterId(), pool.shift() as Coord));
   }
-  for (let i = 0; i < (rule.sandwormLarva ?? 0) && pool.length > 0; i++) {
-    monsters.push(makeSandwormLarva(nextMonsterId(), pool.shift() as Coord));
+  for (let i = 0; i < (rule.desertHopperLizard ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeDesertHopperLizard(nextMonsterId(), pool.shift() as Coord));
+  }
+  for (let i = 0; i < (rule.duneSentinel ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeDuneSentinel(nextMonsterId(), pool.shift() as Coord));
   }
   for (let i = 0; i < (rule.poisonScorpion ?? 0) && pool.length > 0; i++) {
     monsters.push(makePoisonScorpion(nextMonsterId(), pool.shift() as Coord));
@@ -165,16 +191,19 @@ export function generateChapterMonsters(
   for (let i = 0; i < (rule.snowWolf ?? 0) && pool.length > 0; i++) {
     monsters.push(makeSnowWolf(nextMonsterId(), pool.shift() as Coord));
   }
-  for (let i = 0; i < (rule.iceSlime ?? 0) && pool.length > 0; i++) {
-    monsters.push(makeIceSlime(nextMonsterId(), pool.shift() as Coord));
+  for (let i = 0; i < (rule.frostspikePorcupine ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeFrostspikePorcupine(nextMonsterId(), pool.shift() as Coord));
   }
   for (let i = 0; i < (rule.frostSprite ?? 0) && pool.length > 0; i++) {
     monsters.push(makeFrostSprite(nextMonsterId(), pool.shift() as Coord));
   }
+  for (let i = 0; i < (rule.glacierShaper ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeGlacierShaper(nextMonsterId(), pool.shift() as Coord));
+  }
 
   // 第 4 章普通/精英变体（P1）
-  for (let i = 0; i < (rule.lavaGrunt ?? 0) && pool.length > 0; i++) {
-    monsters.push(makeLavaGrunt(nextMonsterId(), pool.shift() as Coord));
+  for (let i = 0; i < (rule.ashHound ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeAshHound(nextMonsterId(), pool.shift() as Coord));
   }
   for (let i = 0; i < (rule.lavaCrab ?? 0) && pool.length > 0; i++) {
     monsters.push(makeLavaCrab(nextMonsterId(), pool.shift() as Coord));
@@ -190,8 +219,8 @@ export function generateChapterMonsters(
   for (let i = 0; i < (rule.fateWatcher ?? 0) && pool.length > 0; i++) {
     monsters.push(makeFateWatcher(nextMonsterId(), pool.shift() as Coord));
   }
-  for (let i = 0; i < (rule.voidWorm ?? 0) && pool.length > 0; i++) {
-    monsters.push(makeVoidWorm(nextMonsterId(), pool.shift() as Coord));
+  for (let i = 0; i < (rule.fateWheelBeast ?? 0) && pool.length > 0; i++) {
+    monsters.push(makeFateWheelBeast(nextMonsterId(), pool.shift() as Coord));
   }
 
   // 第 2-5 章灵气怪差异化变体（260616）

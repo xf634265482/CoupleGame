@@ -1,8 +1,26 @@
 const cloud = require('wx-server-sdk');
 const { resolveOpenId, requireUser } = require('./common/auth');
 const { getUserByOpenId } = require('./common/db');
-const { loadActiveSave, startRun, saveFloorProgress, settleExpedition } = require('./common/pve/PveSave');
-const { loadMeta, updateMeta, unlockTreeNode, resetTreeNodes } = require('./common/pve/PveMeta');
+const { loadProfile, manageCamp, startMinghenTracking, updateCampConfiguration } = require('./common/pve/PveProgression');
+const {
+  loadActiveFloorChallenge,
+  saveFloorChallengeRuntime,
+  startFloorChallenge,
+  settleFloorChallenge,
+} = require('./common/pve/PveChallenge');
+const {
+  loadMeta,
+  updateMeta,
+  loadLeaderboard,
+} = require('./common/pve/PveMeta');
+const {
+  listMailsForUser,
+  claimMailForUser,
+  claimAllMailsForUser,
+  deleteMailForUser,
+  markMailReadForUser,
+} = require('./common/pve/PveMailService');
+const { handleCheckInAction } = require('./common/pve/PveCheckIn');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -17,29 +35,49 @@ exports.main = async (event = {}) => {
     const user = await requireUser(openId, getUserByOpenId);
     const { action } = event;
 
-    if (action === 'loadSave') {
-      const { save } = await loadActiveSave(user);
-      return { ok: true, save };
+    if (action === 'loadProfile') {
+      const { profile } = await loadProfile(user);
+      return { ok: true, profile };
     }
 
-    if (action === 'startRun') {
-      const { runSeed, resume } = await startRun(user);
-      return { ok: true, runSeed, resume };
+    if (action === 'startMinghenTracking') {
+      const result = await startMinghenTracking(user, event.request || {});
+      return { ok: true, ...result };
     }
 
-    if (action === 'saveFloor') {
-      const { save } = await saveFloorProgress(user, event.report || {});
-      return { ok: true, save };
+    if (action === 'updateCampConfiguration') {
+      const result = await updateCampConfiguration(user, event.request || {});
+      return { ok: true, ...result };
     }
 
-    if (action === 'settleRun') {
-      const { rewards } = await settleExpedition(user, event.report || {});
-      return { ok: true, rewards };
+    if (action === 'manageCamp') {
+      const result = await manageCamp(user, event.request || {});
+      return { ok: true, ...result };
+    }
+
+    if (action === 'startFloorChallenge') {
+      const result = await startFloorChallenge(user, event.request || {});
+      return { ok: true, ...result };
+    }
+
+    if (action === 'loadActiveFloorChallenge') {
+      const { challenge } = await loadActiveFloorChallenge(user);
+      return { ok: true, challenge };
+    }
+
+    if (action === 'saveFloorChallengeRuntime') {
+      const result = await saveFloorChallengeRuntime(user, event.request || {});
+      return { ok: true, ...result };
+    }
+
+    if (action === 'settleFloorChallenge') {
+      const result = await settleFloorChallenge(user, event.request || {});
+      return { ok: true, ...result };
     }
 
     if (action === 'loadMeta') {
-      const { meta } = await loadMeta(user);
-      return { ok: true, meta };
+      const { meta, balanceSnapshot } = await loadMeta(user);
+      return { ok: true, meta, balanceSnapshot };
     }
 
     if (action === 'updateMeta') {
@@ -47,14 +85,43 @@ exports.main = async (event = {}) => {
       return { ok: true };
     }
 
-    if (action === 'unlockTreeNode') {
-      const { meta } = await unlockTreeNode(user, event.nodeId);
-      return { ok: true, meta };
+    if (action === 'loadLeaderboard') {
+      const { entries, myRank } = await loadLeaderboard(user, event.limit);
+      return { ok: true, entries, myRank: myRank ?? null };
     }
 
-    if (action === 'resetTreeNodes') {
-      const { meta } = await resetTreeNodes(user);
-      return { ok: true, meta };
+    if (action === 'listMails') {
+      const result = await listMailsForUser(user.id, { limit: event.limit });
+      return { ok: true, ...result };
+    }
+
+    if (action === 'claimMail') {
+      const result = await claimMailForUser(user, event.mailId || event.request?.mailId);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'claimAllMails') {
+      const result = await claimAllMailsForUser(user);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'deleteMail') {
+      await deleteMailForUser(user.id, event.mailId || event.request?.mailId);
+      return { ok: true };
+    }
+
+    if (action === 'markMailRead') {
+      const result = await markMailReadForUser(user.id, event.mailId || event.request?.mailId);
+      return { ok: true, ...result };
+    }
+
+    if (action === 'checkIn') {
+      const result = await handleCheckInAction(user, event.request || {
+        action: event.checkInAction,
+        day: event.day,
+        days: event.days,
+      });
+      return { ok: true, ...result };
     }
 
     return { ok: false, code: 'UNKNOWN_ACTION', message: `未知 action: ${action}` };

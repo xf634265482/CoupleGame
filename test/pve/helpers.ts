@@ -25,9 +25,7 @@ export function makeRunPlayer(overrides: Partial<RunPlayer> = {}): RunPlayer {
     anima: INITIAL_ANIMA,
     animaProgress: 0,
     classId: INITIAL_CLASS,
-    classTraits: [],
     equipment: {},
-    classFragments: {},
     ...overrides,
   };
 }
@@ -60,6 +58,7 @@ export interface MakeStateOptions {
   floor?: number;
   seed?: number;
   chapter?: number;
+  persistentFloorMode?: true;
   floorOverrides?: Partial<FloorState>;
   playerOverrides?: Partial<RunPlayer>;
 }
@@ -67,7 +66,14 @@ export interface MakeStateOptions {
 export function makeExpeditionState(options: MakeStateOptions = {}): ExpeditionState {
   const floorNum = options.floor ?? 1;
   const seed = options.seed ?? 1;
-  const floorState: FloorState = { ...generateFloor(floorNum, seed), ...options.floorOverrides };
+  const generated = generateFloor(floorNum, seed);
+  const floorState: FloorState = {
+    ...generated,
+    ...options.floorOverrides,
+    ...(options.floorOverrides?.monsters && !options.floorOverrides.revealed
+      ? { revealed: generated.revealed.map((row) => row.map(() => true)) }
+      : {}),
+  };
   return {
     runSeed: seed,
     chapter: options.chapter ?? 1,
@@ -75,5 +81,6 @@ export function makeExpeditionState(options: MakeStateOptions = {}): ExpeditionS
     status: 'ACTIVE',
     player: makeRunPlayer(options.playerOverrides),
     floorState,
+    ...(options.persistentFloorMode ? { persistentFloorMode: true } : {}),
   };
 }

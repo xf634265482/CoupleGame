@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 将 bgm_main.mp3 压到 ~96kbps，为主包腾出 ~200KB（含 icons 后主包须 <4096KB）。
+ * 将 bgm_main.mp3 进一步压到 ~48kbps，为主包再腾一段安全余量。
  * 依赖 @ffmpeg-installer/ffmpeg（npm install 后自动可用）。
  */
 const { execFileSync } = require('child_process');
@@ -9,8 +9,9 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const src = path.join(root, 'assets', 'resources', 'audio', 'bgm_main.mp3');
-const bak = src + '.bak';
-const tmp = src + '.tmp.mp3';
+const backupRoot = path.join(root, '.asset-backups', 'compress-bgm');
+const bak = path.join(backupRoot, 'assets', 'resources', 'audio', 'bgm_main.mp3.bak');
+const tmp = path.join(backupRoot, 'tmp', 'bgm_main.tmp.mp3');
 
 function resolveFfmpeg() {
   try {
@@ -31,15 +32,17 @@ if (!fs.existsSync(src)) {
 
 const before = kb(src);
 if (!fs.existsSync(bak)) {
+  fs.mkdirSync(path.dirname(bak), { recursive: true });
   fs.copyFileSync(src, bak);
   console.log('[compress-bgm] backup ->', path.relative(root, bak));
 }
 
 const ffmpeg = resolveFfmpeg();
+fs.mkdirSync(path.dirname(tmp), { recursive: true });
 try {
   execFileSync(
     ffmpeg,
-    ['-y', '-i', src, '-b:a', '64k', '-ar', '44100', '-ac', '2', tmp],
+    ['-y', '-i', src, '-b:a', '48k', '-ar', '44100', '-ac', '2', tmp],
     { stdio: 'pipe' },
   );
 } catch (err) {

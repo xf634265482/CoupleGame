@@ -50,7 +50,14 @@ import type {
   PveEvent,
 } from '../PveTypes';
 import { makeGoblinWarrior } from '../Chapter1Monsters';
-import { HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
+import { BOSS_ARMOR_PENETRATION, GOBLIN_CHIEF_SUMMON_CAP, HORN_WARRIOR_COUNT, HORN_WARRIOR_ENRAGE_COUNT } from '../PveConstants';
+
+function bossPhysicalDamage(state: ExpeditionState, rawAttack: number, multiplier = 1): number {
+  const player = state.player;
+  const armor = player.equipment.ARMOR?.baseStat ?? 0;
+  const effectiveArmor = Math.floor(Math.max(0, armor) * (1 - BOSS_ARMOR_PENETRATION));
+  return Math.max(1, Math.round(Math.max(0, rawAttack - effectiveArmor) * multiplier));
+}
 
 /** HP ≤ 此值时进入狂暴：攻击 +10、移动 +1（MonsterAI 处理额外移动步；2026-06-15 由 200 下调为 170）。 */
 export const GOBLIN_CHIEF_ENRAGE_HP = 170;
@@ -63,11 +70,11 @@ export const HORN_INTERVAL_NORMAL = 3;
 /** 增援号角间隔（狂暴后）：每 2 个怪物回合。 */
 export const HORN_INTERVAL_ENRAGED = 2;
 /** 蓄力重击内圈伤害倍率（距离 ≤ HEAVY_STRIKE_INNER_RANGE）。 */
-export const HEAVY_STRIKE_MULTIPLIER = 1.5;
+export const HEAVY_STRIKE_MULTIPLIER = 2;
 /** 蓄力重击内圈半径（距离 ≤ 2 触发内圈伤害）。 */
 export const HEAVY_STRIKE_INNER_RANGE = 2;
 /** 蓄力重击外圈伤害倍率（距离 HEAVY_STRIKE_INNER_RANGE+1 到 HEAVY_STRIKE_RANGE）。 */
-export const HEAVY_STRIKE_OUTER_MULTIPLIER = 1.5;
+export const HEAVY_STRIKE_OUTER_MULTIPLIER = 1.75;
 /** 蓄力重击外圈最大半径（整体 AOE 半径）。2026-06-15 曾由 4→3，同日改为「重击回合站桩」后又改回 4
  *  （站桩后红圈=橙圈，无需靠缩小半径来腾出躲避空间，半径放大回 4 保持威慑）。 */
 export const HEAVY_STRIKE_RANGE = 4;
@@ -91,9 +98,10 @@ export function isHornTurn(turn: number, enraged: boolean): boolean {
   return turn > 0 && turn % interval === 0;
 }
 
-/** 哥布林酋长本回合最大移动步数：狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）为 2，否则为 1。 */
+/** 哥布林酋长本回合最大移动步数：2026-06-27 起狂暴后不再额外增加移动，始终为 1。 */
 export function goblinChiefMaxMoveSteps(hp: number): number {
-  return hp <= GOBLIN_CHIEF_ENRAGE_HP ? 2 : 1;
+  void hp;
+  return 1;
 }
 
 /**
@@ -168,7 +176,7 @@ function getAdjacentFreeCells(floor: FloorState, center: Coord, count: number): 
     if (d.x < 0 || d.y < 0 || d.x >= floor.size || d.y >= floor.size) continue;
     if (d.x === floor.player.x && d.y === floor.player.y) continue;
     if (floor.monsters.some((m) => m.aiState !== 'DEAD' && m.pos.x === d.x && m.pos.y === d.y)) continue;
-    if (floor.entities.some((e) => e.type === 'ROCK' && !e.consumed && e.pos.x === d.x && e.pos.y === d.y)) continue;
+    if (floor.entities.some((e) => !e.consumed && e.pos.x === d.x && e.pos.y === d.y)) continue;
     result.push(d);
   }
   return result;
@@ -179,7 +187,7 @@ function getAdjacentFreeCells(floor: FloorState, center: Coord, count: number): 
  * - 普通回合（奇数）：普通攻击范围 GOBLIN_CHIEF_RANGE（2），单目标
  * - 重击回合（偶数）：同心圆 AOE，内圈(≤2格)×3，外圈(3-4格)×2
  *   - 石块在 boss→player 路径上时吸收伤害并消失
- * - 狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）：基础攻击+10
+ * - 狂暴（HP≤GOBLIN_CHIEF_ENRAGE_HP）：基础攻击+15
  */
 export function goblinChiefAttack(state: ExpeditionState, bossId: string): ApplyResult {
   const floor = state.floorState;
@@ -190,7 +198,7 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 
   const heavy = isHeavyStrikeTurn(floor.turn);
   const enraged = boss.hp <= GOBLIN_CHIEF_ENRAGE_HP;
-  const baseAttack = enraged ? boss.attack + 10 : boss.attack;
+  const baseAttack = enraged ? boss.attack + 15 : boss.attack;
 
   if (!heavy) {
     // ── 普通攻击（单目标）───────────────────────────────
@@ -198,7 +206,7 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
       return noop(state);
     }
 
-    const damage = baseAttack;
+    const damage = bossPhysicalDamage(state, baseAttack);
     const hp = Math.max(0, state.player.hp - damage);
     const dead = hp <= 0;
 
@@ -244,18 +252,10 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 
   // 按距离计算伤害倍率：内圈×HEAVY_STRIKE_MULTIPLIER，外圈×HEAVY_STRIKE_OUTER_MULTIPLIER
   const mult = playerDist <= HEAVY_STRIKE_INNER_RANGE ? HEAVY_STRIKE_MULTIPLIER : HEAVY_STRIKE_OUTER_MULTIPLIER;
-  const damage = Math.round(baseAttack * mult);
+  const damage = bossPhysicalDamage(state, baseAttack, mult);
 
-  let hp = Math.max(0, state.player.hp - damage);
-  let dead = hp <= 0;
-
-  // BERSERKER 不屈：本层首次将死时保留 1HP
-  let undyingTriggered = false;
-  if (dead && state.player.classTraits.includes('undying') && (floor.undyingAvailable ?? true)) {
-    hp = 1;
-    dead = false;
-    undyingTriggered = true;
-  }
+  const hp = Math.max(0, state.player.hp - damage);
+  const dead = hp <= 0;
 
   const events: PveEvent[] = [resolvedEvent, { type: 'PLAYER_DAMAGED', damage, hp, sourceId: bossId }];
   if (dead) events.push({ type: 'PLAYER_DEAD' });
@@ -268,7 +268,6 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
       floorState: {
         ...floor,
         status: dead ? 'DEAD' : floor.status,
-        ...(undyingTriggered ? { undyingAvailable: false } : {}),
       },
     },
     events,
@@ -278,6 +277,8 @@ export function goblinChiefAttack(state: ExpeditionState, bossId: string): Apply
 /**
  * 哥布林酋长增援号角：召唤哥布林战士 ×HORN_WARRIOR_COUNT（非狂暴=1）；
  * 狂暴状态下召唤数提升为 HORN_WARRIOR_ENRAGE_COUNT（=2）。
+ * 为避免久战时怪物数量失控，场上同时存活的号角召唤兵数量被限制在
+ * GOBLIN_CHIEF_SUMMON_CAP 以内；达到上限时本次号角不再继续加怪。
  * 怪物生成在 boss 相邻空格，格子不足时少召唤。
  */
 export function goblinChiefHorn(state: ExpeditionState, bossId: string): ApplyResult {
@@ -289,12 +290,18 @@ export function goblinChiefHorn(state: ExpeditionState, bossId: string): ApplyRe
 
   const enraged = boss.hp <= GOBLIN_CHIEF_ENRAGE_HP;
   const warriorCount = enraged ? HORN_WARRIOR_ENRAGE_COUNT : HORN_WARRIOR_COUNT;
+  const activeSummonedCount = floor.monsters.filter((m) => m.aiState !== 'DEAD' && m.summoned).length;
+  const summonQuota = Math.max(0, GOBLIN_CHIEF_SUMMON_CAP - activeSummonedCount);
+  if (summonQuota <= 0) {
+    return { state, events: [] };
+  }
+  const actualSummonCount = Math.min(warriorCount, summonQuota);
 
-  const freeCells = getAdjacentFreeCells(floor, boss.pos, warriorCount);
+  const freeCells = getAdjacentFreeCells(floor, boss.pos, actualSummonCount);
   const newMonsters: Monster[] = [];
   const events: PveEvent[] = [];
 
-  for (let i = 0; i < warriorCount && i < freeCells.length; i++) {
+  for (let i = 0; i < actualSummonCount && i < freeCells.length; i++) {
     const pos = freeCells[i];
     // summoned: 增援召唤的战士击杀后不掉落（金币/灵气/装备），避免刷增援白嫖收益
     const m = { ...makeGoblinWarrior(`mon_horn_${floor.turn}_w${i}`, pos), summoned: true };

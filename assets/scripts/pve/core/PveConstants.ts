@@ -1,41 +1,41 @@
-// PVE「命运远征」数值常量（客户端权威单一来源）。
-// 修改本文件的玩法数值时必须同步 specs/260608-pve-destiny-expedition/design.md（见 .cursor/rules/pve-module.mdc）。
-// 不用 enum：统一 as const + 字面量联合类型。
+﻿// PVE銆屽懡杩愯繙寰併€嶆暟鍊煎父閲忥紙瀹㈡埛绔潈濞佸崟涓€鏉ユ簮锛夈€?
+// 淇敼鏈枃浠剁殑鐜╂硶鏁板€兼椂蹇呴』鍚屾 specs/260608-pve-destiny-expedition/design.md锛堣 .cursor/rules/pve-module.mdc锛夈€?
+// 涓嶇敤 enum锛氱粺涓€ as const + 瀛楅潰閲忚仈鍚堢被鍨嬨€?
 
-// ── AP 行动点（design §4） ─────────────────────────────
+// 鈹€鈹€ AP 琛屽姩鐐癸紙design 搂4锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const AP_BASE = 8;
 export const DICE_MIN = 1;
 export const DICE_MAX = 6;
 
 export const AP_COST = {
-  MOVE: 2, // 移动 1 格
-  ATTACK: 3, // 普通攻击（再调高为 3 进一步限制每回合攻击次数，强化资源决策）
-  OPEN_CHEST: 1, // 开启宝箱
-  OPEN_EXIT: 1, // 开启出口门
-  USE_IDOL: 1, // 使用神像
-  USE_HOT_SPRING: 1, // 使用温泉
-  USE_ALTAR: 1, // 使用祭坛（铁匠不在此表：铁匠只收金币，不消耗 AP）
+  MOVE: 2, // 绉诲姩 1 鏍?
+  ATTACK: 3, // 鏅€氭敾鍑伙紙鍐嶈皟楂樹负 3 杩涗竴姝ラ檺鍒舵瘡鍥炲悎鏀诲嚮娆℃暟锛屽己鍖栬祫婧愬喅绛栵級
+  OPEN_CHEST: 1, // 寮€鍚疂绠?
+  OPEN_EXIT: 1, // 寮€鍚嚭鍙ｉ棬
+  USE_INTERACT: 1, // 通用剧情交互（火药桶、爆破点等）
+  USE_HOT_SPRING: 1, // 浣跨敤娓╂硥
+  USE_ALTAR: 1, // 浣跨敤绁潧锛堥搧鍖犱笉鍦ㄦ琛細閾佸尃鍙敹閲戝竵锛屼笉娑堣€?AP锛?
 } as const;
 
-// AP 结转：回合结束时未用完的 AP，按 min(剩余, AP_CARRY_CAP) 结转到下一回合上限。
-// 上限取 3（恰好够凑一次 ATTACK 的"零头"），避免无限攒 AP 打破"每回合行动次数受限"的资源设计。
+// AP 缁撹浆锛氬洖鍚堢粨鏉熸椂鏈敤瀹岀殑 AP锛屾寜 min(鍓╀綑, AP_CARRY_CAP) 缁撹浆鍒颁笅涓€鍥炲悎涓婇檺銆?
+// 涓婇檺鍙?3锛堟伆濂藉鍑戜竴娆?ATTACK 鐨?闆跺ご"锛夛紝閬垮厤鏃犻檺鏀?AP 鎵撶牬"姣忓洖鍚堣鍔ㄦ鏁板彈闄?鐨勮祫婧愯璁°€?
 export const AP_CARRY_CAP = 3;
 
-// ── 中立交互实体效果（M1 占位数值，待与设计师对齐回写 design.md） ──
-export const IDOL_MAX_HP_BONUS = 10; // 神像祝福：永久 +10 maxHp（数值×10基准下 = 原 +1）
-export const HOT_SPRING_HEAL_RATIO = 0.4; // 温泉：恢复 maxHp 的 40%（削弱自回满，避免玩家无损通层）
+// 鈹€鈹€ 涓珛浜や簰瀹炰綋鏁堟灉锛圡1 鍗犱綅鏁板€硷紝寰呬笌璁捐甯堝榻愬洖鍐?design.md锛?鈹€鈹€
+export const HOT_SPRING_SHIELD_RATIO = 0.2; // 温泉护泉：获得 maxHp 20% 的临时护盾
+export const HOT_SPRING_SPIRIT_GAIN = 15; // 温泉净泉：净化 1 个负面状态并获得灵气
 
-// ── 地图尺寸（design §3 / §5） ─────────────────────────
+// 鈹€鈹€ 鍦板浘灏哄锛坉esign 搂3 / 搂5锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const MAP_SIZE = {
-  NORMAL: 8, // 8×8 普通层
-  HIGH: 9, // 9×9 高层
-  BOSS: 10, // 10×10 Boss 层
+  NORMAL: 8, // 8脳8 鏅€氬眰
+  HIGH: 9, // 9脳9 楂樺眰
+  BOSS: 10, // 10脳10 Boss 灞?
 } as const;
 
-// ── 章节结构（design §3） ──────────────────────────────
-export const FLOORS_PER_CHAPTER = 5;
+// 鈹€鈹€ 绔犺妭缁撴瀯锛坉esign 搂3锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+export const FLOORS_PER_CHAPTER = 7;
 export const TOTAL_CHAPTERS = 5;
-export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * TOTAL_CHAPTERS; // 25
+export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * TOTAL_CHAPTERS; // 35
 
 export const CHAPTER_BOSS = {
   1: 'GOBLIN_CHIEF',
@@ -45,520 +45,455 @@ export const CHAPTER_BOSS = {
   5: 'FATE_GUARDIAN',
 } as const;
 
-// ── 玩家初始状态 ───────────────────────────────────────
-export const INITIAL_HP = 200;
+// 鈹€鈹€ 鐜╁鍒濆鐘舵€?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+export const INITIAL_HP = 280; // V3 搂4b.2锛氫笂璋冨熀纭€ HP锛堝師 230锛夛紝鏂版墜缂撳啿
 export const INITIAL_GOLD = 0;
 export const INITIAL_ANIMA = 0;
 export const INITIAL_CLASS = 'ADVENTURER';
 
-// ── 迷雾揭示半径（曼哈顿距离，design §5） ───────────────
+// 鈹€鈹€ 杩烽浘鎻ず鍗婂緞锛堟浖鍝堥】璺濈锛宒esign 搂5锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const FOG_REVEAL_RADIUS = 1;
 
-// ── 职业（design §8） ──────────────────────────────────
-// attackBonus / attackRangeBonus / moveBonus / 进阶即时代价
+// 鈹€鈹€ 鑱屼笟锛坉esign 搂8锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// attackBonus / attackRangeBonus / moveBonus / 杩涢樁鍗虫椂浠ｄ环
+// 永久逐层：职业面板见 professions/ProfessionBaseStats.ts；此处 attackBonus/attackRangeBonus 一律为 0，
+// 避免旧「进阶狂战士 +8」等叠进 HUD。moveBonus 仅遗留非永久路径可能读取。
 export const CLASS_STATS = {
   ADVENTURER: { attackBonus: 0, attackRangeBonus: 0, moveBonus: 0, hpCost: 0 },
-  BERSERKER: { attackBonus: 15, attackRangeBonus: 0, moveBonus: 0, hpCost: 0 }, // hpCost=0：进阶代价改为动态扣当前 HP 一半（ClassSystem 计算）
-  ARCHER: { attackBonus: 5, attackRangeBonus: 2, moveBonus: 0, hpCost: 0 },
-  ROGUE: { attackBonus: 10, attackRangeBonus: 0, moveBonus: 1, hpCost: 0 },
+  BERSERKER: { attackBonus: 0, attackRangeBonus: 0, moveBonus: 0, hpCost: 0 },
+  ARCHER: { attackBonus: 0, attackRangeBonus: 0, moveBonus: 0, hpCost: 0 },
+  ROGUE: { attackBonus: 0, attackRangeBonus: 0, moveBonus: 1, hpCost: 0 },
 } as const;
 
-export const CLASS_FRAGMENTS_TO_ADVANCE = 5; // 集齐 5 个同职业碎片可进阶（V2 节奏调整：第一章 Boss 前裸随机上限为 3，需命运树 B3 / 精英碎片对掉落补足）
+/** 绮捐嫳銆佺壒娈婃€笌 Boss 瀵瑰皠鎵嬪叏閮ㄧ帺瀹舵潵婧愪激瀹崇殑鏈€缁堝噺浼ゃ€?*/
+/** 鐜╁鏀诲嚮鎬墿鏃讹紝鎬墿鎶ょ敳鏈€澶氬墛鍑忔湰娆″師浼ゅ鐨勬瘮渚嬨€?*/
+export const MONSTER_ARMOR_MAX_REDUCTION_RATIO = 0.30;
+/** 鎬墿鏀诲嚮鐜╁鏃讹紝鐜╁鎶ょ敳鏈€澶氬墛鍑忔湰娆″師浼ゅ鐨勬瘮渚嬨€?*/
+export const PLAYER_ARMOR_MAX_REDUCTION_RATIO = 0.35;
+/** 鐜╁杩炵画绔欐々鏃讹紝姣忓眰琚洿鏀诲鍔犵殑鎬墿鐩存帴鏀诲嚮浼ゅ銆?*/
+export const STATIONARY_PRESSURE_DAMAGE_PER_STACK = 0.25;
+/** 琚洿鏀绘渶澶у眰鏁般€?*/
+export const STATIONARY_PRESSURE_MAX_STACKS = 3;
+/** 姣忕珷鐗规畩鎬娆¤穼鐮磋鐢熷懡姣斾緥鏃惰Е鍙戜竴娆℃挙閫€銆?*/
+export const SPECIAL_MONSTER_RETREAT_HP_RATIO = 0.5;
+/** 鐗规畩鎬綆琛€鎾ら€€鐨勬渶澶хЩ鍔ㄦ牸鏁般€?*/
+export const SPECIAL_MONSTER_RETREAT_STEPS = 3;
 
-// ── 灵气（design §9） ──────────────────────────────────
-export const ANIMA_PER_STRENGTHEN = 100; // 初始强化阈值
-export const ANIMA_THRESHOLD_MULTIPLIER = 1.5; // 每次触发后阈值 × 此系数（100→150→225→337...）
+// 鈹€鈹€ 鐏垫皵锛坉esign 搂9锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+export const ANIMA_PROGRESS_CAP = 100;
+export const ANIMA_THRESHOLD_MULTIPLIER = 1.35; // 姣忔瑙﹀彂鍚庨槇鍊?脳 姝ょ郴鏁帮紙V3 搂4b.1锛?.5鈫?.35锛屽欢缂撳悗鏈熸柇渚涳級
 export const STRENGTHEN_CHOICES = 3; // 3 选 1
+/** 首通通关命痕弹窗固定选项数（主题池可更长，展示截取前 N 个）。 */
+export const FLOOR_CLEAR_MINGHEN_CHOICES = 3;
+/** 营地命痕装配槽上限。 */
+export const MINGHEN_LOADOUT_SLOTS = 10;
 
-// ── 战斗基础值（M1：冒险者无武器基础攻击；装备后叠加） ──
-export const BASE_ATTACK = 10; // M1 冒险者基础普攻（×10 基准，原 1；后续由装备/职业调整）
-export const BASE_ATTACK_RANGE = 1; // 曼哈顿距离 1（相邻）
+// 鈹€鈹€ 鎴樻枟鍩虹鍊硷紙M1锛氬啋闄╄€呮棤姝﹀櫒鍩虹鏀诲嚮锛涜澶囧悗鍙犲姞锛?鈹€鈹€
+export const BASE_ATTACK = 10; // M1 鍐掗櫓鑰呭熀纭€鏅敾锛埫?0 鍩哄噯锛屽師 1锛涘悗缁敱瑁呭/鑱屼笟璋冩暣锛?
+export const BASE_ATTACK_RANGE = 1; // 鏇煎搱椤胯窛绂?1锛堢浉閭伙級
 
-// ── 怪物（design §6） ──────────────────────────────────
+// 鈹€鈹€ 鎬墿锛坉esign 搂6锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const MONSTER_BASE = {
-  NORMAL: { hp: 40, attack: 10, range: 1, aggroRadius: 3 },
-  ANIMA: { hp: 30, attack: 0, range: 0, aggroRadius: 6 }, // 6 格感知：比普通怪更早察觉玩家并开始逃跑
+  NORMAL: { hp: 40, attack: 13, range: 1, aggroRadius: 3 },
+  ANIMA: { hp: 30, attack: 0, range: 0, aggroRadius: 6 }, // 6 鏍兼劅鐭ワ細姣旀櫘閫氭€洿鏃╁療瑙夌帺瀹跺苟寮€濮嬮€冭窇
   ELITE: { hp: 80, attack: 20, range: 1, aggroRadius: 4 },
   BOSS: { hp: 300, attack: 30, range: 1, aggroRadius: 99 },
 } as const;
 
-// 普通怪掉落（design §6）：概率与发放量
+// 鏅€氭€帀钀斤紙design 搂6锛夛細姒傜巼涓庡彂鏀鹃噺
 export const NORMAL_MONSTER_DROP = {
   GOLD_ONLY: 0.5,
   ANIMA_ONLY: 0.25,
   GOLD_AND_ANIMA: 0.25,
-  /** 独立额外判定：5% 概率掉落 COMMON 装备（与金币/灵气掉落互相独立）。 */
-  EQUIP_CHANCE: 0.05,
   goldSmall: [5, 12] as const,
   animaSmall: [10, 25] as const,
 } as const;
 
-// ── 死亡结算保留/清空（design §2.1） ───────────────────
-export const DEATH_KEEP = ['achievements', 'codex', 'diamond', 'destinyShards'] as const;
-export const DEATH_CLEAR = ['equipment', 'classId', 'classTraits', 'gold', 'anima'] as const;
+// 鈹€鈹€ 瑁呭鎺夎惤琛紙Phase 4锛屽崟娆℃幏楠?+ 绔犺妭灏侀《锛宒esign 搂5锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// 姣忛」涓?[ch1, ch2, ch3, ch4, ch5] 姒傜巼锛涘垽瀹氶『搴?LEGENDARY鈫扙PIC鈫扲ARE鈫扚INE鈫扖OMMON锛涘叾浣?涓嶆帀瑁呭銆?
+// 姗欙紙浼犲锛変粠绗?3 绔犺捣锛坈h3 寮€濮嬮潪闆讹級銆?
 
-// ── 类型 ───────────────────────────────────────────────
+export const NORMAL_MONSTER_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,          0,          0.000909091, 0.002170543, 0.003809524] as const,
+  EPIC:      [0,          0,          0.004545455, 0.008139535, 0.012698413] as const,
+  RARE:      [0,          0.008333333,0.013636364, 0.016279070, 0.019047619] as const,
+  FINE:      [0.013333333,0.016666667,0.018181818, 0.021705426, 0.025396825] as const,
+  COMMON:    [0.026666667,0.025,      0.022727272, 0.021705426, 0.019047619] as const,
+} as const;
+
+export const ELITE_MONSTER_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,     0,          0.003448276, 0.006875,    0.010909091] as const,
+  EPIC:      [0,     0,          0.020689655, 0.0275,      0.029090909] as const,
+  RARE:      [0,     0.034615385,0.034482759, 0.034375,    0.036363636] as const,
+  FINE:      [0.08,  0.055384615,0.041379310, 0.04125,     0.043636364] as const,
+  COMMON:    [0,     0,     0,     0,     0    ] as const,
+} as const;
+
+export const CHEST_EQUIP_DROP_TABLE = {
+  LEGENDARY: [0,     0,     0.002944785, 0.006506024, 0.007228916] as const,
+  EPIC:      [0,     0,     0.019631902, 0.032530120, 0.036144578] as const,
+  RARE:      [0,     0.03,  0.039263804, 0.043373494, 0.048192771] as const,
+  FINE:      [0.04,  0.05,  0.049079755, 0.054216868, 0.060240964] as const,
+  COMMON:    [0.08,  0.06,  0.049079754, 0.043373494, 0.048192771] as const,
+} as const;
+
+export const NORMAL_ARMOR_PENETRATION_BY_CHAPTER = [0, 0, 0.35, 0.40, 0.45, 0.50] as const;
+export const ELITE_ARMOR_PENETRATION_BY_CHAPTER = [0, 0.25, 0.50, 0.55, 0.60, 0.65] as const;
+export const BOSS_ARMOR_PENETRATION = 0.70;
+
+// 鈹€鈹€ 姝讳骸缁撶畻淇濈暀/娓呯┖锛坉esign 搂2.1锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 鍚屾椂鏈€澶氭縺娲荤殑閬楃墿妲芥暟锛圥hase 5锛孉C-EQ-8锛夈€?*/
+
+// 鈹€鈹€ 绫诲瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export type ClassId = keyof typeof CLASS_STATS;
 export type BossId = (typeof CHAPTER_BOSS)[keyof typeof CHAPTER_BOSS];
 
-// ── M2 怪物数量（每普通层，design §6 AC-18）──────────────
-export const ANIMA_MONSTER_COUNT = 1; // 灵气怪：逃跑，100% 大量灵气
-export const ELITE_MONSTER_COUNT = 1; // 精英怪：巡逻→追击，掉落更好
+// 鈹€鈹€ M2 鎬墿鏁伴噺锛堟瘡鏅€氬眰锛宒esign 搂6 AC-18锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+export const ANIMA_MONSTER_COUNT = 1; // 鐏垫皵鎬細閫冭窇锛?00% 澶ч噺鐏垫皵
+export const ELITE_MONSTER_COUNT = 1; // 绮捐嫳鎬細宸￠€烩啋杩藉嚮锛屾帀钀芥洿濂?
 
-// ── M2 职业碎片（每普通层，design §8 AC-15）──────────────
-export const FRAGMENT_COUNT = 2; // 每普通层生成 2 个职业碎片
-
-/** 可进阶的职业列表（ADVENTURER 是初始职业，不作为进阶目标）。 */
-export const ADVANCABLE_CLASSES = ['BERSERKER', 'ARCHER', 'ROGUE'] as const;
-export type AdvancableClass = (typeof ADVANCABLE_CLASSES)[number];
-
-// ── 二阶进阶/觉醒（V2 §七）──────────────────────────────
-/** 觉醒所需本职业碎片数（远高于一阶进阶阈值，对应"差一点"后的长线追逐）。 */
-export const CLASS_FRAGMENTS_TO_AWAKEN = 10;
-/** 觉醒所需"另外两个职业碎片合计"数（取奇数，保证两者必有高低，决定觉醒形态）。 */
-export const AWAKEN_SECONDARY_TOTAL = 7;
-/** 觉醒额外门槛：需击败第三章 Boss（FROST_GIANT）。 */
-export const AWAKEN_REQUIRED_CHAPTER = 3;
-
-/** 觉醒形态 id：职业 + 形态序号（1/2，由副职业碎片对比决定）。 */
-export type AwakenForm = 'BERSERKER_1' | 'BERSERKER_2' | 'ARCHER_1' | 'ARCHER_2' | 'ROGUE_1' | 'ROGUE_2';
-
-/** 觉醒形态定义：statTrait 为轻量属性加成（复用现有通用词条 A），traitId/traitName/traitDesc 为专属觉醒词条（B）。 */
-export interface AwakenFormDef {
-  id: AwakenForm;
-  classId: AdvancableClass;
-  /** 中文形态名（界面展示，不含英文）。 */
-  name: string;
-  /** 轻量属性加成：复用现有通用词条 id。 */
-  statTrait: string;
-  /** 专属觉醒词条 id（CombatSystem 内联判断）。 */
-  traitId: string;
-  /** 专属觉醒词条中文名。 */
-  traitName: string;
-  /** 专属觉醒词条中文描述。 */
-  traitDesc: string;
-}
-
-export const AWAKEN_FORMS: Record<AwakenForm, AwakenFormDef> = {
-  BERSERKER_1: {
-    id: 'BERSERKER_1',
-    classId: 'BERSERKER',
-    name: '狂战士·破阵型',
-    statTrait: 'eagle_eye', // 轻量A：攻击范围 +1
-    traitId: 'awakened_cleave',
-    traitName: '横扫',
-    traitDesc: '攻击命中后，对目标周围的相邻怪物造成50%溅射伤害',
-  },
-  BERSERKER_2: {
-    id: 'BERSERKER_2',
-    classId: 'BERSERKER',
-    name: '狂战士·嗜杀型',
-    statTrait: 'swift', // 轻量A：移动消耗 -1 AP
-    traitId: 'awakened_frenzy',
-    traitName: '狂热',
-    traitDesc: '击杀目标后，下一次攻击必定暴击并额外回复20点HP',
-  },
-  ARCHER_1: {
-    id: 'ARCHER_1',
-    classId: 'ARCHER',
-    name: '射手·强击型',
-    statTrait: 'strengthen_attack_up', // 轻量A：攻击 +5
-    traitId: 'awakened_power_shot',
-    traitName: '强弓',
-    traitDesc: '基础伤害额外提升15点',
-  },
-  ARCHER_2: {
-    id: 'ARCHER_2',
-    classId: 'ARCHER',
-    name: '射手·游击型',
-    statTrait: 'swift', // 轻量A：移动消耗 -1 AP
-    traitId: 'awakened_volley',
-    traitName: '连珠',
-    traitDesc: '连射概率提升至60%，且连射命中后有30%概率触发连锁射击',
-  },
-  ROGUE_1: {
-    id: 'ROGUE_1',
-    classId: 'ROGUE',
-    name: '隐匿者·屠戮型',
-    statTrait: 'strengthen_attack_up', // 轻量A：攻击 +5
-    traitId: 'awakened_execute',
-    traitName: '处决',
-    traitDesc: '目标HP低于30%时直接处决，背刺伤害提升至3倍',
-  },
-  ROGUE_2: {
-    id: 'ROGUE_2',
-    classId: 'ROGUE',
-    name: '隐匿者·影袭型',
-    statTrait: 'eagle_eye', // 轻量A：攻击范围 +1
-    traitId: 'awakened_shadow_strike',
-    traitName: '影袭',
-    traitDesc: '每回合可触发2次背刺伤害',
-  },
-};
-
-/**
- * 觉醒形态判定：副职业（另外两个职业）碎片数较多者决定形态。
- * 数组 [classA, classB]：classA 碎片数 > classB → 形态一；否则（含相等，理论上因 AWAKEN_SECONDARY_TOTAL 为奇数不会发生）→ 形态二。
- * 形态主题对应：BERSERKER ←→ ARCHER（远程/范围）/ ROGUE（机动）；ARCHER ←→ BERSERKER（输出）/ ROGUE（机动）；ROGUE ←→ BERSERKER（输出）/ ARCHER（范围）。
- */
-export const AWAKEN_SECONDARY_ORDER: Record<AdvancableClass, [AdvancableClass, AdvancableClass]> = {
-  BERSERKER: ['ARCHER', 'ROGUE'],
-  ARCHER: ['BERSERKER', 'ROGUE'],
-  ROGUE: ['BERSERKER', 'ARCHER'],
-};
-
-// ── M2 灵气怪掉落 ─────────────────────────────────────────
+// 鈹€鈹€ M2 鐏垫皵鎬帀钀?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const ANIMA_MONSTER_DROP = {
-  animaLarge: [40, 60] as const, // 100% 大量灵气
+  animaLarge: [40, 60] as const, // 100% 澶ч噺鐏垫皵
 } as const;
 
-// ── M2 精英怪掉落（design §6：40/30/15/10/5%）──────────────
+// 鈹€鈹€ M2 绮捐嫳鎬帀钀斤紙design 搂6锛?0/30/15/10/5%锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 export const ELITE_MONSTER_DROP = {
   GOLD_ONLY: 0.40,
   GOLD_AND_ANIMA: 0.30,
-  GOLD_HIGH: 0.25,     // 大量金币（40+30+25=95%）
-  FRAGMENT_PAIR: 0.05, // 职业碎片对（40+30+25+5=100%）
-  /** 独立额外判定：15% 概率掉落 FINE 装备（与金币/灵气掉落互相独立）。 */
-  EQUIP_CHANCE: 0.15,
+  GOLD_HIGH: 0.25,     // 澶ч噺閲戝竵锛?0+30+25=95%锛?
+  GOLD_HIGH_EXTRA: 0.05,
   goldMid: [15, 30] as const,
   goldHigh: [35, 60] as const,
   animaMid: [20, 40] as const,
 } as const;
 
-// ── Boss 掉落表（design §6 / Boss设计V1）────────────────────
-// 三层结构：通用必掉（金币/灵气）+ 专属随机 1 件 + 稀有独立判定（命运碎片/卷轴/遗物）。
-// 数值按章节缩放：第 1~5 章倍率 = [1, 1.2, 1.5, 1.8, 2.2]（与 bossChapterScaling 不同，掉落更线性以避免高章节资源过度通胀）。
+// 鈹€鈹€ Boss 鎺夎惤琛紙design 搂6 / Boss璁捐V1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// 涓夊眰缁撴瀯锛氶€氱敤蹇呮帀锛堥噾甯?鐏垫皵锛? 涓撳睘闅忔満 1 浠?+ 绋€鏈夌嫭绔嬪垽瀹氾紙鍛借繍纰庣墖/鍗疯酱/閬楃墿锛夈€?
+// 鏁板€兼寜绔犺妭缂╂斁锛氱 1~5 绔犲€嶇巼 = [1, 1.2, 1.5, 1.8, 2.2]锛堜笌 bossChapterScaling 涓嶅悓锛屾帀钀芥洿绾挎€т互閬垮厤楂樼珷鑺傝祫婧愯繃搴﹂€氳儉锛夈€?
 
-/** Boss 掉落基础数值（第 1 章基准，按 BOSS_DROP_CHAPTER_MULT 缩放）。 */
+/** Boss 鎺夎惤鍩虹鏁板€硷紙绗?1 绔犲熀鍑嗭紝鎸?BOSS_DROP_CHAPTER_MULT 缂╂斁锛夈€?*/
 export const BOSS_DROP_BASE = {
-  /** 通用必掉：金币基础值。 */
+  /** 閫氱敤蹇呮帀锛氶噾甯佸熀纭€鍊笺€?*/
   goldBase: 100,
-  /** 通用必掉：灵气基础值。 */
+  /** 閫氱敤蹇呮帀锛氱伒姘斿熀纭€鍊笺€?*/
   animaBase: 30,
-  /** 稀有独立判定：命运碎片基础值（命中 SHARDS_CHANCE 时给）。 */
-  shardsBase: 3,
 } as const;
 
-/** Boss 掉落数值的章节缩放倍率（1~5 章）。 */
+/** Boss 鎺夎惤鏁板€肩殑绔犺妭缂╂斁鍊嶇巼锛?~5 绔狅級銆?*/
 export const BOSS_DROP_CHAPTER_MULT = [1.0, 1.2, 1.5, 1.8, 2.2] as const;
 
-/** Boss 稀有掉落概率（三个独立判定，互不影响）。 */
+/** Boss 稀有掉落：独立判定的额外楼层池装备。 */
 export const BOSS_RARE_DROP = {
-  /** 命运碎片掉落概率。 */
-  SHARDS_CHANCE: 0.10,
-  /** 命运词条卷轴掉落概率。 */
-  SCROLL_CHANCE: 0.30,
-  /** Boss 遗物基础掉落概率（图鉴已解锁该遗物时 +RELIC_CODEX_BONUS）。 */
-  RELIC_BASE_CHANCE: 0.20,
-  /** 图鉴已解锁该遗物时的额外掉落概率加成。 */
-  RELIC_CODEX_BONUS: 0.10,
+  /** Boss 额外掉落一层楼层固定池装备的概率（非 100%）。 */
+  EXTRA_FLOOR_EQUIP_CHANCE: 0.30,
 } as const;
 
-/** 营地遗物宝箱（每个营地楼层绑定上一个 Boss 层的章节，只能开出该章节遗物）。 */
-export const RELIC_CHEST = {
-  /** 单次开箱花费金币。 */
-  COST_GOLD: 1000,
-  /** 单次开箱花费钻石。 */
-  COST_DIAMOND: 50,
-  /** 开箱开出本章遗物的概率（剩余 90% 为「未中」）。 */
-  SUCCESS_CHANCE: 0.10,
-  /** 开出已持有的遗物时返还资源的比例（避免重复无意义）。 */
-  REFUND_PCT: 0.30,
-} as const;
-
-/** 每个章节 Boss 对应的遗物 id（营地宝箱按楼层所属章节定位本章遗物）。 */
-export const CHAPTER_BOSS_RELIC: Record<number, string> = {
-  1: 'CHIEF_ROAR',
-  2: 'QUICKSAND_HEART',
-  3: 'PERMAFROST_CORE',
-  4: 'MAGMA_HEART',
-  5: 'FATE_ECHO',
-} as const;
-
-/** 按章节返回 Boss 通用掉落数值（金币/灵气/命运碎片）。chapter 1-5，越界夹紧。 */
-export function bossDropScaled(chapter: number): { gold: number; anima: number; shards: number } {
+/** 鎸夌珷鑺傝繑鍥?Boss 閫氱敤鎺夎惤鏁板€硷紙閲戝竵/鐏垫皵/鍛借繍纰庣墖锛夈€俢hapter 1-5锛岃秺鐣屽す绱с€?*/
+export function bossDropScaled(chapter: number): { gold: number; anima: number } {
   const idx = Math.max(0, Math.min(chapter - 1, BOSS_DROP_CHAPTER_MULT.length - 1));
   const mult = BOSS_DROP_CHAPTER_MULT[idx];
   return {
     gold: Math.round(BOSS_DROP_BASE.goldBase * mult),
     anima: Math.round(BOSS_DROP_BASE.animaBase * mult),
-    shards: Math.round(BOSS_DROP_BASE.shardsBase * mult),
   };
 }
 
-// ── Boss 专属机制常量（design §11b）─────────────────────────
-/** 流沙巨蝎：每隔多少回合潜地一次。 */
+// 鈹€鈹€ Boss 涓撳睘鏈哄埗甯搁噺锛坉esign 搂11b锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 娴佹矙宸ㄨ潕锛氭瘡闅斿灏戝洖鍚堟綔鍦颁竴娆°€?*/
 export const QUICKSAND_SCORPION_BURROW_INTERVAL = 4;
-/** 流沙巨蝎：每次潜地在周边动态生成的沙坑数（流沙扩张，反风筝）。 */
-export const QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW = 2;
-/** 流沙巨蝎：动态沙坑存续回合数（remaining，到 0 自动移除；静态沙坑无此值，永久）。2026-06-15 由 5→8，潜地间隔(4/3)内多波叠加，营造越打越走不了的压迫感。 */
-export const QUICKSAND_SCORPION_DYNAMIC_PIT_DURATION = 8;
-/** 流沙巨蝎：HP 占比 ≤ 此值时进入狂暴（潜地间隔缩短、沙暴范围扩大）。 */
-export const QUICKSAND_SCORPION_ENRAGE_HP_RATIO = 0.3;
-/** 流沙巨蝎：狂暴后潜地间隔（非狂暴见 QUICKSAND_SCORPION_BURROW_INTERVAL=4）。 */
+/** 娴佹矙宸ㄨ潕锛氭瘡娆℃綔鍦板湪鐜╁闄勮繎鍔ㄦ€佺敓鎴愮殑娌欏潙鏁帮紙娴佹矙鎵╁紶锛岃揩浣垮畨鍏ㄥ尯杩佺Щ锛夈€?*/
+export const QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW = 4;
+/** 娴佹矙宸ㄨ潕锛氱媯鏆村悗姣忔娼滃湴鍦ㄧ帺瀹堕檮杩戝姩鎬佺敓鎴愮殑娌欏潙鏁般€?*/
+export const QUICKSAND_SCORPION_DYNAMIC_PIT_PER_BURROW_ENRAGED = 5;
+/** 娴佹矙宸ㄨ潕锛氬姩鎬佹矙鍧戝瓨缁洖鍚堟暟锛坮emaining锛屽埌 0 鑷姩绉婚櫎锛涢潤鎬佹矙鍧戞棤姝ゅ€硷紝姘镐箙锛夈€?*/
+export const QUICKSAND_SCORPION_DYNAMIC_PIT_DURATION = 9;
+/** 娴佹矙宸ㄨ潕锛欻P 鍗犳瘮 鈮?姝ゅ€兼椂杩涘叆鐙傛毚锛堟綔鍦伴棿闅旂缉鐭€佹矙鏆磋寖鍥存墿澶э級銆?*/
+export const QUICKSAND_SCORPION_ENRAGE_HP_RATIO = 0.4;
+/** 娴佹矙宸ㄨ潕锛氱媯鏆村悗娼滃湴闂撮殧锛堥潪鐙傛毚瑙?QUICKSAND_SCORPION_BURROW_INTERVAL=4锛夈€?*/
 export const QUICKSAND_SCORPION_BURROW_INTERVAL_ENRAGED = 3;
-/** 流沙巨蝎：潜地时沙暴随机覆盖格数（非狂暴）。 */
-export const QUICKSAND_SCORPION_SANDSTORM_CELLS = 2;
-/** 流沙巨蝎：狂暴后沙暴随机覆盖格数。 */
-export const QUICKSAND_SCORPION_SANDSTORM_CELLS_ENRAGED = 4;
-/** 流沙巨蝎：沙暴命中玩家所在格造成的真实伤害（无视护甲，不受常规攻击 10 点下限限制）。 */
-export const QUICKSAND_SCORPION_SANDSTORM_DAMAGE = 1;
-/** 冰霜巨人：每隔多少回合铺一次冰面（复用原冰冻间隔）。 */
+/** 娴佹矙宸ㄨ潕锛氭綔鍦版椂娌欐毚闅忔満瑕嗙洊鏍兼暟锛堥潪鐙傛毚锛夈€?*/
+export const QUICKSAND_SCORPION_SANDSTORM_CELLS = 7;
+/** 娴佹矙宸ㄨ潕锛氱媯鏆村悗娌欐毚闅忔満瑕嗙洊鏍兼暟銆?*/
+export const QUICKSAND_SCORPION_SANDSTORM_CELLS_ENRAGED = 9;
+/** 娴佹矙宸ㄨ潕锛氭矙鏆村懡涓帺瀹舵墍鍦ㄦ牸閫犳垚鐨勭湡瀹炰激瀹筹紙鏃犺鎶ょ敳锛屼笉鍙楀父瑙勬敾鍑?10 鐐逛笅闄愰檺鍒讹級銆?*/
+export const QUICKSAND_SCORPION_SANDSTORM_DAMAGE = 20;
+/** 鍐伴湝宸ㄤ汉锛氭瘡闅斿灏戝洖鍚堥摵涓€娆″啺闈紙澶嶇敤鍘熷啺鍐婚棿闅旓級銆?*/
 export const FROST_GIANT_FREEZE_INTERVAL = 4;
-/** 冰霜巨人：冰面以玩家为中心铺开的曼哈顿半径（1 → 「+」字 5 格）。 */
+/** 鍐伴湝宸ㄤ汉锛氬啺闈互鐜╁涓轰腑蹇冮摵寮€鐨勬浖鍝堥】鍗婂緞锛? 鈫?銆?銆嶅瓧 5 鏍硷級銆?*/
 export const FROST_GIANT_ICE_RADIUS = 1;
-/** 冰霜巨人：冰面存续回合数（remaining 倒计时融化）。 */
+/** 鍐伴湝宸ㄤ汉锛氬啺闈㈠瓨缁洖鍚堟暟锛坮emaining 鍊掕鏃惰瀺鍖栵級銆?*/
 export const FROST_GIANT_ICE_DURATION = 2;
-/** 冰霜巨人：普通攻击命中玩家叠加 1 层寒气，达到此层数触发冻结并归零。 */
+/** 鍐伴湝宸ㄤ汉锛氭櫘閫氭敾鍑诲懡涓帺瀹跺彔鍔?1 灞傚瘨姘旓紝杈惧埌姝ゅ眰鏁拌Е鍙戝喕缁撳苟褰掗浂銆?*/
 export const FROST_GIANT_CHILL_STACKS_TO_FREEZE = 3;
-/** 冰霜巨人：冻结状态下玩家需主动攻击（playerAttack/attackIceWall）多少次才能解除冻结。 */
+/** 鍐伴湝宸ㄤ汉锛氬喕缁撶姸鎬佷笅鐜╁闇€涓诲姩鏀诲嚮锛坧layerAttack/attackIceWall锛夊灏戞鎵嶈兘瑙ｉ櫎鍐荤粨銆?*/
 export const FROST_GIANT_FREEZE_ATTACKS_TO_BREAK = 3;
-/** 冰霜巨人：冻结时在玩家周围生成的 FREEZE_WALL 数量（解除时一并移除）。 */
+/** 鍐伴湝宸ㄤ汉锛氬喕缁撴椂鍦ㄧ帺瀹跺懆鍥寸敓鎴愮殑 FREEZE_WALL 鏁伴噺锛堣В闄ゆ椂涓€骞剁Щ闄わ級銆?*/
 export const FROST_GIANT_FREEZE_WALL_COUNT = 2;
-/** 冰霜巨人：每隔多少个怪物回合触发一次冰霜重击（AOE，以 boss 自身为中心）。 */
+/** 鍐伴湝宸ㄤ汉锛氭瘡闅斿灏戜釜鎬墿鍥炲悎瑙﹀彂涓€娆″啺闇滈噸鍑伙紙AOE锛屼互 boss 鑷韩涓轰腑蹇冿級銆?*/
 export const FROST_GIANT_HEAVY_STRIKE_INTERVAL = 3;
-/** 冰霜巨人：冰霜重击 AOE 曼哈顿半径（以 boss 自身为中心）。 */
+/** 鍐伴湝宸ㄤ汉锛氬啺闇滈噸鍑?AOE 鏇煎搱椤垮崐寰勶紙浠?boss 鑷韩涓轰腑蹇冿級銆?*/
 export const FROST_GIANT_HEAVY_STRIKE_RADIUS = 2;
-/** 冰霜巨人：冰霜重击命中玩家后沿 boss→玩家方向击退的距离（格）。 */
+/** 鍐伴湝宸ㄤ汉锛氬啺闇滈噸鍑诲懡涓帺瀹跺悗娌?boss鈫掔帺瀹舵柟鍚戝嚮閫€鐨勮窛绂伙紙鏍硷級銆?*/
 export const FROST_GIANT_KNOCKBACK_DISTANCE = 1;
-/** 冰霜巨人：击退落点为冰面时，滑行结束后额外造成的固定伤害。 */
+/** 鍐伴湝宸ㄤ汉锛氬嚮閫€钀界偣涓哄啺闈㈡椂锛屾粦琛岀粨鏉熷悗棰濆閫犳垚鐨勫浐瀹氫激瀹炽€?*/
 export const FROST_GIANT_ICE_SLIDE_DAMAGE = 30;
-/** 冰霜巨人：ICE_WALL/FREEZE_WALL 被击碎后，四周生成的 SHATTERED_ICE 存续回合数。 */
+/** 鍐伴湝宸ㄤ汉锛欼CE_WALL/FREEZE_WALL 琚嚮纰庡悗锛屽洓鍛ㄧ敓鎴愮殑 SHATTERED_ICE 瀛樼画鍥炲悎鏁般€?*/
 export const FROST_GIANT_SHATTERED_ICE_DURATION = 5;
-/** 冰霜巨人：玩家踩入 SHATTERED_ICE 造成的固定伤害（命中后该格立即消耗）。 */
+/** 鍐伴湝宸ㄤ汉锛氱帺瀹惰俯鍏?SHATTERED_ICE 閫犳垚鐨勫浐瀹氫激瀹筹紙鍛戒腑鍚庤鏍肩珛鍗虫秷鑰楋級銆?*/
 export const FROST_GIANT_SHATTERED_ICE_DAMAGE = 30;
-/** 冰霜巨人：HP 占比 ≤ 此值时进入狂暴，开启「预警→冲锋」循环（替代冰霜重击）。 */
+/** 鍐伴湝宸ㄤ汉锛欻P 鍗犳瘮 鈮?姝ゅ€兼椂杩涘叆鐙傛毚锛屽紑鍚€岄璀︹啋鍐查攱銆嶅惊鐜紙鏇夸唬鍐伴湝閲嶅嚮锛夈€?*/
 export const FROST_GIANT_ENRAGE_HP_RATIO = 0.4;
-/** 冰霜巨人：狂暴冲锋命中玩家时的伤害倍率。 */
+/** 鍐伴湝宸ㄤ汉锛氱媯鏆村啿閿嬪懡涓帺瀹舵椂鐨勪激瀹冲€嶇巼銆?*/
 export const FROST_GIANT_CHARGE_DAMAGE_MULT = 2;
-/** 熔岩领主：每次攻击附加灼烧 tick 数（每 tick = 10 HP，每回合消耗 1 tick）。 */
+/** 鍐伴湝宸ㄤ汉锛氱媯鏆村啿閿嬭溅閬撳崐瀹斤紙2 => 鎬诲 5 鏍硷級銆?*/
+export const FROST_GIANT_CHARGE_LANE_HALF_WIDTH = 2;
+/** 鍐伴湝宸ㄤ汉锛氱媯鏆村啿閿嬫湭鍛戒腑鐜╁鏃讹紝鍦ㄧ帺瀹堕檮杩戠敓鎴愮殑鍐板鏁伴噺銆?*/
+export const FROST_GIANT_CHARGE_MISS_ICE_WALLS = 2;
+/** 鐔斿博棰嗕富锛氭瘡娆℃敾鍑婚檮鍔犵伡鐑?tick 鏁帮紙姣?tick = 10 HP锛屾瘡鍥炲悎娑堣€?1 tick锛夈€?*/
 export const LAVA_LORD_BURN_TICKS = 3;
-/** 命运守卫：玩家 HP 占 maxHp 比例大于此值时守卫伤害 × 2。 */
+/** 鍛借繍瀹堝崼锛氱帺瀹?HP 鍗?maxHp 姣斾緥澶т簬姝ゅ€兼椂瀹堝崼浼ゅ 脳 2銆?*/
 export const FATE_GUARDIAN_HP_THRESHOLD = 0.5;
-/** 命运守卫：每隔多少回合标记一次命运预言（下个 Boss 回合该区域爆炸）。 */
+/** 鍛借繍瀹堝崼锛氭瘡闅斿灏戝洖鍚堟爣璁颁竴娆″懡杩愰瑷€锛堜笅涓?Boss 鍥炲悎璇ュ尯鍩熺垎鐐革級銆?*/
 export const FATE_PROPHECY_INTERVAL = 3;
-/** 命运守卫：预言爆炸范围（Chebyshev 半径，1 → 3×3）。 */
+/** 鍛借繍瀹堝崼锛氶瑷€鐖嗙偢鑼冨洿锛圕hebyshev 鍗婂緞锛? 鈫?3脳3锛夈€?*/
 export const FATE_PROPHECY_RADIUS = 1;
-/** 命运守卫：预言爆炸伤害 = boss.attack × 该系数（取整）。 */
+/** 鍛借繍瀹堝崼锛氶瑷€鐖嗙偢浼ゅ = boss.attack 脳 璇ョ郴鏁帮紙鍙栨暣锛夈€?*/
 export const FATE_PROPHECY_DAMAGE_MULT = 1.0;
 
-// ── 祭坛灵气奖励范围（design §3 中性区域）────────────────────
-/** 祭坛：每次使用随机获得灵气的最小值。 */
+// 鈹€鈹€ 绁潧鐏垫皵濂栧姳鑼冨洿锛坉esign 搂3 涓€у尯鍩燂級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 绁潧锛氭瘡娆′娇鐢ㄩ殢鏈鸿幏寰楃伒姘旂殑鏈€灏忓€笺€?*/
 export const ALTAR_ANIMA_MIN = 20;
-/** 祭坛：每次使用随机获得灵气的最大值。 */
+/** 绁潧锛氭瘡娆′娇鐢ㄩ殢鏈鸿幏寰楃伒姘旂殑鏈€澶у€笺€?*/
 export const ALTAR_ANIMA_MAX = 35;
 
-// ── 铁匠服务费用（design §3 中性区域）────────────────────────
-/** 铁匠强化基础费用（每次实际费用 = BASE × upgradeStep × (enhanceLevel + 1)，按品质分级递增）。 */
-export const BLACKSMITH_UPGRADE_COST = 20;
-/** 强化从第几级起开始有失败概率（+5 = 10%，+6 = 15%，每级 +5%，上限 80%）。 */
-export const BLACKSMITH_FAIL_THRESHOLD = 5;
-export const BLACKSMITH_FAIL_BASE = 0.10;
-export const BLACKSMITH_FAIL_STEP = 0.05;
-export const BLACKSMITH_FAIL_CAP = 0.80;
-/**
- * 铁匠强化每次提升 baseStat 的增量，按装备品质分级（×10 基准）。
- * WEAPON / ARMOR / HELMET 使用此表；SHOES / TRINKET 固定 +1。
- * 示例：COMMON 武器（基础10）每次+1；FINE（基础20）每次+2；LEGENDARY（基础80）每次+8。
- */
-export const BLACKSMITH_ENHANCE_STEP: Record<string, number> = {
-  COMMON:    1,
-  FINE:      2,
-  RARE:      3,
-  EPIC:      5,
-  LEGENDARY: 8,
-};
-/** 铁匠洗炼：重新随机词条所需金币。 */
-export const BLACKSMITH_REROLL_COST = 30;
-
-// ── 第 2-5 章 Boss 专属机制常量（260613 内容深化）──────────
-/** 第2章 QuicksandScorpion Boss 房静态沙坑数量（开房时刷，永久；钻地优先出沙坑位）。 */
-export const CHAPTER2_SAND_PIT_COUNT = 5;
-/** 沙坑移动 AP 额外消耗（叠加在基础 MOVE 上；静态/动态沙坑共用）。 */
+// ── 第2-5章 Boss 专属机制常量（260613 内容深化）────────────────
+/** 绗?绔?QuicksandScorpion Boss 鎴块潤鎬佹矙鍧戞暟閲忥紙寮€鎴挎椂鍒凤紝姘镐箙锛涢捇鍦颁紭鍏堝嚭鐩搁偦娌欏潙浣嶏級銆?*/
+export const CHAPTER2_SAND_PIT_COUNT = 8;
+/** 娌欏潙绉诲姩 AP 棰濆娑堣€楋紙鍙犲姞鍦ㄥ熀纭€ MOVE 涓婏紱闈欐€?鍔ㄦ€佹矙鍧戝叡鐢級銆?*/
 export const CHAPTER2_SAND_PIT_MOVE_PENALTY = 2;
-/** 第3章 FrostGiant Boss 房冰墙数量。 */
+/** 第 12 层沙暴走廊：玩家回合上限（超时弹窗失败）。 */
+export const CHAPTER2_TIMED_ESCAPE_TURN_LIMIT = 30;
+/** 第 12 层：从该回合起追兵持续狂暴（攻击/移动翻倍，直到本层结束）。 */
+export const CHAPTER2_TIMED_ESCAPE_ENRAGE_TURN = 19;
+/** 绗?绔?FrostGiant Boss 鎴垮啺澧欐暟閲忋€?*/
 export const CHAPTER3_ICE_WALL_COUNT = 3;
-/** 冰墙 HP（玩家可攻击破坏，HP=0 时消失并掉灵气）。 */
-export const CHAPTER3_ICE_WALL_HP = 10;
-/** 冰墙破坏时掉落灵气。 */
-export const CHAPTER3_ICE_WALL_DROP_ANIMA = 1;
-/** 第4章 LavaLord 阶段二：定向熔岩潮汐每隔多少 Boss 回合推进一排（2026-06-15 由"随机撒点"重做为"定向整排"）。 */
+/** 鍐板 HP锛堢帺瀹跺彲鏀诲嚮鐮村潖锛孒P=0 鏃舵秷澶卞苟鎺夌伒姘旓級銆?*/
+export const CHAPTER3_ICE_WALL_HP = 100;
+/** 第 16 层悬赏单位相对原型的 HP / 攻击倍率（同 AI，不新增怪物类型）。 */
+export const CHAPTER3_BOUNTY_HP_MULT = 1.75;
+export const CHAPTER3_BOUNTY_ATK_MULT = 1.25;
+/** 第 18 层冰川阵核基础 HP；霜甲晶柱存活时额外减伤比例。 */
+export const CHAPTER3_CORE_HP = 480;
+export const CHAPTER3_CORE_ARMOR_PILLAR_REDUCTION = 0.35;
+/** 第 18 层辅助晶柱周期（回合间隔）。 */
+export const CHAPTER3_PILLAR_INTERVAL_TURNS = 3;
+/** 第 19 层控制点完成所需玩家回合占领进度。 */
+export const CHAPTER3_CONTROL_POINT_PROGRESS = 5;
+/** 第 19 层夺控狂暴：站在未完成控制点时怪物移动 / 攻击加成。 */
+export const CHAPTER3_CONTROL_RAGE_MOVE_BONUS = 2;
+export const CHAPTER3_CONTROL_RAGE_ATTACK_BONUS = 5;
+/** 鍐板鐮村潖鏃舵帀钀界伒姘斻€?*/
+export const CHAPTER3_ICE_WALL_DROP_ANIMA = 2;
+/** 鍐板窛濉戝舰鑰呭吋瀹瑰埆鍚嶏細褰撳墠鎵€鏈夌涓夌珷 ICE_WALL 缁熶竴浣跨敤 CHAPTER3_ICE_WALL_HP銆?*/
+export const GLACIER_SHAPER_ICE_WALL_HP = CHAPTER3_ICE_WALL_HP;
+/** 鍐板窛濉戝舰鑰咃細姣忔鎶€鑳芥渶澶氬崌璧风殑姘镐箙鍐板鏁伴噺銆?*/
+export const GLACIER_SHAPER_WALLS_PER_CAST = 3;
+/** 鍐板窛濉戝舰鑰呭吋瀹瑰埆鍚嶏細褰撳墠鎵€鏈夌涓夌珷 ICE_WALL 缁熶竴浣跨敤 CHAPTER3_ICE_WALL_DROP_ANIMA銆?*/
+export const GLACIER_SHAPER_ICE_WALL_DROP_ANIMA = CHAPTER3_ICE_WALL_DROP_ANIMA;
+/** 姣忓眰閫氳繃鍑荤鍐板鏈€澶氳幏寰楃殑鐏垫皵锛岄槻姝㈠埛澧欏吇鎴愩€?*/
+export const GLACIER_SHAPER_ICE_WALL_FLOOR_ANIMA_CAP = 12;
+/** 第 23 层熔岩 vent 喷发周期（玩家回合）。 */
+export const CHAPTER4_VENT_INTERVAL = 3;
+/** 第 25 层安全区迁移周期（玩家回合）。 */
+export const CHAPTER4_SAFE_ZONE_INTERVAL = 2;
+/** 第 25 层需坚持的玩家回合数。 */
+export const CHAPTER4_SAFE_ZONE_SURVIVE_TURNS = 8;
+/** 第 25 层安全区外环境伤害（每玩家回合结束）。 */
+export const CHAPTER4_SAFE_ZONE_OUTSIDE_DAMAGE = 8;
+/** 第 27 层熔岩潮汐推进周期（玩家回合）。 */
+export const CHAPTER4_TIDE_INTERVAL = 2;
+/** 第 32 层预言之眼固定预言伤害（非 Boss 攻击）。 */
+export const CHAPTER5_PROPHECY_FIXED_DAMAGE = 12;
+/** 第 32 层：双预言之眼存活时的预言间隔（玩家回合）。 */
+export const CHAPTER5_PROPHECY_INTERVAL_TWO = 2;
+/** 第 32 层：单预言之眼存活时的预言间隔（玩家回合）。 */
+export const CHAPTER5_PROPHECY_INTERVAL_ONE = 3;
+/** 第 31 层命运抉择「坚守」需坚持的玩家回合数。 */
+export const CHAPTER5_FATE_CHOICE_HOLD_TURNS = 6;
+/** 第 34 层改写试炼需坚持的玩家回合数。 */
+export const CHAPTER5_FATE_REWRITE_SURVIVE_TURNS = 6;
+/** 第 34 层改写命运预告间隔（玩家回合）。 */
+export const CHAPTER5_FATE_REWRITE_INTERVAL = 2;
+/** 第 4 章 LavaLord 阶段二：定向熔岩潮汐每隔多少 Boss 回合推进一排（Boss 战专用）。 */
 export const CHAPTER4_LAVA_TIDE_INTERVAL = 3;
-/** 定向熔岩潮汐最多推进的排数（达到后停止推进，已生成格子永久保留）。 */
+/** 瀹氬悜鐔斿博娼睈鏈€澶氭帹杩涚殑鎺掓暟锛堣揪鍒板悗鍋滄鎺ㄨ繘锛屽凡鐢熸垚鏍煎瓙姘镐箙淇濈暀锛夈€?*/
 export const CHAPTER4_LAVA_TIDE_ROW_MAX = 3;
-/** 玩家踩入熔岩地块的伤害（每回合开始结算，含永久熔岩格）。 */
+/** 鐜╁韪╁叆鐔斿博鍦板潡鐨勪激瀹筹紙姣忓洖鍚堝紑濮嬬粨绠楋紝鍚案涔呯啍宀╂牸锛夈€?*/
 export const CHAPTER4_LAVA_TILE_DAMAGE = 5;
-/** LavaLord phase2 触发的 HP 比例阈值。 */
+/** LavaLord phase2 瑙﹀彂鐨?HP 姣斾緥闃堝€笺€?*/
 export const CHAPTER4_LAVA_LORD_PHASE2_HP_RATIO = 0.5;
-/** 阶段一「喷发预警」：每隔多少回合标记一次喷发区域。 */
+/** 闃舵涓€銆屽柗鍙戦璀︺€嶏細姣忛殧澶氬皯鍥炲悎鏍囪涓€娆″柗鍙戝尯鍩熴€?*/
 export const LAVA_LORD_ERUPTION_INTERVAL = 3;
-/** 喷发结算生成的熔岩地块存续回合数。 */
+/** 鍠峰彂缁撶畻鐢熸垚鐨勭啍宀╁湴鍧楀瓨缁洖鍚堟暟銆?*/
 export const LAVA_LORD_ERUPTION_DURATION = 3;
-/** 熔核爆裂：玩家灼烧层数达到该阈值时强制触发。 */
+/** 鐔旀牳鐖嗚锛氱帺瀹剁伡鐑у眰鏁拌揪鍒拌闃堝€兼椂寮哄埗瑙﹀彂銆?*/
 export const LAVA_LORD_BURN_BURST_THRESHOLD = 6;
-/** 熔核爆裂：每层灼烧造成的真实伤害。 */
+/** 鐔旀牳鐖嗚锛氭瘡灞傜伡鐑ч€犳垚鐨勭湡瀹炰激瀹炽€?*/
 export const LAVA_LORD_BURN_BURST_DAMAGE_PER_STACK = 5;
-/** 熔核爆裂：玩家周围生成的熔岩地块存续回合数。 */
+/** 鐔旀牳鐖嗚锛氱帺瀹跺懆鍥寸敓鎴愮殑鐔斿博鍦板潡瀛樼画鍥炲悎鏁般€?*/
 export const LAVA_LORD_BURN_BURST_TILE_DURATION = 3;
-/** 熔岩锁链：玩家与 Boss 距离达到该值时直接触发（无需累计回合）。 */
+/** 鐔斿博閿侀摼锛氱帺瀹朵笌 Boss 璺濈杈惧埌璇ュ€兼椂鐩存帴瑙﹀彂锛堟棤闇€绱鍥炲悎锛夈€?*/
 export const LAVA_LORD_CHAIN_DISTANCE_THRESHOLD = 4;
-/** 熔岩锁链：玩家连续多少回合未与 Boss 相邻时触发。 */
+/** 鐔斿博閿侀摼锛氱帺瀹惰繛缁灏戝洖鍚堟湭涓?Boss 鐩搁偦鏃惰Е鍙戙€?*/
 export const LAVA_LORD_CHAIN_TURN_THRESHOLD = 3;
-/** 熔岩锁链命中时附加的灼烧层数。 */
+/** 鐔斿博閿侀摼鍛戒腑鏃堕檮鍔犵殑鐏肩儳灞傛暟銆?*/
 export const LAVA_LORD_CHAIN_BURN_TICKS = 2;
-/** Boss 站在熔岩地块上时，普通攻击力加成。 */
+/** Boss 绔欏湪鐔斿博鍦板潡涓婃椂锛屾櫘閫氭敾鍑诲姏鍔犳垚銆?*/
 export const LAVA_LORD_LAVA_STAND_ATTACK_BONUS = 1;
-/** Boss 站在熔岩地块上时，受到玩家伤害的减免比例。 */
+/** Boss 绔欏湪鐔斿博鍦板潡涓婃椂锛屽彈鍒扮帺瀹朵激瀹崇殑鍑忓厤姣斾緥銆?*/
 export const LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION = 0.2;
-/** 命运守卫：行为镜像生成 HP 比例阈值（Boss HP 跨过 50% 时生成 1 次）。 */
+/** 鍛借繍瀹堝崼锛氳涓洪暅鍍忕敓鎴?HP 姣斾緥闃堝€硷紙Boss HP 璺ㄨ繃 50% 鏃剁敓鎴?1 娆★級銆?*/
 export const FATE_MIRROR_SPAWN_HP_RATIO = 0.5;
-/** 命运守卫：镜像 HP = 玩家当前 HP × 该系数（诞生瞬间快照）。 */
+/** 鍛借繍瀹堝崼锛氶暅鍍?HP = 鐜╁褰撳墠 HP 脳 璇ョ郴鏁帮紙璇炵敓鐬棿蹇収锛夈€?*/
 export const FATE_MIRROR_HP_FROM_PLAYER = 0.5;
-/** 命运守卫：镜像攻击 = 玩家当前 attack × 该系数（诞生瞬间快照）。 */
+/** 鍛借繍瀹堝崼锛氶暅鍍忔敾鍑?= 鐜╁褰撳墠 attack 脳 璇ョ郴鏁帮紙璇炵敓鐬棿蹇収锛夈€?*/
 export const FATE_MIRROR_ATK_FROM_PLAYER = 0.5;
-/** 命运守卫：镜像反打攻击曼哈顿距离上限（> 此值空挥）。 */
+/** 鍛借繍瀹堝崼锛氶暅鍍忓弽鎵撴敾鍑绘浖鍝堥】璺濈涓婇檺锛? 姝ゅ€肩┖鎸ワ級銆?*/
 export const FATE_MIRROR_ATTACK_RANGE = 2;
-/** 命运镜像 bossId（用于 stepBoss / mirrorBehaviorStep 区分镜像与本体）。 */
+/** 鍛借繍闀滃儚 bossId锛堢敤浜?stepBoss / mirrorBehaviorStep 鍖哄垎闀滃儚涓庢湰浣擄級銆?*/
 export const FATE_MIRROR_BOSS_ID = 'FATE_MIRROR';
-/** 命运守卫：HP 跨过此比例 → 进入狂暴态（清空预言、开启改写命运周期）。 */
+/** 鍛借繍瀹堝崼锛欻P 璺ㄨ繃姝ゆ瘮渚?鈫?杩涘叆鐙傛毚鎬侊紙娓呯┖棰勮█銆佸紑鍚敼鍐欏懡杩愬懆鏈燂級銆?*/
 export const FATE_ENRAGE_HP_RATIO = 0.3;
-/** 命运守卫：狂暴态每多少个怪物回合触发一次「改写命运」预告。 */
+/** 鍛借繍瀹堝崼锛氱媯鏆存€佹瘡澶氬皯涓€墿鍥炲悎瑙﹀彂涓€娆°€屾敼鍐欏懡杩愩€嶉鍛娿€?*/
 export const DESTINY_REWRITE_INTERVAL = 4;
-/** 命运守卫：改写命运事件池大小（E1-E5）。 */
+/** 鍛借繍瀹堝崼锛氭敼鍐欏懡杩愪簨浠舵睜澶у皬锛圗1-E5锛夈€?*/
 export const DESTINY_REWRITE_POOL_SIZE = 5;
-/** 命运守卫：改写命运每次抽取的事件数（玩家会从中弃 1，剩余 2 生效）。 */
+/** 鍛借繍瀹堝崼锛氭敼鍐欏懡杩愭瘡娆℃娊鍙栫殑浜嬩欢鏁帮紙鐜╁浼氫粠涓純 1锛屽墿浣?2 鐢熸晥锛夈€?*/
 export const DESTINY_REWRITE_DRAW_SIZE = 3;
-/** 命运守卫：E1 Boss 回血量 = maxHp × 该系数。 */
+/** 鍛借繍瀹堝崼锛欵1 Boss 鍥炶閲?= maxHp 脳 璇ョ郴鏁般€?*/
 export const DESTINY_HEAL_RATIO = 0.05;
-/** 命运守卫：E2 Boss 加伤害百分比（普攻 / 镜像攻击 / 5×5 都吃）。 */
+/** 鍛借繍瀹堝崼锛欵2 Boss 鍔犱激瀹崇櫨鍒嗘瘮锛堟櫘鏀?/ 闀滃儚鏀诲嚮 / 5脳5 閮藉悆锛夈€?*/
 export const DESTINY_ATK_BUFF_PCT = 30;
-/** 命运守卫：E2 Boss 加伤害持续怪物回合数。 */
+/** 鍛借繍瀹堝崼锛欵2 Boss 鍔犱激瀹虫寔缁€墿鍥炲悎鏁般€?*/
 export const DESTINY_ATK_BUFF_DURATION_TURNS = 3;
-/** 命运守卫：E3 玩家扣血伤害 = boss.attack × 该系数（无视防御）。 */
+/** 鍛借繍瀹堝崼锛欵3 鐜╁鎵ｈ浼ゅ = boss.attack 脳 璇ョ郴鏁帮紙鏃犺闃插尽锛夈€?*/
 export const DESTINY_DIRECT_DMG_MULT = 1.0;
-/** 命运守卫：E4 5×5 爆炸切比雪夫半径（2 → 5×5）。 */
+/** 鍛借繍瀹堝崼锛欵4 5脳5 鐖嗙偢鍒囨瘮闆か鍗婂緞锛? 鈫?5脳5锛夈€?*/
 export const DESTINY_5X5_RADIUS = 2;
-/** 命运守卫：E4 5×5 爆炸伤害 = boss.attack × 该系数（中心 = Boss 当前格）。 */
+/** 鍛借繍瀹堝崼锛欵4 5脳5 鐖嗙偢浼ゅ = boss.attack 脳 璇ョ郴鏁帮紙涓績 = Boss 褰撳墠鏍硷級銆?*/
 export const DESTINY_5X5_DMG_MULT = 1.2;
 
-// ── 第一章专属机制常量 ─────────────────────────────────────
-/** 第一章 Boss 房随机石块数量。 */
-export const CHAPTER1_BOSS_ROCK_COUNT = 2;
-/** 增援号角每次召唤哥布林战士数（非狂暴）。 */
+// 鈹€鈹€ 绗竴绔犱笓灞炴満鍒跺父閲?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 绗竴绔?Boss 鎴块殢鏈虹煶鍧楁暟閲忋€?*/
+export const CHAPTER1_BOSS_ROCK_COUNT = 5;
+/** 第 5 层：激活火药桶后，必须在该玩家回合数内引爆，否则失败。 */
+export const CHAPTER1_BLAST_TURN_LIMIT = 7;
+/** 第 6 层：第 3 波起，刷出后若未清完，经过该玩家回合数强制刷下一波。 */
+export const CHAPTER1_WAVE_FORCE_SPAWN_TURNS = 4;
+/** 第 4 层目标哨兵：怪物回合向逃离点移动格数。 */
+export const CHAPTER1_CHASE_SENTINEL_MOVE = 3;
+/** 第 4 层目标哨兵：被命中且存活时立刻朝逃离点逃离格数。 */
+export const CHAPTER1_CHASE_SENTINEL_HIT_FLEE = 2;
+/** 第 4 层目标哨兵 HP（追逃目标耐久，避免一步一刀秒杀）。 */
+export const CHAPTER1_CHASE_SENTINEL_HP = 150;
+/** 第 4 层哨兵首次呼喊时，其余守卫向玩家冲锋格数。 */
+export const CHAPTER1_CHASE_INTERCEPT_RUSH = 3;
+/** 鐭冲潡 HP锛堝彲鐮村潖锛岀帺瀹舵櫘鏀诲彲鍑荤锛夈€?*/
+export const ROCK_HP = 350;
+/** 澧炴彺鍙疯姣忔鍙敜鍝ュ竷鏋楁垬澹暟锛堥潪鐙傛毚锛夈€?*/
 export const HORN_WARRIOR_COUNT = 1;
-/** 增援号角每次召唤哥布林战士数（狂暴后）。 */
+/** 澧炴彺鍙疯姣忔鍙敜鍝ュ竷鏋楁垬澹暟锛堢媯鏆村悗锛夈€?*/
 export const HORN_WARRIOR_ENRAGE_COUNT = 2;
-/** 冰霜哥布林冰霜：移动AP+1的持续回合数（可叠加）。 */
+/** 鍝ュ竷鏋楅厠闀垮満涓婂悓鏃跺厑璁稿瓨鍦ㄧ殑鍙疯鍙敜鍏典笂闄愶紝鐢ㄤ簬闃叉涔呮垬鏃舵€墿鏁伴噺澶辨帶銆?*/
+export const GOBLIN_CHIEF_SUMMON_CAP = 8;
+/** 鍐伴湝鍝ュ竷鏋楀啺闇滐細绉诲姩AP+1鐨勬寔缁洖鍚堟暟锛堝彲鍙犲姞锛夈€?*/
 export const FROST_MOVE_PENALTY_ROUNDS = 2;
-/** 赤炎哥布林灼烧：5HP/回合的持续回合数（可叠加）。 */
+/** 璧ょ値鍝ュ竷鏋楃伡鐑э細5HP/鍥炲悎鐨勬寔缁洖鍚堟暟锛堝彲鍙犲姞锛夈€?*/
 export const FIRE_BURN_ROUNDS = 2;
 
-// ── 第 2-5 章普通/精英怪新行为常量（P1）────────────────────────
-/** 毒蝎中毒：每回合伤害值。 */
+// 鈹€鈹€ 绗?2-5 绔犳櫘閫?绮捐嫳鎬柊琛屼负甯搁噺锛圥1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 姣掕潕涓瘨锛氭瘡鍥炲悎浼ゅ鍊笺€?*/
 export const POISON_DAMAGE_PER_ROUND = 8;
-/** 毒蝎中毒：命中玩家后的持续回合数（不叠加，刷新计时）。 */
+/** 娌欐紶璺冭湧棣栨瑙﹀彂鏂熬鐙傝穬鐨勭敓鍛芥瘮渚嬨€?*/
+export const DESERT_HOPPER_FRENZY_HP_RATIO = 0.5;
+/** 娌欐紶璺冭湧鏂熬鐙傝穬鍚庝笅涓€娆℃垚鍔熸敾鍑诲€嶇巼銆?*/
+export const DESERT_HOPPER_FRENZY_ATTACK_MULT = 2;
+/** 鍐板埡璞尓鍙嶅脊鐜╁鐩存帴鏀诲嚮鏈€缁堜激瀹崇殑姣斾緥銆?*/
+export const FROSTSPIKE_PORCUPINE_REFLECT_RATIO = 0.2;
+/** 鐏扮儸鐚庣姮绔欏湪鐔斿博鍦板潡涓婃椂鐨勬敾鍑诲€嶇巼銆?*/
+export const ASH_HOUND_LAVA_ATTACK_MULT = 1.2;
+/** 姣掕潕涓瘨锛氬懡涓帺瀹跺悗鐨勬寔缁洖鍚堟暟锛堜笉鍙犲姞锛屽埛鏂拌鏃讹級銆?*/
 export const POISON_ROUNDS = 3;
 
-// ── 第 2-5 章灵气怪专属机制常量（260616 灵气怪差异化升级）─────
-/** 灵气甲虫（CH2）：逃跑离开格留下沙坑，存续回合数。 */
+// 鈹€鈹€ 绗?2-5 绔犵伒姘旀€笓灞炴満鍒跺父閲忥紙260616 鐏垫皵鎬樊寮傚寲鍗囩骇锛夆攢鈹€鈹€鈹€鈹€
+/** 鐏垫皵鐢茶櫕锛圕H2锛夛細閫冭窇绂诲紑鏍肩暀涓嬫矙鍧戯紝瀛樼画鍥炲悎鏁般€?*/
 export const ANIMA_BEETLE_TRAP_DURATION = 8;
-/** 灵气精灵（CH3）：逃跑离开格留下冰面，存续回合数。 */
+/** 鐏甸湝闆厰锛圕H3锛夛細閫冭窇绂诲紑鏍肩暀涓嬪啺闈紝瀛樼画鍥炲悎鏁般€?*/
 export const ANIMA_ELF_TRAP_DURATION = 6;
-/** 灵气炎魂（CH4）：玩家击杀时在十字 4 格生成的熔岩存续回合数。 */
+/** 鐏垫皵鐐庨瓊锛圕H4锛夛細鐜╁鍑绘潃鏃跺湪鍗佸瓧 4 鏍肩敓鎴愮殑鐔斿博瀛樼画鍥炲悎鏁般€?*/
 export const ANIMA_EMBER_LAVA_DURATION = 3;
-/** 灵气幻象（CH5）Buff/Debuff 池 id：随机一项立即生效。 */
-export const ANIMA_MIRAGE_BUFF_IDS = ['HEAL_30', 'AP_PLUS_3', 'ANIMA_PLUS_60', 'GOLD_PLUS_60', 'ATTACK_UP'] as const;
+/** 鐏垫皵骞昏薄锛圕H5锛塀uff/Debuff 姹?id锛氶殢鏈轰竴椤圭珛鍗崇敓鏁堛€?*/
+export const ANIMA_MIRAGE_BUFF_IDS = ['HEAL_30', 'AP_PLUS_3', 'ANIMA_PLUS_60', 'GOLD_PLUS_60'] as const;
 export const ANIMA_MIRAGE_DEBUFF_IDS = ['HURT_20', 'FIRE_BURN_2', 'SLOW_2', 'AP_MINUS_3', 'ANIMA_PROGRESS_MINUS_30'] as const;
 export type AnimaMirageBuffId = (typeof ANIMA_MIRAGE_BUFF_IDS)[number];
 export type AnimaMirageDebuffId = (typeof ANIMA_MIRAGE_DEBUFF_IDS)[number];
 
-// ── 命运碎片成长树（destiny tree，design「命运树 V1 数值调整建议」）──
-/** A1 坚韧之躯Ⅰ：maxHp/hp +20（×10 基准，原 +2）。 */
-export const TREE_A1_HP_BONUS = 20;
-/** A2 坚韧之躯Ⅱ：再 +20（与 A1 累计 +40，×10 基准，原 +2）。 */
-export const TREE_A2_HP_BONUS = 20;
-/** A3 遗产意志：死亡结算保留的金币比例。 */
-export const TREE_A3_DEATH_GOLD_RETENTION = 0.2;
-/** B1 武者直觉：攻击力加成 +5（×10 基准，原 +0.5）。 */
-export const TREE_B1_ATTACK_BONUS = 5;
-/** B2 急行军：AP 骰子上限 +1（dice 范围 [1,6]→[1,7]）。 */
-export const TREE_B2_AP_DICE_BONUS = 1;
-/** B2 急行军：AP 结转上限 +1（AP_CARRY_CAP 3→4）。 */
-export const TREE_B2_AP_CARRY_BONUS = 1;
-/** B3 职业先驱：远征开始时随机一个可进阶职业的碎片 +1。 */
-export const TREE_B3_FRAGMENT_BONUS = 1;
-/** C1 财富眼光：开局金币加成（原 +8 感知过弱，调整为 +12）。 */
-export const TREE_C1_GOLD_BONUS = 12;
-/** C2 宝箱老手：开宝箱额外获得的金币比例（原"金币下限+1"调整为"额外+20%金币"）。 */
-export const TREE_C2_CHEST_GOLD_BONUS_PCT = 0.2;
-/** C3 铁匠熟客：铁匠强化费用减免（20→15）。 */
-export const TREE_C3_BLACKSMITH_DISCOUNT = 5;
-/** D1 灵感涌现：开局灵气 +25。 */
-export const TREE_D1_ANIMA_BONUS = 25;
-/** D2 悟道加速：强化阈值整体 ×0.9（100→90，150→135...）。 */
-export const TREE_D2_THRESHOLD_MULT = 0.9;
-/** D3 灵脉共鸣：灵气获取额外 +10%。 */
-export const TREE_D3_ANIMA_GAIN_PCT = 0.1;
-/** E1 誓石意志：maxHp/hp +40（×10 基准，原 +4）。 */
-export const TREE_E1_HP_BONUS = 40;
-/** 命运树重置：消耗钻石数（退还全部已解锁节点的命运碎片，清空 unlockedTreeNodes）。 */
-export const TREE_RESET_DIAMOND_COST = 20;
+/** 鎸¤绾跨殑鍦板舰绫诲瀷锛堝浣撳瀷锛涘湴闈㈠瀷 SAND_PIT / ICE_TILE / LAVA_TILE 涓嶆尅锛孉C-MT-5锛夈€?*/
+export const BLOCKS_LOS_TYPES = new Set(['ROCK', 'ICE_WALL', 'FREEZE_WALL']);
 
-/** 命运树节点定义：column 内按 order 顺序解锁（需先解锁 order-1 的节点）。 */
-export interface DestinyTreeNodeDef {
-  id: string;
-  column: 'A' | 'B' | 'C' | 'D' | 'E';
-  order: 1 | 2 | 3;
-  name: string;
-  cost: number;
-  /** 节点效果简述，常驻显示在命运树面板节点格内（specs/game-design/命运树设计V1.md §三）。 */
-  desc: string;
-}
+// 鈹€鈹€ 鏅€氬眰鍦板舰鐢熸垚锛坰pecs/260629-map-terrain Phase 1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 姣忕珷鏅€氬眰涓诲湴褰㈢被鍨嬶紙绗?绔犳部鐢ㄧ煶鍧椾綔璧颁綅闅滅锛夈€?*/
+export const NORMAL_FLOOR_TERRAIN_TYPE = {
+  1: 'ROCK',
+  2: 'SAND_PIT',
+  3: 'ICE_WALL',
+  4: 'LAVA_TILE',
+  5: 'ROCK',
+} as const;
 
-export const DESTINY_TREE_NODES: readonly DestinyTreeNodeDef[] = [
-  { id: 'A1', column: 'A', order: 1, name: '坚韧之躯Ⅰ', cost: 15, desc: '生命上限+20' },
-  { id: 'A2', column: 'A', order: 2, name: '坚韧之躯Ⅱ', cost: 25, desc: '生命上限再+20' },
-  { id: 'A3', column: 'A', order: 3, name: '遗产意志', cost: 30, desc: '死亡保留20%金币' },
-  { id: 'B1', column: 'B', order: 1, name: '武者直觉', cost: 20, desc: '攻击力+5' },
-  { id: 'B2', column: 'B', order: 2, name: '急行军', cost: 25, desc: 'AP骰子上限+1，AP结转上限+1' },
-  { id: 'B3', column: 'B', order: 3, name: '职业先驱', cost: 30, desc: '开局职业碎片+1' },
-  { id: 'C1', column: 'C', order: 1, name: '财富眼光', cost: 15, desc: '开局金币+12' },
-  { id: 'C2', column: 'C', order: 2, name: '宝箱老手', cost: 20, desc: '宝箱金币+20%' },
-  { id: 'C3', column: 'C', order: 3, name: '铁匠熟客', cost: 25, desc: '强化费用-5' },
-  { id: 'D1', column: 'D', order: 1, name: '灵感涌现', cost: 15, desc: '开局灵气+25' },
-  { id: 'D2', column: 'D', order: 2, name: '悟道加速', cost: 25, desc: '强化阈值×0.9' },
-  { id: 'D3', column: 'D', order: 3, name: '灵脉共鸣', cost: 30, desc: '灵气获取+10%' },
-  { id: 'E1', column: 'E', order: 1, name: '誓石意志', cost: 20, desc: '生命上限+40' },
-  { id: 'E2', column: 'E', order: 2, name: '命运馈赠', cost: 30, desc: '开局三选一装备' },
-  { id: 'E3', column: 'E', order: 3, name: '命运护佑', cost: 40, desc: '开局三选一词条' },
-] as const;
+/** 绗?绔犳櫘閫氬眰棰濆閾鸿鍐伴潰鏁伴噺锛圛CE_TILE锛岄潪闃绘尅锛屽紩鍙戞粦琛岃蛋浣嶏級銆?*/
+export const CHAPTER3_NORMAL_ICE_TILE_COUNT = 2;
 
-// ── 仅开发调试（正式构建前必须置 0）────────────────────────
 /**
- * 自动跳至目标层（0 = 关闭）。
- * 将此值改为非零整数（例如 5）后重新构建，开局将直接跳到该层。
- * ⚠️ 正式构建 / 提测前必须改回 0！同时把上面的 INITIAL_HP 改回 200。
+ * 鏅€氬眰鍦板舰鏁伴噺鍖洪棿 [min, max]锛屾寜绔犲唴灞傚彿锛?-6锛涚7灞傛槸 Boss锛屼笉璧版琛級銆?
+ * 鑺傛媿锛?-2 鎺㈢储閾哄灚锛堢█鐤忥級鈫?3 绮捐嫳鍏筹紙涓瓑锛夆啋 4-6 鏈哄叧涓诲満锛堝瘑闆嗭級銆?
+ */
+export const NORMAL_FLOOR_TERRAIN_COUNT: Readonly<Record<number, readonly [number, number]>> = {
+  1: [3, 5],
+  2: [3, 5],
+  3: [5, 7],
+  4: [8, 12],
+  5: [8, 12],
+  6: [8, 12],
+};
+
+// 鈹€鈹€ 浠呭紑鍙戣皟璇曪紙姝ｅ紡鏋勫缓鍓嶅繀椤荤疆 0锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/**
+ * 鑷姩璺宠嚦鐩爣灞傦紙0 = 鍏抽棴锛夈€?
+ * 灏嗘鍊兼敼涓洪潪闆舵暣鏁帮紙渚嬪 5锛夊悗閲嶆柊鏋勫缓锛屽紑灞€灏嗙洿鎺ヨ烦鍒拌灞傘€?
+ * 鈿狅笍 姝ｅ紡鏋勫缓 / 鎻愭祴鍓嶅繀椤绘敼鍥?0锛佸悓鏃剁‘璁や笂闈㈢殑 INITIAL_HP 涓烘寮忕洰鏍囧€笺€?
  */
 export const DEV_SKIP_TO_FLOOR = 0;
 
-/** 第 floor 层（1-based）所属章节（1-based）。 */
+/** 绗?floor 灞傦紙1-based锛夋墍灞炵珷鑺傦紙1-based锛夈€?*/
 export function chapterOfFloor(floor: number): number {
   return Math.floor((floor - 1) / FLOORS_PER_CHAPTER) + 1;
 }
 
-/** 第 floor 层是否为章节 Boss 层（每章第 5 层）。 */
+/** 绗?floor 灞傛槸鍚︿负绔犺妭 Boss 灞傦紙姣忕珷绗?FLOORS_PER_CHAPTER 灞傦紝褰撳墠=7锛夈€?*/
 export function isBossFloor(floor: number): boolean {
   return floor % FLOORS_PER_CHAPTER === 0;
 }
 
-/** 第 floor 层地图边长。 */
+/** 绗?floor 灞傚湴鍥捐竟闀裤€?*/
 export function mapSizeOfFloor(floor: number): number {
   if (isBossFloor(floor)) return MAP_SIZE.BOSS;
   return chapterOfFloor(floor) >= 3 ? MAP_SIZE.HIGH : MAP_SIZE.NORMAL;
 }
 
-/** 按章节返回普通/精英/灵气怪属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。
- *  旧值：1.0→1.4→2.0→2.8→3.8；新值大幅拉陡使后期怪物真正构成威胁。
+/** 鎸夌珷鑺傝繑鍥炴櫘閫?绮捐嫳/鐏垫皵鎬睘鎬у€嶇巼锛圚P / 鏀诲嚮锛夛紝chapter 1-5锛岀珷鑺傚澶圭揣鍒拌竟鐣屻€?
+ *  鏃у€硷細1.0鈫?.4鈫?.0鈫?.8鈫?.8锛涙柊鍊煎ぇ骞呮媺闄′娇鍚庢湡鎬墿鐪熸鏋勬垚濞佽儊銆?
  */
 export function chapterScaling(chapter: number): { hpMult: number; attackMult: number } {
   const SCALING = [
@@ -572,17 +507,63 @@ export function chapterScaling(chapter: number): { hpMult: number; attackMult: n
   return SCALING[idx];
 }
 
-/** 按章节返回 Boss 专属属性倍率（HP / 攻击），chapter 1-5，章节外夹紧到边界。
- *  HP 大幅上调保证 Boss 战有足够回合数；攻击上调幅度较缓，保留可玩余地。
+/** 鎸夌珷鑺傝繑鍥?Boss 涓撳睘灞炴€у€嶇巼锛圚P / 鏀诲嚮锛夛紝chapter 1-5锛岀珷鑺傚澶圭揣鍒拌竟鐣屻€?
+ *  HP 澶у箙涓婅皟淇濊瘉 Boss 鎴樻湁瓒冲鍥炲悎鏁帮紱鏀诲嚮涓婅皟骞呭害杈冪紦锛屼繚鐣欏彲鐜╀綑鍦般€?
  */
 export function bossChapterScaling(chapter: number): { hpMult: number; attackMult: number } {
   const SCALING = [
-    { hpMult: 2.0,  attackMult: 1.5 },
-    { hpMult: 3.5,  attackMult: 2.5 },
-    { hpMult: 6.0,  attackMult: 3.5 },
-    { hpMult: 10.0, attackMult: 5.0 },
-    { hpMult: 16.0, attackMult: 7.0 },
+    { hpMult: 2.2,  attackMult: 1.5 },
+    { hpMult: 5.6,  attackMult: 2.5 },
+    { hpMult: 12.0, attackMult: 3.5 },
+    { hpMult: 17.0, attackMult: 5.0 },
+    { hpMult: 23.0, attackMult: 7.0 },
   ] as const;
   const idx = Math.max(0, Math.min(chapter - 1, SCALING.length - 1));
   return SCALING[idx];
+}
+export const PVE_STAMINA_MAX = 60;
+export const PVE_STAMINA_CHALLENGE_COST = 5;
+export const PVE_STAMINA_RECOVERY_MS = 5 * 60 * 1000;
+
+// 鈹€鈹€ 闅惧害妗ｏ紙design 260628-progression-pacing-v3 搂5锛屸啋 AC-P3-6/7/9锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+/** 闅惧害妗ｆ灇涓撅紙涓庝簯绔?PVE_DIFFICULTY 闀滃儚涓€鑷达級銆?*/
+export const DIFFICULTY_TIER = {
+  NORMAL:    'NORMAL',
+  HARD:      'HARD',
+  NIGHTMARE: 'NIGHTMARE',
+  ABYSS:     'ABYSS',
+  INFERNO:   'INFERNO',
+} as const;
+export type DifficultyTier = typeof DIFFICULTY_TIER[keyof typeof DIFFICULTY_TIER];
+
+/** 闅惧害妗ｈВ閿侀『搴忥紙绱㈠紩 = 鏁板€肩骇鍒紝涓庝簯绔?PVE_DIFFICULTY_ORDER 淇濇寔涓€鑷达級銆?*/
+export const DIFFICULTY_ORDER: readonly DifficultyTier[] = [
+  'NORMAL', 'HARD', 'NIGHTMARE', 'ABYSS', 'INFERNO',
+];
+
+/**
+ * 鍚勯毦搴︽。鎬墿 HP/鏀诲嚮鍊嶇巼涓庡懡杩愮鐗囩粨绠楀€嶇巼锛堜笌浜戠 PVE_DIFFICULTY_MULTIPLIERS 闀滃儚涓€鑷达級銆?
+ * - hpMult / atkMult锛氫綔鐢ㄤ簬鐢熸垚鎬墿鐨勭珷鑺傜缉鏀剧粨鏋滐紙鍐荤粨杩涘瓨妗ｏ紝鈫?AC-P3-9锛?
+ * - shardMult锛氫綔鐢ㄤ簬缁撶畻浜у嚭鍛借繍纰庣墖锛堜簯绔潈濞佽绠楋紝鈫?AC-P3-9锛?
+ */
+export const DIFFICULTY_MULTIPLIERS: Record<DifficultyTier, { hpMult: number; atkMult: number; shardMult: number }> = {
+  NORMAL:    { hpMult: 1.00, atkMult: 1.00, shardMult: 1.00 },
+  HARD:      { hpMult: 1.10, atkMult: 1.05, shardMult: 1.15 },
+  NIGHTMARE: { hpMult: 1.20, atkMult: 1.10, shardMult: 1.30 },
+  ABYSS:     { hpMult: 1.35, atkMult: 1.18, shardMult: 1.50 },
+  INFERNO:   { hpMult: 1.50, atkMult: 1.25, shardMult: 1.75 },
+};
+
+/** 闅惧害蹇収锛堝喕缁撹繘瀛樻。锛涚画妗ｆ椂浠庡瓨妗ｈ鍙栵紝涓嶅彲琚悗缁厤缃彉鍖栧奖鍝嶏紝鈫?AC-P3-9锛夈€?*/
+export interface DifficultySnapshot {
+  tier: DifficultyTier;
+  hpMult: number;
+  atkMult: number;
+  shardMult: number;
+}
+
+/** 浠庨毦搴︽。鏋氫妇鍒涘缓蹇収瀵硅薄锛坰tartExpedition 鏃惰皟鐢ㄥ苟鍐欏叆 ExpeditionState锛夈€?*/
+export function makeDifficultySnapshot(tier: DifficultyTier = 'NORMAL'): DifficultySnapshot {
+  const m = DIFFICULTY_MULTIPLIERS[tier] ?? DIFFICULTY_MULTIPLIERS.NORMAL;
+  return { tier, ...m };
 }

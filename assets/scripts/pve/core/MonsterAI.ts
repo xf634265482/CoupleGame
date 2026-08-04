@@ -14,20 +14,32 @@ import {
   isHeavyStrikeTurn,
   isHornTurn,
 } from './bosses/GoblinChief';
-import { VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
-import { VARIANT_SANDWORM_LARVA } from './Chapter2Monsters';
-import { VARIANT_SNOW_WOLF } from './Chapter3Monsters';
-import { VARIANT_VOID_WORM } from './Chapter5Monsters';
+import { VARIANT_GOBLIN_SENTINEL, VARIANT_SPIRIT_RAT } from './Chapter1Monsters';
+import { VARIANT_DESERT_HOPPER_LIZARD, VARIANT_DESERT_RAIDER, VARIANT_DUNE_SENTINEL } from './Chapter2Monsters';
+import { VARIANT_FROST_SPRITE, VARIANT_GLACIER_SHAPER, VARIANT_SNOW_WOLF } from './Chapter3Monsters';
+import { isControlRageActive } from './chapter3/ControlPointRage';
+import { VARIANT_ASH_HOUND, VARIANT_FIRE_ELEMENTAL } from './Chapter4Monsters';
+import { F24_ESCORT_CORE } from './chapter4/Chapter4FloorCatalog';
+import { stepEscortCore } from './chapter4/EscortCore';
+import { VARIANT_FATE_WATCHER, VARIANT_SHADOW_ASSASSIN } from './Chapter5Monsters';
 import {
   VARIANT_SPIRIT_BEETLE,
   VARIANT_SPIRIT_ELF,
 } from './ChapterAnimaMonsters';
 
-/** 冲锋变体：CHASE 状态每回合最多移动 2 格（而非普通怪的 1 格）。 */
-const CHARGE_VARIANTS = new Set([VARIANT_SANDWORM_LARVA, VARIANT_SNOW_WOLF, VARIANT_VOID_WORM]);
-import { ANIMA_BEETLE_TRAP_DURATION, ANIMA_ELF_TRAP_DURATION } from './PveConstants';
+import {
+  ANIMA_BEETLE_TRAP_DURATION,
+  ANIMA_ELF_TRAP_DURATION,
+  CHAPTER1_CHASE_INTERCEPT_RUSH,
+  CHAPTER1_CHASE_SENTINEL_MOVE,
+  CHAPTER3_ICE_WALL_HP,
+  CHAPTER3_CONTROL_RAGE_MOVE_BONUS,
+  GLACIER_SHAPER_ICE_WALL_HP,
+  GLACIER_SHAPER_WALLS_PER_CAST,
+} from './PveConstants';
 import type { FixedEntity } from './PveTypes';
-import { shoesStealthReduction } from './EquipmentSystem';
+import { resolveShoesStageEffectsFromItem } from './EquipmentSystem';
+import { legSwallowStepsStealthBonus } from './LegendarySystem';
 import {
   fateGuardianAttack,
   fateProphecyStep,
@@ -42,8 +54,15 @@ import { frostGiantAttack, stepFrostGiant } from './bosses/FrostGiant';
 import { lavaChainStep, lavaEruptionStep, lavaLordAttack, lavaTideStep } from './bosses/LavaLord';
 import { isBurrowTurn, quicksandScorpionBurrow, quicksandScorpionAttack } from './bosses/QuicksandScorpion';
 import { QUICKSAND_SCORPION_ENRAGE_HP_RATIO } from './PveConstants';
-import { monsterAttack } from './CombatSystem';
+import { allyAttackMonster, monsterAttack } from './CombatSystem';
+import { applyMonsterAlert, isPlayerExposed } from './AlertSystem';
+import { checkLos } from './LosSystem';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent } from './PveTypes';
+
+/** 冲锋变体：CHASE 状态每回合最多移动 2 格（而非普通怪的 1 格）。哨兵已改为纯支援/逃跑，不含在内。 */
+const CHARGE_VARIANTS = new Set([VARIANT_DESERT_HOPPER_LIZARD, VARIANT_DESERT_RAIDER, VARIANT_SNOW_WOLF]);
+const WARNING_VARIANTS = new Set([VARIANT_DUNE_SENTINEL]);
+const FIRE_ELEMENTAL_LAVA_DURATION = 3;
 
 function manhattan(a: Coord, b: Coord): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -53,6 +72,31 @@ function inBounds(size: number, pos: Coord): boolean {
   return pos.x >= 0 && pos.y >= 0 && pos.x < size && pos.y < size;
 }
 
+function isAllyMonster(monster: Monster): boolean {
+  return monster.side === 'ALLY';
+}
+
+function livingEnemyMonsters(floor: FloorState): Monster[] {
+  return floor.monsters.filter((monster) => monster.aiState !== 'DEAD' && !isAllyMonster(monster));
+}
+
+function livingAllyMonsters(floor: FloorState): Monster[] {
+  return floor.monsters.filter((monster) => monster.aiState !== 'DEAD' && isAllyMonster(monster));
+}
+
+function primaryEnemyTarget(floor: FloorState, monster: Monster): { pos: Coord; allyId?: string } {
+  const allies = livingAllyMonsters(floor);
+  if (allies.length === 0) return { pos: floor.player };
+  allies.sort((a, b) => {
+    const da = manhattan(a.pos, monster.pos);
+    const db = manhattan(b.pos, monster.pos);
+    if (da !== db) return da - db;
+    return a.id.localeCompare(b.id);
+  });
+  const ally = allies[0];
+  return ally ? { pos: ally.pos, allyId: ally.id } : { pos: floor.player };
+}
+
 function isOccupied(floor: FloorState, pos: Coord, excludeId: string): boolean {
   if (floor.player.x === pos.x && floor.player.y === pos.y) return true;
   // 石块障碍：ROCK 类型未消耗的实体阻断移动（含怪物和玩家）
@@ -60,7 +104,7 @@ function isOccupied(floor: FloorState, pos: Coord, excludeId: string): boolean {
     return true;
   }
   return floor.monsters.some(
-    (m) => m.id !== excludeId && m.aiState !== 'DEAD' && m.pos.x === pos.x && m.pos.y === pos.y,
+    (m) => m.id !== excludeId && m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y,
   );
 }
 
@@ -96,6 +140,128 @@ function stepToward(from: Coord, to: Coord): Coord[] {
   return candidates;
 }
 
+function orthogonalSteps(from: Coord): Coord[] {
+  return [
+    { x: from.x + 1, y: from.y },
+    { x: from.x - 1, y: from.y },
+    { x: from.x, y: from.y + 1 },
+    { x: from.x, y: from.y - 1 },
+  ];
+}
+
+function getWarningUnit(floor: FloorState, monster: Monster): Monster | null {
+  if (monster.type === 'BOSS' || WARNING_VARIANTS.has(monster.variantId ?? '')) return null;
+  return floor.monsters.find(
+    (m) =>
+      m.id !== monster.id
+      && m.aiState !== 'DEAD'
+      && WARNING_VARIANTS.has(m.variantId ?? '')
+      && manhattan(m.pos, monster.pos) <= 3
+      && manhattan(m.pos, floor.player) <= 4,
+  ) ?? null;
+}
+
+function coordinatedRetreatTarget(player: Coord, warning: Coord): Coord {
+  const dx = player.x - warning.x;
+  const dy = player.y - warning.y;
+  if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) return { x: player.x + Math.sign(dx), y: player.y };
+  if (dy !== 0) return { x: player.x, y: player.y + Math.sign(dy) };
+  return { x: player.x + 1, y: player.y };
+}
+
+function chaseCandidates(floor: FloorState, monster: Monster): Coord[] {
+  const primaryTarget = primaryEnemyTarget(floor, monster);
+  const warning = getWarningUnit(floor, monster);
+  if (!warning) return stepToward(monster.pos, primaryTarget.pos);
+
+  const retreatTarget = coordinatedRetreatTarget(primaryTarget.pos, warning.pos);
+  const defaultOrder = stepToward(monster.pos, primaryTarget.pos);
+  return orthogonalSteps(monster.pos).sort((a, b) => {
+    const aBlocked = !inBounds(floor.size, a) || isOccupied(floor, a, monster.id);
+    const bBlocked = !inBounds(floor.size, b) || isOccupied(floor, b, monster.id);
+    if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+    const aScore = manhattan(a, primaryTarget.pos) * 10 + manhattan(a, retreatTarget) * 3;
+    const bScore = manhattan(b, primaryTarget.pos) * 10 + manhattan(b, retreatTarget) * 3;
+    if (aScore !== bScore) return aScore - bScore;
+    return defaultOrder.findIndex((p) => p.x === a.x && p.y === a.y)
+      - defaultOrder.findIndex((p) => p.x === b.x && p.y === b.y);
+  });
+}
+
+function isBlockingEntityType(type: FixedEntity['type']): boolean {
+  return type === 'ROCK' || type === 'ICE_WALL' || type === 'FREEZE_WALL';
+}
+
+function isBlockedForPlayer(floor: FloorState, pos: Coord, extraWall?: Coord): boolean {
+  if (!inBounds(floor.size, pos)) return true;
+  if (extraWall && pos.x === extraWall.x && pos.y === extraWall.y) return true;
+  if (floor.monsters.some((m) => m.aiState !== 'DEAD' && !m.isBurrowed && m.pos.x === pos.x && m.pos.y === pos.y)) return true;
+  return floor.entities.some(
+    (e) => !e.consumed && isBlockingEntityType(e.type) && e.pos.x === pos.x && e.pos.y === pos.y,
+  );
+}
+
+function isReservedAllyCell(floor: FloorState, pos: Coord): boolean {
+  return floor.entities.some((entity) => !entity.consumed
+    && entity.pos.x === pos.x
+    && entity.pos.y === pos.y
+    && (entity.type === 'PORTAL' || entity.type === 'EXIT'));
+}
+
+function wouldHardLockPlayer(floor: FloorState, wallPos: Coord): boolean {
+  return orthogonalSteps(floor.player).every((pos) => isBlockedForPlayer(floor, pos, wallPos));
+}
+
+function glacierShaperWallCandidates(player: Coord, monster: Coord, floor?: FloorState): Coord[] {
+  const retreat = coordinatedRetreatTarget(player, monster);
+  const lateral = orthogonalSteps(player)
+    .filter((pos) => !(pos.x === retreat.x && pos.y === retreat.y))
+    .sort((a, b) => manhattan(a, monster) - manhattan(b, monster));
+  const cells: Coord[] = [retreat, ...lateral];
+  const exit = floor?.entities.find((e) => !e.consumed && e.type === 'EXIT');
+  if (exit) {
+    cells.push(...orthogonalSteps(exit.pos).sort((a, b) => manhattan(a, player) - manhattan(b, player)));
+  }
+  const seen = new Set<string>();
+  return cells.filter((pos) => {
+    const key = `${pos.x},${pos.y}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function fireElementalLavaCells(center: Coord): Coord[] {
+  return [
+    center,
+    { x: center.x + 1, y: center.y },
+    { x: center.x - 1, y: center.y },
+    { x: center.x, y: center.y + 1 },
+    { x: center.x, y: center.y - 1 },
+  ];
+}
+
+function selectGlacierWallTargets(floor: FloorState, monster: Monster, monsterId: string): Coord[] {
+  const result: Coord[] = [];
+  for (const wallPos of glacierShaperWallCandidates(floor.player, monster.pos, floor)) {
+    const blocked = isOccupied(floor, wallPos, monsterId)
+      || floor.entities.some((e) => !e.consumed && e.pos.x === wallPos.x && e.pos.y === wallPos.y);
+    if (!inBounds(floor.size, wallPos) || blocked) continue;
+    const previewWalls = result.map((pos, index) => ({
+      id: `__glacier_preview_${index}`,
+      type: 'ICE_WALL' as const,
+      pos,
+      consumed: false,
+      hp: GLACIER_SHAPER_ICE_WALL_HP,
+      source: 'GLACIER_SHAPER' as const,
+    }));
+    if (wouldHardLockPlayer({ ...floor, entities: [...floor.entities, ...previewWalls] }, wallPos)) continue;
+    result.push(wallPos);
+    if (result.length >= GLACIER_SHAPER_WALLS_PER_CAST) break;
+  }
+  return result;
+}
+
 /**
  * 远离威胁的候选格（全部 4 个方向按逃跑后与威胁距离降序排列）。
  * 返回全部方向而非仅 1-2 个贪心方向，确保灵气怪被墙/怪物部分封堵时仍能找到最优逃跑路线。
@@ -120,6 +286,101 @@ function withMonsterPatch(state: ExpeditionState, id: string, patch: Partial<Mon
       monsters: state.floorState.monsters.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     },
   };
+}
+
+function attackWithTemporaryRange(
+  state: ExpeditionState,
+  monster: Monster,
+  range: number,
+): ApplyResult {
+  const patched = withMonsterPatch(state, monster.id, { aiState: 'CHASE', range });
+  const result = attackByType(patched, { ...monster, aiState: 'CHASE', range });
+  return {
+    state: withMonsterPatch(result.state, monster.id, { range: monster.range }),
+    events: result.events,
+  };
+}
+
+function patrolMove(state: ExpeditionState, monster: Monster, steps: number): ApplyResult {
+  let current = withMonsterPatch(state, monster.id, { aiState: 'PATROL' });
+  const events: PveEvent[] = [];
+  for (let step = 0; step < steps; step++) {
+    const latest = current.floorState.monsters.find((m) => m.id === monster.id);
+    if (!latest || latest.aiState === 'DEAD') break;
+    const dirs = orthogonalSteps(latest.pos);
+    const startIdx = patrolDirIndex(monster.id, current.floorState.turn + step);
+    let moved = false;
+    for (let i = 0; i < dirs.length; i++) {
+      const to = dirs[(startIdx + i) % dirs.length];
+      if (!inBounds(current.floorState.size, to)) continue;
+      if (isOccupied(current.floorState, to, monster.id)) continue;
+      events.push({ type: 'MOVE', entityId: monster.id, from: latest.pos, to, apLeft: current.floorState.ap });
+      current = withMonsterPatch(current, monster.id, { pos: to, aiState: 'PATROL' });
+      moved = true;
+      break;
+    }
+    if (!moved) break;
+  }
+  return { state: current, events };
+}
+
+function retreatMove(state: ExpeditionState, monsterId: string, steps: number): ApplyResult {
+  let current = withMonsterPatch(state, monsterId, { aiState: 'FLEE' });
+  const events: PveEvent[] = [];
+  for (let step = 0; step < steps; step++) {
+    const latest = current.floorState.monsters.find((m) => m.id === monsterId);
+    if (!latest || latest.aiState === 'DEAD') break;
+    const primaryTarget = primaryEnemyTarget(current.floorState, latest);
+    let moved = false;
+    for (const to of stepAwayFrom(latest.pos, primaryTarget.pos)) {
+      if (!inBounds(current.floorState.size, to)) continue;
+      if (isOccupied(current.floorState, to, monsterId)) continue;
+      events.push({ type: 'MOVE', entityId: monsterId, from: latest.pos, to, apLeft: current.floorState.ap });
+      current = withMonsterPatch(current, monsterId, { pos: to, aiState: 'FLEE' });
+      moved = true;
+      break;
+    }
+    if (!moved) break;
+  }
+  return { state: current, events };
+}
+
+function chapter1Floor4EscapeTarget(floor: FloorState): Coord {
+  return floor.entities.find((entity) => !entity.consumed && entity.type === 'ESCAPE_MARKER')?.pos
+    ?? { x: floor.size - 2, y: 0 };
+}
+
+function stepChapter1Floor4Sentinel(state: ExpeditionState, monsterId: string): ApplyResult {
+  let current = withMonsterPatch(state, monsterId, { aiState: 'FLEE' });
+  const events: PveEvent[] = [];
+  for (let step = 0; step < CHAPTER1_CHASE_SENTINEL_MOVE; step += 1) {
+    const latest = current.floorState.monsters.find((m) => m.id === monsterId);
+    if (!latest || latest.aiState === 'DEAD') break;
+    const escape = chapter1Floor4EscapeTarget(current.floorState);
+    if (latest.pos.x === escape.x && latest.pos.y === escape.y) {
+      events.push({ type: 'TARGET_ESCAPED', entityId: monsterId, pos: latest.pos });
+      break;
+    }
+    const nearPlayer = manhattan(latest.pos, current.floorState.player) <= 3;
+    const candidates = orthogonalSteps(latest.pos).sort((a, b) => {
+      const aBlocked = !inBounds(current.floorState.size, a) || isOccupied(current.floorState, a, monsterId);
+      const bBlocked = !inBounds(current.floorState.size, b) || isOccupied(current.floorState, b, monsterId);
+      if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+      const aScore = manhattan(a, escape) * 10 - (nearPlayer ? manhattan(a, current.floorState.player) * 6 : 0);
+      const bScore = manhattan(b, escape) * 10 - (nearPlayer ? manhattan(b, current.floorState.player) * 6 : 0);
+      if (aScore !== bScore) return aScore - bScore;
+      return a.x === b.x ? a.y - b.y : a.x - b.x;
+    });
+    const to = candidates.find((cell) => inBounds(current.floorState.size, cell) && !isOccupied(current.floorState, cell, monsterId));
+    if (!to) break;
+    events.push({ type: 'MOVE', entityId: monsterId, from: latest.pos, to, apLeft: current.floorState.ap });
+    current = withMonsterPatch(current, monsterId, { pos: to, aiState: 'FLEE' });
+    if (to.x === escape.x && to.y === escape.y) {
+      events.push({ type: 'TARGET_ESCAPED', entityId: monsterId, pos: to });
+      break;
+    }
+  }
+  return { state: current, events };
 }
 
 /** 按怪物类型派发专属攻击函数；Boss 调用专属机制，普通/精英/灵气怪走通用结算。 */
@@ -197,10 +458,11 @@ function stepGoblinChief(state: ExpeditionState, boss: Monster): ApplyResult {
     for (let step = 0; step < steps; step++) {
       const m = current.floorState.monsters.find((mm) => mm.id === boss.id);
       if (!m || m.aiState === 'DEAD') break;
-      if (stopRange >= 0 && manhattan(m.pos, current.floorState.player) <= stopRange) break;
+      const primaryTarget = primaryEnemyTarget(current.floorState, m);
+      if (stopRange >= 0 && manhattan(m.pos, primaryTarget.pos) <= stopRange) break;
       const chasing = withMonsterPatch(current, boss.id, { aiState: 'CHASE' });
       let didMove = false;
-      for (const to of stepToward(m.pos, current.floorState.player)) {
+      for (const to of stepToward(m.pos, primaryTarget.pos)) {
         if (!inBounds(current.floorState.size, to)) continue;
         if (isOccupied(chasing.floorState, to, boss.id)) continue;
         allEvents.push({ type: 'MOVE', entityId: boss.id, from: m.pos, to, apLeft: floor.ap });
@@ -359,11 +621,12 @@ function chaseMoveOnly(state: ExpeditionState, monsterId: string): ApplyResult {
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return { state, events: [] };
-  if (manhattan(monster.pos, floor.player) <= monster.range) {
+  const primaryTarget = primaryEnemyTarget(floor, monster);
+  if (manhattan(monster.pos, primaryTarget.pos) <= monster.range) {
     return { state: withMonsterPatch(state, monsterId, { aiState: 'CHASE' }), events: [] };
   }
   const chasing = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
-  for (const to of stepToward(monster.pos, floor.player)) {
+  for (const to of chaseCandidates(chasing.floorState, monster)) {
     if (!inBounds(floor.size, to)) continue;
     if (isOccupied(chasing.floorState, to, monsterId)) continue;
     return {
@@ -374,12 +637,63 @@ function chaseMoveOnly(state: ExpeditionState, monsterId: string): ApplyResult {
   return { state: chasing, events: [] };
 }
 
+function stepOneAlly(state: ExpeditionState, monsterId: string): ApplyResult {
+  if (monsterId === F24_ESCORT_CORE) {
+    return stepEscortCore(state, monsterId);
+  }
+  const ally = state.floorState.monsters.find((monster) => monster.id === monsterId);
+  if (!ally || ally.aiState === 'DEAD' || !isAllyMonster(ally)) return { state, events: [] };
+  const enemies = livingEnemyMonsters(state.floorState);
+  if (enemies.length === 0) {
+    for (const to of orthogonalSteps(ally.pos)) {
+      if (!inBounds(state.floorState.size, to)) continue;
+      if (isOccupied(state.floorState, to, monsterId) || isReservedAllyCell(state.floorState, to)) continue;
+      return {
+        state: withMonsterPatch(state, monsterId, { pos: to, aiState: 'IDLE' }),
+        events: [{ type: 'MOVE', entityId: monsterId, from: ally.pos, to, apLeft: state.floorState.ap }],
+      };
+    }
+    return { state, events: [] };
+  }
+  enemies.sort((a, b) => {
+    const da = manhattan(a.pos, ally.pos);
+    const db = manhattan(b.pos, ally.pos);
+    if (da !== db) return da - db;
+    return a.id.localeCompare(b.id);
+  });
+  const target = enemies[0];
+  if (!target) return { state, events: [] };
+
+  let current = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
+  const startDist = manhattan(ally.pos, target.pos);
+  const events: PveEvent[] = [];
+  if (startDist > ally.range) {
+    const latest = current.floorState.monsters.find((monster) => monster.id === monsterId);
+    if (latest) {
+      for (const to of stepToward(latest.pos, target.pos)) {
+        if (!inBounds(current.floorState.size, to)) continue;
+        if (isOccupied(current.floorState, to, monsterId) || isReservedAllyCell(current.floorState, to)) continue;
+        events.push({ type: 'MOVE', entityId: monsterId, from: latest.pos, to, apLeft: current.floorState.ap });
+        current = withMonsterPatch(current, monsterId, { pos: to, aiState: 'CHASE' });
+        break;
+      }
+    }
+  }
+
+  const movedAlly = current.floorState.monsters.find((monster) => monster.id === monsterId);
+  if (!movedAlly) return { state: current, events };
+  if (manhattan(movedAlly.pos, target.pos) > movedAlly.range) return { state: current, events };
+  const attackResult = allyAttackMonster(current, monsterId, target.id);
+  return { state: attackResult.state, events: [...events, ...attackResult.events] };
+}
+
 function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyResult {
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster || monster.aiState === 'DEAD') return { state, events: [] };
+  if (isAllyMonster(monster)) return stepOneAlly(state, monsterId);
 
-  // 冰冻（永冻之核遗物）：跳过本回合并 -1；归零后下回合正常行动
+  // 冰冻状态：跳过本回合并递减，归零后恢复行动。
   if ((monster.frozenRounds ?? 0) > 0) {
     return {
       state: {
@@ -399,12 +713,219 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   const bossResult = stepBoss(state, monster);
   if (bossResult !== null) return bossResult;
 
-  const dist = manhattan(monster.pos, floor.player);
-  // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；EPIC+靴子：额外缩小 2~3（叠加）
-  const stealthReduction = (state.player.classTraits.includes('stealth') ? 2 : 0)
-    + shoesStealthReduction(state.player.equipment.SHOES?.baseStat ?? 0);
+  // 冰霜精灵：每 3 回合牺牲本次攻击，在玩家与自身之间、靠近玩家的一格升起冰墙。
+  // 该墙立即打断双方远程 LOS，玩家可换线或击碎；同回合只触发一次。
+  if (monster.variantId === VARIANT_FROST_SPRITE
+    && floor.turn > 0
+    && floor.turn % 3 === 0
+    && monster.frostWallTurn !== floor.turn
+    && manhattan(monster.pos, floor.player) >= 2) {
+    const dx = Math.sign(monster.pos.x - floor.player.x);
+    const dy = Math.sign(monster.pos.y - floor.player.y);
+    const wallPos = Math.abs(monster.pos.x - floor.player.x) >= Math.abs(monster.pos.y - floor.player.y)
+      ? { x: floor.player.x + dx, y: floor.player.y }
+      : { x: floor.player.x, y: floor.player.y + dy };
+    const blocked = isOccupied(floor, wallPos, monsterId)
+      || floor.entities.some((e) => !e.consumed && e.pos.x === wallPos.x && e.pos.y === wallPos.y);
+    if (inBounds(floor.size, wallPos) && !blocked) {
+      const entityId = `frost_sprite_wall_${floor.floor}_${floor.turn}_${monsterId}`;
+      return {
+        state: {
+          ...state,
+          floorState: {
+            ...floor,
+            monsters: floor.monsters.map((m) => m.id === monsterId
+              ? { ...m, aiState: 'CHASE', frostWallTurn: floor.turn }
+              : m),
+            entities: [...floor.entities, {
+              id: entityId,
+              type: 'ICE_WALL',
+              pos: wallPos,
+              consumed: false,
+              hp: CHAPTER3_ICE_WALL_HP,
+              remaining: 3,
+            }],
+          },
+        },
+        events: [{ type: 'FROST_SPRITE_WALL_RAISED', monsterId, entityId, pos: wallPos }],
+      };
+    }
+  }
+
+  if (monster.variantId === VARIANT_GLACIER_SHAPER) {
+    if (monster.glacierWallTarget || (monster.glacierWallTargets?.length ?? 0) > 0) {
+      const wallPositions = selectGlacierWallTargets(floor, monster, monsterId);
+      if (wallPositions.length > 0) {
+        const walls = wallPositions.map((pos, index) => ({
+          id: `glacier_shaper_wall_${floor.floor}_${floor.turn}_${monsterId}_${index}`,
+          type: 'ICE_WALL' as const,
+          pos,
+          consumed: false,
+          hp: GLACIER_SHAPER_ICE_WALL_HP,
+          source: 'GLACIER_SHAPER' as const,
+        }));
+        const raisedState: ExpeditionState = {
+          ...state,
+          floorState: {
+            ...floor,
+            monsters: floor.monsters.map((m) => m.id === monsterId
+              ? {
+                ...m,
+                aiState: 'CHASE',
+                frostWallTurn: floor.turn,
+                glacierWallTarget: undefined,
+                glacierWallTargets: undefined,
+              }
+              : m),
+            entities: [...floor.entities, ...walls],
+          },
+        };
+        const chaseResult = chaseMoveOnly(raisedState, monsterId);
+        return {
+          state: chaseResult.state,
+          events: [
+            ...walls.map((wall) => ({
+              type: 'GLACIER_SHAPER_WALL_RAISED' as const,
+              monsterId,
+              entityId: wall.id,
+              pos: wall.pos,
+            })),
+            ...chaseResult.events,
+          ],
+        };
+      }
+      return {
+        state: withMonsterPatch(state, monsterId, {
+          aiState: 'CHASE',
+          glacierWallTarget: undefined,
+          glacierWallTargets: undefined,
+        }),
+        events: monster.glacierWallTarget
+          ? [{ type: 'GLACIER_SHAPER_WALL_FIZZLED', monsterId, pos: monster.glacierWallTarget }]
+          : [],
+      };
+    }
+
+    if (floor.turn > 0
+      && floor.turn % 3 === 0
+      && monster.frostWallTurn !== floor.turn
+      && manhattan(monster.pos, primaryEnemyTarget(floor, monster).pos) <= 4) {
+      const wallPositions = selectGlacierWallTargets(floor, monster, monsterId);
+      if (wallPositions.length > 0) {
+        return {
+          state: withMonsterPatch(state, monsterId, {
+            aiState: 'CHASE',
+            frostWallTurn: floor.turn,
+            glacierWallTarget: wallPositions[0],
+            glacierWallTargets: wallPositions,
+          }),
+          events: [{ type: 'GLACIER_SHAPER_WALL_TELEGRAPHED', monsterId, pos: wallPositions[0] }],
+        };
+      }
+    }
+  }
+
+  if (monster.variantId === VARIANT_FIRE_ELEMENTAL) {
+    if (monster.lavaTelegraphTarget) {
+      const target = monster.lavaTelegraphTarget;
+      const tiles = fireElementalLavaCells(target)
+        .filter((pos) => inBounds(floor.size, pos))
+        .filter((pos) => !floor.entities.some(
+          (e) => !e.consumed && e.type === 'LAVA_TILE' && e.pos.x === pos.x && e.pos.y === pos.y,
+        ));
+      return {
+        state: {
+          ...state,
+          floorState: {
+            ...floor,
+            monsters: floor.monsters.map((m) => m.id === monsterId
+              ? { ...m, aiState: 'CHASE', lavaTelegraphTarget: undefined }
+              : m),
+            entities: [
+              ...floor.entities,
+              ...tiles.map((pos, index) => ({
+                id: `fire_elemental_lava_${floor.floor}_${floor.turn}_${monsterId}_${index}`,
+                type: 'LAVA_TILE' as const,
+                pos,
+                consumed: false,
+                remaining: FIRE_ELEMENTAL_LAVA_DURATION,
+              })),
+            ],
+          },
+        },
+        events: [{ type: 'FIRE_ELEMENTAL_LAVA_SPREAD', monsterId, tiles, duration: FIRE_ELEMENTAL_LAVA_DURATION }],
+      };
+    }
+
+    if (floor.turn > 0 && floor.turn % 3 === 0 && manhattan(monster.pos, primaryEnemyTarget(floor, monster).pos) <= 4) {
+      const cells = fireElementalLavaCells(floor.player).filter((pos) => inBounds(floor.size, pos));
+      return {
+        state: withMonsterPatch(state, monsterId, {
+          aiState: 'CHASE',
+          lavaTelegraphTarget: primaryEnemyTarget(floor, monster).pos,
+        }),
+        events: [{ type: 'FIRE_ELEMENTAL_LAVA_TELEGRAPHED', monsterId, cells }],
+      };
+    }
+  }
+
+  const primaryTarget = primaryEnemyTarget(floor, monster);
+  const dist = manhattan(monster.pos, primaryTarget.pos);
+  // ROGUE 潜行(stealth)：怪物仇恨范围缩小 2；轻靴史诗起：额外缩小（叠加）
+  // 基础款优缺点：重盔 helmet_heavy 使怪物警戒范围 +1（等同于减少潜行收益，AC-EQ-3）
+  const helmetAggroPenalty = state.player.equipment.HELMET?.implicit === 'helmet_heavy' ? 1 : 0;
+  const stealthReduction = resolveShoesStageEffectsFromItem(state.player.equipment.SHOES).stealthReduction
+    + legSwallowStepsStealthBonus(state.player.equipment)
+    - helmetAggroPenalty;
   // 潜行削减"发现距离"，但怪物在自身攻击射程内时始终能感知玩家（不能对贴身敌人完全隐身）
-  const inAggroRange = dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);
+  const detectedPlayer = !state.floorState.rogueHidden
+    && dist <= Math.max(monster.range, monster.aggroRadius - stealthReduction);
+  const detectedTarget = primaryTarget.allyId
+    ? dist <= Math.max(monster.range, monster.aggroRadius)
+    : detectedPlayer;
+  const inAggroRange = primaryTarget.allyId
+    ? detectedTarget || monster.aiState === 'CHASE'
+    : (monster.type !== 'ANIMA' && isPlayerExposed(floor)) || detectedPlayer;
+
+  if (monster.variantId === VARIANT_GOBLIN_SENTINEL && detectedPlayer) {
+    const alertEvents: PveEvent[] = [];
+    const alerted = applyMonsterAlert(state, monsterId, 'GOBLIN_SENTINEL', alertEvents);
+    if (alertEvents.length > 0) {
+      // 第 4 层：哨兵首次呼喊时，其余守卫立刻冲锋拦截追击玩家。
+      if (floor.floor === 4 && monsterId === 'GOBLIN_SENTINEL') {
+        const interceptorIds = livingEnemyMonsters(alerted.floorState)
+          .filter((entry) => entry.id !== monsterId)
+          .map((entry) => entry.id);
+        const rush = rushMonstersTowardPlayer(alerted, CHAPTER1_CHASE_INTERCEPT_RUSH, {
+          monsterIds: interceptorIds,
+          attackIfInRange: true,
+        });
+        return { state: rush.state, events: [...alertEvents, ...rush.events] };
+      }
+      return { state: alerted, events: alertEvents };
+    }
+  }
+  if (monster.variantId === VARIANT_DUNE_SENTINEL && detectedPlayer) {
+    const alertEvents: PveEvent[] = [];
+    const alerted = applyMonsterAlert(state, monsterId, 'DUNE_SENTINEL', alertEvents);
+    if (alertEvents.length > 0) return { state: alerted, events: alertEvents };
+  }
+
+  // 哥布林哨兵：永不普攻。第 4 层目标哨兵走追逃专属；其余巡逻 / 远离玩家。
+  if (monster.variantId === VARIANT_GOBLIN_SENTINEL) {
+    if (floor.floor === 4 && monster.id === 'GOBLIN_SENTINEL') {
+      return stepChapter1Floor4Sentinel(state, monsterId);
+    }
+    if (!inAggroRange) return patrolMove(state, monster, 2);
+    return retreatMove(state, monsterId, 2);
+  }
+
+  if (floor.floor === 11 && monsterId === 'CHASE_TARGET') {
+    return stepChapter1Floor4Sentinel(state, monsterId);
+  }
+  if (floor.floor === 17 && monsterId === 'CHASE_TARGET') {
+    return stepChapter1Floor4Sentinel(state, monsterId);
+  }
 
   // ── 灵气怪：FLEE ──────────────────────────────────────
   if (monster.type === 'ANIMA') {
@@ -427,7 +948,7 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
     for (let step = 0; step < moveSteps; step++) {
       const m = current.floorState.monsters.find((m) => m.id === monsterId)!;
       let moved = false;
-      for (const to of stepAwayFrom(m.pos, current.floorState.player)) {
+      for (const to of stepAwayFrom(m.pos, primaryEnemyTarget(current.floorState, m).pos)) {
         if (!inBounds(current.floorState.size, to)) continue;
         if (isOccupied(current.floorState, to, monsterId)) continue;
         const from = m.pos;
@@ -478,24 +999,7 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   if (monster.type === 'ELITE') {
     if (!inAggroRange && monster.aiState !== 'CHASE') {
       // 巡逻：确定性随机游走
-      const patrolling = withMonsterPatch(state, monsterId, { aiState: 'PATROL' });
-      const dirs = [
-        { x: monster.pos.x + 1, y: monster.pos.y },
-        { x: monster.pos.x - 1, y: monster.pos.y },
-        { x: monster.pos.x, y: monster.pos.y + 1 },
-        { x: monster.pos.x, y: monster.pos.y - 1 },
-      ];
-      const startIdx = patrolDirIndex(monsterId, floor.turn);
-      for (let i = 0; i < dirs.length; i++) {
-        const to = dirs[(startIdx + i) % dirs.length];
-        if (!inBounds(floor.size, to)) continue;
-        if (isOccupied(patrolling.floorState, to, monsterId)) continue;
-        return {
-          state: withMonsterPatch(patrolling, monsterId, { pos: to }),
-          events: [{ type: 'MOVE', entityId: monsterId, from: monster.pos, to, apLeft: floor.ap }],
-        };
-      }
-      return { state: patrolling, events: [] };
+      return patrolMove(state, monster, 1);
     }
     // 发现玩家后进入 CHASE，与普通怪相同（fall through to CHASE logic below）
   }
@@ -507,21 +1011,72 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   }
 
   if (dist <= monster.range) {
-    return attackByType(
-      withMonsterPatch(state, monsterId, { aiState: 'CHASE' }),
-      monster,
-    );
+    // 远程怪（range≥2）：先做 LOS 校验；被掩体遮挡时不站桩空放，改为移动找射界（AC-MT-6）。
+    // 近战（range=1）无中间格，直接攻击。
+    if (monster.range >= 2) {
+      const stateChased = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
+      if (!checkLos(stateChased.floorState, monster.pos, primaryTarget.pos)) {
+        return attackByType(stateChased, monster);
+      }
+      // LOS 被遮挡 → fall through 到移动逻辑，让怪物继续逼近找射界
+    } else {
+      return attackByType(
+        withMonsterPatch(state, monsterId, { aiState: 'CHASE' }),
+        monster,
+      );
+    }
   }
 
-  // 冲锋变体（SANDWORM_LARVA/SNOW_WOLF/VOID_WORM）每回合最多移动 2 格，普通怪 1 格。
-  const maxMoveSteps = CHARGE_VARIANTS.has(monster.variantId ?? '') ? 2 : 1;
+  // 高速/封路变体（沙漠跃蜥/沙漠劫匪/雪狼）每回合最多移动 2 格，且移动后本回合不追加攻击。
+  const ashHoundOnLava = monster.variantId === VARIANT_ASH_HOUND && floor.entities.some(
+    (e) => e.type === 'LAVA_TILE' && !e.consumed && e.pos.x === monster.pos.x && e.pos.y === monster.pos.y,
+  );
+  const playerRepeatedMove = (floor.playerStepsThisTurn ?? 0) >= 2;
+  const shadowCutsRetreat = monster.variantId === VARIANT_SHADOW_ASSASSIN && playerRepeatedMove;
+  const watcherAction: 'ATTACK' | 'MOVE' | null = monster.variantId === VARIANT_FATE_WATCHER
+    ? floor.playerAttackedThisTurn ? 'ATTACK' : playerRepeatedMove ? 'MOVE' : null
+    : null;
+  const watcherRange = watcherAction === 'ATTACK' ? monster.range + 1 : monster.range;
+  const warningUnit = getWarningUnit(floor, monster);
+  const baseMoveSteps = CHARGE_VARIANTS.has(monster.variantId ?? '')
+    || ashHoundOnLava
+    || shadowCutsRetreat
+    || watcherAction === 'ATTACK'
+    || warningUnit !== null
+    ? 2
+    : watcherAction === 'MOVE'
+      ? 3
+      : 1;
+  const floor12SandstormMoveBonus = floor.floor === 12 ? 4 : 0;
+  let maxMoveSteps = baseMoveSteps
+    + floor12SandstormMoveBonus
+    + (monster.frenzied ? 1 : 0)
+    + (isControlRageActive(floor) ? CHAPTER3_CONTROL_RAGE_MOVE_BONUS : 0);
+  // 第 12 层第 19 回合后追兵狂暴：移动翻倍。
+  if (floor.floor === 12 && floor.timedEscapeEnraged) {
+    maxMoveSteps *= 2;
+  }
+  // 第 4 层哨兵已呼喊期间：追逃守卫加速贴脸拦截。
+  if (
+    floor.floor === 4
+    && monsterId !== 'GOBLIN_SENTINEL'
+    && (floor.goblinSentinelAlertIds?.length ?? 0) > 0
+  ) {
+    maxMoveSteps = Math.max(maxMoveSteps, 2);
+  }
   let current = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
   const allEvents: PveEvent[] = [];
+  if (watcherAction) allEvents.push({ type: 'FATE_WATCHER_ADAPTED', monsterId, action: watcherAction });
+
+  if (watcherAction === 'ATTACK' && dist <= watcherRange) {
+    const rangedAttack = attackWithTemporaryRange(current, monster, watcherRange);
+    return { state: rangedAttack.state, events: [...allEvents, ...rangedAttack.events] };
+  }
 
   for (let step = 0; step < maxMoveSteps; step++) {
     const m = current.floorState.monsters.find((mm) => mm.id === monsterId)!;
     let moved = false;
-    for (const to of stepToward(m.pos, current.floorState.player)) {
+    for (const to of chaseCandidates(current.floorState, m)) {
       if (!inBounds(current.floorState.size, to)) continue;
       if (isOccupied(current.floorState, to, monsterId)) continue;
       allEvents.push({ type: 'MOVE', entityId: monsterId, from: m.pos, to, apLeft: floor.ap });
@@ -532,7 +1087,94 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
     if (!moved) break;
   }
 
+  if (watcherAction === 'MOVE') {
+    const movedWatcher = current.floorState.monsters.find((mm) => mm.id === monsterId);
+    if (movedWatcher && manhattan(movedWatcher.pos, primaryEnemyTarget(current.floorState, movedWatcher).pos) <= movedWatcher.range) {
+      const attackResult = attackByType(current, movedWatcher);
+      return { state: attackResult.state, events: [...allEvents, ...attackResult.events] };
+    }
+  }
+
   return { state: current, events: allEvents };
+}
+
+/**
+ * 火药桶警报冲锋 / 夜袭刷出冲锋：指定（或全体）存活敌怪各向玩家逼近最多 steps 格。
+ * - attackIfInRange 默认 true（火药桶）；夜袭刷出传 false，避免刚出场就远程点杀。
+ * - collapseMoves 为 true 时每个怪只 emit 一条 MOVE（起点→终点），便于整波同时冲入。
+ */
+export function rushMonstersTowardPlayer(
+  state: ExpeditionState,
+  steps: number,
+  options?: {
+    monsterIds?: readonly string[];
+    attackIfInRange?: boolean;
+    collapseMoves?: boolean;
+  },
+): ApplyResult {
+  const attackIfInRange = options?.attackIfInRange !== false;
+  const collapseMoves = options?.collapseMoves === true;
+  const idFilter = options?.monsterIds ? new Set(options.monsterIds) : null;
+  let current = state;
+  const events: PveEvent[] = [];
+  const livingIds = livingEnemyMonsters(state.floorState)
+    .map((monster) => monster.id)
+    .filter((id) => !idFilter || idFilter.has(id));
+
+  for (const monsterId of livingIds) {
+    if (current.status === 'DEAD' || current.player.hp <= 0) break;
+    const monster = current.floorState.monsters.find((entry) => entry.id === monsterId);
+    if (!monster || monster.aiState === 'DEAD' || monster.hp <= 0) continue;
+    const startPos = { ...monster.pos };
+
+    for (let step = 0; step < steps; step++) {
+      const latest = current.floorState.monsters.find((entry) => entry.id === monsterId);
+      if (!latest || latest.aiState === 'DEAD') break;
+      const target = primaryEnemyTarget(current.floorState, latest).pos;
+      if (manhattan(latest.pos, target) <= latest.range) break;
+
+      let moved = false;
+      for (const to of stepToward(latest.pos, target)) {
+        if (!inBounds(current.floorState.size, to)) continue;
+        if (isOccupied(current.floorState, to, monsterId)) continue;
+        if (!collapseMoves) {
+          events.push({ type: 'MOVE', entityId: monsterId, from: latest.pos, to, apLeft: current.floorState.ap });
+        }
+        current = withMonsterPatch(current, monsterId, { pos: to, aiState: 'CHASE' });
+        moved = true;
+        break;
+      }
+      if (!moved) break;
+    }
+
+    if (collapseMoves) {
+      const after = current.floorState.monsters.find((entry) => entry.id === monsterId);
+      if (after && (after.pos.x !== startPos.x || after.pos.y !== startPos.y)) {
+        events.push({
+          type: 'MOVE',
+          entityId: monsterId,
+          from: startPos,
+          to: { ...after.pos },
+          apLeft: current.floorState.ap,
+        });
+      } else {
+        current = withMonsterPatch(current, monsterId, { aiState: 'CHASE' });
+      }
+    }
+
+    if (!attackIfInRange) continue;
+    if (current.status === 'DEAD' || current.player.hp <= 0) break;
+    const afterMove = current.floorState.monsters.find((entry) => entry.id === monsterId);
+    if (!afterMove || afterMove.aiState === 'DEAD' || afterMove.hp <= 0) continue;
+    const target = primaryEnemyTarget(current.floorState, afterMove).pos;
+    if (manhattan(afterMove.pos, target) > afterMove.range) continue;
+
+    const attack = attackByType(current, afterMove);
+    current = attack.state;
+    events.push(...attack.events);
+  }
+
+  return { state: current, events };
 }
 
 /**

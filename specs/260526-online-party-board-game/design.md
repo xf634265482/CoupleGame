@@ -1,7 +1,9 @@
 ---
 projects:
   - CoupleGame: assets/**
-status: active
+status: archived
+archived: 2026-06-29
+archive_reason: PVP 棋盘对战已彻底移除（见 specs/260629-pvp-removal/plan.md）
 created: 2026-05-26
 ---
 

@@ -1,20 +1,9 @@
-import { GameSession } from '../../core/GameSession';
-import { quitGame } from '../../network/GameService';
-
-/** 切后台/关闭时退出对局 → AC-13 */
+/** 切后台时执行回调（PVP quit 逻辑已随 PVP 移除） */
 export function bindWxHideQuit(onAfter?: () => void): () => void {
   if (typeof wx === 'undefined' || !wx.onHide) {
     return () => undefined;
   }
-
-  const handler = () => {
-    const gameId = GameSession.gameId;
-    if (!gameId) return;
-    void quitGame(gameId)
-      .then(() => onAfter?.())
-      .catch((err) => console.warn('[WxLifecycle] quit on hide', err));
-  };
-
+  const handler = () => onAfter?.();
   wx.onHide(handler);
   return () => {
     wx.offHide?.(handler);

@@ -7,7 +7,11 @@
     "strict": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "paths": {
+      "cc": ["test/__mocks__/cc.ts"],
+      "cc/env": ["test/__mocks__/cc-env.ts"]
+    }
   },
-  "include": ["test/**/*.ts", "assets/scripts/pve/core/**/*.ts"]
+  "include": ["test/**/*.ts", "assets/scripts/pve/core/**/*.ts", "assets/scripts/ui/UiAssets.ts"]
 }

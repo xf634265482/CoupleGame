@@ -3,6 +3,17 @@ import { createFogGrid, revealAround } from '../../assets/scripts/pve/core/FogSy
 import { makeExpeditionState, makeMonster } from './helpers';
 
 describe('MovementSystem — 网格移动（AC-2, AC-3）', () => {
+  it('移动一步立即清除被围攻层数', () => {
+    const state = makeExpeditionState({
+      floorOverrides: {
+        player: { x: 4, y: 4 }, ap: 10, monsters: [], stationaryPressureStacks: 3,
+      },
+    });
+    const result = applyMove(state, 'RIGHT');
+    expect(result.state.floorState.stationaryPressureStacks).toBeUndefined();
+    expect(result.events).toContainEqual({ type: 'STATIONARY_PRESSURE_CHANGED', stacks: 0 });
+  });
+
   it('合法移动：位置更新、AP -2、产生 MOVE 事件', () => {
     const state = makeExpeditionState({
       floorOverrides: {

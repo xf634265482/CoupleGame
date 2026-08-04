@@ -96,7 +96,7 @@ describe('chapter25-depth: 2-5 章怪物表框架', () => {
     expect(fl2.filter((m) => m.variantId === 'SPIRIT_RAT').length).toBe(1);
 
     const fl3 = run(1, 3);
-    expect(fl3.filter((m) => m.variantId === 'FIRE_GOBLIN').length).toBe(1);
+    expect(fl3.filter((m) => m.variantId === 'FIRE_GOBLIN').length).toBe(2); // V3精英关卡
 
     const fl4 = run(1, 4);
     expect(fl4.filter((m) => m.variantId === 'FROST_GOBLIN').length).toBe(1);
@@ -134,10 +134,26 @@ describe('chapter25-depth: 2-5 章怪物表框架', () => {
     expect(ms.filter((m) => m.type === 'ANIMA').length).toBe(1);
   });
 
-  it('CHAPTER_MONSTER_RULES 表覆盖 chapter 1-5 × fl 1-4', () => {
+  it('CHAPTER_MONSTER_RULES 表覆盖 chapter 1-5 × fl 1-6（V3）', () => {
     for (const chapter of [1, 2, 3, 4, 5]) {
-      for (let fl = 1; fl <= 4; fl++) {
+      for (let fl = 1; fl <= 6; fl++) {
         expect(CHAPTER_MONSTER_RULES[chapter][fl]).toBeDefined();
+      }
+    }
+  });
+
+  it('chapter=1~5 章内第 3 层为精英关卡（精英怪 ≥ 2）', () => {
+    for (const chapter of [1, 2, 3, 4, 5]) {
+      const ms = run(chapter, 3);
+      expect(ms.filter((m) => m.type === 'ELITE').length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('chapter=2~5 层 5/6（机关主场）各有 1 只 ANIMA 怪', () => {
+    for (const chapter of [2, 3, 4, 5]) {
+      for (const fl of [5, 6]) {
+        const ms = run(chapter, fl);
+        expect(ms.filter((m) => m.type === 'ANIMA').length).toBe(1);
       }
     }
   });
@@ -149,19 +165,19 @@ describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
   const { applyMove } = require('../../assets/scripts/pve/core/MovementSystem') as typeof import('../../assets/scripts/pve/core/MovementSystem');
   const { CHAPTER2_SAND_PIT_COUNT, CHAPTER2_SAND_PIT_MOVE_PENALTY, AP_COST } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
 
-  it('第 10 层（第 2 章 Boss 房）生成 CHAPTER2_SAND_PIT_COUNT 个沙坑', () => {
-    const floor = generateFloor(10, 12345);
+  it('第 14 层（第 2 章 Boss 房）生成 CHAPTER2_SAND_PIT_COUNT 个沙坑', () => {
+    const floor = generateFloor(14, 12345);
     const pits = floor.entities.filter((e) => e.type === 'SAND_PIT');
     expect(pits).toHaveLength(CHAPTER2_SAND_PIT_COUNT);
   });
 
   it('非 Boss 层 / 非第 2 章不生成沙坑', () => {
     const fl1 = generateFloor(1, 1);
-    const fl5 = generateFloor(5, 1); // 第1章 Boss 层
-    const fl15 = generateFloor(15, 1); // 第3章 Boss 层
+    const fl7 = generateFloor(7, 1); // 第1章 Boss 层
+    const fl21 = generateFloor(21, 1); // 第3章 Boss 层
     expect(fl1.entities.filter((e) => e.type === 'SAND_PIT')).toHaveLength(0);
-    expect(fl5.entities.filter((e) => e.type === 'SAND_PIT')).toHaveLength(0);
-    expect(fl15.entities.filter((e) => e.type === 'SAND_PIT')).toHaveLength(0);
+    expect(fl7.entities.filter((e) => e.type === 'SAND_PIT')).toHaveLength(0);
+    expect(fl21.entities.filter((e) => e.type === 'SAND_PIT')).toHaveLength(0);
   });
 
   it('踩入沙坑：移动 AP 消耗增加 CHAPTER2_SAND_PIT_MOVE_PENALTY', () => {
@@ -224,7 +240,7 @@ describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
     expect(result.events.some((e) => e.type === 'BOSS_EMERGED')).toBe(true);
   });
 
-  it('Boss 冒出：所有沙坑被怪物占据时回退到玩家相邻空格', () => {
+  it('Boss 冒出：所有沙坑被怪物占据时保持潜地，不回退到普通空格', () => {
     const state = makeExpeditionState({
       floor: 10,
       chapter: 2,
@@ -261,12 +277,9 @@ describe('chapter25-depth: QuicksandScorpion 沙坑', () => {
     });
     const result = quicksandScorpionAttack(state, 'boss');
     const bossAfter = result.state.floorState.monsters.find((m) => m.id === 'boss')!;
-    // 不落在被占据的沙坑
-    expect(bossAfter.pos).not.toEqual({ x: 4, y: 5 });
-    // 落在玩家相邻 8 格之一
-    const dx = Math.abs(bossAfter.pos.x - 5);
-    const dy = Math.abs(bossAfter.pos.y - 5);
-    expect(Math.max(dx, dy)).toBeLessThanOrEqual(1);
+    expect(bossAfter.pos).toEqual({ x: 0, y: 0 });
+    expect(bossAfter.isBurrowed).toBe(true);
+    expect(result.events).toEqual([]);
   });
 
   it('quicksandScorpionBurrow 仍设 isBurrowed=true 并 emit BOSS_BURROWED', () => {
@@ -302,8 +315,8 @@ describe('chapter25-depth: FrostGiant 冰墙', () => {
   const { attackIceWall } = require('../../assets/scripts/pve/core/CombatSystem') as typeof import('../../assets/scripts/pve/core/CombatSystem');
   const { CHAPTER3_ICE_WALL_COUNT, CHAPTER3_ICE_WALL_HP, CHAPTER3_ICE_WALL_DROP_ANIMA } = require('../../assets/scripts/pve/core/PveConstants') as typeof import('../../assets/scripts/pve/core/PveConstants');
 
-  it('第 15 层（第 3 章 Boss 房）生成 CHAPTER3_ICE_WALL_COUNT 个冰墙，初始 HP=CHAPTER3_ICE_WALL_HP', () => {
-    const floor = generateFloor(15, 12345);
+  it('第 21 层（第 3 章 Boss 房）生成 CHAPTER3_ICE_WALL_COUNT 个冰墙，初始 HP=CHAPTER3_ICE_WALL_HP', () => {
+    const floor = generateFloor(21, 12345);
     const walls = floor.entities.filter((e) => e.type === 'ICE_WALL');
     expect(walls).toHaveLength(CHAPTER3_ICE_WALL_COUNT);
     walls.forEach((w) => expect(w.hp).toBe(CHAPTER3_ICE_WALL_HP));
@@ -311,7 +324,7 @@ describe('chapter25-depth: FrostGiant 冰墙', () => {
 
   it('非 Boss 层 / 非第 3 章不生成冰墙', () => {
     expect(generateFloor(1, 1).entities.filter((e) => e.type === 'ICE_WALL')).toHaveLength(0);
-    expect(generateFloor(10, 1).entities.filter((e) => e.type === 'ICE_WALL')).toHaveLength(0); // 第2章 Boss 层
+    expect(generateFloor(14, 1).entities.filter((e) => e.type === 'ICE_WALL')).toHaveLength(0); // 第2章 Boss 层
   });
 
   it('玩家移动到冰墙格 no-op（位置不变，AP 不扣）', () => {

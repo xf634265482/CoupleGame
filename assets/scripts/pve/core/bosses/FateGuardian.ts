@@ -26,8 +26,6 @@
 
 import { monsterAttack } from '../CombatSystem';
 import {
-  BASE_ATTACK,
-  CLASS_STATS,
   DESTINY_5X5_DMG_MULT,
   DESTINY_5X5_RADIUS,
   DESTINY_ATK_BUFF_DURATION_TURNS,
@@ -48,6 +46,7 @@ import {
   FATE_PROPHECY_INTERVAL,
   FATE_PROPHECY_RADIUS,
 } from '../PveConstants';
+import { professionBaseStats, professionIdFromClassId } from '../professions/ProfessionBaseStats';
 import { createRng } from '../rng';
 import type { ApplyResult, Coord, ExpeditionState, FloorState, Monster, PveEvent } from '../PveTypes';
 
@@ -288,9 +287,9 @@ export function tryCrossMirrorThreshold(state: ExpeditionState, bossId: string):
  * 用于镜像快照。避免循环依赖 CombatSystem.playerAttackPower 的复杂词条计算。
  */
 function estimatePlayerBaseAttack(state: ExpeditionState): number {
-  const classBonus = CLASS_STATS[state.player.classId]?.attackBonus ?? 0;
+  const profession = professionBaseStats(professionIdFromClassId(state.player.classId));
   const weaponBonus = state.player.equipment.WEAPON?.baseStat ?? 0;
-  return BASE_ATTACK + classBonus + weaponBonus;
+  return profession.attack + weaponBonus;
 }
 
 /**

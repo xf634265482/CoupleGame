@@ -1,55 +1,29 @@
 ---
-description: PVE「命运远征」模块玩法文档同步与编码规范（客户端权威 + 云端校验）
+description: PVE 命运远征模块的当前玩法、编码与文档同步规则
 globs: assets/scripts/pve/**/*.ts,cloudfunctions/pve/**/*.js,cloudfunctions/common/pve/**/*.js,specs/260608-pve-destiny-expedition/**/*.md
 alwaysApply: false
 ---
 
 # PVE 模块规则
 
-PVE「命运远征」与 PVP **完全独立**。PVP 玩法以 `specs/260529-combat-board-game-rework/design.md` 为准；**PVE 玩法以 `specs/260608-pve-destiny-expedition/design.md` 为唯一主文档**，两者互不覆盖。
+PVE 与其他玩法相互独立。PVE 规则以 `specs/260608-pve-destiny-expedition/design.md` 为唯一主文档。
 
-## 1. 玩法文档同步（强制）
+## 玩法与代码
 
-任何 PVE 玩法规则、数值、流程、地图实体、AP 消耗、怪物 AI、掉落、灵气/职业/词条/装备、Boss 机制或验收口径修改，**必须同步** `specs/260608-pve-destiny-expedition/design.md` 对应章节与 AC。
+- 修改楼层、战斗、怪物、装备、命痕、职业、体力或奖励时，同步更新主设计文档和验收项。
+- `assets/scripts/pve/core/` 保持零 Cocos 依赖，不得直接 `import 'cc'`。
+- 随机数统一使用 `core/rng.ts`，不得直接调用 `Math.random()`。
+- 当前远征是永久逐层挑战：第一至十四层使用现有链路，第三至第五章代码保持隔离，章节整体完成前不调整当前战斗基准。
+- 装备只使用当前固定 85 件目录；怪物使用当前章节目录。
+- 每次楼层挑战消耗 5 点体力，首次教程挑战免费；体力上限 60，每 5 分钟恢复 1 点。
 
-- 正确：改 `pve/core/PveConstants.ts`、`CombatSystem.ts`、`MonsterAI.ts`、`LootSystem.ts` 等后，同时更新 design.md 规则与 AC。
-- 错误：只改代码或任务文档，保留 design.md 旧数值/旧 AC。
+## 云端
 
-## 2. 分层与权威
+- `cloudfunctions/common/` 是共享逻辑唯一源；修改后运行 `node scripts/sync-cloud-common.js`。
+- 云端保存永久档案、挑战状态与结算结果，并校验层数连续性、奖励边界和请求幂等性。
+- 客户端不得直接编辑永久资源或绕过挑战生命周期。
 
-- **`assets/scripts/pve/core` 零框架依赖**：禁止 `import ... from 'cc'`，禁止引用 `Node/Component/director/tween`。纯 TS 输入输出，可 ts-jest 单测、云端复算。
-- **确定性 + 种子化 RNG**：core 禁止直接 `Math.random()`；统一用 `pve/core/rng.ts`。每次远征/每层用确定种子并存档，保证可复现与云端复算（→ AC-13）。
-- **三层结构**：`core`（纯逻辑/权威）→ `controllers`（`cc.Component` 编排输入/动画）→ `views`（普通类，纯渲染）。View 不持有规则，Controller 不直接画 UI。
-- **状态变更走纯函数**：core 的 `applyMove`/`applyAttack`/`endTurn` 等返回新状态 + 事件列表，Controller 据事件回放动画。
+## 资源与发布
 
-## 3. Cocos 2D 性能
-
-- **节点池化**：网格格子（最多 100）、迷雾遮罩、怪物节点必须复用，禁止每次 refresh `destroy/new Node`（参考 `BoardView` 预建数组）。
-- **Diff 刷新**：View 记录上次渲染态，仅更新变化格（参考 `BoardView.refresh` 跳过逻辑）。
-- **不在 `update()` 做重活**：回合制离散事件用 `scheduleOnce`/`tween` 播动画。
-- **生命周期清理**：`onLoad` 注册的 `EventBus`/计时器必须在 `onDestroy` 注销。
-
-## 4. 既有工程约定
-
-- UI 用代码构建，不依赖 prefab；命名 `XxxController.ts`(`@ccclass`)、`XxxView.ts`(普通类)、`xxxLayout.ts`(工具函数)。
-- 不用 enum，用 `as const` 对象或字面量联合类型；私有字段 `_` 前缀；`import type` 引类型；`err instanceof Error ? err.message : String(err)`；`_busy` 守卫并发输入。
-- 复用 `SceneLoader`/`GameSession`/`EventBus`/`CloudService.callFunction`/`UiAssets`。
-- 常量单一来源：`pve/core/PveConstants.ts`；若云端校验需同值，按 `sync-cloud-common.js` 同步，两边数值必须一致。
-
-## 5. 微信真机资源红线（继承 cocos-wechatgame-subpackage.mdc）
-
-- PVE 新增格子/迷雾/实体图标/HUD 若需真机首屏显示，必须进 `UiAssets.ts` 主包 critical native 清单，走 `loadWechatNativeSprite`（主包优先）；**禁止**真机 `bundle.load` 读分包贴图（Error 4930）。
-- 主包 < 4096KB：新增美术先 `python scripts/compress-ui-large-assets.py`，再 `node scripts/patch-wechatgame-config.js`，`calc-main-native-budget.py` 核对。
-- 发布流程：重建 wechatgame → 压缩 → patch → 清缓存 → 真机调试。
-
-## 6. 云端与存档
-
-- 云函数权威只在「结算/入账」边界：客户端上报每层结果，`pve` 云函数对奖励做上下界校验（单层钻石/碎片上限、层数连续性、种子复算）后才写 `users.diamond`/`users.destinyShards`，绝不无条件信任客户端（→ AC-14）。
-- `cloudfunctions/pve/common` 是部署副本，源在 `cloudfunctions/common`，改后必须 `node scripts/sync-cloud-common.js`。
-- 存档字段完整可序列化（含 RNG 种子/层/HP/金币/装备/职业/词条），断点续玩从存档重建 `ExpeditionState`（→ AC-11）。
-
-## 7. 相关文件
-
-- `specs/260608-pve-destiny-expedition/design.md` — PVE 玩法主文档
-- `specs/260608-pve-destiny-expedition/plan.md` / `tasks.md` / `ddl-sql.md` / `acceptance-checklist.md`
-- `assets/scripts/pve/core/**` — 纯逻辑（ts-jest 单测）
+- 真机首屏资源按 `cocos-wechatgame-subpackage.mdc` 的主包规则处理。
+- 重大修改后执行游戏类型检查、PVE 测试、云端测试和微信构建配置检查。

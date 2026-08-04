@@ -1,32 +1,35 @@
-// 中立交互实体（design §3 中性区域）：神像 / 温泉 / 祭坛 / 铁匠。
+﻿// 涓珛浜や簰瀹炰綋锛坉esign 搂3 涓€у尯鍩燂級锛氱鍍?/ 娓╂硥 / 绁潧 / 閾佸尃銆?
 
 import { canAfford, spend } from './ApSystem';
 import { addAnima } from './AnimaSystem';
+import { applyInteractionExposure } from './AlertSystem';
 import { equipItem } from './EquipHelper';
-import { EQUIP_TRAIT_POOL } from './EquipmentSystem';
 import {
   ALTAR_ANIMA_MAX,
   ALTAR_ANIMA_MIN,
   BLACKSMITH_ENHANCE_STEP,
   BLACKSMITH_FAIL_BASE,
   BLACKSMITH_FAIL_CAP,
+  IDOL_ATTACK_BONUS,
+  IDOL_ARMOR_BONUS,
   BLACKSMITH_FAIL_STEP,
   BLACKSMITH_FAIL_THRESHOLD,
-  BLACKSMITH_REROLL_COST,
   BLACKSMITH_UPGRADE_COST,
   HOT_SPRING_HEAL_RATIO,
   IDOL_MAX_HP_BONUS,
 } from './PveConstants';
 import { createRng } from './rng';
 import type { ApplyResult, EquipSlot, ExpeditionState, PveEvent } from './PveTypes';
+import { hasLivingChapter1Floor3Blocker } from './chapter1/Chapter1FloorCatalog';
 
 function noop(state: ExpeditionState): ApplyResult {
   return { state, events: [] };
 }
 
 /**
- * 使用神像：玩家站在 IDOL 格 + AP ≥ 1 + 未消耗 → 扣 AP，永久 +IDOL_MAX_HP_BONUS maxHp。
- * 当前 HP 同步上调（避免出现 "HP 20/maxHp 21" 的视觉怪状态）。
+ * 浣跨敤绁炲儚锛氱帺瀹剁珯鍦?IDOL 鏍?+ AP 鈮?1 + 鏈秷鑰?鈫?鎵?AP锛?
+ * 鐢ㄦゼ灞?RNG 涓夐€変竴闅忔満锛?IDOL_MAX_HP_BONUS maxHp / +IDOL_ATTACK_BONUS 鏀诲嚮 / +IDOL_ARMOR_BONUS 鎶ょ敳銆?
+ * 褰撳墠 HP 鍚屾涓婅皟锛堥€変腑 MAX_HP 鏃讹級锛岄伩鍏嶅嚭鐜?"HP 20/maxHp 21" 鐨勮瑙夋€姸鎬併€?
  */
 export function useIdol(state: ExpeditionState, entityId: string): ApplyResult {
   const floor = state.floorState;
@@ -35,30 +38,39 @@ export function useIdol(state: ExpeditionState, entityId: string): ApplyResult {
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
   if (!canAfford(floor.ap, 'USE_IDOL')) return noop(state);
 
-  const bonus = IDOL_MAX_HP_BONUS;
-  const events: PveEvent[] = [{ type: 'IDOL_BLESSING', entityId, maxHpBonus: bonus }];
+  const rng = createRng(floor.rngState);
+  const roll = rng.int(0, 2); // 0=MAX_HP, 1=ATTACK, 2=ARMOR
 
-  return {
-    state: {
-      ...state,
-      player: {
-        ...state.player,
-        maxHp: state.player.maxHp + bonus,
-        hp: state.player.hp + bonus, // 同步把当前 HP 上限抬起来
-      },
-      floorState: {
-        ...floor,
-        ap: spend(floor.ap, 'USE_IDOL'),
-        entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
-      },
+  let nextPlayer = { ...state.player };
+  let event: PveEvent;
+  if (roll === 0) {
+    nextPlayer = { ...nextPlayer, maxHp: nextPlayer.maxHp + IDOL_MAX_HP_BONUS, hp: nextPlayer.hp + IDOL_MAX_HP_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'MAX_HP', maxHpBonus: IDOL_MAX_HP_BONUS };
+  } else if (roll === 1) {
+    nextPlayer = { ...nextPlayer, idolAttackBonus: (nextPlayer.idolAttackBonus ?? 0) + IDOL_ATTACK_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'ATTACK', attackBonus: IDOL_ATTACK_BONUS };
+  } else {
+    nextPlayer = { ...nextPlayer, idolArmorBonus: (nextPlayer.idolArmorBonus ?? 0) + IDOL_ARMOR_BONUS };
+    event = { type: 'IDOL_BLESSING', entityId, effect: 'ARMOR', armorBonus: IDOL_ARMOR_BONUS };
+  }
+
+  const events: PveEvent[] = [event];
+  const next = applyInteractionExposure({
+    ...state,
+    player: nextPlayer,
+    floorState: {
+      ...floor,
+      ap: spend(floor.ap, 'USE_IDOL'),
+      rngState: rng.state(),
+      entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
     },
-    events,
-  };
+  }, events);
+  return { state: next, events };
 }
 
 /**
- * 使用温泉：玩家站在 HOT_SPRING 格 + AP ≥ 1 + 未消耗 → 扣 AP，
- * 当次恢复 maxHp × HOT_SPRING_HEAL_RATIO（0.4 = 40% maxHp），超出上限截断；HP 已满则 no-op。
+ * 浣跨敤娓╂硥锛氱帺瀹剁珯鍦?HOT_SPRING 鏍?+ AP 鈮?1 + 鏈秷鑰?鈫?鎵?AP锛?
+ * 褰撴鎭㈠ maxHp 脳 HOT_SPRING_HEAL_RATIO锛?.4 = 40% maxHp锛夛紝瓒呭嚭涓婇檺鎴柇锛汬P 宸叉弧鍒?no-op銆?
  */
 export function useHotSpring(state: ExpeditionState, entityId: string): ApplyResult {
   const floor = state.floorState;
@@ -66,7 +78,7 @@ export function useHotSpring(state: ExpeditionState, entityId: string): ApplyRes
   if (!entity || entity.type !== 'HOT_SPRING' || entity.consumed) return noop(state);
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
   if (!canAfford(floor.ap, 'USE_HOT_SPRING')) return noop(state);
-  if (state.player.hp >= state.player.maxHp) return noop(state); // 已满血则无意义，no-op 避免浪费 AP
+  if (state.player.hp >= state.player.maxHp) return noop(state); // 宸叉弧琛€鍒欐棤鎰忎箟锛宯o-op 閬垮厤娴垂 AP
 
   const targetHp = Math.min(
     state.player.maxHp,
@@ -76,23 +88,23 @@ export function useHotSpring(state: ExpeditionState, entityId: string): ApplyRes
 
   const events: PveEvent[] = [{ type: 'HOT_SPRING_HEAL', entityId, healed }];
 
-  return {
-    state: {
-      ...state,
-      player: { ...state.player, hp: targetHp },
-      floorState: {
-        ...floor,
-        ap: spend(floor.ap, 'USE_HOT_SPRING'),
-        entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
-      },
+  const next = applyInteractionExposure({
+    ...state,
+    player: { ...state.player, hp: targetHp },
+    floorState: {
+      ...floor,
+      ap: spend(floor.ap, 'USE_HOT_SPRING'),
+      entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
     },
-    events,
-  };
+  }, events);
+  return { state: next, events };
 }
 
 /**
- * 使用祭坛：玩家站在 ALTAR 格 + AP ≥ 1 + 未消耗 → 扣 AP，消耗祭坛，
- * 随机获得 [ALTAR_ANIMA_MIN, ALTAR_ANIMA_MAX] 范围内的灵气（可能触发强化）。
+ * 使用祭坛：玩家站在 ALTAR 格 + AP ≥ 1 + 未消耗 → 扣 AP、消耗祭坛。
+ * - 永久逐层第 6 层刷怪点已改为 `WAVE_SPAWN_MARKER`（不可交互）；旧档若仍有 `WAVE_ALTAR_*` 也禁止消耗。
+ * - 永久逐层不再发放旧灵气进度（灵气爆发走 spirit）。
+ * - 非永久模式仍随机获得 [ALTAR_ANIMA_MIN, ALTAR_ANIMA_MAX] 灵气（可触发旧强化）。
  */
 export function useAltar(state: ExpeditionState, entityId: string): ApplyResult {
   const floor = state.floorState;
@@ -100,37 +112,50 @@ export function useAltar(state: ExpeditionState, entityId: string): ApplyResult 
   if (!entity || entity.type !== 'ALTAR' || entity.consumed) return noop(state);
   if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
   if (!canAfford(floor.ap, 'USE_ALTAR')) return noop(state);
+  // 第 6 层夜袭刷怪源（含旧 WAVE_ALTAR 存档）不可当祭坛消耗。
+  if (entityId.startsWith('WAVE_ALTAR_') || entityId.startsWith('WAVE_SPAWN_')
+    || (state.persistentFloorMode && state.floor === 6)) {
+    return noop(state);
+  }
+  if (state.persistentFloorMode && state.floor === 3 && hasLivingChapter1Floor3Blocker(floor.monsters)) {
+    return noop(state);
+  }
 
-  const rng = createRng(floor.rngState);
-  const animaGain = rng.int(ALTAR_ANIMA_MIN, ALTAR_ANIMA_MAX);
+  // 永久逐层：关闭祭坛不计旧灵气；非永久模式仍 RNG 发放灵气。
+  let animaGain = 0;
+  let rngState = floor.rngState;
+  if (!state.persistentFloorMode) {
+    const rng = createRng(floor.rngState);
+    animaGain = rng.int(ALTAR_ANIMA_MIN, ALTAR_ANIMA_MAX);
+    rngState = rng.state();
+  }
 
-  // 先扣 AP、消耗实体、推进 RNG 种子
   const midState: ExpeditionState = {
     ...state,
     floorState: {
       ...floor,
       ap: spend(floor.ap, 'USE_ALTAR'),
-      rngState: rng.state(),
+      rngState,
       entities: floor.entities.map((e) => (e.id === entityId ? { ...e, consumed: true } : e)),
     },
   };
 
-  // addAnima 追加灵气进度，可能再次触发 ANIMA_STRENGTHEN 事件
   const animaResult = addAnima(midState, animaGain);
+  const events: PveEvent[] = [{ type: 'ALTAR_USED', entityId, anima: animaGain }, ...animaResult.events];
   return {
-    state: animaResult.state,
-    events: [{ type: 'ALTAR_USED', entityId, anima: animaGain }, ...animaResult.events],
+    state: applyInteractionExposure(animaResult.state, events),
+    events,
   };
 }
 
 /**
- * 铁匠强化：提升指定槽位装备的 baseStat，消耗金币（随强化等级递增）。
- * 强化增量按品质分级（COMMON+1 / FINE+2 / RARE+3 / EPIC+5 / LEGENDARY+8，×10基准）；
- * SHOES / TRINKET 固定 +1（不在 ×10 范围）。
- * +5 以上开始有失败概率（10%/15%/20%/…，封顶 80%）；失败时只扣费、属性不变。
- * 铁匠实体不消耗、不消耗 AP。
+ * 閾佸尃寮哄寲锛氭彁鍗囨寚瀹氭Ы浣嶈澶囩殑 baseStat锛屾秷鑰楅噾甯侊紙闅忓己鍖栫瓑绾ч€掑锛夈€?
+ * 寮哄寲澧為噺鎸夊搧璐ㄥ垎绾э紙COMMON+1 / FINE+2 / RARE+3 / EPIC+5 / LEGENDARY+8锛屆?0鍩哄噯锛夛紱
+ * SHOES / TRINKET 鍥哄畾 +1锛堜笉鍦?脳10 鑼冨洿锛夈€?
+ * +5 浠ヤ笂寮€濮嬫湁澶辫触姒傜巼锛?0%/15%/20%/鈥︼紝灏侀《 80%锛夛紱澶辫触鏃跺彧鎵ｈ垂銆佸睘鎬т笉鍙樸€?
+ * 閾佸尃瀹炰綋涓嶆秷鑰椼€佷笉娑堣€?AP銆?
  */
-/** 营地铁匠上下文的哨兵 entityId，用于跳过楼层实体与位置校验。 */
+/** 钀ュ湴閾佸尃涓婁笅鏂囩殑鍝ㄥ叺 entityId锛岀敤浜庤烦杩囨ゼ灞傚疄浣撲笌浣嶇疆鏍￠獙銆?*/
 export const CAMP_BLACKSMITH_ID = 'CAMP_BLACKSMITH';
 
 export function upgradeEquip(state: ExpeditionState, entityId: string, slot: EquipSlot): ApplyResult {
@@ -145,20 +170,17 @@ export function upgradeEquip(state: ExpeditionState, entityId: string, slot: Equ
 
   const currentLevel = item.enhanceLevel ?? 0;
 
-  // 强化步进按品质决定（SHOES/TRINKET 固定+1；WEAPON/ARMOR/HELMET 按品质分级）
+  // 寮哄寲姝ヨ繘鎸夊搧璐ㄥ喅瀹氾紙SHOES/TRINKET 鍥哄畾+1锛沇EAPON/ARMOR/HELMET 鎸夊搧璐ㄥ垎绾э級
   const upgradeStep = (slot === 'SHOES' || slot === 'TRINKET')
     ? 1
     : (BLACKSMITH_ENHANCE_STEP[item.quality] ?? 1);
 
-  // 费用 = BASE × 步进 × (level+1)，品质越高每次强化值越大、费用也越高；命运树 C3 折扣后最低 1g
-  const discount = state.player.treeBonuses?.blacksmithDiscount ?? 0;
-  const cost = Math.max(1, BLACKSMITH_UPGRADE_COST * upgradeStep * (currentLevel + 1) - discount);
+  // 璐圭敤 = BASE 脳 姝ヨ繘 脳 (level+1)锛屽搧璐ㄨ秺楂樻瘡娆″己鍖栧€艰秺澶с€佽垂鐢ㄤ篃瓒婇珮锛涘懡杩愭爲 C3 鎶樻墸鍚庢渶浣?1g
+  const cost = Math.max(1, BLACKSMITH_UPGRADE_COST * upgradeStep * (currentLevel + 1));
   if (state.player.gold < cost) return noop(state);
-
-  // 消耗金币
   const afterGold = { ...state.player, gold: state.player.gold - cost };
 
-  // 失败概率检定（+5 起生效，消耗 rngState 保证 AC-13 确定性）
+  // 澶辫触姒傜巼妫€瀹氾紙+5 璧风敓鏁堬紝娑堣€?rngState 淇濊瘉 AC-13 纭畾鎬э級
   const failChance = currentLevel >= BLACKSMITH_FAIL_THRESHOLD
     ? Math.min(BLACKSMITH_FAIL_CAP, BLACKSMITH_FAIL_BASE + (currentLevel - BLACKSMITH_FAIL_THRESHOLD) * BLACKSMITH_FAIL_STEP)
     : 0;
@@ -167,67 +189,28 @@ export function upgradeEquip(state: ExpeditionState, entityId: string, slot: Equ
   const nextRngState = rng.state();
 
   if (failed) {
+    const events: PveEvent[] = [{ type: 'BLACKSMITH_UPGRADE_FAIL', entityId, slot, failChance }];
     return {
-      state: {
+      state: applyInteractionExposure({
         ...state,
         player: afterGold,
         floorState: { ...floor, rngState: nextRngState },
-      },
-      events: [{ type: 'BLACKSMITH_UPGRADE_FAIL', entityId, slot, failChance }],
+      }, events),
+      events,
     };
   }
 
-  // 强化成功
+  // 寮哄寲鎴愬姛
   const newStat = item.baseStat + upgradeStep;
   const newEnhanceLevel = currentLevel + 1;
   const newItem = { ...item, baseStat: newStat, enhanceLevel: newEnhanceLevel };
 
-  // equipItem 统一处理 HELMET 的 maxHp/hp 联动
+  // equipItem 缁熶竴澶勭悊 HELMET 鐨?maxHp/hp 鑱斿姩
   const player = equipItem(afterGold, newItem);
 
+  const upgradeEvents: PveEvent[] = [{ type: 'BLACKSMITH_UPGRADE', entityId, slot, newStat, newEnhanceLevel }];
   return {
-    state: { ...state, player, floorState: { ...floor, rngState: nextRngState } },
-    events: [{ type: 'BLACKSMITH_UPGRADE', entityId, slot, newStat, newEnhanceLevel }],
-  };
-}
-
-/**
- * 词条洗炼最低品质要求：紫色（EPIC）及以上才有词条槽。
- * 低品质装备的词条栏留空，洗炼对其无效。
- */
-export const REROLL_QUALITY_MIN = new Set(['EPIC', 'LEGENDARY']);
-
-/**
- * 铁匠洗炼：为指定槽位装备随机替换一个词条，消耗 BLACKSMITH_REROLL_COST 金币。
- * 仅 EPIC / LEGENDARY 品质装备有词条槽；低品质返回 no-op。
- * 铁匠实体不消耗，不消耗 AP。
- */
-export function rerollEquipTrait(state: ExpeditionState, entityId: string, slot: EquipSlot): ApplyResult {
-  const floor = state.floorState;
-  if (entityId !== CAMP_BLACKSMITH_ID) {
-    const entity = floor.entities.find((e) => e.id === entityId);
-    if (!entity || entity.type !== 'BLACKSMITH') return noop(state);
-    if (entity.pos.x !== floor.player.x || entity.pos.y !== floor.player.y) return noop(state);
-  }
-  const item = state.player.equipment[slot];
-  if (!item) return noop(state);
-  if (!REROLL_QUALITY_MIN.has(item.quality)) return noop(state); // 品质不足，无词条槽
-  if (state.player.gold < BLACKSMITH_REROLL_COST) return noop(state);
-
-  const rng = createRng(floor.rngState);
-  const newTrait = rng.pick([...EQUIP_TRAIT_POOL]);
-  const newItem = { ...item, trait: newTrait };
-
-  return {
-    state: {
-      ...state,
-      player: {
-        ...state.player,
-        gold: state.player.gold - BLACKSMITH_REROLL_COST,
-        equipment: { ...state.player.equipment, [slot]: newItem },
-      },
-      floorState: { ...floor, rngState: rng.state() },
-    },
-    events: [{ type: 'BLACKSMITH_REROLL', entityId, slot, newTrait }],
+    state: applyInteractionExposure({ ...state, player, floorState: { ...floor, rngState: nextRngState } }, upgradeEvents),
+    events: upgradeEvents,
   };
 }

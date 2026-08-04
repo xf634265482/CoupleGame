@@ -1,3 +1,5 @@
+> HISTORICAL ONLY: early UI-entry notes. WxGameNameInput.ts has been deleted; current entry points and platform rules are in PROJECT_NAVIGATION.md and DEVELOPMENT_GUIDE.md.
+
 # 260603 UI 入口与微信真机资源（功能说明）
 
 > 本目录记录 **UI 美术接入、大厅/棋盘视觉、微信分包真机补丁** 等近期改动。玩法与云函数仍以战斗改版规格为准。
@@ -59,3 +61,4 @@
 | 外出联测 | `mobile-testing.md` |
 | 根目录文档地图 | `README.md` §文档索引 |
 | 战斗玩法细节 | **未**改 `260529/design.md`（UI 属表现层，玩法文档仍有效） |
+> HISTORICAL ONLY: early UI-entry notes. `WxGameNameInput.ts` has been deleted; current entry points and platform rules are in `PROJECT_NAVIGATION.md` and `DEVELOPMENT_GUIDE.md`.

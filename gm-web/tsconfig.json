@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cloudbase/model": ["./node_modules/@cloudbase/js-sdk/model"],
+      "@cloudbase/mysql": ["./node_modules/@cloudbase/js-sdk/mysql"],
+      "@cloudbase/oauth": ["./node_modules/@cloudbase/js-sdk/oauth"],
+      "@cloudbase/auth": ["./node_modules/@cloudbase/js-sdk/auth"],
+      "@cloudbase/ai": ["./node_modules/@cloudbase/js-sdk/ai"],
+      "@cloudbase/types": ["./node_modules/@cloudbase/js-sdk/types"],
+      "@cloudbase/types/functions": ["./node_modules/@cloudbase/js-sdk/types/functions.d.ts"]
+    },
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": ["src", "src/vite-env.d.ts"]
+}

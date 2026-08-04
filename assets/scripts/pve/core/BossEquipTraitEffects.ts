@@ -29,11 +29,12 @@ export const T_BURN_IMMUNE = 'boss_burn_immune'; // 灼烧免疫
 export const T_KILL_HEAL = 'boss_kill_heal_8'; // 击杀回血
 export const T_CRIT = 'boss_crit_15'; // 15% 暴击 ×2
 export const T_REVIVE = 'boss_revive_50'; // 致死复活回 50%（每场 1 次）
+export const T_SUMMON_WARRIOR = 'boss_summon_warrior'; // 战争号角：每 5 回合召唤友军
 
-// TODO（主动技能型，本批次未实现，标记保留以便后续补充）：
-//   boss_summon_warrior  — 每 5 回合主动召唤助战
+// TODO（主动技能型，标记保留以便后续补充）：
 //   boss_active_ice      — 主动铺冰（永冻指环）
 //   boss_show_intent     — UI 显示 Boss 下回合意图（纯视图）
+// boss_summon_warrior → hasWarHornTrait + CombatSystem.warHornAssist
 
 // ── 数值常量 ─────────────────────────────────────────────
 export const LIFESTEAL_HEAL = 5;
@@ -59,6 +60,11 @@ export function hasBossTrait(equipment: Equipment, trait: string): boolean {
     equipment.SHOES?.trait === trait ||
     equipment.TRINKET?.trait === trait
   );
+}
+
+/** 战争号角（`boss_summon_warrior`）：ExpeditionState 每 5 回合调用 warHornAssist。 */
+export function hasWarHornTrait(player: RunPlayer): boolean {
+  return hasBossTrait(player.equipment, T_SUMMON_WARRIOR);
 }
 
 // ── 攻击侧 ────────────────────────────────────────────────
@@ -122,9 +128,7 @@ export function bossStunOnHurt(player: RunPlayer, rng: Rng): boolean {
 }
 
 /**
- * boss_revive_50：致死兜底（每场远征一次，状态存 relicState.shieldUsed）。
- * 与 FATE_ECHO 的区别：本 trait 需玩家**装备守卫圣盾饰品**（饰品丢失/替换后失效），
- * FATE_ECHO 是遗物（拾取即生效）。两者可叠加：FATE_ECHO 先触发，圣盾后兜底。
+ * boss_revive_50：致死兜底（每场远征一次，状态存独立装备效果字段）。
  */
 export function bossTryRevive(player: RunPlayer): {
   revived: boolean;
@@ -134,7 +138,7 @@ export function bossTryRevive(player: RunPlayer): {
   if (!hasBossTrait(player.equipment, T_REVIVE)) {
     return { revived: false, restoredHp: 0, nextPlayer: player };
   }
-  const used = player.relicState?.shieldUsed ?? false;
+  const used = player.equipmentEffectState?.bossReviveUsed === true;
   if (used) return { revived: false, restoredHp: 0, nextPlayer: player };
   const restoredHp = Math.max(1, Math.round(player.maxHp * REVIVE_HP_PCT));
   return {
@@ -142,7 +146,10 @@ export function bossTryRevive(player: RunPlayer): {
     restoredHp,
     nextPlayer: {
       ...player,
-      relicState: { ...(player.relicState ?? {}), shieldUsed: true },
+      equipmentEffectState: {
+        ...player.equipmentEffectState,
+        bossReviveUsed: true,
+      },
     },
   };
 }
@@ -165,6 +172,7 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
     let hp = m.hp;
     let bleed = m.bleedRounds ?? 0;
     let burn = m.burnRounds ?? 0;
+    let poison = m.poisonRounds ?? 0;
     if (bleed > 0) {
       hp = Math.max(0, hp - BLEED_DAMAGE);
       totalDamage += BLEED_DAMAGE;
@@ -175,7 +183,11 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
       totalDamage += BURN_TICK_DAMAGE;
       burn -= 1;
     }
-    if (hp === m.hp && bleed === (m.bleedRounds ?? 0) && burn === (m.burnRounds ?? 0)) return m;
+    if (poison > 0) {
+      hp = Math.max(0, hp - (m.poisonDamage ?? 3));
+      poison -= 1;
+    }
+    if (hp === m.hp && bleed === (m.bleedRounds ?? 0) && burn === (m.burnRounds ?? 0) && poison === (m.poisonRounds ?? 0)) return m;
     const dead = hp <= 0;
     return {
       ...m,
@@ -183,6 +195,8 @@ export function tickMonsterDots(monsters: readonly Monster[]): { monsters: Monst
       aiState: dead ? ('DEAD' as const) : m.aiState,
       bleedRounds: bleed > 0 ? bleed : undefined,
       burnRounds: burn > 0 ? burn : undefined,
+      poisonRounds: poison > 0 ? poison : undefined,
+      poisonDamage: poison > 0 ? m.poisonDamage : undefined,
     };
   });
   return { monsters: next, totalDamage };

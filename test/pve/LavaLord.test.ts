@@ -50,7 +50,7 @@ function makeBossState(opts: {
   } = opts;
 
   return makeExpeditionState({
-    floor: 20,
+    floor: 28,
     chapter: 4,
     floorOverrides: {
       player: playerPos,
@@ -281,7 +281,7 @@ describe('LavaLord', () => {
       const ev = result.events.find((e) => e.type === 'ATTACK');
       expect(ev).toBeDefined();
       if (ev && ev.type === 'ATTACK') {
-        const baseDamage = 10; // ADVENTURER 基础攻击力（无装备/词条加成）
+        const baseDamage = 13;
         const expected = Math.max(1, Math.round(baseDamage * (1 - LAVA_LORD_LAVA_STAND_DAMAGE_REDUCTION)));
         expect(ev.damage).toBe(expected);
         expect(ev.targetHp).toBe(1000 - expected);
@@ -293,7 +293,7 @@ describe('LavaLord', () => {
     it('applyMove 踩入永久 LAVA_TILE 时立即触发 LAVA_TILE_DAMAGED，地块保留不消失', () => {
       // 玩家在 (1,0)，向左移动踩入 (0,0) 的 LAVA_TILE
       const state = makeExpeditionState({
-        floor: 20,
+        floor: 28,
         chapter: 4,
         floorOverrides: {
           turn: 1,
@@ -322,7 +322,7 @@ describe('LavaLord', () => {
 
     it('endTurn 时玩家站在 LAVA_TILE 上不再额外扣血（伤害已在步入时结算）', () => {
       const state = makeExpeditionState({
-        floor: 20,
+        floor: 28,
         chapter: 4,
         floorOverrides: {
           turn: 1,

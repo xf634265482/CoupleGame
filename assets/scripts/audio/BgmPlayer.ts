@@ -43,7 +43,7 @@ export function startMainBgm(bundle: AssetManager.Bundle | null): void {
     }
     audio.clip = clip;
     audio.loop = true;
-    audio.volume = 0.55;
+    audio.volume = 0.45;
     audio.playOnAwake = false;
     if (!audio.playing) {
       audio.play();

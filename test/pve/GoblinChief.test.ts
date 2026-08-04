@@ -10,6 +10,7 @@ import {
   isHornTurn,
   rollGuaranteedDrop,
 } from '../../assets/scripts/pve/core/bosses/GoblinChief';
+import { GOBLIN_CHIEF_SUMMON_CAP } from '../../assets/scripts/pve/core/PveConstants';
 import { playerAttack } from '../../assets/scripts/pve/core/CombatSystem';
 import { applyMonsterKillDrop } from '../../assets/scripts/pve/core/LootSystem';
 import { createRng } from '../../assets/scripts/pve/core/rng';
@@ -34,6 +35,19 @@ function bossState(turn: number, overrides: { attack?: number; hp?: number } = {
     },
     playerOverrides: { hp: 200, maxHp: 200 },
   });
+}
+
+function revealAll<T extends ReturnType<typeof makeExpeditionState>>(state: T): T {
+  return {
+    ...state,
+    floorState: {
+      ...state.floorState,
+      revealed: Array.from(
+        { length: state.floorState.size },
+        () => Array.from({ length: state.floorState.size }, () => true),
+      ),
+    },
+  };
 }
 
 describe('GoblinChief — 第一章 Boss 专属机制（AC-10）', () => {
@@ -172,18 +186,51 @@ describe('GoblinChief — 第一章 Boss 专属机制（AC-10）', () => {
       expect(drop.events).toEqual([]);
       expect(drop.state.player.gold).toBe(horned.player.gold);
     });
+
+    it('does not summon beyond the active horn-warrior cap', () => {
+      const state = makeExpeditionState({
+        floorOverrides: {
+          player: { x: 4, y: 4 },
+          turn: HORN_INTERVAL_NORMAL,
+          monsters: [
+            makeMonster('boss1', { x: 4, y: 5 }, {
+              type: 'BOSS',
+              bossId: 'GOBLIN_CHIEF',
+              attack: 30,
+              range: 1,
+              hp: 300,
+              maxHp: 300,
+            }),
+            ...Array.from({ length: GOBLIN_CHIEF_SUMMON_CAP }, (_, index) => makeMonster(
+              `horn_${index}`,
+              { x: index % 2 === 0 ? 3 : 5, y: 5 + Math.floor(index / 2) },
+              {
+                variantId: 'GOBLIN_WARRIOR',
+                summoned: true,
+              },
+            )),
+          ],
+        },
+      });
+
+      const beforeCount = state.floorState.monsters.length;
+      const result = goblinChiefHorn(state, 'boss1');
+      expect(result.events).toEqual([]);
+      expect(result.state.floorState.monsters).toHaveLength(beforeCount);
+      expect(result.state.floorState.monsters.filter((m) => m.summoned)).toHaveLength(GOBLIN_CHIEF_SUMMON_CAP);
+    });
   });
 
   describe('狂暴战报事件（2026-06-15）', () => {
     it('玩家攻击使 HP 跨过狂暴阈值且未致死时 emit BOSS_ENRAGED', () => {
       // boss HP = 阈值 + 1，任意基础攻击都能打到 ≤ 阈值但远不致死
-      const state = bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP + 1 });
+      const state = revealAll(bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP + 1 }));
       const result = playerAttack(state, 'boss1');
       expect(result.events.some((e) => e.type === 'BOSS_ENRAGED')).toBe(true);
     });
 
     it('攻击前 HP 已 ≤ 阈值时不重复 emit BOSS_ENRAGED', () => {
-      const state = bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP });
+      const state = revealAll(bossState(1, { hp: GOBLIN_CHIEF_ENRAGE_HP }));
       const result = playerAttack(state, 'boss1');
       expect(result.events.some((e) => e.type === 'BOSS_ENRAGED')).toBe(false);
     });

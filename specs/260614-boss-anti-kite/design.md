@@ -1,7 +1,7 @@
 # 260614 · Boss 反「风筝逃课」机制改动
 
 > 状态：设计已确认，进入实现。
-> 关联：`specs/260608-pve-destiny-expedition/design.md`（PVE 主文档）、`specs/game-design/Boss设计V1.md`（Boss 机制总表）。
+> 关联：`specs/260608-pve-destiny-expedition/design.md`（PVE 主文档）。
 > 仅改 PVE 第 3/5/2 章 Boss + 两个数值加料；第 1 章哥布林酋长、第 4 章熔岩领主机制不动（仅熔岩焰格数量 +3）。
 
 ## 一、背景与根因
@@ -24,7 +24,7 @@
 
 ## 二、机制一：冰霜巨人 → 冰面地形锁移动（滑行）
 
-> **2026-06-15 后续**：本节（v1）的冰面滑行已上线并保留。「贴脸打一下、退一步」式风筝在冰面之外仍可行，故追加 v2（寒气→冻结循环 / 冰霜重击 AOE+击退 / 残血预警→冲锋），详见 `specs/game-design/Boss设计V1.md` §四与 `specs/260608-pve-destiny-expedition/design.md` §11b。本文档不再更新 v2 内容。
+> **2026-06-15 后续**：本节的冰面滑行已上线并保留；后续机制以 `specs/260608-pve-destiny-expedition/design.md` 为准。
 
 把现在的「冰冻回合 AP-4」整套替换为「冰冻回合生成冰面」。
 
@@ -98,4 +98,4 @@
 - `test/pve/QuicksandScorpion.test.ts`：潜地刷动态沙坑、+2AP 惩罚、动态坑倒计时移除。
 - `test/pve/MovementSystem*` / `ExpeditionState*`：受影响处更新。
 - `npx jest test/pve` 全绿。
-- 文档同步：`specs/game-design/Boss设计V1.md`（§三冰霜、§六命运、§三流沙巨蝎、§七总表）+ `specs/260608-pve-destiny-expedition/design.md`（§11b Boss 机制）。
+- 文档同步：`specs/260608-pve-destiny-expedition/design.md` 中的 Boss 机制。

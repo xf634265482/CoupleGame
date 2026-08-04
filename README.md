@@ -41,8 +41,7 @@
 ### 二、已在仓库里准备好的（Task 1.1）
 
 - `project.config.json` — 微信项目配置（含 `cloudfunctionRoot`）
-- `cloudfunctions/` — login / room / match / game / scheduler 占位云函数
-- `specs/260526-online-party-board-game/` — 设计、计划、任务文档
+- `cloudfunctions/` — login / pve / initDb / adminLogin / adminTool 云函数
 - `config/wechat.local.json.example` — 本地密钥配置模板
 
 ### Cocos 构建
@@ -58,6 +57,28 @@ node scripts/patch-wechatgame-config.js
 ```
 
 真机资源与分包细节见 `.cursor/rules/cocos-wechatgame-subpackage.mdc`。
+
+### 提交前检查
+
+日常提交前，至少跑下面两条：
+
+```bash
+npm run typecheck:game
+npm run test:pve
+```
+
+说明：
+
+- `npm run typecheck:game`：只检查主游戏客户端 TS（`assets/scripts` + `shared`），是当前推荐的日常类型回归入口
+- `npm run test:pve`：跑 PVE 客户端单测
+
+如果改了云函数公共逻辑，再补跑：
+
+```bash
+npm run typecheck:cloud
+node scripts/sync-cloud-common.js
+cd cloudfunctions/common && npm test
+```
 
 ### Cocos 首场景
 
@@ -100,17 +121,15 @@ CoupleGame/
 | 你想查什么 | 路径 |
 |------------|------|
 | **项目入门、构建、云函数** | 本文件 `README.md` |
-| **联机派对初版：设计 / 计划 / 任务** | `specs/260526-online-party-board-game/`（`design.md`、`plan.md`、`tasks.md`） |
-| **战斗棋盘改版：玩法、验收、双端联调** | `specs/260529-combat-board-game-rework/`（`design.md`、`acceptance-checklist.md`、`dual-device-debug.md`） |
-| **UI 美术接入、大厅/棋盘视觉、真机分包（当前版本）** | `specs/260603-ui-entry/README.md`、`ui-asset-checklist.md` |
+| **UI 美术接入、大厅视觉、真机分包（当前版本）** | `specs/260603-ui-entry/README.md`、`ui-asset-checklist.md` |
 | **出门联测、不用预览二维码** | `specs/260603-ui-entry/mobile-testing.md` |
+| **PVE 成长节奏 V3：7 层/章、35 层通关、三段成长、难度阶位、排行榜复合键** | `specs/260628-progression-pacing-v3/design.md` |
+| **PVE 管理员改动手册（数据库视角）** | `docs/pve-admin-manual.md` |
+| **GM 后台部署与使用手册** | `docs/gm-admin-web-manual.md` |
 | **微信构建 patch 规则（防改坏）** | `.cursor/rules/cocos-wechatgame-subpackage.mdc` |
 | **云数据库与索引** | `cloud/database/`、`specs/*/ddl-sql.md` |
 | **云函数 common 同步** | `cloudfunctions/common/README.md` |
 
-当前 **UI / 真机资源** 迭代说明以 `specs/260603-ui-entry/README.md` 为准；**棋盘规则与 AC** 仍以 `specs/260529-combat-board-game-rework/design.md` 为准。
+当前 **UI / 真机资源** 迭代说明以 `specs/260603-ui-entry/README.md` 为准。
 
-## 任务进度
-
-- 初版联机：`specs/260526-online-party-board-game/tasks.md`
-- 战斗改版：`specs/260529-combat-board-game-rework/tasks.md`
+> PVP 棋盘对战相关历史文档见 `specs/260526-online-party-board-game/` 和 `specs/260529-combat-board-game-rework/`（已归档）。

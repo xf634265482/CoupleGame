@@ -79,7 +79,7 @@ build/wechatgame/
 |------|------|------|
 | `config.json` | 主包 stub + 分包 | 真机读分包根 config 常失败 |
 | `import/` JSON | 主包 `assets/resources/import` | 真机读分包 import 常 `no such file` |
-| UI native（清单内） | 主包 `assets/resources/native/` | 真机可读；规避 4930 |
+| UI native（清单内） | 主包 `assets/resources/native/` | 真机可读；规避 4930；PVE 仅地图/HUD 首屏资源 |
 | 大背景 / 结算 | 分包 `native/` | 单张背景过大，主包装不下 |
 | icons | 主包 + 分包副本 | 须即时显示；靠 BGM/bg_lobby 压缩腾体积 |
 | `index.js` / `game.js` | 主包 stub + 分包 | 微信 IDE 预编译要求 |
@@ -101,7 +101,7 @@ build/wechatgame/
 | `syncProjectConfig` | 不 ignore 主包 native |
 | `verifyJsSyntax` | `node --check` engine/web adapter |
 
-主包 native 排除项（`MAIN_NATIVE_EXCLUDE_*`）：`bg_room`、`bg_board`、`bg_settlement`、`settlement/*`。**icons 不得排除**。增删须跑 `python scripts/calc-main-native-budget.py` 核对主包体积；含 icons 前须跑 `compress-ui-large-assets.py`（含 BGM 压缩）。
+主包 native 排除策略（`isMainNativeExcluded`）：结算页与 PVE HUD 美术、大背景、次级面板留在分包；PVE 仅地图核心集合进入 critical，其中包含五章地板瓦片（精确清单见 `PVE_MAIN_NATIVE_KEYS`）。PVP 通用 `icons/*` 不得排除。增删须跑 `python scripts/calc-main-native-budget.py` 核对主包体积；含 icons 前须跑 `compress-ui-large-assets.py`（含 BGM 压缩）。
 
 ## 修改 `engine-adapter` 陷阱
 
@@ -125,6 +125,19 @@ build/wechatgame/
 | 主包超 4MB | 跑 `compress-ui-large-assets.py`（BGM 96kbps + bg_lobby 64 色） |
 | `compiled UiAssets patch skipped` | Cocos 重建 wechatgame |
 | patch 后无 `critical native -> main` | `copyCriticalNativeToMain` 须在 `ensureResourcesEntryScripts` **之后** |
+
+## PVE 章节背景分包 `chapter_N`（2026-06-24 起）
+
+第2-5章战场背景从 `resources` 分包迁出，各成独立 Cocos Asset Bundle（`assets/chapter_backgrounds/chapter_N/`，`.meta` 配 `isBundle`+`compressionType.wechatgame:subpackage`），运行时由 `assets/scripts/pve/ChapterResourceLoader.ts` 用 `wx.loadSubpackage('chapter_N')`+`loadBundle`+`bundle.load` 加载。
+
+**为什么不复用 resources 分包**：resources 是被 patch 脚本**手动**从主包搬成分包、且引擎被一堆 `subpackages/resources/` 专属字符串 hack 过（native 读取被强制重定向到主包），所以分包-only 大图真机读不到。chapter_N 是 Cocos **原生**输出的分包，路径不匹配那些 `resources` 专属 hack（尤其 `patchEngineTransformNativeRewrite` 只改 `subpackages/resources/native`），`bundle.load` 直接读自己分包 native——这是真机能显示的关键。
+
+**patch 脚本要点**（`chapterSubpackageNames` / `ensureChapterSubpackageStubs`）：
+- chapter 分包必须同时出现在 **game.json**、**settings.json**、**application.js overrideSettings** 三处的 subpackages 列表；尤其 application override 原硬编码 `['resources']` 会覆盖运行时设置，已改为动态含 chapter_N（漏了会 `wx.loadSubpackage` 未注册而失败）。
+- chapter 分包计入 `subKb`、不计入 `mainKb`（背景不占主包预算）。
+- **禁止**给 chapter 分包套用 resources 的 native→主包重写。
+
+**分阶段铺开**：`MIGRATED_CHAPTERS`（ChapterResourceLoader）先只含 `2`。真机验证 chapter_2 背景显示、无 4930 后，再把 3/4/5 加入并建对应 bundle。若真机 `bundle.load` 仍失败 → 见 design.md「资源加载策略」Fallback（主包腾位 + 主包 native 路径）。
 
 ## 相关文件
 

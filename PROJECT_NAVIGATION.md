@@ -1,498 +1,114 @@
 # PROJECT_NAVIGATION.md
-> 代码导航索引。排查 Bug / 实现新功能时，**先查本文定位入口，再开文件**，避免盲目全局搜索。
-> 更新规则：改动涉及新系统或重命名文件时，同步更新本文。
+
+> 当前项目导航。排查 Bug / 实现功能时，先从这里定位入口，再打开具体代码。
+> 当前 PVE 总边界以 `specs/260608-pve-destiny-expedition/design.md` 为准，1–35 层细节见 `specs/260712-pve-persistent-floor-progression/`。
 
 ---
 
-## 目录
+## 当前权威入口
 
-- [架构总览](#架构总览)
-- [PVE 模块](#pve-模块)
-  - [01 战斗系统](#01-战斗系统)
-  - [02 怪物系统](#02-怪物系统)
-  - [03 Boss 系统](#03-boss-系统)
-  - [04 词条/强化系统](#04-词条强化系统)
-  - [05 装备系统](#05-装备系统)
-  - [06 职业系统](#06-职业系统)
-  - [07 命运树系统](#07-命运树系统)
-  - [08 地图生成系统](#08-地图生成系统)
-  - [09 迷雾系统](#09-迷雾系统)
-  - [10 非战斗交互系统](#10-非战斗交互系统)
-  - [10b 楼层通关系统](#10b-楼层通关系统)
-  - [11 存档系统](#11-存档系统)
-  - [12 PVE UI 系统](#12-pve-ui-系统)
-  - [13 事件系统（PVE）](#13-事件系统pve)
-- [PVP 模块](#pvp-模块)
-  - [14 棋盘对战系统](#14-棋盘对战系统)
-- [公共基础层](#公共基础层)
-  - [15 应用启动](#15-应用启动)
-  - [16 网络层](#16-网络层)
-  - [17 UI 公共组件](#17-ui-公共组件)
-  - [18 音频系统](#18-音频系统)
-  - [19 微信平台适配](#19-微信平台适配)
-- [云函数层](#云函数层)
-  - [20 PVE 云函数](#20-pve-云函数)
-  - [21 PVP 云函数](#21-pvp-云函数)
-- [已知问题与命名混乱](#已知问题与命名混乱)
+### 大厅与场景
 
----
+| 功能 | 当前入口 |
+| --- | --- |
+| 游戏启动 | `assets/scripts/core/GameApp.ts` |
+| 场景切换 | `assets/scripts/core/SceneLoader.ts` |
+| 大厅 UI / 远征入口 / 营地入口 | `assets/scripts/lobby/PveLobbyController.ts` |
+| 大厅邮箱入口 / 邮件弹层 | `PveLobbyController.ts` + `assets/scripts/pve/views/MailView.ts`；云端 `cloudfunctions/common/pve/PveMailService.js` |
+| 大厅签到入口 / 签到弹层 | `PveLobbyController.ts` + `assets/scripts/pve/views/CheckInView.ts`；云端 `cloudfunctions/common/pve/PveCheckIn.js` |
+| 大厅伙伴入口 / 养成面板 | `assets/scripts/pve/controllers/PartnerController.ts` + `views/PartnerView.ts` |
+| 远征战斗场景 | `assets/scripts/pve/controllers/ExpeditionController.ts` 挂载于 `assets/scenes/pve_expedition.scene` |
+| 营地场景 UI | `assets/scripts/pve/controllers/CampController.ts` + `assets/scripts/pve/views/CampView.ts` |
+| 大厅今日命痕商会 | `assets/scripts/pve/controllers/MinghenShopController.ts` + `assets/scripts/pve/views/MinghenShopView.ts` |
+| 伙伴技能执行 | `assets/scripts/pve/core/partner/PartnerSkillExecutor.ts` |
 
-## 架构总览
+### 永久逐层远征
 
-```
-用户操作
-  │
-  ▼
-controllers/          ← 输入编排层（Cocos Component，处理触摸/点击）
-  │  调用纯函数
-  ▼
-pve/core/             ← 纯逻辑层（零框架依赖，可独立 jest 测试）
-  │  返回 { state, events[] }
-  ▼
-views/                ← 渲染层（消费 events 数组，驱动 Label/Graphics）
-  │
-  ▼
-network/PveService    ← 网络层（云端存档/校验）
-  │
-  ▼
-cloudfunctions/pve/   ← 云端权威（结算、防作弊）
-```
+| 职责 | 当前入口 |
+| --- | --- |
+| 挑战生命周期编排 | `assets/scripts/pve/core/PersistentFloorFlow.ts` |
+| 持久化运行时 / 目标 / 命痕事件桥 | `assets/scripts/pve/core/PersistentExpeditionRuntime.ts` |
+| 章节路由（全局层 1–35） | `assets/scripts/pve/core/chapterRouting.ts` |
+| 第一章楼层目录 | `assets/scripts/pve/core/chapter1/Chapter1FloorCatalog.ts` |
+| 第一章确定性楼层生成 | `assets/scripts/pve/core/chapter1/Chapter1FloorGenerator.ts` |
+| 第一章正式 ExpeditionState/FloorState 工厂 | `assets/scripts/pve/core/chapter1/Chapter1ExpeditionFactory.ts` |
+| 第二章楼层目录 / 生成 / 工厂 | `assets/scripts/pve/core/chapter2/Chapter2FloorCatalog.ts` / `Chapter2FloorGenerator.ts` / `Chapter2ExpeditionFactory.ts` |
+| 第三章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter3/Chapter3FloorCatalog.ts` / `Chapter3FloorGenerator.ts` / `Chapter3ExpeditionFactory.ts` / `Chapter3Objectives.ts` |
+| 第三章机制（寒核压力 / 夺控狂暴） | `chapter3/CoreBreakPressure.ts` / `ControlPointRage.ts` |
+| 第四章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter4/Chapter4FloorCatalog.ts` / `Chapter4FloorGenerator.ts` / `Chapter4ExpeditionFactory.ts` / `Chapter4Objectives.ts` |
+| 第四章机制（vent / 安全区 / 潮汐 / 护运） | `chapter4/LavaVentPressure.ts` / `SafeZoneMigration.ts` / `LavaTideAdvance.ts` / `EscortCore.ts` |
+| 第五章楼层目录 / 生成 / 工厂 / 目标 | `assets/scripts/pve/core/chapter5/Chapter5FloorCatalog.ts` / `Chapter5FloorGenerator.ts` / `Chapter5ExpeditionFactory.ts` / `Chapter5Objectives.ts` |
+| 第五章机制（预言阵眼 / 镜像桥 / 改写试炼） | `chapter5/ProphecyEyePressure.ts` / `MirrorTrialBridge.ts` / `FateRewriteTrial.ts` |
+| 装备模板库（中文名） | `assets/scripts/pve/core/EquipmentSystem.ts` |
+| 装备图标映射 / 分包加载 | `assets/scripts/pve/EquipmentCatalog.ts` / `EquipmentResourceLoader.ts` |
+| 永久层装备掉落（无词条） | `assets/scripts/pve/core/equipment/FixedEquipmentLoot.ts` |
+| 第二章机制（哨卫降压 / 轻沙暴 / 沙坑扩张） | `chapter2/HuntPressure.ts` / `LightSandstorm.ts` / `SandPitExpansion.ts` |
+| 固定武器与职业上下文攻击 | `assets/scripts/pve/core/PersistentCombatRules.ts` |
+| 命痕目录 / 展示 / 战斗桥 | `assets/scripts/pve/core/minghen/MinghenCatalog.ts` / `MinghenDisplay.ts` / `MinghenCombatBridge.ts` |
+| 前端网络 API | `assets/scripts/network/PveProgressionService.ts` |
+| 云端挑战生命周期 | `cloudfunctions/common/pve/PveChallenge.js` |
+| 云端玩家永久档案 | `cloudfunctions/common/pve/PveProfile.js` |
+| 云端挑战校验 | `cloudfunctions/common/pve/PveChallengeValidate.js` |
 
-**PVE 三层铁律**：core 不 import cc，不直接 Math.random()；view 不持有游戏状态；controller 是唯一的状态更新者。
+### 原战斗主链（仍是当前唯一表现/输入主链）
 
----
+| 功能 | 当前入口 |
+| --- | --- |
+| 玩家移动 | `assets/scripts/pve/core/MovementSystem.ts` |
+| 玩家攻击 / 地形攻击 | `assets/scripts/pve/core/CombatSystem.ts` |
+| 回合结束 / 怪物回合 | `assets/scripts/pve/core/ExpeditionState.ts` 的 `endTurn()` |
+| 怪物 AI | `assets/scripts/pve/core/MonsterAI.ts` |
+| 钥匙 / 出口 / 传送门 / 特殊实体交互 | `assets/scripts/pve/core/FloorRules.ts` + `NeutralEntities.ts` |
+| 战场渲染 | `assets/scripts/pve/views/FogMapView.ts` |
+| HUD | `assets/scripts/pve/views/PveHudView.ts`（右上「目标」= 本层通关条件，不是词条） |
+| 战报 | `assets/scripts/pve/views/PveMessageLog.ts` |
+| 弹窗 / Toast / 选择 | `assets/scripts/pve/views/PveToastView.ts` |
 
-## PVE 模块
+### 营地
 
-### 01 战斗系统
+| 功能 | 当前入口 |
+| --- | --- |
+| 营地控制器 | `assets/scripts/pve/controllers/CampController.ts` |
+| 营地布局与交互 | `assets/scripts/pve/views/CampView.ts` |
+| 命痕台布局 | `assets/scripts/pve/views/CampMinghenLayout.ts` |
+| 营地档案读写 | `assets/scripts/network/PveProgressionService.ts` |
+| 云端配置校验 | `cloudfunctions/common/pve/PveProgression.js` |
 
-**职责**：玩家/怪物的伤害计算、异常状态（冰冻/灼烧）施加、装备词条加成、击杀判定。
+### 资源与分包
 
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/CombatSystem.ts` | **入口** — `playerAttack()` / `monsterAttack()` / `attackIceWall()` |
-| `assets/scripts/pve/core/PveConstants.ts` | 所有伤害相关数值（基础攻击、Boss 倍率等） |
-| `assets/scripts/pve/core/PveTypes.ts` | `Monster` / `RunPlayer` / `StatusEffect` 类型定义 |
-| `assets/scripts/pve/core/StrengthenEffects.ts` | 强化词条对伤害的修正（吸血/狂暴/反击计算） |
-| `assets/scripts/pve/core/EquipTraitEffects.ts` | 装备词条对伤害的修正 |
-| `assets/scripts/pve/core/BossEquipTraitEffects.ts` | 装备词条对 Boss 专属效果 |
-
-**推荐入口**：`CombatSystem.ts` → 找 `playerAttack()` → 内部调用 `resolveHit()`。
-
-> ⚠️ **`CombatSystem.ts` 不是单一职责文件**。`resolveHit()` 除了计算伤害，还内联了：
-> - 全部 4 个 Boss 的**狂暴 HP 阈值检测**（GoblinChief / QuicksandScorpion / FrostGiant / FateGuardian 各一段 if 分支）
-> - 章节专属怪物变体的**被击中副作用**（LAVA_CRAB 硬甲减伤、VOID_WORM 双生复活、FIRE_ELEMENTAL 死亡爆炸、FATE_MIRROR 护盾吸收）
-> - 击杀后的 LootSystem / AnimaSystem / RelicSystem 级联调用
->
-> **后果**：Boss 行为 Bug 不仅要看 `bosses/` 目录，**还必须看 `CombatSystem.ts`**。
+| 功能 | 当前入口 |
+| --- | --- |
+| UI 资源缓存 / critical native 清单 | `assets/scripts/ui/UiAssets.ts` |
+| 章节背景 / 分包加载 | `assets/scripts/pve/ChapterResourceLoader.ts` |
+| 构建后微信分包 patch | `scripts/patch-wechatgame-config.js` |
 
 ---
 
-### 02 怪物系统
+## 常见问题从哪里查
 
-**职责**：怪物 AI 状态机（IDLE/PATROL/CHASE/FLEE）、回合驱动、追击路径、玩家阵亡检测；各章节怪物变体定义。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/MonsterAI.ts` | **入口** — `stepMonsters(state)` 驱动所有怪物一回合 |
-| `assets/scripts/pve/core/ChapterMonsterRules.ts` | `CHAPTER_MONSTER_RULES` — 各章各层怪物配比表 |
-| `assets/scripts/pve/core/Chapter1Monsters.ts` | 哥布林战士/弓箭手/火焰/冰霜哥布林、灵鼠 |
-| `assets/scripts/pve/core/Chapter2Monsters.ts` | 沙漠劫匪、沙虫幼虫、毒蝎、灵甲虫 |
-| `assets/scripts/pve/core/Chapter3Monsters.ts` | 雪狼、冰晶史莱姆、冰霜精灵 |
-| `assets/scripts/pve/core/Chapter4Monsters.ts` | 熔岩士兵、熔岩螃蟹、火元素 |
-| `assets/scripts/pve/core/Chapter5Monsters.ts` | 暗影刺客、命运守卫小怪、虚空虫 |
-| `assets/scripts/pve/core/ChapterAnimaMonsters.ts` | 通用灵气怪（各章共用） |
-| `assets/scripts/pve/core/AnimaDeathEffects.ts` | 灵气怪击杀后的环境效果 |
-
-**推荐入口**：`MonsterAI.ts` → `stepMonsters()` → 找对应 AI 状态分支。  
-修改某章怪物：直接看 `Chapter{N}Monsters.ts` 对应工厂函数。
+| 问题 | 先看 |
+| --- | --- |
+| 进远征不是选中楼层 / 继续错楼层 | `PveLobbyController.ts` → `GameSession.pendingPveFloor` → `PersistentFloorFlow.bootstrap()` |
+| 战场移动/攻击/交互表现异常 | `ExpeditionController.ts` → `_apply()` / `_playFxFor()` / `FogMapView.ts` |
+| 传送门、出口、钥匙、祭坛交互异常 | `FloorRules.ts` / `NeutralEntities.ts` / `PersistentExpeditionRuntime.ts` |
+| 怪物图标不显示、红方块、资源加载失败 | `FogMapView.ts` 的 artMap + `UiAssets.ts` + `ChapterResourceLoader.ts` |
+| 营地命痕/装备配置没保存 | `CampController.ts` / `PveProgressionService.ts` / `PveProgression.js` |
+| GM 重置后仍有残留 | `cloudfunctions/common/admin/AdminToolService.js` + `PveProfile.js` / `PveChallenge.js` |
+| 云函数改动未生效 | 只改 `cloudfunctions/common/**` 后运行 `node scripts/sync-cloud-common.js`，再部署对应云函数 |
 
 ---
 
-### 03 Boss 系统
-
-**职责**：五章 Boss 的独立 AI 步进、阶段切换、特殊机制（AOE/地形/传送/镜像）、掉落表。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/bosses/GoblinChief.ts` | 第1章（第5层）— 重击 AOE + 增援号角 + 狂暴 |
-| `assets/scripts/pve/core/bosses/QuicksandScorpion.ts` | 第2章（第10层）— 潜地突袭 + 流沙扩张 + 沙暴 |
-| `assets/scripts/pve/core/bosses/FrostGiant.ts` | 第3章（第15层）— 冰面铺设 + 冻结循环 + 冲锋 |
-| `assets/scripts/pve/core/bosses/LavaLord.ts` | 第4章（第20层）— 灼烧 + 喷发 + 潮汐 + 锁链（两阶段）|
-| `assets/scripts/pve/core/bosses/FateGuardian.ts` | **第5章（第25层）** — 命运预言 + 行为镜像 + 狂暴改写命运（三段）|
-| `assets/scripts/pve/core/bosses/BossSpoils.ts` | `BOSS_SPOILS` 掉落表 + `rollBossSpoil()` |
-
-**推荐入口**：找对应章节 Boss 文件，入口函数均以 `step{BossName}()` 或 `{bossName}Attack()` 命名。  
-遗物/掉落问题 → `BossSpoils.ts`。
-
-> ⚠️ **Boss 狂暴检测的职责分裂**：HP 阈值是否跌破的检测发生在 `CombatSystem.resolveHit()`（每次玩家攻击命中时），Boss 文件里的 `tryCross*Threshold()` 只负责**阈值被触发后**下一怪物回合的状态变更。排查"Boss 为什么没有进入狂暴"应同时看两处。
-
----
-
-### 04 词条/强化系统
-
-**职责**：灵气积累触发 3 选 1 强化；词条效果实现（49 条）；职业被动词条。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/AnimaSystem.ts` | **写入入口** — `addAnima()` / `applyStrengthen()` / `traitCount()`；内含所有职业强化词条 id 常量池 |
-| `assets/scripts/pve/core/StrengthenEffects.ts` | 强化词条的实际效果函数（吸血/狂暴/反击/护甲等） |
-| `assets/scripts/pve/core/PveConstants.ts` | `ANIMA_PER_STRENGTHEN=100` / 阈值倍增 / 强化池定义 |
-
-**词条 ID 完整生命周期**（查词条 Bug 必须按此顺序追踪）：
-1. **定义**：`AnimaSystem.ts` 的 `BERSERKER_STRENGTHEN_POOL` / `ARCHER_STRENGTHEN_POOL` / `ROGUE_STRENGTHEN_POOL` 常量数组
-2. **写入**：`AnimaSystem.applyStrengthen()` → `player.classTraits.push(traitId)`
-3. **触发**：`CombatSystem.ts` 里直接调用 `StrengthenEffects` 的对应函数（`hasCleave()` / `lowHpAttackMultiplier()` 等）
-4. **查询**：`AnimaSystem.traitCount(player, traitId)` 判断词条是否激活
-
-> ⚠️ **词条不在 `AnimaSystem` 里生效，在 `CombatSystem` 里生效**。"吸血词条为什么没触发"要去 `CombatSystem.ts`，不是 `AnimaSystem.ts`。
-
-> ⚠️ **`player.classTraits[]` 混合存储两类词条**：职业进阶词条（`ClassSystem.applyClassAdvance` 写入）和灵气强化词条（`AnimaSystem.applyStrengthen` 写入）都进同一个数组，`CombatSystem` 查询时无区分。导航里"职业系统"和"词条/强化系统"是两套写入路径，但底层存储和触发查询是同一处。
-
----
-
-### 05 装备系统
-
-**职责**：装备生成（品质/词条随机）、装卸、词条被动触发、铁匠强化/重铸。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/EquipmentSystem.ts` | **入口** — `rollEquipment()` / `equipItem()` / `unequipItem()` |
-| `assets/scripts/pve/core/EquipTraitEffects.ts` | 装备词条被动效果（战斗中触发） |
-| `assets/scripts/pve/core/BossEquipTraitEffects.ts` | 装备词条对 Boss 专属修正 |
-| `assets/scripts/pve/core/EquipHelper.ts` | 装备操作工具函数 |
-| `assets/scripts/pve/core/NeutralEntities.ts` | `upgradeEquip()` / `rerollEquipTrait()` — 铁匠强化/重铸 |
-| `assets/scripts/pve/core/PveConstants.ts` | 装备品质权重、词条池 |
-
-**推荐入口**：`EquipmentSystem.ts` → `rollEquipment()` 看生成逻辑；战斗词条触发看 `EquipTraitEffects.ts`。
-
----
-
-### 06 职业系统
-
-**职责**：职业碎片积累、一阶进阶、二阶觉醒、职业被动加成。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/ClassSystem.ts` | **入口** — `pickFragment()` / `applyClassAdvance()` / `applyClassAwaken()` / `getAwakenEligible()` |
-| `assets/scripts/pve/core/PveConstants.ts` | `CLASS_FRAGMENTS_TO_ADVANCE=5` / 觉醒条件 / 职业被动定义 |
-| `assets/scripts/pve/core/PveTypes.ts` | `ClassId` 联合类型 / `ClassTraits` |
-
-**推荐入口**：`ClassSystem.ts` → `applyClassAdvance()` 看进阶逻辑，`getAwakenEligible()` 看觉醒条件。
-
----
-
-### 07 命运树系统
-
-**职责**：元进度成长树（5列3节点）；解锁条件校验；效果快照注入远征；树重置。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/DestinyTreeSystem.ts` | **客户端逻辑入口** — `canUnlockNode()` / `unlockNode()` / `getTreeBonuses()` / `buildPendingTreeChoices()` |
-| `assets/scripts/pve/controllers/DestinyTreeController.ts` | **UI 编排** — 拉取元进度 → 渲染 → 解锁请求 → 云端校验 |
-| `assets/scripts/pve/views/DestinyTreeView.ts` | **渲染层** — 5行3列布局、三态着色 |
-| `assets/scripts/pve/core/PveConstants.ts` | `DESTINY_TREE_NODES` 各节点解锁成本 |
-| `cloudfunctions/common/pve/PveMeta.js` | **云端权威** — `unlockTreeNode()` / `resetTreeNodes()` |
-
-**推荐入口**：客户端逻辑 → `DestinyTreeSystem.ts`；解锁失败/云端校验 → `PveMeta.js`。
-
----
-
-### 08 地图生成系统
-
-**职责**：确定性楼层布局（同 seed 同结果 AC-13）；怪物/实体位置随机放置；地图尺寸按章节变化。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/MapGenerator.ts` | **入口** — `generateFloor(floor, seed)` |
-| `assets/scripts/pve/core/rng.ts` | `createRng(seed)` / Mulberry32 / `.state()` 快照 |
-| `assets/scripts/pve/core/ChapterMonsterRules.ts` | 配比表（MapGenerator 消费） |
-| `assets/scripts/pve/core/PveConstants.ts` | `MAP_SIZE.NORMAL=8` / `MAP_SIZE.HIGH=9` / `MAP_SIZE.BOSS=10` |
-
-**推荐入口**：`MapGenerator.ts` → `generateFloor()` → 找 `createRng(seed)` 调用点。
-
----
-
-### 09 迷雾系统
-
-**职责**：战争迷雾初始化；玩家移动后按曼哈顿距离揭示周边格子；视野范围控制。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/FogSystem.ts` | **入口** — `createFogGrid()` / `revealAround()` / `isRevealed()` |
-| `assets/scripts/pve/core/MovementSystem.ts` | `applyMove()` 调用 `revealAround()` |
-| `assets/scripts/pve/views/FogMapView.ts` | 渲染层 — 8×8/9×9/10×10 网格池化渲染 |
-
-**推荐入口**：`FogSystem.ts`；视野 Bug 排查同时看 `MovementSystem.ts` → `applyMove()`。
-
----
-
-### 10 非战斗交互系统
-
-**职责**：神像/温泉/祭坛/铁匠的交互效果；营地商店购买/出售；遗物开箱。（**不包含**楼层通关，通关见 §10b）
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/NeutralEntities.ts` | **非战斗实体** — `useIdol()` / `useHotSpring()` / `useAltar()` / `upgradeEquip()` / `rerollEquipTrait()` |
-| `assets/scripts/pve/core/CampSystem.ts` | **营地商店** — `applyShopBuy()` / `applySellEquip()` / `openRelicChest()` |
-| `assets/scripts/pve/core/RelicSystem.ts` | **遗物系统** — `RELIC_DEFS` / `pickupRelic()` / `relicOnNewFloor()` / `relicTryRevive()` |
-| `assets/scripts/pve/core/ScrollSystem.ts` | **卷轴系统** — `useScroll()` / `claimScrollChoice()` |
-
-**推荐入口**：铁匠/神像/温泉/祭坛 → `NeutralEntities.ts`；商店 → `CampSystem.ts`；遗物被动 → `RelicSystem.ts`。
-
----
-
-### 10b 楼层通关系统
-
-**职责**：钥匙拾取、出口门开启、Boss 层传送门生成与踏入、楼层完成事件。（与 §10 非战斗交互分离，前者是"交互实体效果"，此处是"通关流程"）
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/FloorRules.ts` | **入口** — `pickKey()` / `openExit()` / `spawnPortal()` / `interactPortal()` |
-
-**推荐入口**：通关流程 Bug（拿到钥匙后无法出门、传送门不出现）→ `FloorRules.ts`。
-
----
-
-### 11 存档系统
-
-**职责**：远征生命周期（开始/存档/结算）；状态序列化/反序列化；断线续档。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/ExpeditionState.ts` | **客户端编排入口** — `startExpedition()` / `endTurn()` / `advanceFloor()` / `applyDeath()` / `serialize()` / `resumeExpedition()` |
-| `assets/scripts/network/PveService.ts` | **网络入口** — `startRun()` / `loadPveSave()` / `savePveFloor()` / `settlePveRun()` |
-| `cloudfunctions/common/pve/PveSave.js` | **云端权威** — `startRun()` / `saveFloorProgress()` / `settleExpedition()` |
-| `assets/scripts/pve/controllers/ExpeditionController.ts` | 触发存档的时机（每层通关后自动调用） |
-
-**推荐入口**：客户端序列化 → `ExpeditionState.ts`；存档失败/结算异常 → `PveSave.js`（云函数）。
-
----
-
-### 12 PVE UI 系统
-
-**职责**：地图渲染、HUD、角色面板、消息栏、Toast 提示、强化弹窗。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/views/FogMapView.ts` | **地图渲染** — 格子/实体/怪物/玩家图标；节点池化 diff 刷新 |
-| `assets/scripts/pve/views/PveHudView.ts` | **HUD** — 楼层/回合/AP/HP/金币/灵气/钥匙；方向键+功能按钮 |
-| `assets/scripts/pve/views/PveCharacterPanel.ts` | **角色面板弹窗** — 职业/HP/攻击/装备/词条/碎片/成就/图鉴 |
-| `assets/scripts/pve/views/PveMessageLog.ts` | **战报消息栏** — 按事件类型上色，可滚动 |
-| `assets/scripts/pve/views/PveToastView.ts` | **Toast + 强化 3 选 1 弹窗** |
-| `assets/scripts/pve/views/DestinyTreeView.ts` | **命运树 UI** — 5行3列节点、三态着色 |
-| `assets/scripts/pve/views/pveUiKit.ts` | 按钮/标签工厂工具函数 |
-
-**推荐入口**：HUD 刷新 Bug → `PveHudView.ts` → `refresh(state)`；强化弹窗 → `PveToastView.ts`。
-
----
-
-### 13 事件系统（PVE）
-
-**职责**：core 纯函数返回 `events[]` 数组，Controller 顺序回放，驱动 View 更新和动画。事件是单向数据流的核心。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/pve/core/PveTypes.ts` | **协议定义** — 所有 `PveEvent` 联合类型（50+ 类型：MOVE/ATTACK/KILL/LOOT 等）；纯类型声明，无运行时逻辑 |
-| `assets/scripts/pve/controllers/ExpeditionController.ts` | **运行时消费入口** — `_replayEvents(events)`；这是事件流的实际执行中枢 |
-| `assets/scripts/pve/views/PveMessageLog.ts` | 消费 events 显示战报 |
-| `assets/scripts/pve/views/PveToastView.ts` | 消费 LOOT/STRENGTHEN events 显示 Toast |
-
-**推荐入口**：
-- 排查"某事件触发后 UI 没反应" → `ExpeditionController._replayEvents()` 找对应 case
-- 新增事件类型 → 先在 `PveTypes.ts` 加联合类型 → 在 core 函数里 push → 在 `_replayEvents()` 里加 case
-- `PveTypes.ts` 是协议文件，不含任何事件触发或消费逻辑
-
----
-
-## PVP 模块
-
-### 14 棋盘对战系统
-
-**职责**：联机棋盘对战（云端权威）；棋子移动、战斗结算、事件/商店/营地结算；机器人 AI。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/game/board/BoardController.ts` | **客户端主控** — 接收云端状态 → 驱动 View |
-| `assets/scripts/game/board/BoardView.ts` | 棋盘渲染 |
-| `assets/scripts/game/board/BoardSceneBootstrap.ts` | 场景启动入口 |
-| `assets/scripts/game/board/HudController.ts` | 棋盘 HUD（HP/金币/回合） |
-| `assets/scripts/game/board/BoardCombatUi.ts` | 战斗结算 UI |
-| `assets/scripts/game/board/BoardSidePanel.ts` | 侧边面板 |
-| `cloudfunctions/common/GameEngine.js` | **云端权威逻辑入口** — 回合推进、权威状态机 |
-| `cloudfunctions/common/CombatResolver.js` | 战斗结算（云端） |
-| `cloudfunctions/common/CellResolver.js` | 格子事件解析（云端） |
-| `cloudfunctions/common/ShopResolver.js` | 商店结算（云端） |
-| `cloudfunctions/common/EventResolver.js` | 事件结算（云端） |
-| `cloudfunctions/common/BoardGenerator.js` | 棋盘布局生成 |
-| `cloudfunctions/common/BotPlayer.js` | 机器人 AI |
-| `cloudfunctions/common/constants.js` | PVP 数值常量 |
-
-**推荐入口**：客户端渲染 Bug → `BoardController.ts` / `BoardView.ts`；规则 Bug → `GameEngine.js` → 对应 Resolver。
-
----
-
-## 公共基础层
-
-### 15 应用启动
-
-**职责**：微信云初始化 → 登录 → 资源预加载 → 跳转大厅；全局 Session 管理。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/core/GameApp.ts` | **启动入口** — `onLoad()` 里的完整启动序列 |
-| `assets/scripts/core/GameSession.ts` | 当前登录用户信息（uid / openid / 昵称）|
-| `assets/scripts/core/SceneLoader.ts` | 场景切换（封装 `director.loadScene`）|
-| `assets/scripts/core/EventBus.ts` | 框架级全局事件派发（非 PVE 事件数组）|
-| `assets/scripts/core/Constants.ts` | 全局常量（`PERF_TRACE_ENABLED` 等）|
-| `assets/scripts/lobby/LobbyController.ts` | 大厅主控 — 房间列表 / 创建加入 / PVE 入口 |
-
-**推荐入口**：启动流程 → `GameApp.ts`；场景跳转 → `SceneLoader.ts`；大厅功能 → `LobbyController.ts`。
-
----
-
-### 16 网络层
-
-**职责**：封装微信云函数调用；对外暴露业务 API（PVE / PVP / 大厅 / 匹配）。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/network/CloudService.ts` | **底层封装** — `callFunction(name, data)` 统一错误处理 |
-| `assets/scripts/network/PveService.ts` | **PVE 业务 API** — startRun / loadSave / saveFloor / settle / loadMeta / unlockTreeNode |
-| `assets/scripts/network/GameService.ts` | **PVP 业务 API** — 回合提交、状态拉取 |
-| `assets/scripts/network/LobbyService.ts` | **大厅 API** — 创建/加入/离开房间 |
-| `assets/scripts/network/GameStateMirror.ts` | 客户端状态镜像（PVP 云端状态同步缓存）|
-| `assets/scripts/network/GameWatcher.ts` | 云数据库实时监听（PVP 推送更新）|
-
-**推荐入口**：PVE 网络问题 → `PveService.ts`；PVP 同步问题 → `GameWatcher.ts` / `GameStateMirror.ts`。
-
----
-
-### 17 UI 公共组件
-
-**职责**：通用 UI 组件（加载遮罩、选项列表、精灵资产管理）。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/ui/UiAssets.ts` | **资源管理** — critical native 清单；图标/按钮资源懒加载 |
-| `assets/scripts/ui/LoadingOverlay.ts` | 加载遮罩 |
-| `assets/scripts/ui/OptionListUi.ts` | 通用选项列表弹窗 |
-| `assets/scripts/ui/SceneUiBackground.ts` | 场景背景组件 |
-| `assets/scripts/ui/UiSprite.ts` | Sprite 工具组件 |
-
-**推荐入口**：图标加载失败 → `UiAssets.ts`（真机分包问题优先看此文件）。
-
----
-
-### 18 音频系统
-
-**职责**：背景音乐播放/停止；微信原生音频适配。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/audio/BgmController.ts` | **入口** — `playMainBgm()` / `stopMainBgm()` / `getBgmController()` |
-| `assets/scripts/platform/wechat/WxAudio.ts` | 微信原生音频 API 封装 |
-
-**推荐入口**：BGM 播放异常 → `BgmController.ts` → `WxAudio.ts`。
-
----
-
-### 19 微信平台适配
-
-**职责**：微信登录/授权、横竖屏、分享、房间码输入、云初始化。
-
-| 文件 | 说明 |
-|------|------|
-| `assets/scripts/platform/wechat/WxCloudInit.ts` | 云开发初始化（`wx.cloud.init`）|
-| `assets/scripts/platform/wechat/WxAuth.ts` | 微信登录授权 |
-| `assets/scripts/platform/wechat/WxLifecycle.ts` | 小游戏生命周期（前后台切换）|
-| `assets/scripts/platform/wechat/WxShare.ts` | 分享 API |
-| `assets/scripts/platform/wechat/WxLandscape.ts` | 横屏适配 |
-| `assets/scripts/platform/wechat/ViewAdapt.ts` | 视口自适应 |
-| `assets/scripts/platform/wechat/WxRoomCodeInput.ts` | 房间码输入组件 |
-| `assets/scripts/platform/wechat/WxGameNameInput.ts` | 游戏昵称输入组件 |
-
-**推荐入口**：登录问题 → `WxAuth.ts`；横屏/视口 Bug → `WxLandscape.ts` / `ViewAdapt.ts`。
-
----
-
-## 云函数层
-
-### 20 PVE 云函数
-
-**职责**：存档读写、结算防作弊、元进度（命运树/成就/图鉴）、卷轴发放。
-
-| 文件 | 说明 |
-|------|------|
-| `cloudfunctions/pve/index.js` | **Action 路由入口**（loadSave/startRun/saveFloor/settleRun/loadMeta/updateMeta/unlockTreeNode/resetTreeNodes）|
-| `cloudfunctions/common/pve/PveSave.js` | 存档 CRUD + 结算（奖励按已通关层数独立计算，不信任客户端）|
-| `cloudfunctions/common/pve/PveMeta.js` | 元进度读写（成就/图鉴/命运碎片/树节点）|
-| `cloudfunctions/common/pve/PveValidate.js` | 防作弊校验 |
-| `cloudfunctions/common/pve/PveReward.js` | 按章节完成度计算钻石/碎片奖励 |
-| `cloudfunctions/common/pve/PveDestinyTree.js` | 命运树解锁权威校验 |
-
-> ⚠️ **只改 `cloudfunctions/common/pve/`，改完跑 `node scripts/sync-cloud-common.js`**，其余 6 个目录是自动同步副本。
-
----
-
-### 21 PVP 云函数
-
-**职责**：PVP 回合权威、房间管理、匹配、登录、定时调度。
-
-| 文件 | 说明 |
-|------|------|
-| `cloudfunctions/common/GameEngine.js` | PVP 核心引擎 |
-| `cloudfunctions/common/CombatResolver.js` | 战斗结算 |
-| `cloudfunctions/common/CellResolver.js` | 格子事件解析 |
-| `cloudfunctions/common/ShopResolver.js` | 商店结算 |
-| `cloudfunctions/common/EventResolver.js` | 事件结算 |
-| `cloudfunctions/common/BoardGenerator.js` | 棋盘生成 |
-| `cloudfunctions/common/Settlement.js` | 终局结算 |
-| `cloudfunctions/common/BotPlayer.js` | 机器人 AI |
-| `cloudfunctions/game/index.js` | PVP 云函数主入口 |
-| `cloudfunctions/room/index.js` | 房间管理 |
-| `cloudfunctions/match/index.js` | 匹配服务 |
-| `cloudfunctions/login/index.js` | 登录云函数 |
-
-> ⚠️ 同上，只改 `cloudfunctions/common/`。
-
----
-
-## 已知问题与命名混乱
-
-### 职责模糊点
-
-1. **`ExpeditionState.ts` vs `ExpeditionController.ts`**  
-   `ExpeditionState.ts`（core 层）负责状态序列化和生命周期编排；`ExpeditionController.ts`（controller 层）负责输入处理和网络调用。两者职责划分清晰，但名字相近，容易混淆。  
-   **记忆法**：State = 纯函数/序列化；Controller = Cocos Component/网络。
-
-2. **`ExpeditionState.ts` 已泄露 Boss 专属知识**  
-   虽然是 core 层编排文件，但它直接 import 了：
-   - `FateGuardian.recordPlayerActionForMirror`（命运守卫镜像记录）
-   - `BossEquipTraitEffects.isPlayerBurnImmune` / `tickMonsterDots`（DoT tick）
-   
-   这意味着 `endTurn()` 的实际执行路径比本文档描述的更复杂。排查 endTurn 相关 Bug 时，除了 `ExpeditionState.ts` 本身，还需检查这两处引用文件。
-
-3. **`PveEvent`（PveTypes.ts）vs `EventBus`（core/EventBus.ts）**  
-   `PveEvent` 是 core 层的事件数据对象（plain object 数组，表示一次操作产生的副作用序列）；`EventBus` 是框架级的观察者模式发布订阅。两者完全独立，不要混用。
-
-4. **`cloudfunctions/common/constants.js` vs `assets/scripts/pve/core/PveConstants.ts`**  
-   前者是 PVP 数值常量（云端）；后者是 PVE 数值常量（客户端）。同名不同内容。
-
-5. **`EquipTraitEffects.ts` vs `BossEquipTraitEffects.ts` vs `StrengthenEffects.ts`**  
-   三个"效果"文件：装备词条效果 / Boss 专属装备词条效果 / 灵气强化词条效果。功能分工清晰但文件数量多，查询时注意区分触发来源（装备 vs 强化）。
-
-6. **`RelicSystem.ts` 中的遗物 vs `ScrollSystem.ts` 中的卷轴**  
-   遗物（Relic）= Boss 掉落的持久被动道具；卷轴（Scroll）= 账户级消耗品。概念相近但机制完全不同。
-
-7. **Boss ID 字符串一致性问题**  
-   `FATE_MIRROR_BOSS_ID` 有在 `PveConstants.ts` 定义为常量，但 `'GOBLIN_CHIEF'`、`'FROST_GIANT'` 等在 `CombatSystem.ts` / `MonsterAI.ts` 里是裸字符串比较。全局搜索某个 Boss ID 时会命中多处，且无法从常量定义处反向查找所有引用。
-
-8. **`noop` 函数在三处各自定义**  
-   `CombatSystem.ts`、`NeutralEntities.ts`、`FloorRules.ts` 各有一个 `function noop(state) { return { state, events: [] }; }`，完全相同。搜索 `noop` 会命中三处，均非从公共模块导入。
-
-### 缺少单一入口的系统
-
-- **成就/图鉴**：`AchievementSystem.ts`（检测逻辑）+ `PveCharacterPanel.ts`（UI 展示）+ `PveMeta.js`（云端持久化）三处分散，没有单一入口控制器。
-- **AP 系统**：`ApSystem.ts` 负责骰子逻辑，但 AP 消耗分散在 `MovementSystem.ts` / `CombatSystem.ts` 中，需同时看多文件。
-- **词条触发链**：词条定义在 `AnimaSystem.ts`，写入在 `ClassSystem` / `AnimaSystem`，触发在 `CombatSystem.ts`，三个不同文件，没有聚合入口。
+## 文档权威顺序
+
+1. 当前 PVE 目标态：`specs/260712-pve-persistent-floor-progression/design.md`
+2. 当前 PVE 总设计入口：`specs/260608-pve-destiny-expedition/design.md`
+3. 代码导航：本文件
+4. 调用链：`CALL_FLOW.md`
+
+## 2026-07-17 当前系统边界
+
+- 正式 PVE 内容仅开放全局第 1–35 层；客户端入口为 `chapterRouting.ts`，云端校验入口为 `cloudfunctions/common/pve/PveChallengeValidate.js`。
+- 职业入口为战士、射手、游侠三套机制、熟练度和灵气爆发。
+- 装备只引用 85 件固定目录；命痕是唯一被动构筑系统。
+- 排行榜只读取 `users.pveProfile.highestClearedFloor`，同层按 `highestClearedAt` 先到先得。
+- 广告只保留通用平台层与未接线的 `restore_stamina` 协议；当前没有广告 UI 或体力发放路由。

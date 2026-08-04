@@ -123,8 +123,7 @@ function applyMirageBuff(state: ExpeditionState, buffId: string): ExpeditionStat
     case 'GOLD_PLUS_60':
       return { ...state, player: { ...player, gold: player.gold + 60 } };
     case 'ATTACK_UP':
-      // 立即附加一层 strengthen_attack_up（自然受 STRENGTHEN_META.stack=5 约束，超过则继续 push 也只在 playerAttackPower 起作用）
-      return { ...state, player: { ...player, classTraits: [...player.classTraits, 'strengthen_attack_up'] } };
+      return { ...state, player: { ...player, idolAttackBonus: (player.idolAttackBonus ?? 0) + 3 } };
     default:
       return state;
   }

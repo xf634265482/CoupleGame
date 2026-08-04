@@ -1,9 +1,22 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const source = path.join(root, 'config', 'wechatgame.game.json');
 const buildRoot = path.join(root, 'build');
+const buildFlavorPath = path.join(root, 'config', 'build-flavor.json');
+
+function readBuildFlavor() {
+  if (!fs.existsSync(buildFlavorPath)) return 'full';
+  try {
+    return JSON.parse(fs.readFileSync(buildFlavorPath, 'utf8')).flavor || 'full';
+  } catch {
+    return 'full';
+  }
+}
+
+const BUILD_FLAVOR = readBuildFlavor();
+const IS_PVE_ONLY = BUILD_FLAVOR === 'pve-only';
 
 function findGameJsonDirs(dir, results = []) {
   if (!fs.existsSync(dir)) return results;
@@ -42,7 +55,7 @@ function resolveBuildDir(hint) {
     );
     console.warn(`[patch-wechatgame-config] using: ${chosen}`);
     console.warn(
-      '[patch-wechatgame-config] fix Creator: 发布路径=project://build, 输出名称=wechatgame',
+      '[patch-wechatgame-config] fix Creator: 鍙戝竷璺緞=project://build, 杈撳嚭鍚嶇О=wechatgame',
     );
   }
   return chosen;
@@ -65,7 +78,198 @@ function dirSizeKb(dir, skipSymlinks = false) {
   return Math.round(dirSizeBytes(dir, skipSymlinks) / 1024);
 }
 
-/** 微信编译要求每个分包根目录有 game.js；内容须与 index.js 一致（不能 require，分包上下文无法解析） */
+function findStrayResourceSidecars() {
+  const assetsRoot = path.join(root, 'assets', 'resources');
+  if (!fs.existsSync(assetsRoot)) return [];
+  const hits = [];
+  const visit = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+        continue;
+      }
+      if (!/\.(pngbak|tmp)$/i.test(entry.name) && !/\.mp3\.bak$/i.test(entry.name)) {
+        continue;
+      }
+      hits.push(path.relative(root, full).replace(/\\/g, '/'));
+    }
+  };
+  visit(assetsRoot);
+  return hits;
+}
+
+function assertNoStrayResourceSidecars() {
+  const hits = findStrayResourceSidecars();
+  if (!hits.length) return;
+  const preview = hits.slice(0, 12).join(', ');
+  throw new Error(
+    `[patch-wechatgame-config] found backup/tmp assets under assets/resources: ${preview}${hits.length > 12 ? ' ...' : ''}. ` +
+      'Move them outside assets/ before rebuilding, otherwise Cocos will import them and inflate the WeChat package.',
+  );
+}
+
+function findBuildImportedSidecars(buildDir) {
+  const importRoots = [
+    path.join(buildDir, 'assets', 'resources', 'import'),
+    path.join(buildDir, 'subpackages', 'resources', 'import'),
+  ];
+  const hits = [];
+  for (const importRoot of importRoots) {
+    if (!fs.existsSync(importRoot)) continue;
+    for (const name of fs.readdirSync(importRoot, { recursive: true })) {
+      if (typeof name !== 'string' || !name.endsWith('.json')) continue;
+      const full = path.join(importRoot, name);
+      const text = fs.readFileSync(full, 'utf8');
+      if (!text.includes('.pngbak') && !text.includes('.tmp') && !text.includes('.mp3.bak')) {
+        continue;
+      }
+      hits.push(path.relative(buildDir, full).replace(/\\/g, '/'));
+    }
+  }
+  return hits;
+}
+
+function assertBuildHasNoImportedSidecars(buildDir) {
+  const hits = findBuildImportedSidecars(buildDir);
+  if (!hits.length) return;
+  const preview = hits.slice(0, 12).join(', ');
+  throw new Error(
+    `[patch-wechatgame-config] build still contains imported backup/tmp assets: ${preview}${hits.length > 12 ? ' ...' : ''}. ` +
+      'Rebuild wechatgame in Cocos Creator after cleaning assets/resources sidecars, then rerun this patch.',
+  );
+}
+
+/**
+ * 宸叉惉鍒?subpackages/ 鐨?chapter_* 璧勬簮鍒嗗寘锛圥VE 绔犺妭鑳屾櫙锛岃 assets/scripts/pve/ChapterResourceLoader.ts锛夈€?
+ * 涓?resources 鍒嗗寘涓嶅悓锛屽畠浠?*涓?*濂楃敤 resources 涓撳睘鐨?native鈫掍富鍖呴噸鍐欙紙閭ｄ簺瑙勫垯 key 鍦ㄥ瓧绗︿覆 'resources' 涓婏級锛?
+ * 鍥犳 bundle.load 鐩存帴璇诲悇鑷垎鍖?native鈥斺€旇繖姝ｆ槸鐪熸満鑳屾櫙鑳芥樉绀虹殑鍏抽敭銆?
+ */
+function chapterSubpackageNames(buildDir) {
+  const subRoot = path.join(buildDir, 'subpackages');
+  if (!fs.existsSync(subRoot)) return [];
+  const names = [];
+  for (const entry of fs.readdirSync(subRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (!/^chapter_\d+$/.test(entry.name)) continue;
+    names.push(entry.name);
+  }
+  names.sort();
+  return names;
+}
+
+const EQUIPMENT_SUBPACKAGE_NAMES = ['equipment_tier1', 'equipment_tier2', 'equipment_tier3'];
+
+function equipmentSubpackageNames(buildDir) {
+  const subRoot = path.join(buildDir, 'subpackages');
+  if (!fs.existsSync(subRoot)) return [];
+  return EQUIPMENT_SUBPACKAGE_NAMES.filter((name) => fs.existsSync(path.join(subRoot, name)));
+}
+
+function runtimeSubpackageNames(buildDir) {
+  return [...new Set([...chapterSubpackageNames(buildDir), ...equipmentSubpackageNames(buildDir)])].sort();
+}
+
+function writePlainSubpackageEntries(subRoot) {
+  const body = "'use strict';\n";
+  fs.writeFileSync(path.join(subRoot, 'index.js'), body, 'utf8');
+  fs.writeFileSync(path.join(subRoot, 'game.js'), body, 'utf8');
+}
+
+function copyEquipmentSubpackages(buildDir) {
+  const srcRoot = path.join(root, 'build_artifacts', 'pve-equipment-icons');
+  if (!fs.existsSync(srcRoot)) {
+    console.warn('[patch-wechatgame-config] missing build_artifacts/pve-equipment-icons, skip equipment subpackages');
+    return [];
+  }
+
+  const copied = [];
+  fs.mkdirSync(path.join(buildDir, 'subpackages'), { recursive: true });
+  for (const name of EQUIPMENT_SUBPACKAGE_NAMES) {
+    const src = path.join(srcRoot, name);
+    if (!fs.existsSync(src)) {
+      throw new Error(`[patch-wechatgame-config] missing equipment subpackage source: ${src}`);
+    }
+    const dest = path.join(buildDir, 'subpackages', name);
+    if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(src, dest, { recursive: true });
+    writePlainSubpackageEntries(dest);
+    copied.push(name);
+    console.log(`[patch-wechatgame-config] copied equipment subpackage -> subpackages/${name}`);
+  }
+  return copied;
+}
+
+function copySpecialIconArtifacts(buildDir) {
+  const srcRoot = path.join(root, 'build_artifacts', 'pve-special-icons');
+  if (!fs.existsSync(srcRoot)) {
+    console.warn('[patch-wechatgame-config] missing build_artifacts/pve-special-icons, skip boss icons');
+    return [];
+  }
+
+  const mainSpecialIconRoot = path.join(buildDir, 'pve_special_icons');
+  if (fs.existsSync(mainSpecialIconRoot)) {
+    fs.rmSync(mainSpecialIconRoot, { recursive: true, force: true });
+    console.log('[patch-wechatgame-config] removed main pve_special_icons copy');
+  }
+
+  const copied = [];
+  const mainSrc = path.join(srcRoot, 'chapter_1');
+  if (fs.existsSync(mainSrc)) {
+    const mainDest = path.join(buildDir, 'subpackages', 'equipment_tier1', 'pve_special_icons', 'chapter_1');
+    if (fs.existsSync(mainDest)) fs.rmSync(mainDest, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(mainDest), { recursive: true });
+    fs.cpSync(mainSrc, mainDest, { recursive: true });
+    copied.push('chapter_1');
+    console.log('[patch-wechatgame-config] copied special icons -> subpackages/equipment_tier1/pve_special_icons/chapter_1');
+  }
+
+  for (const chapter of [2, 3, 4, 5]) {
+    const src = path.join(srcRoot, `chapter_${chapter}`);
+    if (!fs.existsSync(src)) continue;
+    const dest = path.join(buildDir, 'subpackages', `chapter_${chapter}`, 'pve_special_icons');
+    if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(src, dest, { recursive: true });
+    copied.push(`chapter_${chapter}`);
+    console.log(`[patch-wechatgame-config] copied special icons -> subpackages/chapter_${chapter}/pve_special_icons`);
+  }
+
+  return copied;
+}
+
+/**
+ * Cocos 鎶婃墍鏈?bundle锛堝惈閰嶆垚 subpackage 鐨勶級閮借緭鍑哄埌 build/assets/<name>/锛?
+ * 涓?resources 涓€鏍凤紝椤荤敱鏈剼鏈妸 assets/chapter_* 鎼埌 subpackages/chapter_*锛?
+ * 鍚﹀垯绔犺妭鑳屾櫙鐣欏湪涓诲寘銆佹拺鐖?4MB 涓斾笉鎴愬叾涓哄垎鍖呫€傛惉瀹岃ˉ game.js stub銆?
+ */
+function relocateChapterSubpackagesToSub(buildDir) {
+  const assetsRoot = path.join(buildDir, 'assets');
+  if (!fs.existsSync(assetsRoot)) return [];
+  const moved = [];
+  for (const entry of fs.readdirSync(assetsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^chapter_\d+$/.test(entry.name)) continue;
+    const from = path.join(assetsRoot, entry.name);
+    const to = path.join(buildDir, 'subpackages', entry.name);
+    fs.mkdirSync(path.join(buildDir, 'subpackages'), { recursive: true });
+    if (fs.existsSync(to)) fs.rmSync(to, { recursive: true, force: true });
+    fs.renameSync(from, to);
+    if (fs.existsSync(path.join(to, 'index.js'))) {
+      writeSubpackageGameJs(to);
+    }
+    moved.push(entry.name);
+    console.log(`[patch-wechatgame-config] moved assets/${entry.name} -> subpackages/${entry.name}`);
+  }
+  const all = chapterSubpackageNames(buildDir);
+  if (all.length) {
+    console.log('[patch-wechatgame-config] chapter subpackages found:', all.join(', '));
+  } else {
+    console.log('[patch-wechatgame-config] no chapter_* bundle in build (check 妫€鏌ュ櫒 鍘嬬缉绫诲瀷=鍒嗗寘 + 閲嶆柊鏋勫缓)');
+  }
+  return all;
+}
+
+/** 寰俊缂栬瘧瑕佹眰姣忎釜鍒嗗寘鏍圭洰褰曟湁 game.js锛涘唴瀹归』涓?index.js 涓€鑷达紙涓嶈兘 require锛屽垎鍖呬笂涓嬫枃鏃犳硶瑙ｆ瀽锛?*/
 function writeSubpackageGameJs(subRoot) {
   const indexPath = path.join(subRoot, 'index.js');
   const entry = path.join(subRoot, 'game.js');
@@ -89,7 +293,7 @@ function isPathSymlink(p) {
   }
 }
 
-/** 主包 stub：入口脚本 + config（真机无法 fs.access 分包内 config，须放主包） */
+/** 涓诲寘 stub锛氬叆鍙ｈ剼鏈?+ config锛堢湡鏈烘棤娉?fs.access 鍒嗗寘鍐?config锛岄』鏀句富鍖咃級 */
 const RESOURCES_STUB_FILES = new Set(['index.js', 'game.js', 'config.json']);
 const LEGACY_RESOURCES_STUB_FILES = new Set(['index.js', 'game.js', 'config.json']);
 
@@ -100,7 +304,7 @@ function isResourcesStubDir(dir) {
   return entries.every((name) => LEGACY_RESOURCES_STUB_FILES.has(name));
 }
 
-/** 分包须含 import 目录（仅有 config/index 说明曾被 stub 误覆盖，需重新构建） */
+/** 鍒嗗寘椤诲惈 import 鐩綍锛堜粎鏈?config/index 璇存槑鏇捐 stub 璇鐩栵紝闇€閲嶆柊鏋勫缓锛?*/
 function countSubpackageNativeFiles(buildDir) {
   const nativeDir = path.join(buildDir, 'subpackages', 'resources', 'native');
   if (!fs.existsSync(nativeDir)) return 0;
@@ -115,7 +319,7 @@ function verifyResourcesSubpackageContent(buildDir) {
   const importDir = path.join(buildDir, 'subpackages', 'resources', 'import');
   if (!fs.existsSync(importDir)) {
     throw new Error(
-      '[patch-wechatgame-config] subpackages/resources/import missing — stub overwrote subpackage. Rebuild wechatgame in Cocos, then run patch again.',
+      '[patch-wechatgame-config] subpackages/resources/import missing 鈥?stub overwrote subpackage. Rebuild wechatgame in Cocos, then run patch again.',
     );
   }
   const hasJson = fs.readdirSync(importDir, { recursive: true }).some((name) => {
@@ -124,13 +328,13 @@ function verifyResourcesSubpackageContent(buildDir) {
   });
   if (!hasJson) {
     throw new Error(
-      '[patch-wechatgame-config] subpackages/resources/import is empty — rebuild wechatgame in Cocos Creator first.',
+      '[patch-wechatgame-config] subpackages/resources/import is empty 鈥?rebuild wechatgame in Cocos Creator first.',
     );
   }
   const nativeCount = countSubpackageNativeFiles(buildDir);
   if (nativeCount < 1) {
     throw new Error(
-      '[patch-wechatgame-config] subpackages/resources/native has no textures — rebuild wechatgame in Cocos Creator first.',
+      '[patch-wechatgame-config] subpackages/resources/native has no textures 鈥?rebuild wechatgame in Cocos Creator first.',
     );
   }
   console.log(
@@ -138,7 +342,7 @@ function verifyResourcesSubpackageContent(buildDir) {
   );
 }
 
-/** Creator 未输出分包时，把 resources 挪到 subpackages/ 并改配置 */
+/** Creator 鏈緭鍑哄垎鍖呮椂锛屾妸 resources 鎸埌 subpackages/ 骞舵敼閰嶇疆 */
 function ensureResourcesSubpackage(buildDir) {
   const inMain = path.join(buildDir, 'assets', 'resources');
   const inSub = path.join(buildDir, 'subpackages', 'resources');
@@ -149,7 +353,7 @@ function ensureResourcesSubpackage(buildDir) {
     fs.rmSync(inMain, { force: true });
     console.log('[patch-wechatgame-config] removed stale assets/resources junction');
   } else if (hasValidSubpackage) {
-    // 已经 patch 过的构建目录会同时存在主包 stub 与真实分包；不要把 stub 再移动覆盖分包。
+    // 宸茬粡 patch 杩囩殑鏋勫缓鐩綍浼氬悓鏃跺瓨鍦ㄤ富鍖?stub 涓庣湡瀹炲垎鍖咃紱涓嶈鎶?stub 鍐嶇Щ鍔ㄨ鐩栧垎鍖呫€?
     console.log('[patch-wechatgame-config] resources subpackage already present');
   } else if (fs.existsSync(inMain) && !isResourcesStubDir(inMain)) {
     fs.mkdirSync(path.join(buildDir, 'subpackages'), { recursive: true });
@@ -172,8 +376,10 @@ function ensureResourcesSubpackage(buildDir) {
     settings.assets = settings.assets || {};
     const subs = new Set(settings.assets.subpackages || []);
     subs.add('resources');
+    // 娉ㄥ唽 chapter_* 绔犺妭鍒嗗寘锛圕ocos 涓€鑸凡鍔犲叆锛岃繖閲屽厹搴曠‘淇濅笉琚紡鎺夛級銆?
+    for (const name of runtimeSubpackageNames(buildDir)) subs.add(name);
     settings.assets.subpackages = [...subs];
-    // 真机启动勿预加载 resources：须先 wx.loadSubpackage，否则 readFile config.json 失败卡 splash
+    // 鐪熸満鍚姩鍕块鍔犺浇 resources锛氶』鍏?wx.loadSubpackage锛屽惁鍒?readFile config.json 澶辫触鍗?splash
     settings.assets.preloadBundles = [{ bundle: 'main' }];
     patchRenderingSettings(settings, buildDir);
     patchSplashSettings(settings);
@@ -195,7 +401,7 @@ function ensureResourcesSubpackage(buildDir) {
   return true;
 }
 
-/** 关闭引擎内置 splash，避免与 first-screen.js 双重销毁（Error 5000） */
+/** 鍏抽棴寮曟搸鍐呯疆 splash锛岄伩鍏嶄笌 first-screen.js 鍙岄噸閿€姣侊紙Error 5000锛?*/
 function patchSplashSettings(settings) {
   settings.splashScreen = settings.splashScreen || {};
   settings.splashScreen.totalTime = 0;
@@ -207,8 +413,8 @@ function patchSplashSettings(settings) {
   };
 }
 
-/** 保留 Creator 生成的渲染管线配置；关闭 customPipeline 会导致 pipelineSceneData 为空
- *  （2026-06-11 误关此项导致模拟器 batcher2D 报 `switchBufferAccessor of null`，已回滚） */
+/** 淇濈暀 Creator 鐢熸垚鐨勬覆鏌撶绾块厤缃紱鍏抽棴 customPipeline 浼氬鑷?pipelineSceneData 涓虹┖
+ *  锛?026-06-11 璇叧姝ら」瀵艰嚧妯℃嫙鍣?batcher2D 鎶?`switchBufferAccessor of null`锛屽凡鍥炴粴锛?*/
 function patchRenderingSettings(settings, buildDir) {
   settings.rendering = settings.rendering || {};
   const effectBin = path.join(buildDir, 'src', 'effect.bin');
@@ -221,7 +427,7 @@ function patchRenderingSettings(settings, buildDir) {
   }
 }
 
-/** 移除 assets/resources 联接（微信会把联接目标算进主包，导致 4MB 超限） */
+/** 绉婚櫎 assets/resources 鑱旀帴锛堝井淇′細鎶婅仈鎺ョ洰鏍囩畻杩涗富鍖咃紝瀵艰嚧 4MB 瓒呴檺锛?*/
 function removeResourcesCompatLink(buildDir) {
   const stub = path.join(buildDir, 'assets', 'resources');
   if (!fs.existsSync(stub)) return;
@@ -236,8 +442,8 @@ function removeResourcesCompatLink(buildDir) {
 }
 
 /**
- * 微信 IDE 预编译需要 assets/resources/game.js 与 index.js。
- * 主包再放 config.json（~6KB）与 import/（~15KB）；critical native 由 copyCriticalNativeToMain 写入。
+ * 寰俊 IDE 棰勭紪璇戦渶瑕?assets/resources/game.js 涓?index.js銆?
+ * 涓诲寘鍐嶆斁 config.json锛垀6KB锛変笌 import/锛垀15KB锛夛紱critical native 鐢?copyCriticalNativeToMain 鍐欏叆銆?
  */
 function ensureResourcesEntryScripts(buildDir) {
   const subRoot = path.join(buildDir, 'subpackages', 'resources');
@@ -271,7 +477,7 @@ function ensureResourcesEntryScripts(buildDir) {
   copyResourcesImportToMain(buildDir);
 }
 
-/** 真机分包内 import 索引常读失败；复制到主包（约 15KB）并由 transform 重定向 URL */
+/** 鐪熸満鍒嗗寘鍐?import 绱㈠紩甯歌澶辫触锛涘鍒跺埌涓诲寘锛堢害 15KB锛夊苟鐢?transform 閲嶅畾鍚?URL */
 function copyResourcesImportToMain(buildDir) {
   const src = path.join(buildDir, 'subpackages', 'resources', 'import');
   const dst = path.join(buildDir, 'assets', 'resources', 'import');
@@ -289,13 +495,69 @@ function copyResourcesImportToMain(buildDir) {
   console.log('[patch-wechatgame-config] copied import -> assets/resources/import', jsonCount, 'json');
 }
 
-/** 运行时 override，确保 assetManager.init 能注册 resources 分包映射 */
+/**
+ * 涓诲寘璇诲彇 config/import锛岃祫婧愬垎鍖呬繚鐣欏悓涓€浠藉厹搴曘€?
+ * 涓よ竟浠讳竴浠介厤缃垨鍚堝苟鍖呬笉涓€鑷达紝鐪熸満浼氬嚭鐜扳€滄棫 config 璇锋眰宸蹭笉瀛樺湪 pack鈥濈殑榛戝睆銆?
+ */
+function verifyResourcesPackConsistency(buildDir) {
+  const mainConfigPath = path.join(buildDir, 'assets', 'resources', 'config.json');
+  const subConfigPath = path.join(buildDir, 'subpackages', 'resources', 'config.json');
+  if (!fs.existsSync(mainConfigPath) || !fs.existsSync(subConfigPath)) {
+    throw new Error('[patch-wechatgame-config] resources config missing before pack verification');
+  }
+
+  const mainConfigBytes = fs.readFileSync(mainConfigPath);
+  const subConfigBytes = fs.readFileSync(subConfigPath);
+  if (!mainConfigBytes.equals(subConfigBytes)) {
+    throw new Error(
+      '[patch-wechatgame-config] assets/subpackages resources config mismatch; rebuild Cocos and patch again',
+    );
+  }
+
+  let config;
+  try {
+    config = JSON.parse(mainConfigBytes.toString('utf8'));
+  } catch (err) {
+    throw new Error(
+      `[patch-wechatgame-config] invalid resources config: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  const packIds = Object.keys(config.packs || {});
+  for (const packId of packIds) {
+    const rel = path.join(packId.slice(0, 2), `${packId}.json`);
+    const mainPack = path.join(buildDir, 'assets', 'resources', 'import', rel);
+    const subPack = path.join(buildDir, 'subpackages', 'resources', 'import', rel);
+    if (!fs.existsSync(mainPack) || !fs.existsSync(subPack)) {
+      throw new Error(
+        `[patch-wechatgame-config] resources pack ${packId} missing; rebuild Cocos and patch again`,
+      );
+    }
+    if (!fs.readFileSync(mainPack).equals(fs.readFileSync(subPack))) {
+      throw new Error(
+        `[patch-wechatgame-config] resources pack ${packId} differs between main and subpackage`,
+      );
+    }
+  }
+
+  console.log(
+    `[patch-wechatgame-config] resources config/packs consistent (${packIds.length} packs)`,
+  );
+}
+
+/** 杩愯鏃?override锛岀‘淇?assetManager.init 鑳芥敞鍐?resources 鍒嗗寘鏄犲皠 */
 function patchApplicationOverride(buildDir) {
   const appPath = path.join(buildDir, 'application.js');
   if (!fs.existsSync(appPath)) return;
 
   let src = fs.readFileSync(appPath, 'utf8');
   let changed = false;
+  // 绔犺妭鍒嗗寘蹇呴』涓€骞跺嚭鐜板湪 override 鐨?subpackages 鍒楄〃閲岋紝鍚﹀垯杩愯鏃?override 浼氳鐩?
+  // settings.json 鍙繚鐣?['resources']锛屽鑷?wx.loadSubpackage('chapter_N') 鏈敞鍐岃€屽け璐ャ€?
+  const extraSubpackageNames = runtimeSubpackageNames(buildDir);
+  const subsLiteral = ['resources', ...extraSubpackageNames].map((n) => `'${n}'`).join(', ');
   const beforeStrip = src;
   src = src.replace(
     /\n\s*rendering:\s*\{\s*\n\s*customPipeline:\s*false,\s*\n\s*renderPipeline:\s*'',\s*\n\s*\},/g,
@@ -306,7 +568,7 @@ function patchApplicationOverride(buildDir) {
   }
 
   const assetsBlock =
-    "assets: {\n                  subpackages: ['resources'],\n                  preloadBundles: [{ bundle: 'main' }],\n                },";
+    `assets: {\n                  subpackages: [${subsLiteral}],\n                  preloadBundles: [{ bundle: 'main' }],\n                },`;
   const splashBlock =
     "splashScreen: {\n                  totalTime: 0,\n                  displayRatio: 0,\n                  logo: { type: 'none' },\n                },";
   const screenBlock =
@@ -351,13 +613,29 @@ function patchApplicationOverride(buildDir) {
     changed = true;
   }
 
+  // 骞傜瓑鏀跺彛锛氭棤璁?assetsBlock 鏄惁鏈鏂版彃鍏ワ紝纭繚 override 鐨?subpackages 鏁扮粍涓庡叏閮?chapter 鍒嗗寘涓€鑷淬€?
+  if (extraSubpackageNames.length) {
+    const desired = `subpackages: [${subsLiteral}]`;
+    const updated = src.replace(
+      /subpackages:\s*\[[^\]]*\](?=\s*,\s*\n\s*preloadBundles:\s*\[\{ bundle: 'main' \}\])/,
+      desired,
+    );
+    if (updated !== src) {
+      src = updated;
+      changed = true;
+    }
+  }
+
   if (changed) {
     fs.writeFileSync(appPath, src, 'utf8');
-    console.log('[patch-wechatgame-config] application.js overrideSettings patched');
+    console.log(
+      '[patch-wechatgame-config] application.js overrideSettings patched, subpackages:',
+      `[${subsLiteral}]`,
+    );
   }
 }
 
-/** 避免 Canvas 销毁时 director.root 未就绪导致 removeScreen 崩溃 */
+/** 閬垮厤 Canvas 閿€姣佹椂 director.root 鏈氨缁鑷?removeScreen 宕╂簝 */
 function patchEngineCanvasGuard(buildDir) {
   const ccPath = path.join(buildDir, 'cocos-js', 'cc.js');
   if (!fs.existsSync(ccPath)) return;
@@ -378,7 +656,7 @@ function patchEngineCanvasGuard(buildDir) {
   }
 }
 
-/** 强制 resources 走微信分包路径，避免真机按 assets/resources/import 读取 */
+/** 寮哄埗 resources 璧板井淇″垎鍖呰矾寰勶紝閬垮厤鐪熸満鎸?assets/resources/import 璇诲彇 */
 function patchEngineResourcesSubpackage(buildDir) {
   const adapterPath = path.join(buildDir, 'engine-adapter.js');
   if (!fs.existsSync(adapterPath)) return;
@@ -398,27 +676,36 @@ function patchEngineResourcesSubpackage(buildDir) {
 }
 
 /**
- * 真机 loadSubpackage 后往往无法 readFile 分包根下 config.json；
- * bundle 配置改从主包 assets/resources/config.json 读取，资源仍走 subpackages/resources/。
+ * 鐪熸満 loadSubpackage 鍚庡線寰€鏃犳硶 readFile 鍒嗗寘鏍逛笅 config.json锛?
+ * resources 鐨?bundle 閰嶇疆鏀逛粠涓诲寘 assets/resources/config.json 璇诲彇锛岃祫婧愪粛璧?subpackages/resources/銆?
+ * 鈿狅笍 鍙兘瀵?resources 鐢熸晥锛氬師浠ｇ爜鏄€屾墍鏈夊垎鍖呫€嶉€氱敤鐨?config 璺緞鏋勯€犲櫒锛?
+ * 鑻ユ棤鏉′欢鍐欐鎴?resources锛屼細璁?chapter_* 绛夊叾瀹冨垎鍖呬篃鍘昏 resources 鐨?config 鑰屽姞杞藉け璐ャ€?
  */
 function patchEngineResourcesConfigInMain(buildDir) {
   const adapterPath = path.join(buildDir, 'engine-adapter.js');
   if (!fs.existsSync(adapterPath)) return;
 
   let src = fs.readFileSync(adapterPath, 'utf8');
-  if (src.includes('[CoupleGame] resources-config-main')) return;
 
   const subConfigPath =
     'n=(y.platform===y.Platform.TAOBAO_MINI_GAME?"":"subpackages/").concat(o,"/config.").concat(a,"json"),h(o,t.onFileProgress';
-  const mainConfigPath =
+  // 鏃х増锛坆ug锛夛細鏃犳潯浠跺啓姝?resources锛屼細璁?chapter_* 涔熷幓璇?resources config銆?
+  const legacyHardcoded =
     'n="assets/resources/config.".concat(a,"json"),h(o,t.onFileProgress';
+  // 鏂扮増锛歳esources 鈫?涓诲寘 config锛堢湡鏈哄凡楠岃瘉锛夛紱鍏跺畠鍒嗗寘 鈫?缁存寔鍘熴€宻ubpackages/<o>/config銆嶉€昏緫銆?
+  const mainConfigPath =
+    'n=(o==="resources"?"assets/resources/config.".concat(a,"json"):(y.platform===y.Platform.TAOBAO_MINI_GAME?"":"subpackages/").concat(o,"/config.").concat(a,"json")),h(o,t.onFileProgress';
 
-  if (!src.includes(subConfigPath)) {
+  if (src.includes(mainConfigPath)) return; // 宸叉槸鏂扮増
+  if (src.includes(legacyHardcoded)) {
+    // 淇宸?patch 杩囩殑鏃ф瀯寤猴紙鏃犻渶閲嶅缓鍗冲彲绾犳 chapter_* 璇婚敊 config 鐨?bug锛夈€?
+    src = src.replace(legacyHardcoded, mainConfigPath);
+  } else if (src.includes(subConfigPath)) {
+    src = src.replace(subConfigPath, mainConfigPath);
+  } else {
     console.warn('[patch-wechatgame-config] engine-adapter config path pattern not found');
     return;
   }
-
-  src = src.replace(subConfigPath, mainConfigPath);
   fs.writeFileSync(
     adapterPath,
     src.startsWith('/* [CoupleGame] resources-config-main */')
@@ -430,8 +717,8 @@ function patchEngineResourcesConfigInMain(buildDir) {
 }
 
 /**
- * 真机 wx.access 对 subpackages/ 下路径常误报不存在，导致 bundle 内 import/native 加载失败。
- * 对 subpackages/ 跳过 exists 预检，交给 readFile/download 处理。
+ * 鐪熸満 wx.access 瀵?subpackages/ 涓嬭矾寰勫父璇姤涓嶅瓨鍦紝瀵艰嚧 bundle 鍐?import/native 鍔犺浇澶辫触銆?
+ * 瀵?subpackages/ 璺宠繃 exists 棰勬锛屼氦缁?readFile/download 澶勭悊銆?
  */
 function patchEngineSubpackageFileExists(buildDir) {
   const adapterPath = path.join(buildDir, 'engine-adapter.js');
@@ -500,7 +787,7 @@ function patchWebAdapterSubpackageExists(buildDir) {
   console.log('[patch-wechatgame-config] web-adapter subpackage exists bypass patched');
 }
 
-/** 将 import 请求从分包路径改到主包 assets/resources/import（真机可读） */
+/** 灏?import 璇锋眰浠庡垎鍖呰矾寰勬敼鍒颁富鍖?assets/resources/import锛堢湡鏈哄彲璇伙級 */
 function patchEngineTransformImportRewrite(buildDir) {
   const adapterPath = path.join(buildDir, 'engine-adapter.js');
   if (!fs.existsSync(adapterPath)) return;
@@ -511,7 +798,7 @@ function patchEngineTransformImportRewrite(buildDir) {
   const nativeRewrite =
     ',o.url&&0<=o.url.indexOf("subpackages/resources/native/")&&("/"!==o.url.charAt(0))&&(o.url="/".concat(o.url))';
 
-  // 真机历史回归：native 加 / 前缀会触发 Error 4930，须移除
+  // 鐪熸満鍘嗗彶鍥炲綊锛歯ative 鍔?/ 鍓嶇紑浼氳Е鍙?Error 4930锛岄』绉婚櫎
   if (src.includes(nativeRewrite)) {
     src = src.replaceAll(nativeRewrite, '');
   }
@@ -542,7 +829,7 @@ function patchEngineTransformImportRewrite(buildDir) {
   console.log('[patch-wechatgame-config] engine-adapter import URL -> assets/resources/import');
 }
 
-/** 真机 Error 4930：引擎加载分包 native 失败，改读主包 copyCriticalNativeToMain 写入的路径 */
+/** 鐪熸満 Error 4930锛氬紩鎿庡姞杞藉垎鍖?native 澶辫触锛屾敼璇讳富鍖?copyCriticalNativeToMain 鍐欏叆鐨勮矾寰?*/
 function patchEngineTransformNativeRewrite(buildDir) {
   const adapterPath = path.join(buildDir, 'engine-adapter.js');
   if (!fs.existsSync(adapterPath)) return;
@@ -557,7 +844,7 @@ function patchEngineTransformNativeRewrite(buildDir) {
   const importRewrite =
     'o.url&&0<=o.url.indexOf("subpackages/resources/import/")&&(o.url=o.url.replace("subpackages/resources/import/","assets/resources/import/"))';
   if (!src.includes(importRewrite)) {
-    console.warn('[patch-wechatgame-config] engine-adapter native rewrite skipped — import rewrite missing');
+    console.warn('[patch-wechatgame-config] engine-adapter native rewrite skipped 鈥?import rewrite missing');
     return;
   }
 
@@ -572,7 +859,7 @@ function patchEngineTransformNativeRewrite(buildDir) {
   console.log('[patch-wechatgame-config] engine-adapter native URL -> assets/resources/native');
 }
 
-/** 修正编译后 UiAssets：勿 loadBundle("subpackages/resources")，须用 bundle 名 resources */
+/** 淇缂栬瘧鍚?UiAssets锛氬嬁 loadBundle("subpackages/resources")锛岄』鐢?bundle 鍚?resources */
 function patchCompiledUiAssets(buildDir) {
   const mainIndex = path.join(buildDir, 'assets', 'main', 'index.js');
   if (!fs.existsSync(mainIndex)) return;
@@ -621,7 +908,7 @@ function patchCompiledUiAssets(buildDir) {
   }
 
   if (!changed) {
-    // 兼容新版构建产物：可能已不存在旧锚点，但内容已是正确形态。
+    // 鍏煎鏂扮増鏋勫缓浜х墿锛氬彲鑳藉凡涓嶅瓨鍦ㄦ棫閿氱偣锛屼絾鍐呭宸叉槸姝ｇ‘褰㈡€併€?
     const hasWrongBundle = src.includes('loadBundle("subpackages/resources"') || src.includes("loadBundle('subpackages/resources'");
     const hasWrongConfig = src.includes('subpackages/resources/config.json');
     const hasCorrectBundle = src.includes('loadBundle("resources"') || src.includes("loadBundle('resources'");
@@ -648,26 +935,116 @@ function patchCompiledUiAssets(buildDir) {
 }
 
 /**
- * 主包 native 清单：从 UiAssets.ts 的 UI_SPRITE_UUID 自动生成。
- * 真机 HTMLImageElement / bundle.load 读分包 native 会 Error 4930，须复制到主包。
- * 排除大背景（留分包）、结算页；icons 须进主包（说明弹窗/HUD 角标，分包 copyFile 真机常失败且极慢）。
- * 含 icons 后主包须 <4096KB：跑 compress-ui-large-assets.py（含 BGM 压缩）后再 patch。
+ * 涓诲寘 native 娓呭崟锛氫粠 UiAssets.ts 鐨?UI_SPRITE_UUID 鑷姩鐢熸垚銆?
+ * 鐪熸満 HTMLImageElement / bundle.load 璇诲垎鍖?native 浼?Error 4930锛岄』澶嶅埗鍒颁富鍖呫€?
+ * 鎺掗櫎澶ц儗鏅紙鍚?PVE 绔犺妭/钀ュ湴/鍛借繍鏍戯紝鐣欏垎鍖咃級銆佺粨绠楅〉锛?
+ * icons 涓?PVE 棣栧睆鍦板浘/HUD 椤昏繘涓诲寘锛堝垎鍖?copyFile 鐪熸満甯稿け璐ヤ笖鏋佹參锛夈€?
+ * 鍚?icons 鍚庝富鍖呴』 <4096KB锛氳窇 compress-ui-large-assets.py锛堝惈 BGM 鍘嬬缉锛夊悗鍐?patch銆?
  */
 const MAIN_NATIVE_EXCLUDE_KEYS = new Set([
   'backgrounds/bg_settlement',
+  'pve/map/tile_floor_ch1',
+  'pve/map/tile_floor_ch1L',
 ]);
 const MAIN_NATIVE_EXCLUDE_PREFIXES = ['settlement/'];
+/**
+ * PVE FogMapView uses these Chapter 1 sprites during battle startup.
+ * Keep only the real, current runtime assets in main native; stale HUD art is not listed here.
+ */
+const PVE_MAP_CRITICAL_KEYS = new Set([
+  'pve/map/tile_fog',
+  'pve/map/icon_player_berserker',
+  'pve/map/icon_player_archer',
+  'pve/map/icon_player_rogue',
+  'pve/map/icon_monster_ch1_normal',
+  'pve/map/icon_monster_ch1_elite',
+  'pve/map/icon_monster_goblin_warrior',
+  'pve/map/icon_monster_goblin_archer',
+  'pve/map/icon_monster_ch1_goblin_sentinel',
+  'pve/map/icon_monster_frost_goblin',
+  'pve/map/icon_monster_fire_goblin',
+  'pve/map/icon_monster_goblin_chief',
+  'pve/map/icon_chest',
+  'pve/map/icon_key',
+  'pve/map/icon_exit',
+  'pve/map/icon_portal',
+  'pve/map/icon_gunpowder_barrel',
+  'pve/map/icon_blast_target',
+  'pve/map/icon_altar',
+  'pve/map/icon_idol',
+  'pve/map/icon_hot_spring',
+  'pve/map/icon_blacksmith',
+  'pve/map/terrain_rock',
+]);
+const PVE_NON_MAP_CRITICAL_PREFIXES = [
+  'pve/hud/',
+];
+const PVE_LOBBY_CRITICAL_KEYS = new Set([
+  'pve/lobby/logo_destiny_tower',
+  'pve/lobby/icon_chip_stardust',
+  'pve/lobby/icon_chip_stamina',
+  'pve/lobby/icon_nav_expedition',
+  'pve/lobby/icon_nav_camp',
+  'pve/lobby/icon_nav_leaderboard',
+]);
 const WECHAT_BGM_UUID = 'f1a2b3c4-5678-4901-a234-567890abcdef';
-/** 1×1 PNG，仅供 IDE 编译过 ENOENT；运行时 UiAssets 跳过主包路径读 excluded 资源 */
+/**
+ * SFX 涓诲寘鐧藉悕鍗曪紙AudioManager 鎺ュ叆鐨勬渶灏忛泦锛夛細涓?BGM 涓€鏍凤紝鍒嗗寘鍐?native 鐪熸満
+ * 璺緞浼氳 engine-adapter 閲嶅啓鍒?assets/resources/native/锛屽繀椤诲鍒跺埌涓诲寘銆?
+ * UUID 鏉ユ簮锛歛ssets/resources/audio/sfx/<cat>/<id>.mp3 鐨?.meta锛堟煡 Cocos 璧勬簮绠＄悊鍣級銆?
+ * 鏂板/鍒犻櫎 SFX 鏃跺悓姝ユ湰琛紝骞堕噸璺?npm run build:wechat銆?
+ */
+const WECHAT_SFX_NATIVES = [
+  { uuid: '85ca5d01-2cbb-4840-bb92-4f12488366e9', label: 'sfx/ui/sfx_ui_click' },
+  { uuid: '9677f90b-2918-4d56-a468-4663e697e971', label: 'sfx/ui/sfx_run_failed' },
+  { uuid: '41ed47b3-e63e-4662-b97e-eb4ea28d8f07', label: 'sfx/battle/sfx_attack_hit' },
+  { uuid: 'e2d73f5b-0efa-42ac-a896-7e39ea1ab389', label: 'sfx/battle/sfx_boss_appear' },
+  { uuid: '806d541a-108d-4e47-801c-bdd2b98b04f2', label: 'sfx/explore/sfx_player_move' },
+  { uuid: 'd3c51eca-4438-4efa-a127-840ea393414a', label: 'sfx/explore/sfx_reward_get' },
+  // 娉細sfx_damage_pop锛堟殏鏃犳枃浠讹紝璺緞澶嶇敤 attack_hit锛変笌 sfx_door_open锛堣矾寰勫鐢?reward_get锛?
+  // 鍦?AudioManager 閲岃鏄犲皠鍒扮幇鏈?mp3锛屾棤闇€鐙珛鍏ヤ富鍖呫€?
+];
+/** 1脳1 PNG锛屼粎渚?IDE 缂栬瘧杩?ENOENT锛涜繍琛屾椂 UiAssets 璺宠繃涓诲寘璺緞璇?excluded 璧勬簮 */
 const COMPILE_PLACEHOLDER_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
 );
 
+function isMainNativeExcluded(label) {
+  if (MAIN_NATIVE_EXCLUDE_KEYS.has(label)) return true;
+  if (MAIN_NATIVE_EXCLUDE_PREFIXES.some((p) => label.startsWith(p))) return true;
+  if (label === 'pve/backgrounds/bg_pve_ch1') return false;
+  if (label === 'pve/backgrounds/bg_pve_loading_expedition') return false;
+  if (/^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(label)) return true;
+  if (label.startsWith('pve/map/')) return !PVE_MAP_CRITICAL_KEYS.has(label);
+  if (label.startsWith('pve/lobby/')) return !PVE_LOBBY_CRITICAL_KEYS.has(label);
+  if (label.startsWith('pve/')) return !PVE_NON_MAP_CRITICAL_PREFIXES.some((p) => label.startsWith(p));
+  return false;
+}
+
+const PVE_ONLY_LOBBY_KEYS = new Set([
+  'backgrounds/bg_lobby',
+]);
+
+function isPackagedForCurrentFlavor(label) {
+  if (!IS_PVE_ONLY) return true;
+  return label.startsWith('pve/') || PVE_ONLY_LOBBY_KEYS.has(label);
+}
+
+function sourceAssetPathForLabel(label, ext) {
+  if (label === 'bgm_main') {
+    return path.join(root, 'assets', 'resources', 'audio', 'bgm_main.mp3');
+  }
+  if (ext === '.jpg') {
+    return path.join(root, 'assets', 'resources', 'art', 'ui', `${label}.jpg`);
+  }
+  return path.join(root, 'assets', 'resources', 'art', 'ui', `${label}.png`);
+}
+
 function buildCriticalNativeManifest() {
   const uiAssetsPath = path.join(root, 'assets', 'scripts', 'ui', 'UiAssets.ts');
   if (!fs.existsSync(uiAssetsPath)) {
-    console.warn('[patch-wechatgame-config] UiAssets.ts missing — using empty critical manifest');
+    console.warn('[patch-wechatgame-config] UiAssets.ts missing 鈥?using empty critical manifest');
     return [];
   }
   const src = fs.readFileSync(uiAssetsPath, 'utf8');
@@ -678,13 +1055,24 @@ function buildCriticalNativeManifest() {
   while ((match = re.exec(src))) {
     const label = match[1];
     const uuid = match[2];
-    if (MAIN_NATIVE_EXCLUDE_KEYS.has(label)) continue;
-    if (MAIN_NATIVE_EXCLUDE_PREFIXES.some((p) => label.startsWith(p))) continue;
+    if (!isPackagedForCurrentFlavor(label)) continue;
+    if (isMainNativeExcluded(label)) continue;
+    const ext =
+      label === 'pve/backgrounds/bg_pve_loading_expedition'
+      || /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(label)
+        ? '.jpg'
+        : '.png';
     if (seen.has(uuid)) continue;
+    if (!fs.existsSync(sourceAssetPathForLabel(label, ext))) continue;
     seen.add(uuid);
-    files.push({ uuid, ext: '.png', label });
+    files.push({ uuid, ext, label });
   }
   files.push({ uuid: WECHAT_BGM_UUID, ext: '.mp3', label: 'bgm_main' });
+  for (const sfx of WECHAT_SFX_NATIVES) {
+    if (seen.has(sfx.uuid)) continue;
+    seen.add(sfx.uuid);
+    files.push({ uuid: sfx.uuid, ext: '.mp3', label: sfx.label });
+  }
   return files;
 }
 
@@ -699,14 +1087,69 @@ function buildExcludedNativeManifest() {
   while ((match = re.exec(src))) {
     const label = match[1];
     const uuid = match[2];
-    const excluded =
-      MAIN_NATIVE_EXCLUDE_KEYS.has(label) ||
-      MAIN_NATIVE_EXCLUDE_PREFIXES.some((p) => label.startsWith(p));
+    if (!isPackagedForCurrentFlavor(label)) continue;
+    const excluded = isMainNativeExcluded(label);
     if (!excluded || seen.has(uuid)) continue;
+    const ext =
+      label === 'pve/backgrounds/bg_pve_loading_expedition'
+      || /^pve\/backgrounds\/bg_pve_ch[2-5]_runtime$/.test(label)
+        ? '.jpg'
+        : '.png';
+    if (!fs.existsSync(sourceAssetPathForLabel(label, ext))) continue;
     seen.add(uuid);
-    files.push({ uuid, ext: '.png', label });
+    files.push({ uuid, ext, label });
   }
   return files;
+}
+
+/**
+ * 绂佹鍙垹闄?resources/native 涓殑 PVP 鏂囦欢锛欳ocos 鐢熸垚鐨?config/import
+ * 浠嶄細寮曠敤瀹冧滑锛屼細瀵艰嚧鍚?bundle 鐨?PVE 鍥剧墖鍔犺浇琚繛缁?ENOENT 骞叉壈銆?
+ * 褰诲簳鍓ョ蹇呴』閫氳繃鐙珛 asset bundle 璁?Creator 閲嶅缓绱㈠紩銆?
+ */
+function purgePvpNativeForPveOnly(_buildDir) {
+  return { removed: 0, totalKb: 0 };
+}
+
+/** 鎭㈠鏇捐鏃х増 PVE-only patch 閿欏垹鐨?UI native 鏂囦欢銆?*/
+function restoreUiNativeToSubpackage(buildDir) {
+  const uiAssetsPath = path.join(root, 'assets', 'scripts', 'ui', 'UiAssets.ts');
+  const subNative = path.join(buildDir, 'subpackages', 'resources', 'native');
+  if (!fs.existsSync(uiAssetsPath) || !fs.existsSync(subNative)) {
+    return { restored: 0, totalKb: 0 };
+  }
+
+  const src = fs.readFileSync(uiAssetsPath, 'utf8');
+  const re = /'([^']+)': '([0-9a-f-]+)@f9941'/g;
+  let restored = 0;
+  let totalBytes = 0;
+  let match;
+  while ((match = re.exec(src))) {
+    const label = match[1];
+    const uuid = match[2];
+    const sourcePng = path.join(
+      root,
+      'assets',
+      'resources',
+      'art',
+      'ui',
+      `${label}.png`,
+    );
+    if (!fs.existsSync(sourcePng)) continue;
+    const dest = path.join(subNative, uuid.slice(0, 2), `${uuid}.png`);
+    if (fs.existsSync(dest)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(sourcePng, dest);
+    const size = fs.statSync(dest).size;
+    totalBytes += size;
+    restored += 1;
+  }
+  if (restored > 0) {
+    console.log(
+      `[patch-wechatgame-config] restored resources native ${restored} files, ${Math.round(totalBytes / 1024)} KB`,
+    );
+  }
+  return { restored, totalKb: Math.round(totalBytes / 1024) };
 }
 
 function purgeStrayNativeBackups(buildDir) {
@@ -730,7 +1173,7 @@ function purgeStrayNativeBackups(buildDir) {
   }
 }
 
-/** 压缩脚本更新源文件后，无需整包重建即可让 patch 复制更小体积（BGM、背景） */
+/** 鍘嬬缉鑴氭湰鏇存柊婧愭枃浠跺悗锛屾棤闇€鏁村寘閲嶅缓鍗冲彲璁?patch 澶嶅埗鏇村皬浣撶Н锛圔GM銆佽儗鏅級 */
 function syncCompressedSourceNative(buildDir) {
   const subNative = path.join(buildDir, 'subpackages', 'resources', 'native');
   if (!fs.existsSync(subNative)) return;
@@ -761,6 +1204,24 @@ function syncCompressedSourceNative(buildDir) {
       src: path.join(root, 'assets', 'resources', 'art', 'ui', 'backgrounds', 'bg_settlement.png'),
     },
     {
+      label: 'pve/backgrounds/bg_pve_ch1',
+      uuid: '41cfbfa8-79b3-4c15-8e9b-24539c23cd1d',
+      ext: '.png',
+      src: path.join(root, 'assets', 'resources', 'art', 'ui', 'pve', 'backgrounds', 'bg_pve_ch1.png'),
+    },
+    {
+      label: 'pve/map/tile_floor_ch1',
+      uuid: '2e6ec7ed-fa51-4278-ad56-f0ddb03dfbe6',
+      ext: '.png',
+      src: path.join(root, 'assets', 'resources', 'art', 'ui', 'pve', 'map', 'tile_floor_ch1.png'),
+    },
+    {
+      label: 'pve/map/tile_fog',
+      uuid: 'cb221eaf-62c2-42df-b751-2d6d521e1652',
+      ext: '.png',
+      src: path.join(root, 'assets', 'resources', 'art', 'ui', 'pve', 'map', 'tile_fog.png'),
+    },
+    {
       label: 'bgm_main',
       uuid: WECHAT_BGM_UUID,
       ext: '.mp3',
@@ -783,13 +1244,30 @@ function syncCompressedSourceNative(buildDir) {
       );
     }
   }
+
+  // 缇庢湳婧愬浘鍘嬬缉鍚庡厑璁哥洿鎺ラ噸璺?patch锛屾棤闇€浠呬负 PNG 浣撶Н鍙樺寲閲嶆柊鏋勫缓鏁翠釜 Cocos 鍖呫€?
+  // UI_SPRITE_UUID 鐨?key 涓?assets/resources/art/ui 涓嬬殑鐩稿璺緞淇濇寔涓€鑷淬€?
+  for (const item of buildCriticalNativeManifest()) {
+    const src = path.join(root, 'assets', 'resources', 'art', 'ui', `${item.label}${item.ext}`);
+    if (!fs.existsSync(src)) continue;
+    const prefix = item.uuid.slice(0, 2);
+    const dest = path.join(subNative, prefix, `${item.uuid}${item.ext}`);
+    if (!fs.existsSync(path.dirname(dest))) continue;
+    const before = fs.existsSync(dest) ? fs.statSync(dest).size : 0;
+    const sourceSize = fs.statSync(src).size;
+    if (before === sourceSize) continue;
+    fs.copyFileSync(src, dest);
+    console.log(
+      `[patch-wechatgame-config] synced critical source ${item.label} ${Math.round(before / 1024)} KB -> ${Math.round(sourceSize / 1024)} KB`,
+    );
+  }
 }
 
 function copyCriticalNativeToMain(buildDir) {
   const subNative = path.join(buildDir, 'subpackages', 'resources', 'native');
   const mainNative = path.join(buildDir, 'assets', 'resources', 'native');
   if (!fs.existsSync(subNative)) {
-    console.warn('[patch-wechatgame-config] copyCriticalNative skipped — subpackage native missing');
+    console.warn('[patch-wechatgame-config] copyCriticalNative skipped 鈥?subpackage native missing');
     return { copied: 0, totalKb: 0 };
   }
 
@@ -822,8 +1300,8 @@ function copyCriticalNativeToMain(buildDir) {
 }
 
 /**
- * 主包 config+import 引用 excluded native，IDE 编译须文件存在；写 1×1 占位 PNG（~70B），不计入主包体积。
- * packOptions.ignore 对上传体积无效，禁止复制完整大背景/结算图到主包。
+ * 涓诲寘 config+import 寮曠敤 excluded native锛孖DE 缂栬瘧椤绘枃浠跺瓨鍦紱鍐?1脳1 鍗犱綅 PNG锛垀70B锛夛紝涓嶈鍏ヤ富鍖呬綋绉€?
+ * packOptions.ignore 瀵逛笂浼犱綋绉棤鏁堬紝绂佹澶嶅埗瀹屾暣澶ц儗鏅?缁撶畻鍥惧埌涓诲寘銆?
  */
 function writeCompileNativePlaceholders(buildDir) {
   const mainNative = path.join(buildDir, 'assets', 'resources', 'native');
@@ -856,12 +1334,12 @@ function writeCompileNativePlaceholders(buildDir) {
   return { written, replacedKb: Math.round(replacedKb) };
 }
 
-/** 保留占位：不再把 assets/resources/native 重写到分包（与 copyCriticalNativeToMain 冲突） */
+/** 淇濈暀鍗犱綅锛氫笉鍐嶆妸 assets/resources/native 閲嶅啓鍒板垎鍖咃紙涓?copyCriticalNativeToMain 鍐茬獊锛?*/
 function patchCompiledCriticalNativePaths(_buildDir) {
   /* no-op */
 }
 
-/** 跳过 first-screen.js WebGL 启动页（与 Cocos 共用 canvas 会触发 Error 5000 循环） */
+/** 璺宠繃 first-screen.js WebGL 鍚姩椤碉紙涓?Cocos 鍏辩敤 canvas 浼氳Е鍙?Error 5000 寰幆锛?*/
 function patchGameBoot(buildDir) {
   const gamePath = path.join(buildDir, 'game.js');
   if (!fs.existsSync(gamePath)) return;
@@ -908,6 +1386,22 @@ function onApplicationCreated(application) {
   console.log('[patch-wechatgame-config] game.js skip first-screen boot');
 }
 
+function patchCompiledSpecialItemLoader(buildDir) {
+  const mainIndexPath = path.join(buildDir, 'assets', 'main', 'index.js');
+  if (!fs.existsSync(mainIndexPath)) return;
+
+  let src = fs.readFileSync(mainIndexPath, 'utf8');
+  const oldPathExpr = 'return e.chapter<=1?y+"/chapter_1/"+"icons/"+e.fileName:"subpackages/"+I(e.chapter)+"/"+y+"/"+"icons/"+e.fileName';
+  const newPathExpr = 'return e.chapter<=1?"subpackages/equipment_tier1/"+y+"/chapter_1/icons/"+e.fileName:"subpackages/"+I(e.chapter)+"/"+y+"/icons/"+e.fileName';
+  if (!src.includes(oldPathExpr) || src.includes(newPathExpr)) {
+    return;
+  }
+
+  src = src.replace(oldPathExpr, newPathExpr);
+  fs.writeFileSync(mainIndexPath, src, 'utf8');
+  console.log('[patch-wechatgame-config] patched compiled SpecialItemResourceLoader chapter_1 path');
+}
+
 function patchGameJson(buildDir) {
   const target = path.join(buildDir, 'game.json');
   if (!fs.existsSync(source)) {
@@ -950,11 +1444,22 @@ function patchGameJson(buildDir) {
     merged.subpackages = list;
   }
 
+  // PVE 绔犺妭鑳屾櫙鍒嗗寘 chapter_*锛圕ocos 宸茬敓鎴愮殑灏辨敞鍐屽埌 game.json锛屽箓绛夊幓閲嶏級銆?
+  const chapterNames = runtimeSubpackageNames(buildDir);
+  if (chapterNames.length) {
+    const existing = Array.isArray(merged.subpackages) ? merged.subpackages : [];
+    const filtered = existing.filter((s) => s && !chapterNames.includes(s.name));
+    for (const name of chapterNames) {
+      filtered.push({ name, root: `subpackages/${name}/` });
+    }
+    merged.subpackages = filtered;
+  }
+
   fs.writeFileSync(target, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
   return { target, merged, useEnginePlugin, hasSubResources };
 }
 
-/** 补全 build 内 project.config（缺 libVersion 时微信工具可能无响应） */
+/** 琛ュ叏 build 鍐?project.config锛堢己 libVersion 鏃跺井淇″伐鍏峰彲鑳芥棤鍝嶅簲锛?*/
 function syncProjectConfig(buildDir) {
   const target = path.join(buildDir, 'project.config.json');
   const rootCfgPath = path.join(root, 'project.config.json');
@@ -1032,6 +1537,7 @@ function verifyBuildDir(buildDir) {
     throw new Error('[patch-wechatgame-config] assets/resources/import missing after copy');
   }
 
+  verifyResourcesPackConsistency(buildDir);
   console.log('[patch-wechatgame-config] build structure OK');
   const nested = path.join(buildDir, 'wechatgame-001');
   if (fs.existsSync(nested)) {
@@ -1056,11 +1562,18 @@ function writePatchStamp(buildDir, info) {
 }
 
 function runPatch(buildDirHint) {
+  assertNoStrayResourceSidecars();
   const buildDir = resolveBuildDir(buildDirHint);
+  // 绔犺妭鍒嗗寘椤诲湪 resources 澶勭悊鍓嶆惉鍒?subpackages/锛岃鍚庣画 settings/game.json/override 娉ㄥ唽鏃惰兘鎵埌銆?
+  relocateChapterSubpackagesToSub(buildDir);
+  copyEquipmentSubpackages(buildDir);
+  copySpecialIconArtifacts(buildDir);
   const hadSub = ensureResourcesSubpackage(buildDir);
+  assertBuildHasNoImportedSidecars(buildDir);
   const { target, merged, useEnginePlugin, hasSubResources } = patchGameJson(buildDir);
   patchApplicationOverride(buildDir);
   patchGameBoot(buildDir);
+  patchCompiledSpecialItemLoader(buildDir);
   patchEngineCanvasGuard(buildDir);
   patchEngineResourcesSubpackage(buildDir);
   patchEngineResourcesConfigInMain(buildDir);
@@ -1078,6 +1591,8 @@ function runPatch(buildDirHint) {
   }
   syncCompressedSourceNative(buildDir);
   purgeStrayNativeBackups(buildDir);
+  const restoredNative = restoreUiNativeToSubpackage(buildDir);
+  const pvpNative = purgePvpNativeForPveOnly(buildDir);
   const criticalNative = copyCriticalNativeToMain(buildDir);
   writeCompileNativePlaceholders(buildDir);
   verifyBuildDir(buildDir);
@@ -1089,6 +1604,7 @@ function runPatch(buildDirHint) {
   const mainKb = assetsKb + rootKb;
 
   console.log(`[patch-wechatgame-config] build dir: ${buildDir}`);
+  console.log(`[patch-wechatgame-config] build flavor: ${BUILD_FLAVOR}`);
   console.log(`[patch-wechatgame-config] merged ${source} -> ${target}`);
   console.log(`[patch-wechatgame-config] useEnginePlugin=${useEnginePlugin}`);
   console.log(
@@ -1114,7 +1630,7 @@ function runPatch(buildDirHint) {
   }
   if (subKb > 0 && subKb < 100) {
     console.warn(
-      '[patch-wechatgame-config] WARNING: subpackages look too small — 真机可能缺 config.json，请确认已执行 Cocos 构建并重新 patch',
+      '[patch-wechatgame-config] WARNING: subpackages look too small 鈥?鐪熸満鍙兘缂?config.json锛岃纭宸叉墽琛?Cocos 鏋勫缓骞堕噸鏂?patch',
     );
   }
   if (merged.subpackages?.length) {
@@ -1131,6 +1647,11 @@ function runPatch(buildDirHint) {
     subpackages: merged.subpackages ?? [],
     criticalNativeCopied: criticalNative.copied,
     criticalNativeKb: criticalNative.totalKb,
+    buildFlavor: BUILD_FLAVOR,
+    pvpNativeRemoved: pvpNative.removed,
+    pvpNativeRemovedKb: pvpNative.totalKb,
+    nativeRestored: restoredNative.restored,
+    nativeRestoredKb: restoredNative.totalKb,
   });
 
   return { buildDir, merged, useEnginePlugin, hasSubResources, hadSub };
@@ -1154,10 +1675,13 @@ module.exports = {
   patchWebAdapterSubpackageExists,
   patchEngineTransformImportRewrite,
   copyResourcesImportToMain,
+  verifyResourcesPackConsistency,
   patchCompiledUiAssets,
   patchCompiledCriticalNativePaths,
   buildCriticalNativeManifest,
   copyCriticalNativeToMain,
+  purgePvpNativeForPveOnly,
+  restoreUiNativeToSubpackage,
   patchGameJson,
   runPatch,
 };

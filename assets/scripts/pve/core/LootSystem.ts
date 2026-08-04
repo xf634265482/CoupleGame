@@ -1,55 +1,115 @@
-// 掉落系统（design §6）：普通怪掉落 50% 金币 / 25% 灵气 / 25% 金币+灵气；宝箱开启获得同张表的掉落
-// （M1 简化：未单列宝箱专属掉落表，复用 NORMAL_MONSTER_DROP，详见 design.md AC-6）。
+﻿// 掉落系统（design §6）：普通怪掉落 50% 星尘 / 25% 灵气 / 25% 星尘+灵气；宝箱开启获得同张表掉落。
 //
-// rollNormalMonsterDrop 是纯随机掷取函数：调用方传入 rng，便于复用同一份楼层 RNG 续算（AC-13 确定性）。
-// openChest 是 ApplyResult 纯函数：金币直接入账；灵气经 AnimaSystem.addAnima 计入进度并可能连锁触发强化。
+// Boss 击杀三层结构（永久逐层 + 旧远征统一）：
+//   1. 通用必掉：星尘 + 灵气（章节缩放，bossDropScaled）
+//   2. 专属战利品：BOSS_SPOILS 中等概率 1 件（100%，rollBossSpoil）
+//   3. 稀有独立判定：~30% 额外楼层固定池装备。
+//
+// rollNormalMonsterDrop 是纯随机抽取函数：调用方传入 rng，便于复用同一份楼层 RNG 续算（AC-13 确定性）。
+// openChest 是 ApplyResult 纯函数：星尘直接入账；灵气经 AnimaSystem.addAnima 累加（不再触发强化三选一）。
 
-import { addAnima, traitCount } from './AnimaSystem';
+import { addAnima } from './AnimaSystem';
+import { applyInteractionExposure } from './AlertSystem';
 import { canAfford, spend } from './ApSystem';
-import { equipItem } from './EquipHelper';
-import { rollEquipment, rollRandomSlot } from './EquipmentSystem';
+import { equipItem, putInBag } from './EquipHelper';
+import { resolveTrinketStageEffectsFromItem, rollEquipment, rollRandomSlot } from './EquipmentSystem';
+import { legFortuneBlessingGoldBonus } from './LegendarySystem';
+import {
+  rollBossExtraFloorEquip,
+  rollPersistentEliteEquip,
+  rollPersistentNormalEquip,
+} from './equipment/FixedEquipmentLoot';
 import { BOSS_SPOILS, rollBossSpoil } from './bosses/BossSpoils';
 import type { BossId } from './bosses/BossSpoils';
 import {
-  ADVANCABLE_CLASSES,
   ANIMA_MONSTER_DROP,
-  BOSS_RARE_DROP,
-  CHAPTER_BOSS_RELIC,
-  CLASS_FRAGMENTS_TO_ADVANCE,
+  CHEST_EQUIP_DROP_TABLE,
   ELITE_MONSTER_DROP,
+  ELITE_MONSTER_EQUIP_DROP_TABLE,
   NORMAL_MONSTER_DROP,
+  NORMAL_MONSTER_EQUIP_DROP_TABLE,
   bossDropScaled,
 } from './PveConstants';
-import type { AdvancableClass, ClassId } from './PveConstants';
-import { pickupRelic } from './RelicSystem';
-import { pickupScroll } from './ScrollSystem';
-import type { EquipQuality, RelicId } from './PveTypes';
+import type { EquipQuality } from './PveTypes';
 import { createRng } from './rng';
 import type { Rng } from './rng';
 import type { ApplyResult, EquipItem, ExpeditionState, PveEvent } from './PveTypes';
+
+/** 永久层：击杀/宝箱星尘为原金币量的 50%（至少 1，若原额>0）；再乘饰品/传奇星尘加成。 */
+function thinPersistentStardust(amount: number, state: ExpeditionState): number {
+  if (!state.persistentFloorMode || amount <= 0) return amount;
+  return Math.max(1, Math.floor(amount * 0.5));
+}
+
+function applyStardustGainBonus(amount: number, state: ExpeditionState): number {
+  if (amount <= 0) return amount;
+  const stage = resolveTrinketStageEffectsFromItem(state.player.equipment.TRINKET).stardustBonusRatio;
+  const legendary = legFortuneBlessingGoldBonus(state.player.equipment);
+  const bonus = stage + legendary;
+  if (bonus <= 0) return amount;
+  return Math.max(0, Math.round(amount * (1 + bonus)));
+}
+
+function resolveLootGold(amount: number | undefined, state: ExpeditionState): number | undefined {
+  if (amount == null) return undefined;
+  return applyStardustGainBonus(thinPersistentStardust(amount, state), state);
+}
 
 export interface DropResult {
   gold?: number;
   anima?: number;
   equip?: EquipItem;
-  /** 职业碎片对（精英怪 5% 掉落）：随机 2 个不同职业各 +1 碎片。 */
-  fragmentPair?: AdvancableClass[];
 }
 
 const [GOLD_MIN, GOLD_MAX] = NORMAL_MONSTER_DROP.goldSmall;
 const [ANIMA_MIN, ANIMA_MAX] = NORMAL_MONSTER_DROP.animaSmall;
 
-/** 灵气怪掉落：100% 大量灵气（AC-18）。 */
+/** 鎺夎惤琛ㄧ殑瀹芥澗缁撴瀯绫诲瀷锛堝吋瀹逛笁寮犱笉鍚屾暟鍊煎瓧闈㈤噺鐨勮〃锛夈€?*/
+export interface EquipDropTable {
+  LEGENDARY: readonly number[];
+  EPIC:      readonly number[];
+  RARE:      readonly number[];
+  FINE:      readonly number[];
+  COMMON:    readonly number[];
+}
+
+/**
+ * 鍗曟鎺烽纭畾瑁呭鍝佽川锛堟垨涓嶆帀瑁呭锛夈€?
+ * 鍒ゅ畾椤哄簭 LEGENDARY鈫扙PIC鈫扲ARE鈫扚INE鈫扖OMMON锛屽叾浣?null銆?
+ * 姗欎粠绗?绔犺捣锛堣〃涓?ch1/ch2 = 0锛屽ぉ鐒舵弧瓒筹級銆?
+ */
+export function rollEquipQuality(
+  rng: Rng,
+  table: EquipDropTable,
+  chapter: number,
+): import('./PveTypes').EquipQuality | null {
+  const ci = Math.min(5, Math.max(1, chapter)) - 1; // 0-indexed
+  const roll = rng.next();
+  let cumulative = 0;
+  for (const quality of ['LEGENDARY', 'EPIC', 'RARE', 'FINE', 'COMMON'] as const) {
+    const prob = table[quality][ci] ?? 0;
+    cumulative += prob;
+    if (roll < cumulative) return quality;
+  }
+  return null;
+}
+
+/** 鐏垫皵鎬帀钀斤細100% 澶ч噺鐏垫皵锛圓C-18锛夈€?*/
 export function rollAnimaMonsterDrop(rng: Rng): DropResult {
   const [min, max] = ANIMA_MONSTER_DROP.animaLarge;
   return { anima: rng.int(min, max) };
 }
 
 /**
- * 精英怪基础掉落：40% 金币 / 30% 金币+灵气 / 25% 高额金币 / 5% 进阶碎片对（design §6）。
- * 装备独立独立判定（EQUIP_CHANCE=15%），与基础掉落互相独立，由调用方追加。
+ * 绮捐嫳鎬熀纭€鎺夎惤锛?0% 閲戝竵 / 30% 閲戝竵+鐏垫皵 / 25% 楂橀閲戝竵 / 5% 杩涢樁纰庣墖瀵癸紙design 搂6锛夈€?
+ * 瑁呭鍗曟鎺烽鐢辩珷鑺傚皝椤惰〃鍐冲畾鍝佽川锛圥hase 4锛夈€?
  */
-export function rollEliteMonsterDrop(rng: Rng): DropResult {
+export function rollEliteMonsterDrop(
+  rng: Rng,
+  chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  classId?: string,
+): DropResult {
   const roll = rng.next();
   let result: DropResult;
   if (roll < ELITE_MONSTER_DROP.GOLD_ONLY) {
@@ -62,22 +122,29 @@ export function rollEliteMonsterDrop(rng: Rng): DropResult {
   } else if (roll < ELITE_MONSTER_DROP.GOLD_ONLY + ELITE_MONSTER_DROP.GOLD_AND_ANIMA + ELITE_MONSTER_DROP.GOLD_HIGH) {
     result = { gold: rng.int(ELITE_MONSTER_DROP.goldHigh[0], ELITE_MONSTER_DROP.goldHigh[1]) };
   } else {
-    // FRAGMENT_PAIR 分支（5%）：随机 2 个不同职业碎片
-    const shuffled = rng.shuffle(ADVANCABLE_CLASSES);
-    result = { fragmentPair: [shuffled[0], shuffled[1]] };
+    result = { gold: rng.int(ELITE_MONSTER_DROP.goldHigh[0], ELITE_MONSTER_DROP.goldHigh[1]) };
   }
-  // 独立 15% 概率额外掉落 FINE 装备
-  if (rng.chance(ELITE_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'FINE') };
+  // 鍗曟鎺烽瑁呭鍝佽川锛堜簰鏂ワ紝鐢辩珷鑺傚皝椤惰〃鍐冲畾锛?
+  const equipQuality = rollEquipQuality(rng, ELITE_MONSTER_EQUIP_DROP_TABLE, chapter);
+  if (equipQuality !== null) {
+    result = {
+      ...result,
+      equip: rollEquipment(rng, rollRandomSlot(rng), equipQuality, chapter, balanceSnapshot, classId),
+    };
   }
   return result;
 }
 
 /**
- * 按 50%(金币) / 25%(灵气) / 25%(金币+灵气) 概率掷取一份基础掉落，
- * 再独立判定 3% 额外掉落 COMMON 装备（design §11.3 普通怪极低概率）。
+ * 鎸?50%(閲戝竵) / 25%(鐏垫皵) / 25%(閲戝竵+鐏垫皵) 姒傜巼鎺峰彇涓€浠藉熀纭€鎺夎惤锛?
+ * 鍐嶅崟娆℃幏楠板垽瀹氳澶囧搧璐紙design 搂5 Phase 4锛夈€?
  */
-export function rollNormalMonsterDrop(rng: Rng): DropResult {
+export function rollNormalMonsterDrop(
+  rng: Rng,
+  chapter = 1,
+  balanceSnapshot?: ExpeditionState['balanceSnapshot'],
+  classId?: string,
+): DropResult {
   const roll = rng.next();
   let result: DropResult;
   if (roll < NORMAL_MONSTER_DROP.GOLD_ONLY) {
@@ -87,9 +154,13 @@ export function rollNormalMonsterDrop(rng: Rng): DropResult {
   } else {
     result = { gold: rng.int(GOLD_MIN, GOLD_MAX), anima: rng.int(ANIMA_MIN, ANIMA_MAX) };
   }
-  // 独立 3% 概率额外掉落装备（不影响基础掉落结果）
-  if (rng.chance(NORMAL_MONSTER_DROP.EQUIP_CHANCE)) {
-    result = { ...result, equip: rollEquipment(rng, rollRandomSlot(rng), 'COMMON') };
+  // 鍗曟鎺烽瑁呭鍝佽川锛堜簰鏂ワ紝鐢辩珷鑺傚皝椤惰〃鍐冲畾锛?
+  const equipQuality = rollEquipQuality(rng, NORMAL_MONSTER_EQUIP_DROP_TABLE, chapter);
+  if (equipQuality !== null) {
+    result = {
+      ...result,
+      equip: rollEquipment(rng, rollRandomSlot(rng), equipQuality, chapter, balanceSnapshot, classId),
+    };
   }
   return result;
 }
@@ -105,15 +176,15 @@ const BOSS_DROP_QUALITY: Record<number, EquipQuality> = {
   5: 'LEGENDARY',
 };
 
-/** Boss id 是否在 BOSS_SPOILS 表中（即支持三层掉落结构）。 */
+/** Boss id 鏄惁鍦?BOSS_SPOILS 琛ㄤ腑锛堝嵆鏀寔涓夊眰鎺夎惤缁撴瀯锛夈€?*/
 function isKnownBossId(bossId: string | undefined): bossId is BossId {
   return !!bossId && bossId in BOSS_SPOILS;
 }
 
 /**
- * 开启宝箱：玩家须站在箱子格、AP ≥ 1、箱子尚未开启，否则 no-op（不消耗 AP/不产生事件）。
- * 命中后：扣 AP、标记 consumed、推进楼层 RNG 状态、结算掉落 —— 产生
- * OPEN_CHEST → LOOT（→ 灵气达阈值时连锁 ANIMA_STRENGTHEN）事件序列。
+ * 寮€鍚疂绠憋細鐜╁椤荤珯鍦ㄧ瀛愭牸銆丄P 鈮?1銆佺瀛愬皻鏈紑鍚紝鍚﹀垯 no-op锛堜笉娑堣€?AP/涓嶄骇鐢熶簨浠讹級銆?
+ * 鍛戒腑鍚庯細鎵?AP銆佹爣璁?consumed銆佹帹杩涙ゼ灞?RNG 鐘舵€併€佺粨绠楁帀钀?鈥斺€?浜х敓
+ * OPEN_CHEST → LOOT 事件序列。
  */
 export function openChest(state: ExpeditionState, entityId: string): ApplyResult {
   const floor = state.floorState;
@@ -123,9 +194,15 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
   if (!canAfford(floor.ap, 'OPEN_CHEST')) return noop(state);
 
   const rng = createRng(floor.rngState);
-  const drop = rollNormalMonsterDrop(rng);
-  // 10% 概率额外掉落 COMMON 品质装备（AC-17）；先算普通掉落以保证 rng 顺序向后兼容
-  const equip = rng.chance(0.10) ? rollEquipment(rng, rollRandomSlot(rng), 'COMMON') : undefined;
+  const drop = rollNormalMonsterDrop(rng, state.chapter, state.balanceSnapshot, state.player.classId);
+  // 宝箱独立装备单抽；永久逐层禁止宝箱掉可穿戴装备（equipment-catalog §8.3）。
+  let equip: EquipItem | undefined;
+  if (!state.persistentFloorMode) {
+    const chestEquipQuality = rollEquipQuality(rng, CHEST_EQUIP_DROP_TABLE, state.chapter);
+    equip = chestEquipQuality !== null
+      ? rollEquipment(rng, rollRandomSlot(rng), chestEquipQuality, state.chapter, state.balanceSnapshot, state.player.classId)
+      : undefined;
+  }
 
   let next: ExpeditionState = {
     ...state,
@@ -137,16 +214,17 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
     },
   };
 
-  // 命运树 C2 宝箱老手：宝箱金币 +chestGoldBonusPct（取整）
-  const chestGoldBonusPct = state.player.treeBonuses?.chestGoldBonusPct ?? 0;
-  const actualGold = drop.gold ? Math.round(drop.gold * (1 + chestGoldBonusPct)) : undefined;
+  // 鍛借繍鏍?C2 瀹濈鑰佹墜锛氬疂绠遍噾甯?+chestGoldBonusPct锛堝彇鏁达級
+  const actualGoldRaw = drop.gold;
+  const actualGold = resolveLootGold(actualGoldRaw, state);
 
+  const slotOccupied = equip ? !!next.player.equipment[equip.slot] : false;
   const lootEvent: PveEvent = {
     type: 'LOOT',
     gold: actualGold,
     anima: drop.anima,
     source: entityId,
-    ...(equip ? { equip } : {}),
+    ...(equip ? { equip, bagged: slotOccupied } : {}),
   };
   const events: PveEvent[] = [
     { type: 'OPEN_CHEST', entityId },
@@ -162,9 +240,10 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
     events.push(...animaResult.events);
   }
   if (equip) {
-    next = { ...next, player: equipItem(next.player, equip) };
+    next = { ...next, player: slotOccupied ? putInBag(next.player, equip) : equipItem(next.player, equip) };
   }
 
+  next = applyInteractionExposure(next, events);
   return { state: next, events };
 }
 
@@ -172,30 +251,42 @@ export function openChest(state: ExpeditionState, entityId: string): ApplyResult
 function applySimpleDrop(
   state: ExpeditionState,
   monsterId: string,
-  roller: (rng: Rng) => DropResult,
+  roller: (rng: Rng, chapter: number, balanceSnapshot?: ExpeditionState['balanceSnapshot'], classId?: string) => DropResult,
+  persistentEquipRoller?: (rng: Rng, state: ExpeditionState) => { equip: EquipItem; nextLootSeq: number } | null,
 ): ApplyResult {
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
-  const drop = roller(rng);
+  const drop = roller(rng, state.chapter, state.balanceSnapshot, state.player.classId);
+
+  // 永久逐层：星尘（字段 gold）/灵气按当前表折薄；装备来自固定装备目录。
+  let lootSeq = state.lootSeq;
+  if (state.persistentFloorMode) {
+    delete drop.equip;
+    if (persistentEquipRoller) {
+      const rolled = persistentEquipRoller(rng, { ...state, lootSeq });
+      if (rolled) {
+        drop.equip = rolled.equip;
+        lootSeq = rolled.nextLootSeq;
+      }
+    }
+  }
 
   let next: ExpeditionState = {
     ...state,
     floorState: { ...floor, rngState: rng.state() },
+    ...(lootSeq !== undefined ? { lootSeq } : {}),
   };
 
-  // strengthen_gold_find：拾取金币 +20%（可叠加，取整）
-  const goldFindCount = traitCount(state.player.classTraits, 'strengthen_gold_find');
-  const actualGold = drop.gold
-    ? (goldFindCount > 0 ? Math.round(drop.gold * (1 + goldFindCount * 0.2)) : drop.gold)
-    : undefined;
+  const actualGoldRaw = drop.gold;
+  const actualGold = resolveLootGold(actualGoldRaw, state);
 
+  const slotOccupiedForDrop = drop.equip ? !!next.player.equipment[drop.equip.slot] : false;
   const lootEvent: PveEvent = {
     type: 'LOOT',
     gold: actualGold,
     anima: drop.anima,
     source: monsterId,
-    ...(drop.equip ? { equip: drop.equip } : {}),
-    ...(drop.fragmentPair ? { fragmentPair: drop.fragmentPair } : {}),
+    ...(drop.equip ? { equip: drop.equip, bagged: slotOccupiedForDrop } : {}),
   };
   const events: PveEvent[] = [lootEvent];
 
@@ -208,122 +299,144 @@ function applySimpleDrop(
     events.push(...animaResult.events);
   }
   if (drop.equip) {
-    next = { ...next, player: equipItem(next.player, drop.equip) };
+    next = {
+      ...next,
+      player: slotOccupiedForDrop ? putInBag(next.player, drop.equip) : equipItem(next.player, drop.equip),
+    };
   }
-  if (drop.fragmentPair) {
-    // 随机 2 个不同职业各 +1 碎片（随机职业由 rollEliteMonsterDrop 中的 rng.shuffle 决定，此处不再消耗 rng）
-    let fragments = { ...next.player.classFragments };
-    for (const cls of drop.fragmentPair) {
-      fragments[cls] = (fragments[cls] ?? 0) + 1;
-    }
-    next = { ...next, player: { ...next.player, classFragments: fragments } };
-    // 检测是否可进阶（有碎片达阈值且不是当前职业）
-    const available = (Object.entries(next.player.classFragments) as [ClassId, number][])
-      .filter(([cls, count]) => cls !== next.player.classId && (count ?? 0) >= CLASS_FRAGMENTS_TO_ADVANCE)
-      .map(([cls]) => cls);
-    if (available.length > 0) {
-      events.push({ type: 'CLASS_CAN_ADVANCE', available });
-    }
-  }
-
   return { state: next, events };
 }
 
 /**
- * 击杀掉落统一入口：按怪物 type 派发（AC-6/AC-10/AC-18）。
- * - NORMAL → 50/25/25 金币/灵气/两者
- * - ANIMA  → 100% 大量灵气
- * - ELITE  → 40/30/30 金币/金币+灵气/高额金币（装备待 AC-17）
- * - BOSS   → 专属必掉装备 + 一份普通掉落
+ * 鍑绘潃鎺夎惤缁熶竴鍏ュ彛锛氭寜鎬墿 type 娲惧彂锛圓C-6/AC-10/AC-18锛夈€?
+ * - NORMAL 鈫?50/25/25 閲戝竵/鐏垫皵/涓よ€?
+ * - ANIMA  鈫?100% 澶ч噺鐏垫皵
+ * - ELITE  鈫?40/30/30 閲戝竵/閲戝竵+鐏垫皵/楂橀閲戝竵锛堣澶囧緟 AC-17锛?
+ * - BOSS   鈫?涓撳睘蹇呮帀瑁呭 + 涓€浠芥櫘閫氭帀钀?
  *
- * 调用方应确保此函数在 KILL 事件 emit 之后调用（顺序：ATTACK → KILL → 本函数）。
+ * 璋冪敤鏂瑰簲纭繚姝ゅ嚱鏁板湪 KILL 浜嬩欢 emit 涔嬪悗璋冪敤锛堥『搴忥細ATTACK 鈫?KILL 鈫?鏈嚱鏁帮級銆?
  */
 export function applyMonsterKillDrop(state: ExpeditionState, monsterId: string): ApplyResult {
   const floor = state.floorState;
   const monster = floor.monsters.find((m) => m.id === monsterId);
   if (!monster) return noop(state);
-  // 增援召唤的怪物（Boss 号角等）击杀后不产生任何掉落，避免刷增援白嫖收益
+  // 增益召唤的怪物（Boss 门卫等）击杀后不产生任何掉落，避免刷增益白嫖收益
   if (monster.summoned) return noop(state);
+  if (monster.tutorialDrop) return applySimpleDrop(state, monsterId, () => ({ ...monster.tutorialDrop }));
   if (monster.type === 'BOSS' && isKnownBossId(monster.bossId)) {
     return applyBossKillDrop(state, monsterId, monster.bossId);
   }
   if (monster.type === 'ANIMA') return applySimpleDrop(state, monsterId, rollAnimaMonsterDrop);
-  if (monster.type === 'ELITE') return applySimpleDrop(state, monsterId, rollEliteMonsterDrop);
+  if (monster.type === 'ELITE') {
+    return applySimpleDrop(
+      state,
+      monsterId,
+      rollEliteMonsterDrop,
+      state.persistentFloorMode ? rollPersistentEliteEquip : undefined,
+    );
+  }
   if (monster.type !== 'NORMAL') return noop(state);
-  return applySimpleDrop(state, monsterId, rollNormalMonsterDrop);
+  return applySimpleDrop(
+    state,
+    monsterId,
+    rollNormalMonsterDrop,
+    state.persistentFloorMode ? rollPersistentNormalEquip : undefined,
+  );
+}
+
+function assignPersistentLootInstanceId(
+  equip: EquipItem,
+  state: ExpeditionState,
+  lootSeq: number,
+): { equip: EquipItem; nextLootSeq: number } {
+  const nextLootSeq = lootSeq + 1;
+  return {
+    equip: { ...equip, id: `loot_${state.runSeed}_${state.floor}_${nextLootSeq}` },
+    nextLootSeq,
+  };
+}
+
+function applyBossEquipDrop(
+  state: ExpeditionState,
+  equip: EquipItem,
+): { state: ExpeditionState; bagged: boolean } {
+  const bagged = !!state.player.equipment[equip.slot];
+  return {
+    state: {
+      ...state,
+      player: bagged ? putInBag(state.player, equip) : equipItem(state.player, equip),
+    },
+    bagged,
+  };
 }
 
 /**
  * Boss 击杀掉落（三层结构，design Boss设计V1 / 掉落系统）：
- *   1. 通用必掉：金币 + 灵气（按章节缩放，bossDropScaled）
- *   2. 专属随机：从 BOSS_SPOILS[bossId] 等概率随机 1 件（rollBossSpoil）
+ *   1. 通用必掉：星尘 + 灵气（按章节缩放，bossDropScaled）
+ *   2. 专属战利品：从 BOSS_SPOILS[bossId] 等概率随机 1 件（100%，rollBossSpoil）
  *   3. 稀有独立判定（互不影响）：
- *      - 10%  → 命运碎片 N 个（按章节缩放）
- *      - 30%  → 命运词条卷轴 1 张
- *      - 20%+10% → Boss 遗物（图鉴已解锁 +10%）
+ *      - ~30% → 额外一层楼层固定池装备（FLOOR_EQUIP_QUALITY_WEIGHTS，非 100%）
  *
- * emit 序列：LOOT(gold/anima/equip) → 可能的 SHARDS_PICKUP → 可能的 SCROLL_PICKUP →
- *           可能的 RELIC_PICKUP / CODEX_RELIC_UNLOCKED → 可能的 ANIMA_STRENGTHEN（由 addAnima 串联）。
+ * emit 序列：LOOT(星尘/灵气/专属) → 可能的 LOOT(额外楼层装备) →
  *
- * 注意：随机判定顺序固定（碎片 → 卷轴 → 遗物）以保证 AC-13 确定性。
+ * 注意：随机判定顺序固定，以保证同一 seed 的结果确定。
  */
 function applyBossKillDrop(state: ExpeditionState, monsterId: string, bossId: BossId): ApplyResult {
   const floor = state.floorState;
   const rng = createRng(floor.rngState);
   const scaled = bossDropScaled(state.chapter);
 
-  // 第 2 层：专属装备（等概率从 3 件中 1 件）
-  const equip = rollBossSpoil(rng, bossId);
+  // 第 2 层：专属战利品（等概率 3 件中 1 件，100%）
+  let spoilEquip = rollBossSpoil(rng, bossId, state.chapter, state.balanceSnapshot);
+  let lootSeq = state.lootSeq ?? 0;
+  if (state.persistentFloorMode) {
+    const wrapped = assignPersistentLootInstanceId(spoilEquip, state, lootSeq);
+    spoilEquip = wrapped.equip;
+    lootSeq = wrapped.nextLootSeq;
+  }
 
-  // 第 3 层：稀有掉落独立判定（顺序固定：碎片 → 卷轴 → 遗物）
-  const dropShards = rng.chance(BOSS_RARE_DROP.SHARDS_CHANCE);
-  const dropScroll = rng.chance(BOSS_RARE_DROP.SCROLL_CHANCE);
-  const codexHasRelic = (state.player.codexRelics ?? []).includes(CHAPTER_BOSS_RELIC[state.chapter] as RelicId);
-  const relicChance = BOSS_RARE_DROP.RELIC_BASE_CHANCE + (codexHasRelic ? BOSS_RARE_DROP.RELIC_CODEX_BONUS : 0);
-  const dropRelic = rng.chance(relicChance);
+  // 第 3 层：额外楼层池装备（独立判定，~30%）
+  const extraRoll = rollBossExtraFloorEquip(rng, { ...state, lootSeq });
+  if (extraRoll) lootSeq = extraRoll.nextLootSeq;
 
+  const scaledGold = resolveLootGold(scaled.gold, state) ?? 0;
   let next: ExpeditionState = {
     ...state,
     floorState: { ...floor, rngState: rng.state() },
-    player: equipItem(state.player, equip),
+    ...(lootSeq !== state.lootSeq ? { lootSeq } : {}),
   };
 
+  const spoilApplied = applyBossEquipDrop(next, spoilEquip);
+  next = spoilApplied.state;
+
   const events: PveEvent[] = [
-    { type: 'LOOT', gold: scaled.gold, anima: scaled.anima, equip, source: monsterId },
+    {
+      type: 'LOOT',
+      gold: scaledGold,
+      anima: scaled.anima,
+      equip: spoilEquip,
+      source: monsterId,
+      bagged: spoilApplied.bagged,
+    },
   ];
 
-  // 通用必掉：金币
-  next = { ...next, player: { ...next.player, gold: next.player.gold + scaled.gold } };
+  next = { ...next, player: { ...next.player, gold: next.player.gold + scaledGold } };
 
-  // 通用必掉：灵气（可能连锁 ANIMA_STRENGTHEN）
   if (scaled.anima > 0) {
     const animaResult = addAnima(next, scaled.anima);
     next = animaResult.state;
     events.push(...animaResult.events);
   }
 
-  // 稀有：命运碎片（写入 player.classFragments 不是入口，这里只 emit 事件；
-  // 实际命运碎片入账由 Controller 在远征结束时调用云函数，按已通关层数发放，
-  // 此处 SHARDS_PICKUP 仅用于战报展示与图鉴/成就触发）
-  if (dropShards && scaled.shards > 0) {
-    events.push({ type: 'SHARDS_PICKUP', amount: scaled.shards, source: monsterId });
-  }
-
-  // 稀有：命运词条卷轴
-  if (dropScroll) {
-    const scrollResult = pickupScroll(next.player, monsterId);
-    next = { ...next, player: scrollResult.player };
-    events.push(...scrollResult.events);
-  }
-
-  // 稀有：Boss 遗物（按章节查表）
-  if (dropRelic) {
-    const relicId = CHAPTER_BOSS_RELIC[state.chapter] as RelicId | undefined;
-    if (relicId) {
-      const relicResult = pickupRelic(next.player, relicId, monsterId);
-      next = { ...next, player: relicResult.player };
-      events.push(...relicResult.events);
-    }
+  if (extraRoll) {
+    const extraApplied = applyBossEquipDrop(next, extraRoll.equip);
+    next = extraApplied.state;
+    events.push({
+      type: 'LOOT',
+      equip: extraRoll.equip,
+      source: monsterId,
+      bagged: extraApplied.bagged,
+    });
   }
 
   return { state: next, events };

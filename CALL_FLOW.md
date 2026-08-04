@@ -1,598 +1,359 @@
 # CALL_FLOW.md
-> 主要调用链速查。理解某个操作的完整执行路径时，从这里找起。
-> 层次标记：`[Controller]` = controller 层（Cocos Component）/ `[Core]` = pve/core 纯函数 / `[View]` = 渲染层 / `[Net]` = 网络层 / `[Cloud]` = 云函数
+
+> 当前调用链速查。本文只记录永久逐层挑战主链。
 
 ---
 
-## 目录
+## 1. 启动到大厅
 
-- [PVE 调用链](#pve-调用链)
-  - [1. 玩家攻击](#1-玩家攻击)
-  - [2. 玩家移动](#2-玩家移动)
-  - [3. 回合结束（EndTurn）](#3-回合结束endturn)
-  - [4. 灵气强化触发（3 选 1）](#4-灵气强化触发3-选-1)
-  - [5. 怪物回合 AI](#5-怪物回合-ai)
-  - [6. Boss 技能释放](#6-boss-技能释放)
-  - [7. 楼层通关 → 下一层](#7-楼层通关--下一层)
-  - [8. 玩家死亡](#8-玩家死亡)
-  - [9. 新局开始](#9-新局开始)
-  - [10. 断线续档](#10-断线续档)
-  - [11. 职业进阶 / 觉醒](#11-职业进阶--觉醒)
-  - [12. 装备掉落 → 装备上身](#12-装备掉落--装备上身)
-  - [13. 命运树解锁](#13-命运树解锁)
-  - [14. 营地商店购买](#14-营地商店购买)
-  - [15. 楼层地图生成](#15-楼层地图生成)
-- [PVP 调用链](#pvp-调用链)
-  - [16. 玩家走格子](#16-玩家走格子)
-  - [17. PVP 战斗结算](#17-pvp-战斗结算)
-
----
-
-## PVE 调用链
-
-### 1. 玩家攻击
-
-```
-[Controller] ExpeditionController._tapAttack()
-  │
-  ├─ 校验 _busy 守卫，防止并发输入
-  │
-  ▼
-[Core] CombatSystem.playerAttack(state, targetPos)
-  ├─ 计算基础伤害（player.attack + equipBonus）
-  ├─ EquipTraitEffects — 装备词条修正（暴击/穿透等）
-  ├─ StrengthenEffects — 强化词条修正（狂暴/吸血等）
-  ├─ 施加异常状态（冻结/灼烧）
-  ├─ resolveHit() — 命中单个怪物：扣 HP、Boss 狂暴检测、变体副作用
-  │    └─ 击杀时：applyMonsterKillDrop(LootSystem) → AnimaSystem.addAnima()
-  │         └─ addAnima 超阈值 → push STRENGTHEN_TRIGGERED event（Core 内部完成）
-  ├─ RelicSystem.relicOnHitTarget() / relicOnKill() — 遗物触发
-  └─ 返回 { state: newState, events: PveEvent[] }
-  │
-  ▼
-[Controller] _replayEvents(events)
-  ├─ ATTACK event            → PveToastView.showDamage()
-  ├─ KILL event              → PveMessageLog.append("击杀xxx")
-  ├─ LOOT event              → PveToastView.showLoot()
-  ├─ STRENGTHEN_TRIGGERED    → PveToastView.showStrengthenPicker()（见 §4）
-  │    注意：addAnima 已在 Core 内部调用，Controller 只消费此 event，不再调用 addAnima
-  │
-  ▼
-[View] FogMapView.refresh(state)   — 移除死亡怪物图标
-[View] PveHudView.refresh(state)   — 更新 HP/金币/灵气
-  │
-  ▼
-[Core] MonsterAI.stepMonsters(state)   — 怪物回合（见 §5）
-  │
-  ▼
-[Net] PveService.savePveFloor(report) — 自动存档（每回合末）
+```text
+GameApp.onLoad()
+  -> 微信云初始化
+  -> 登录与 resources 分包可并行；登录不阻塞等整包 resources
+  -> SceneLoader.loadLobby()（启动读条止于 0.92）
+  -> lobby.scene / PveLobbyController
+       -> 读条从 0.55 续跑；preloadPveLobbyUi 只拉主包大厅 critical native
+       -> applyScreenBackground（await 后重读 visibleDesignSize；过期 apply 丢弃）
+       -> refreshScreenAdapt / ensureScreenBackground：尺寸变化时同步重铺 ScreenBg/Art，避免长屏底部黑边
+       -> 首屏绘制后 hide overlay
+       -> 后台并行：loadPveProfile / loadActiveFloorChallenge（营地·商会·选层可瞬时开）
+                    + ensureEquipmentAssetsForFloor（装备图标）
+                    + ensureResourcesBundle + playMainBgm
+                    + preloadPveExpedition + preloadPartnerIconBundle
 ```
 
 ---
 
-### 2. 玩家移动
+## 2. 进入营地
 
-```
-[Controller] ExpeditionController._tapDirection(dir)
-  │
-  ▼
-[Core] MovementSystem.applyMove(state, direction)
-  ├─ 计算目标格坐标
-  ├─ 碰撞检测（墙/边界/实体阻挡）
-  ├─ 消耗 AP（ApSystem.spend）
-  ├─ 背刺检测 → push BACKSTAB event（若从侧/背方向移到怪物旁）
-  ├─ FogSystem.revealAround(state, newPos, visionRange)
-  │    └─ 曼哈顿距离 ≤ visionRange 的格子标记为 revealed
-  ├─ 踩到实体 → push ENTITY_STEP event
-  └─ 返回 { state, events }
-  │
-  ▼
-[Controller] _replayEvents(events)
-  ├─ MOVE event         → FogMapView.refresh() — 移动玩家图标 + 解除迷雾
-  ├─ ENTITY_STEP event  → 按实体类型分发：
-  │    ├─ 宝箱      → LootSystem.openChest()
-  │    ├─ 钥匙      → FloorRules.pickKey()
-  │    ├─ 出口门    → 触发楼层通关流程（见 §7）
-  │    ├─ 铁匠/神像 → NeutralEntities 对应函数
-  │    └─ 营地      → CampSystem.applyShopBuy() 弹商店 UI
-  └─ BACKSTAB event → CombatSystem.playerAttack（加成伤害）
-  │
-  ▼
-[View] FogMapView.refresh(state)
-[View] PveHudView.refresh(state)   — AP 减少
+```text
+[Lobby] PveLobbyController 点击“营地”
+  -> 有 _warmedProfile 则立刻 CampController.open（不再等 resources 预热）
+  -> 无档案时仅短等 loadPveProfile
+  -> CampView 立刻渲染命痕/装备/情报/角色（装备图标后台补齐，进厅后已开始预热）
+     （角色区：已解锁职业卡调用 previewCampCombatStats 显示攻击/生命/护甲/射程预览）
+     （命痕台只负责装配/库存/方案；不含每日商会）
 ```
 
----
+## 2.1 进入伙伴
 
-### 3. 回合结束（EndTurn）
-
-```
-[Controller] ExpeditionController._tapEndTurn()
-  │
-  ▼
-[Core] ExpeditionState.endTurn(state)
-  ├─ ApSystem.rollAp() — 掷骰子，获得新回合 AP
-  ├─ 回合计数 ++
-  ├─ 异常状态持续扣减（灼烧/中毒）
-  ├─ BossEquipTraitEffects.tickMonsterDots() — DoT 持续伤害结算（此处已耦合 Boss 专属效果）
-  ├─ FateGuardian.recordPlayerActionForMirror() — 记录玩家本回合行动（命运守卫镜像专用）
-  └─ 返回 { state, events }
-  │
-  ▼
-[Core] MonsterAI.stepMonsters(state)   — 怪物移动/攻击（见 §5）
-  │
-  ▼
-[Controller] _replayEvents(events)
-  └─ AP_ROLLED event → PveHudView.showApRoll(newAp)
-  │
-  ▼
-[Net] PveService.savePveFloor(report)
+```text
+[Lobby] PveLobbyController 底栏「伙伴」（排行榜与远征之间）
+  -> PartnerController.open()
+  -> loadPveProfile / updateCampConfiguration(equippedPartnerId) / manageCamp(PARTNER EVOLVE)
+  -> PartnerView 列表/详情/装备/进化
 ```
 
----
+### 战斗内伙伴技能
 
-### 4. 灵气强化触发（3 选 1）
-
+```text
+[Expedition] HUD「伙伴」
+  -> ExpeditionController._onPartnerSkill
+  -> applyPartnerSkillToRuntime / usePartnerSkill
+  -> 需选格/选敌时 _partnerAim + 点地图确认
 ```
-[Core] CombatSystem（击杀/掉落时）→ applyMonsterKillDrop → AnimaSystem.addAnima()
-  ├─ player.anima += amount
-  ├─ player.anima >= animaThreshold?
-  │    ├─ YES → buildStrengthenChoices(state) → 抽 3 条不重复词条
-  │    │         push STRENGTHEN_TRIGGERED event（含 choices 数组）
-  │    └─ NO  → 继续（无额外事件）
-  └─ （全程在 Core 内部完成，Controller 不介入）
-  │
-  ▼  Core 返回 events 到 Controller
-[Controller] _replayEvents → 检测 STRENGTHEN_TRIGGERED event
-  └─ 从 event.choices 读取 3 条词条（不再调用 addAnima）
-  │
-  ▼
-[View] PveToastView.showStrengthenPicker(choices)   — 显示 3 选 1 弹窗
-  │  玩家点选
-  ▼
-[Controller] _onStrengthenChosen(choiceIndex)
-  │
-  ▼
-[Core] AnimaSystem.applyStrengthen(state, traitId)
-  ├─ player.classTraits.push(traitId)  ← 职业词条与强化词条共用同一数组
-  ├─ player.anima -= threshold
-  ├─ player.animaThreshold *= ANIMA_THRESHOLD_MULTIPLIER（下次门槛提高）
-  └─ 返回新 state
-  │
-  ▼
-[View] PveCharacterPanel.refresh() — 词条列表更新
+
+### 营地保存配置
+
+```text
+CampView.onSelectProfession / onEquip / onMinghenLoadout
+  -> CampController 更新本地配置
+  -> PveProgressionService.updateCampConfiguration()
+  -> [Cloud] PveProgression.updateCampConfiguration()
+  -> 校验职业已解锁、装备/命痕归属、无非法槽位
+  -> 写回 users.pveProfile（允许挑战进行中改档；当前层仍用开局快照）
+```
+
+### 大厅今日商会
+
+```text
+[Lobby] 右侧「商会」浮标
+  -> 有 _warmedProfile 则立刻 MinghenShopController.open（不再等 resources）
+  -> MinghenShopView：星尘池 / 命痕兑换（字形格同营地 CAMP_SLOT_SIZE；广告刷新按钮暂隐藏）
+  -> manageCamp(MINGHEN_BUY_STARDUST | MINGHEN_EXCHANGE | MINGHEN_REFRESH_SHOP)
+  -> [Cloud] PveMinghenShop.js
+```
+
+### 大厅邮箱
+
+```text
+[Lobby] 左上头像卡下方「邮箱」
+  -> listMails（红点 unreadCount；打开时有缓存先立刻展示再刷新）
+  -> MailView：列表 / 详情 / 领取 / 删除 / 一键领取
+  -> 领取/删除/已读：乐观更新本地列表与红点，再调云端；失败回滚
+  -> claimMail / claimAllMails / deleteMail / markMailRead（成功后用返回值更新星尘/体力，不再阻塞等 listMails）
+  -> [Cloud] cloudfunctions/pve action → PveMailService
+  -> claimAllMails：单次事务批量入账（分块 ≤15），避免 N 次串行事务
+  -> 星尘入账 pveProfile.gold；体力入账 pveStamina（封顶）
+  -> 大厅刷新星尘芯片与体力条
+
+[GM] gm-web「发送邮件」
+  -> adminTool sendMail | sendMailBroadcast
+  -> AdminToolService → createMailForUser（广播同 batchId，≤500）
+```
+
+### 大厅签到
+
+```text
+[Lobby] 左上头像卡下方「签到」（邮箱旁；红点 = 今日未签或有可领累计）
+  -> getCheckInState / signCheckInToday / makeupCheckIn / claimCheckInMilestone
+  -> CheckInView：月历每日奖 / 补签选日 / 累计里程碑领取
+  -> [Cloud] pve action=checkIn → PveCheckIn.handleCheckInAction
+       GET_STATE | SIGN_TODAY | MAKEUP | CLAIM_MILESTONE
+  -> 入账 gold / materials / checkIn.makeupCards；换月重置 signedDays 与 claimedMilestones
+  -> 返回 checkIn 状态 + profile 片段；大厅刷新星尘芯片与红点
+
+[GM] gm-web「资源调整」补签卡
+  -> adminTool adjustResources resourceType=makeupCards
+  -> 写入 pveProfile.checkIn.makeupCards
 ```
 
 ---
 
-### 5. 怪物回合 AI
+## 3. 选择楼层并进入远征
 
-```
-[Core] MonsterAI.stepMonsters(state)
-  │  遍历所有存活怪物
-  ▼
-  FOR each monster:
-    ├─ aiState == 'IDLE'   → 随机游走（PATROL 概率）
-    ├─ aiState == 'PATROL' → 随机移动，发现玩家（视野内）→ 切 CHASE
-    ├─ aiState == 'CHASE'  → 向玩家 BFS 寻路，移动一步
-    │    └─ 到达攻击范围 → CombatSystem.monsterAttack(state, monster)
-    │         ├─ 计算伤害
-    │         ├─ player.hp -= damage
-    │         └─ player.hp <= 0 → push PLAYER_DEAD event
-    └─ aiState == 'FLEE'   → 远离玩家（灵气怪逃跑逻辑）
-  │
-  ├─ Boss 怪物 → 调用对应 Boss 模块步进函数：
-  │    bossId == 'GOBLIN_CHIEF'       → GoblinChief 逻辑（重击/号角）
-  │    bossId == 'FROST_GIANT'        → stepFrostGiant()
-  │    bossId == 'LAVA_LORD'          → lavaLordAttack() + 阶段技能
-  │    bossId == 'FATE_GUARDIAN'      → fateGuardianAttack() + 阶段检测
-  │
-  └─ 返回 { state, events }
+```text
+[Lobby] PveLobbyController 点击“远征”
+  -> 优先用已缓存的 PveProfile / activeChallenge 立刻弹出选层（不空等云 RTT）
+  -> 后台静默刷新档案缓存
+  -> 用户选择楼层
+  -> _ensureWarmReady（现有 LoadingOverlay 短等）
+  -> GameSession.pendingPveFloor = selectedFloor
+  -> SceneLoader.loadPveExpedition()
+  -> pve_expedition.scene / ExpeditionController.onLoad()
 ```
 
 ---
 
-### 6. Boss 技能释放
+## 4. 战斗场景初始化
 
-以**命运守卫（FateGuardian）三段机制**为例，是最复杂的 Boss：
-
-> ⚠️ **阈值检测与状态变更在两个不同时机执行**：
-> - HP 是否跌破阈值的**检测**：发生在**玩家攻击回合**的 `CombatSystem.resolveHit()` 里（if 判断后 push `BOSS_ENRAGED` event）
-> - 阈值触发后的**状态变更**（生成镜像/开启狂暴）：发生在**下一次怪物回合**的 `MonsterAI` 调用 `tryCross*Threshold()` 时
-
-```
-── 玩家攻击回合 ──────────────────────────────────────────────────────
-[Core] CombatSystem.resolveHit()
-  ├─ Boss HP 从 > 50% 跌到 ≤ 50%？
-  │    └─ （不在此处生成镜像，镜像由下一回合怪物 AI 生成）
-  ├─ Boss HP 从 > 30% 跌到 ≤ 30%？
-  │    └─ push BOSS_ENRAGED event（仅标记事件，不改 boss.enraged 字段）
-  └─ 继续正常伤害结算
-
-── 下一怪物回合 ───────────────────────────────────────────────────────
-[Core] MonsterAI.stepMonsters → bossId == 'FATE_GUARDIAN'
-  │
-  ▼
-  ├─ FateGuardian.tryCrossMirrorThreshold(state, boss)
-  │    └─ boss.hp ≤ 50% 且镜像未生成 → 生成行为镜像实体
-  │         ├─ push MIRROR_SPAWNED event
-  │         └─ 镜像读取 player.lastAction（recordPlayerActionForMirror 记录）→ 镜像攻击
-  │
-  ├─ FateGuardian.tryCrossEnrageThreshold(state, boss)
-  │    └─ boss.hp ≤ 30% 且未狂暴 → 写入 boss.enraged = true
-  │         └─ tryOfferDestinyRewrite(state, boss)
-  │              └─ push DESTINY_REWRITE_OFFER event（给玩家选择）
-  │
-  └─ FateGuardian.fateGuardianAttack(state, boss)
-       ├─ 阶段 1（HP > 50%）：fateProphecyStep() — 预言下一回合攻击方向
-       ├─ 阶段 2（50% ≥ HP > 30%）：mirrorBehaviorStep() — 镜像复制玩家行动
-       └─ 阶段 3（HP ≤ 30%）：攻击力/移速大幅提升
-
-── 玩家响应改写命运 ───────────────────────────────────────────────────
-[Controller] _onDestinyRewriteChosen(accept)
-  ├─ 接受 → chooseDestinyRewrite(state) → resolveDestinyRewrite()
-  └─ 拒绝 → 继续（Boss 狂暴加强）
+```text
+ExpeditionController.onLoad()
+  -> _buildUi()（空 HUD/地图先建好，但被 LoadingOverlay 盖住）
+  -> LoadingOverlay.show「正在进入远征…」
+  -> _bootstrap()
+       -> 大厅确认楼层时已 preloadChapter；进战再与云端并行 ensureChapterAssets
+       -> 同一条 LoadingOverlay 更新进度（不再二次 show「进入第N章」）
+       -> loadPveMeta（含 balanceSnapshot）
+          → PersistentFloorFlow.bootstrap(..., { balanceSnapshot })
+          → createPersistentFloorRuntime → ChapterFactory（灌入玩家覆盖；续玩不重灌）
+       -> _ensureChapterReady({ reuseOverlay: true })（已就绪则瞬时返回）
+       -> _refreshAll() 画出真实 HUD/地图
+       -> LoadingOverlay.hide()
 ```
 
-**哥布林酋长（GoblinChief）重击 AOE 调用链**：
+> 进战加速：已删除的 HUD/弹窗图不再加入 preload；主包 native 缺图 `accessSync` 立刻失败，避免 6×150ms 空重试。
+> 续玩第 2 章：选层/确认时预热 `chapter_2`，避免「远征读条结束后再弹一次进章读条」。
 
-```
-[Core] MonsterAI → GoblinChief
-  │
-  ├─ isHeavyStrikeTurn(boss.turn, HEAVY_STRIKE_INTERVAL)?
-  │    └─ YES →
-  │         ├─ push HEAVY_STRIKE_WARNING event（预警）
-  │         └─ 下回合执行：
-  │              GoblinChief.executeHeavyStrike(state, boss)
-  │              ├─ 以 Boss 为中心，HEAVY_STRIKE_RANGE 格内所有玩家/单位受伤
-  │              ├─ 内圈 × HEAVY_STRIKE_MULTIPLIER 倍额外伤害
-  │              └─ push HEAVY_STRIKE_HIT event
-  │
-  └─ 号角 goblinChiefHorn(state, boss)
-       ├─ 每 HORN_INTERVAL 回合触发
-       ├─ 在 Boss 附近生成 1-2 只哥布林战士
-       └─ push SUMMON event
+HUD 右上「目标」按钮：
+
+```text
+PveHudView「目标」
+  -> 默认 _toggleObjectivePopup()
+  -> 文案来自 Chapter1Objectives / Chapter2Objectives（本层通关条件；不含可选目标）
+  -> 展示当前楼层目标与战斗状态
 ```
 
 ---
 
-### 7. 楼层通关 → 下一层
+## 5. 玩家移动
 
+```text
+方向按钮 / 键盘 / 点击格子
+  -> ExpeditionController._onMove()
+  -> MovementSystem.applyMove(state, direction)
+  -> ExpeditionController._apply(result)
+    -> applyPersistentBattleResult(runtime, result)
+    -> syncRuntimeFromExpedition()
+    -> _playEvents(result.events)
+    -> FogMapView / HUD / 战报刷新
+    -> _queuePersistentSave()
 ```
-[Controller] _replayEvents → FLOOR_EXIT_STEP event
-  │
-  ▼
-[Core] FloorRules.openExit(state) — 已有钥匙才能触发
-  │
-  ▼
-[Core] ExpeditionState.advanceFloor(state)
-  ├─ floor ++
-  ├─ 保留 player 状态（HP/金币/装备/词条）
-  ├─ 清空 floorState（怪物/实体/迷雾）
-  └─ 返回 { state, events: [FLOOR_ADVANCE event] }
-  │
-  ▼
-[Net] PveService.savePveFloor(report) — 存档本层结果
-  │
-  ▼
-[Core] MapGenerator.generateFloor(floor, runSeed)
-  └─ 生成新层布局（确定性，见调用链 §15）
-  │
-  ▼
-[View] FogMapView.rebuild(newFloorState) — 重建地图
-[View] PveHudView.refresh(state)         — 更新层数显示
+
+要查移动动画、重影、闪烁，优先看：
+
+- `ExpeditionController._playFxFor()`
+- `FogMapView.setOccupantVisible()`
+- `FogMapView.clearOccupantVisibilitySuppression()`
+
+---
+
+## 6. 玩家攻击
+
+```text
+点击棋盘格子
+  -> FogMapView onCellTap
+  -> ExpeditionController._onTapCell()
+     - 已揭示格上有怪物/实体：focusMonster / focusEntity，刷新左上角目标卡（不直接攻击/互动）
+     - 教学「点怪普攻」步骤例外：点怪仍直接攻击
+     - 空地 / 迷雾格：朝该方向移动一步（不清除选中）
+
+攻击按钮
+  -> ExpeditionController._onAttack()
+  -> 优先已点选且在攻击范围内的怪物；否则可破坏地形（ICE_WALL / ROCK）；再否则最近可攻击目标
+  -> 怪物：PersistentCombatRules.applyPersistentAttack() / CombatSystem.playerAttack
+  -> 冰墙：CombatSystem.attackIceWall；石块：CombatSystem.attackRock
+  -> ExpeditionController._apply(result)
+  -> _playEvents(ATTACK/...)
+     ATTACK：targetId 先查怪物，未命中再查固定实体（冰墙/石块）；
+             按受击格判定近战/远程；远程 → 箭矢；有武器近战 → 光剑；空装 → lunge
+             地形击碎当帧若 EntityArt 已清空，用临时锚点承载闪白/伤害数字
+  -> _queuePersistentSave()
 ```
 
 ---
 
-### 8. 玩家死亡
+## 7. 交互：钥匙、出口、传送门、祭坛、爆破物
 
+```text
+交互按钮
+  -> ExpeditionController._onInteract()
+  -> 根据当前位置/邻近实体选择交互对象（同格优先 PORTAL）
+  -> FloorRules 或 NeutralEntities:
+     - pickKey()
+     - openExit()
+     - interactPortal()   // 不耗 AP；真正 FLOOR_CLEARED / 通关弹窗
+     - activateGunpowderBarrel()  // 永久狂暴 + rushMonstersTowardPlayer(2)：冲锋后射程内立刻攻击
+     - detonateBlastTarget()
+     - useAltar()/useIdol()/useHotSpring()
+       // 永久逐层：useAltar 不发旧灵气；第 6 层 WAVE_SPAWN_MARKER（旧 WAVE_ALTAR_*）禁止交互
+  -> ExpeditionController._apply(result)
+  -> PersistentExpeditionRuntime 更新目标状态
 ```
-[Core] MonsterAI/CombatSystem → player.hp <= 0
-  └─ push PLAYER_DEAD event
-  │
-  ▼
-[Controller] _replayEvents → PLAYER_DEAD
-  │
-  ▼
-[Core] ExpeditionState.applyDeath(state)
-  ├─ 标记 run 为 DEAD 状态
-  ├─ 计算死亡层数 / 存活回合等
-  └─ 返回最终 state
-  │
-  ▼
-[Net] PveService.settlePveRun(report)
-  │
-  ▼
-[Cloud] PveSave.settleExpedition(report)
-  ├─ 按已通关层数独立计算奖励（不信任客户端数值）
-  ├─ 写入钻石/命运碎片
-  └─ 清除活跃存档
-  │
-  ▼
-[Controller] 展示死亡结算 UI → 返回大厅
+
+永久第一层：取得钥匙即完成目标并刷通关门（`PORTAL_SPAWNED` 与门同时出现在钥匙格）。他层同理——击杀精英/清波等目标完成当下刷门。**不**自动踏门；玩家再点「互动」才 `interactPortal` 弹通关/命痕。刚刷门的那次 apply 会丢弃排队互动，避免连点立刻通关。
+
+火药桶 / 爆破点图标：`pve/map/icon_gunpowder_barrel`、`pve/map/icon_blast_target`（`UiAssets` UUID + `PVE_MAP_KEYS` + FogMapView artMap）。
+
+> 永久逐层：`addAnima` 仅累加灵气资源；铁匠只处理当前装备目录与换装流程。
+
+传送门/红方块/图标问题分两层查：
+
+1. 逻辑是否生成正确实体：`FloorRules.ts` / `PersistentExpeditionRuntime.ts`
+2. 图标是否能渲染：`FogMapView.ts` 的 artMap + `UiAssets.ts`
+
+---
+
+## 8. 回合结束
+
+```text
+结束回合按钮 / AP 自动耗尽
+  -> ExpeditionController._onEndTurn()
+  -> ExpeditionState.endTurn(state)
+    -> 怪物 AI / 状态 tick / 新 AP
+  -> ExpeditionController._apply(result)
+  -> _playEvents：连续 MOVE/ATTACK 跨实体并行回放（同实体多步仍串行）
+  -> PersistentExpeditionRuntime 同步目标、命痕、职业资源
+  -> _queuePersistentSave()（动画/_busy 结束后再 stringify + 云存档，避免抢帧）
+```
+
+> 第 10 层等无迷雾多怪层：串行 await 每步移动会长时间占住 `_busy`，表现为移动/交互/蓄力全延迟。战士蓄力仅改本地 UI，动画期间仍可点。
+> 第 7 层 Boss：增援后同帧大量攻击 SFX / 云存档序列化易打断 tween；SFX 同帧封顶，存档避开 `_busy`。
+
+---
+
+## 9. 后台保存运行时
+
+```text
+ExpeditionController._queuePersistentSave()
+  -> debounce
+  -> PersistentFloorFlow.save()
+  -> PveProgressionService.saveFloorChallengeRuntime()
+  -> [Cloud] PveChallenge.saveRuntime()
+  -> 校验 ACTIVE challenge + runtime version/turn 单调
+  -> 写入 runtimeSave
+```
+
+返回大厅前：
+
+```text
+ExpeditionController._onQuitRequested()
+  -> _flushPersistentSave()
+  -> SceneLoader.loadLobby()
 ```
 
 ---
 
-### 9. 新局开始
+## 10. 楼层结算与进入下一层
 
-```
-[Controller] LobbyController._tapStartPve()
-  │
-  ▼
-[Net] PveService.startRun()
-  │
-  ▼
-[Cloud] PveSave.startRun(uid)
-  ├─ 生成 runSeed（服务端 Math.random() * MAX_INT）
-  ├─ 校验无活跃存档（或覆盖旧存档）
-  └─ 写入 db.pve_save { uid, runSeed, status:'ACTIVE' }
-  │
-  ▼
-[Net] PveService.loadPveMeta()
-  │
-  ▼
-[Cloud] PveMeta.loadMeta(uid)
-  └─ 返回 { treeNodes, achievements, codex, scrolls, destinyShards }
-  │
-  ▼
-[Core] DestinyTreeSystem.getTreeBonuses(metaTreeNodes)
-  └─ 快照化树加成 → treeBonuses 注入初始 player 状态
-  │
-  ▼
-[Core] ExpeditionState.startExpedition(runSeed, treeBonuses)
-  ├─ 初始化 player（HP=200, AP=8, classId='ADVENTURER' 等）
-  ├─ MapGenerator.generateFloor(1, runSeed)
-  └─ 返回初始 state
-  │
-  ▼
-[View] FogMapView.rebuild() / PveHudView.refresh()
+```text
+PersistentExpeditionRuntime.status != ACTIVE
+  -> ExpeditionController._apply：传门通关前停掉后台 ACTIVE 存档（等在途结束，不再强制 flush）
+  -> ExpeditionController._handleFloorCleared()
+     -> Boss 通关：立刻 preloadChapter(next)
+     -> 命痕三选一（如有）
+     -> PersistentFloorFlow.beginDeferredSettle(selection)
+        -> 本地 PendingSettlementStore 落单
+        -> 乐观清 activeChallengeId
+        -> 后台 settle（超时/Busy 可重试，幂等）
+     -> 立刻弹「继续远征 / 返回大厅」（不因云端超时卡住）
+  -> 用户点「继续远征」
+     -> LoadingOverlay「正在同步进度…」
+     -> ensureSettled()（等后台完成或补推）
+     -> continueNextFloor() → start 下一层
+     -> 长时间仍失败：遮罩外「再试一次 / 返回大厅」
+  -> 返回大厅 / 大厅 warm / bootstrap：flushPendingFloorSettlement 补推本地待结算
+  -> [Cloud] PveChallenge.settleFloorChallenge()
+    -> runTransactionWithRetry
+    -> 幂等终态；CLEAR 写 floorRecords / 解锁 / 发奖
 ```
 
----
+> 说明：`updatePveMeta` 负责教学完成等账户标记。装备由击杀掉落自动穿戴，结算入永久背包；继续远征按更新后的 loadout 带装。
+> 章节预热：进入 Boss 前一层 / Boss 层时即 `preloadChapter(chapter+1)`，避免「通关后才开始下分包」。
 
-### 10. 断线续档
+跨章继续下一层：
 
+```text
+用户点「继续远征」且 clearedFloor 为章末 Boss
+  -> LoadingOverlay.show「正在进入第N章…」
+  -> Promise.all([
+       ensureChapterAssets(nextChapter),   // 分包+背景+地图图（可命中预热）
+       PersistentFloorFlow.continueNextFloor()  // 云端开下一层
+     ])
+  -> _ensureChapterReady 兜底（已就绪则瞬时返回）
+  -> 刷新 runtime/state/UI，hide overlay
 ```
-[Controller] ExpeditionController.onLoad()
-  │
-  ▼
-[Net] PveService.loadPveSave()
-  │
-  ▼
-[Cloud] PveSave.loadActiveSave(uid)
-  └─ 返回 { runSeed, floorSnapshot, playerSnapshot, turn, ... }
-  │
-  ▼
-[Core] ExpeditionState.resumeExpedition(saveData)
-  ├─ deserialize floorSnapshot → FloorState
-  ├─ deserialize playerSnapshot → RunPlayer
-  └─ createRng(rngState) 恢复 RNG 快照（AC-13）
-  │
-  ▼
-[View] FogMapView.rebuild() — 恢复上次迷雾状态
+
+同章继续下一层：
+
+```text
+PersistentFloorFlow.continueNextFloor()
+  -> start/load next active challenge
+  -> ExpeditionController 刷新 runtime/state/UI
 ```
 
 ---
 
-### 11. 职业进阶 / 觉醒
+## 11. GM 重置
 
-```
-玩家拾取职业碎片（怪物掉落触发 CLASS_FRAGMENT event）
-  │
-  ▼
-[Core] ClassSystem.pickFragment(state, classId)
-  ├─ player.classFragments[classId] ++
-  ├─ 达到 CLASS_FRAGMENTS_TO_ADVANCE?
-  │    └─ YES → push CLASS_ADVANCE_ELIGIBLE event
-  └─ 返回 state
-  │
-  ▼  玩家主动触发进阶（点击角色面板）
-[Controller] _tapClassAdvance(classId)
-  │
-  ▼
-[Core] ClassSystem.applyClassAdvance(state, classId)
-  ├─ 消耗碎片
-  ├─ player.classId = classId（确定主职）
-  ├─ 解锁一阶被动词条
-  └─ 返回 state
-  │
-  ▼  二阶觉醒（条件满足后可触发）
-[Core] ClassSystem.getAwakenEligible(state)
-  └─ 返回可觉醒的 classId 列表
-  │
-  ▼
-[Core] ClassSystem.applyClassAwaken(state, classId)
-  ├─ 解锁二阶觉醒词条
-  └─ 返回 state
+```text
+gm-web
+  -> cloudfunctions/adminTool
+  -> cloudfunctions/common/admin/AdminToolService.js
+  -> PveProfile reset/cleanup
+  -> PveChallenge active challenge cleanup
+  -> 返回实际 post-cleanup counts
 ```
 
----
+云函数源码规则：
 
-### 12. 装备掉落 → 装备上身
-
-```
-[Core] LootSystem.rollEliteMonsterDrop(state, monster)
-  └─ 概率触发装备掉落
-       ├─ EquipmentSystem.rollEquipment(floor, rng)
-       │    ├─ 按楼层确定品质权重（高层 EPIC/LEGENDARY 概率更高）
-       │    ├─ 随机主属性
-       │    └─ 随机词条（0~2 条，视品质）
-       └─ push LOOT event { item: EquipItem }
-  │
-  ▼
-[Controller] _replayEvents → LOOT event（装备类型）
-  └─ PveToastView.showEquipDrop(item) — 显示装备卡片
-  │  玩家点「装备」
-  ▼
-[Controller] _tapEquip(item, slot)
-  │
-  ▼
-[Core] EquipmentSystem.equipItem(state, item, slot)
-  ├─ 若槽位有旧装备 → unequipItem 先摘除
-  ├─ player.equipment[slot] = item
-  └─ 返回 state
-  │
-  ▼
-[View] PveCharacterPanel.refresh() — 装备格更新
+```text
+只改 cloudfunctions/common/**
+  -> node scripts/sync-cloud-common.js
+  -> 部署对应云函数
 ```
 
----
+## 当前边界调用链（2026-07-17）
 
-### 13. 命运树解锁
+```text
+大厅选择第 1–35 层
+  -> chapterRouting.isFloorContentReady
+  -> PveService.startFloorChallenge
+  -> cloudfunctions/common/pve/PveChallengeValidate.js（再次校验 ≤ 28）
+  -> PveChallenge 事务扣除 5 体力并创建挑战
 
+通关结算
+  -> PveChallengeState.applyChallengeSettlement
+  -> 同事务更新 pveProfile.highestClearedFloor / highestClearedAt
+  -> db.listPveLeaderboard 只按 pveProfile 排行
 ```
-[Controller] DestinyTreeController._tapUnlock(nodeId)
-  │
-  ▼
-[Core] DestinyTreeSystem.canUnlockNode(metaState, nodeId)
-  └─ 校验：父节点已解锁 + 碎片足够
-  │
-  ▼  (客户端预校验通过)
-[Net] PveService.unlockTreeNode(nodeId)
-  │
-  ▼
-[Cloud] PveMeta.unlockTreeNode(uid, nodeId)
-  ├─ 再次校验（权威）
-  ├─ destinyShards -= cost
-  ├─ treeNodes[nodeId].unlocked = true
-  └─ 返回更新后 meta
-  │
-  ▼
-[Controller] 刷新本地 metaState
-  │
-  ▼
-[View] DestinyTreeView.refresh(treeNodes) — 节点变为「已解锁」绿色
-```
-
----
-
-### 14. 营地商店购买
-
-```
-[Controller] ExpeditionController → 踩到营地格子
-  └─ push CAMP_STEP event
-  │
-  ▼
-[View] PveToastView.showShopMenu(state)   — 弹出商品列表
-  │  玩家点购买
-  ▼
-[Controller] _tapShopBuy(itemType, cost)
-  │
-  ▼
-[Core] CampSystem.applyShopBuy(state, itemType)
-  ├─ 校验 player.gold >= cost
-  ├─ player.gold -= cost
-  ├─ 按 itemType 应用效果：
-  │    ├─ 'HEAL'     → player.hp += amount（不超 maxHp）
-  │    ├─ 'MAX_HP'   → player.maxHp += amount
-  │    ├─ 'ANIMA'   → player.anima += amount
-  │    └─ 'RELIC'    → openRelicChest(state)
-  └─ 返回 state
-  │
-  ▼
-[View] PveHudView.refresh(state)
-```
-
----
-
-### 15. 楼层地图生成
-
-```
-runSeed（服务端生成，全程不变）
-  │
-  ▼
-[Core] MapGenerator.generateFloor(floor, runSeed)
-  ├─ deriveFloorSeed(runSeed, floor) → floorSeed（每层唯一）
-  ├─ createRng(floorSeed) → 该层专属 RNG（与其他层隔离）
-  │
-  ├─ 按 floor 决定地图尺寸（1-15层=8×8，16-20=9×9，21-25=10×10）
-  ├─ 生成空白网格 + 随机墙体
-  ├─ ChapterMonsterRules.generateChapterMonsters(chapter, rng)
-  │    └─ 按配比表实例化各怪物变体，随机放置坐标
-  ├─ 放置实体（宝箱/铁匠/神像/温泉等）数量由楼层决定
-  ├─ 放置钥匙 + 出口门
-  └─ 返回 FloorState（fog 全隐藏）
-```
-
----
-
-## PVP 调用链
-
-### 16. 玩家走格子
-
-```
-[Controller] BoardController._tapCell(cellIndex)
-  │
-  ▼
-[Net] GameService.submitTurn({ cellIndex })
-  │
-  ▼
-[Cloud] GameEngine.processTurn(gameState, turnData)
-  ├─ 校验合法性（是否轮到该玩家、格子是否可走）
-  ├─ 更新棋子位置
-  └─ CellResolver.resolve(cell, gameState)
-       ├─ 普通格 → 无事
-       ├─ 战斗格 → CombatResolver.resolve()
-       ├─ 事件格 → EventResolver.resolve()
-       └─ 商店格 → ShopResolver.resolve()
-  │
-  ▼
-[Cloud] 写入新 gameState 到数据库
-  │
-  ▼
-[Net] GameWatcher（实时监听）触发 onStateChange
-  │
-  ▼
-[Controller] BoardController.onStateChange(newState)
-  │
-  ▼
-[View] BoardView.refresh(newState)
-[View] HudController.refresh(newState)
-```
-
----
-
-### 17. PVP 战斗结算
-
-```
-[Cloud] CombatResolver.resolve(attacker, defender, gameState)
-  ├─ 计算双方攻防（装备 + 事件加成）
-  ├─ 掷骰子决定伤害
-  ├─ defender.hp -= damage
-  ├─ defender.hp <= 0 → 复活惩罚（扣金币/退步）
-  └─ 返回 combatResult
-  │
-  ▼
-[Cloud] GameEngine 写入 combatResult 到 gameState
-  │
-  ▼
-[Controller] BoardCombatUi.show(combatResult) — 展示战报动画
-```
-
----
-
-## 通用说明
-
-### core 函数的返回结构
-
-所有 PVE core 函数均遵循：
-```typescript
-function someAction(state: ExpeditionState, ...args): { state: ExpeditionState; events: PveEvent[] }
-```
-- `state` 是新状态（不可变，不修改入参）
-- `events` 是本次操作产生的副作用序列，Controller 顺序回放
-
-### 事件回放顺序
-
-`_replayEvents(events)` 按数组顺序处理，顺序即时间顺序。  
-如需插入新副作用，在 core 函数里 `events.push(...)` 到正确位置，无需改 Controller 主流程。
-
-### 存档触发时机
-
-| 触发点 | 调用 |
-|--------|------|
-| 每回合结束 | `savePveFloor(snapshot)` |
-| 楼层通关 | `savePveFloor(floorResult)` |
-| 远征结算（死亡/完成）| `settlePveRun(finalReport)` |

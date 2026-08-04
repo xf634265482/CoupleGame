@@ -1,7 +1,7 @@
 // Boss 专属掉落表单测（Task #8）：
 // 验证 BOSS_SPOILS 数据结构完整性与 rollBossSpoil 随机选择行为。
 
-import { BOSS_SPOILS, rollBossSpoil } from '../../assets/scripts/pve/core/bosses/BossSpoils';
+import { BOSS_SPOILS, findBossSpoilByName, rollBossSpoil } from '../../assets/scripts/pve/core/bosses/BossSpoils';
 import type { BossId } from '../../assets/scripts/pve/core/bosses/BossSpoils';
 import { createRng } from '../../assets/scripts/pve/core/rng';
 
@@ -51,6 +51,11 @@ describe('BOSS_SPOILS 数据完整性', () => {
 });
 
 describe('rollBossSpoil 随机行为', () => {
+  it('findBossSpoilByName 可按中文名回退 Boss 战利品模板', () => {
+    expect(findBossSpoilByName('哥布林酋长战斧')?.trait).toBe('on_hit_lifesteal_1');
+    expect(findBossSpoilByName('不存在')).toBeNull();
+  });
+
   it('生成的 EquipItem 字段与模板一致', () => {
     const rng = createRng(42);
     const item = rollBossSpoil(rng, 'GOBLIN_CHIEF');

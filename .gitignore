@@ -16,11 +16,12 @@ __pycache__/
 *.pyc
 
 # Local PVE AI art batches and approved working copies
-art_pipeline/generated/
-art_pipeline/approved/
+assets/generated/
+_ai_staging/
 
 # 本地微信 AppID / 云环境 ID（勿提交）
 config/wechat.local.json
+config/admin-accounts.local.json
 
 # MeowArt / 其他本地密钥（勿提交）
 .env
@@ -29,6 +30,10 @@ config/wechat.local.json
 output/
 tmp/
 .codex/
+.codex-tsc-root.txt
+.superpowers/
+.asset-backups/
+scripts/__pycache__/
 
 #//////////////////////////
 # VSCode

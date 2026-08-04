@@ -2,15 +2,22 @@
   "name": "CoupleGame",
   "uuid": "449d07fe-e653-4776-8e30-3590754b0690",
   "creator": {
-    "version": "3.8.8"
+    "version": "3.8.8",
+    "registry": {
+      "remote": {}
+    },
+    "dependencies": {
+      "localization-editor": "1.0.4",
+      "plugin-import-2x": "1.1.10"
+    }
   },
   "scripts": {
     "patch:wechat": "node scripts/patch-wechatgame-config.js",
+    "verify:pve-only": "node scripts/verify-pve-only-build.js",
     "compress:bgm": "node scripts/compress-bgm-main.js",
-    "art:pve:generate": "python art_pipeline/scripts/generate.py",
-    "art:pve:sheet": "python art_pipeline/scripts/contact_sheet.py",
-    "art:pve:validate": "python art_pipeline/scripts/validate.py",
-    "art:pve:promote": "python art_pipeline/scripts/promote.py",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:game": "tsc -p tsconfig.game.json --noEmit",
+    "typecheck:cloud": "tsc -p cloudfunctions/common/tsconfig.checkjs.json",
     "test": "jest",
     "test:pve": "jest --roots test/pve"
   },

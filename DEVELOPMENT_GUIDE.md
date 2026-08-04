@@ -1,289 +1,133 @@
 # DEVELOPMENT_GUIDE.md
-> 开发规则与流程。**所有团队成员（包括 AI 助手）** 改代码前必读。
+
+> 当前开发规则。改代码前先读本文件，再按 `PROJECT_NAVIGATION.md` 和 `CALL_FLOW.md` 定位入口。
 
 ---
 
-## 一、代码定位流程
+## 1. 定位流程
 
-### 优先级顺序（严格遵守）
-
-```
-1. 先查 PROJECT_NAVIGATION.md  → 定位系统和入口文件
-2. 打开入口文件，顺调用链向下追踪
-3. 需要理解完整链路 → 查 CALL_FLOW.md
-4. 以上仍无法定位 → 才允许全局搜索（Grep）
-```
-
-**禁止的行为**：拿到需求后直接 `grep -r "关键词" .`，在 8 份同名文件里翻找。
-
-### 定位示例
-
-> **需求**：修改玩家攻击时的暴击伤害计算逻辑
-
-1. 查 PROJECT_NAVIGATION.md → **01 战斗系统** → 入口 `CombatSystem.ts`
-2. 打开 `CombatSystem.ts` → 找 `playerAttack()` → 找 `EquipTraitEffects` 调用点
-3. 打开 `EquipTraitEffects.ts` → 找暴击词条 id（如 `CRIT_STRIKE`）→ 直接修改
-
-整个过程不需要全局搜索。
+1. 先查 `PROJECT_NAVIGATION.md`，确认当前系统入口。
+2. 再查 `CALL_FLOW.md`，确认调用链。
+3. 从入口文件顺着调用链追，不要从中间文件凭印象改。
+4. 只有导航无法定位时，才用全局搜索。
 
 ---
 
-## 二、修改规则速查
+## 2. 当前 PVE 主线
 
-### PVE 系统修改
+当前 PVE 以永久逐层挑战为目标态：
 
-| 修改类型 | 入口文件 | 注意事项 |
-|----------|---------|---------|
-| 伤害数值 | `PveConstants.ts` | 改完同步 `design.md` |
-| 攻击逻辑 | `CombatSystem.ts` | 测试：`npm run test:pve` |
-| 怪物 AI | `MonsterAI.ts` | 不影响 Boss，Boss 在 `bosses/` 独立 |
-| Boss 机制 | `bosses/{BossName}.ts` | 改完同步 `specs/game-design/Boss设计V1.md` |
-| 新增怪物 | `Chapter{N}Monsters.ts` + `ChapterMonsterRules.ts` | 两处都要改 |
-| 装备词条 | `EquipTraitEffects.ts` | Boss 专属词条在 `BossEquipTraitEffects.ts` |
-| 强化词条 | `AnimaSystem.ts` + `StrengthenEffects.ts` | 49条词条全在这两个文件 |
-| 职业 | `ClassSystem.ts` + `PveConstants.ts` | 数值在 Constants，逻辑在 System |
-| 命运树 | `DestinyTreeSystem.ts` + `PveMeta.js`（云端）| 客户端预校验 + 云端权威 |
-| 地图生成 | `MapGenerator.ts` | 修改后必须验证 AC-13 确定性 |
-| 存档格式 | `ExpeditionState.ts` + `PveSave.js` | 需考虑旧存档兼容性 |
-| UI 刷新 | 对应 `views/*.ts` | 只改渲染，不改状态 |
-| 网络接口 | `PveService.ts` + `cloudfunctions/pve/index.js` | 两端都要改 |
+- 大厅远征：`PveLobbyController` 选择楼层。
+- 战斗场景：`ExpeditionController` 是唯一战斗场景控制器。
+- 挑战生命周期：`PersistentFloorFlow`。
+- 持久运行态：`PersistentExpeditionRuntime`。
+- 云端档案/挑战：`PveProfile` + `PveChallenge`。
+- 营地：`CampController` + `CampView`（远征情报文案须对齐 `Chapter1Objectives`，第四层称「哨兵」勿写「传令兵」）。
+- 战斗 HUD「目标」：展示本层通关条件（仅主目标），不是词条、不是可选目标。
+- `updatePveMeta` 仅负责教学等账户标记。
 
-### PVP 系统修改
-
-| 修改类型 | 入口文件 |
-|----------|---------|
-| 战斗规则 | `cloudfunctions/common/CombatResolver.js` |
-| 格子事件 | `cloudfunctions/common/CellResolver.js` |
-| 商店逻辑 | `cloudfunctions/common/ShopResolver.js` |
-| 棋盘布局 | `cloudfunctions/common/BoardGenerator.js` |
-| 机器人 AI | `cloudfunctions/common/BotPlayer.js` |
-| 客户端渲染 | `assets/scripts/game/board/BoardView.ts` |
-| PVP 数值 | `cloudfunctions/common/constants.js` |
+当前约束：只扩展 ExpeditionController、PersistentFloorFlow、当前章节工厂、三职业、固定装备目录与命痕事件链。
 
 ---
 
-## 三、必须遵守的架构约束
+## 3. PVE 三层约束
 
-### PVE 三层铁律
+```text
+pve/core/
+  纯逻辑层：禁止 import 'cc'，禁止直接 Math.random()，使用 rng.ts。
+  输入 state，返回新 state + events。
 
+pve/controllers/
+  编排层：处理输入、网络、事件回放和状态同步。
+  ExpeditionController 是当前远征战斗唯一主控制器。
+
+pve/views/
+  渲染层：只消费 state/events，写 Label/Sprite/Graphics。
+  不直接发云函数，不直接改规则状态。
 ```
-core/     → 零框架依赖（禁止 import 'cc'）
-           零直接随机（禁止 Math.random()，只用 rng.ts）
-           纯函数（入参 state → 返回新 state + events，不修改入参）
-
-controller → 唯一的状态写入者
-            唯一调用网络的地方
-            负责事件回放，不持有任何渲染逻辑
-
-views/    → 只读 state，只写 Label/Graphics
-           不调用 core 函数，不发网络请求
-```
-
-**违反后果**：core 里 import cc → 单测无法运行；直接 Math.random() → 云端无法复算（破坏 AC-13）。
-
-### 云函数同步规则
-
-```
-✅ 改 cloudfunctions/common/<file>.js
-✅ 然后跑 node scripts/sync-cloud-common.js
-❌ 绝对不能直接改 cloudfunctions/{login,game,room,match,pve,initDb,scheduler}/common/
-```
-
-改完 `common/` 忘记跑 sync → 下次 sync 会覆盖掉你的修改 → 代码静默丢失。
-
-### 单一真相源规则
-
-| 内容 | 权威文件 |
-|------|---------|
-| PVE 所有数值 | `PveConstants.ts` |
-| PVP 所有数值 | `cloudfunctions/common/constants.js` |
-| 云函数共享逻辑 | `cloudfunctions/common/` |
-| PVE 设计规则 | `specs/260608-pve-destiny-expedition/design.md` |
-| PVP 设计规则 | `specs/260529-combat-board-game-rework/design.md` |
-
-**同一个数值只在一处定义**。如果发现两处定义同一个数值，以上表权威文件为准，删除副本。
 
 ---
 
-## 四、修改后必做的检查
+## 4. 常见修改入口
 
-### 改了 PVE core 逻辑
+| 修改类型 | 当前入口 |
+| --- | --- |
+| 战斗伤害 / 攻击 | `assets/scripts/pve/core/CombatSystem.ts` |
+| 固定武器/职业攻击上下文 | `assets/scripts/pve/core/PersistentCombatRules.ts` |
+| 移动规则 | `assets/scripts/pve/core/MovementSystem.ts` |
+| 怪物 AI | `assets/scripts/pve/core/MonsterAI.ts` |
+| 楼层目标 / 命痕运行态 | `assets/scripts/pve/core/PersistentExpeditionRuntime.ts` |
+| 第一章楼层内容 | `assets/scripts/pve/core/chapter1/Chapter1FloorCatalog.ts` / `Chapter1FloorGenerator.ts` |
+| 传送门/出口/钥匙 | `assets/scripts/pve/core/FloorRules.ts` |
+| 祭坛/神像/温泉/铁匠 | `assets/scripts/pve/core/NeutralEntities.ts` |
+| 命痕定义和效果 | `assets/scripts/pve/core/minghen/MinghenCatalog.ts` / `MinghenCombatBridge.ts` |
+| 战斗表现 | `assets/scripts/pve/controllers/ExpeditionController.ts` / `assets/scripts/pve/views/FogMapView.ts` |
+| 营地 UI | `assets/scripts/pve/controllers/CampController.ts` / `assets/scripts/pve/views/CampView.ts` |
+| 云端玩家档案 | `cloudfunctions/common/pve/PveProfile.js` |
+| 云端挑战生命周期 | `cloudfunctions/common/pve/PveChallenge.js` |
+| GM 工具 | `cloudfunctions/common/admin/AdminToolService.js` + `gm-web/src/**` |
+
+---
+
+## 5. 云函数规则
+
+`cloudfunctions/common/` 是共享源码唯一权威源。
+
+正确流程：
 
 ```bash
-npm run test:pve          # 跑 PVE 单元测试
+# 只改 cloudfunctions/common/**
+node scripts/sync-cloud-common.js
 ```
 
-重点检查：
-- `MapGenerator` 测试（AC-13 确定性）
-- `CombatSystem` 伤害边界值
-- 涉及 Boss 的测试用例
+不要直接改：
 
-### 改了云函数
+- `cloudfunctions/pve/common/**`
+- `cloudfunctions/adminTool/common/**`
+- `cloudfunctions/login/common/**`
+- 其它云函数目录下的 `common/**`
 
-```bash
-node scripts/sync-cloud-common.js   # 同步副本（必须）
-cd cloudfunctions/common && npm test  # 跑云函数单测
-```
-
-### 改了 PVE 玩法（数值/机制）
-
-1. 同步 `specs/260608-pve-destiny-expedition/design.md`
-2. 如果改了 Boss 机制，同步 `specs/game-design/Boss设计V1.md`
-
-### 改了 PVP 玩法（数值/机制）
-
-同步 `specs/260529-combat-board-game-rework/design.md`
-
-### 改了存档格式
-
-检查 `ExpeditionState.resumeExpedition()` 的反序列化逻辑，确保旧存档数据仍可加载（字段缺失时提供默认值）。
+这些都是同步副本，下次 sync 会覆盖。
 
 ---
 
-## 五、常见陷阱与对策
+## 6. Cocos 资源安全规则
 
-### 陷阱 1：grep 到 8 份同名文件
+不要直接文本编辑：
+
+- `.scene`
+- `.prefab`
+- `.anim`
+- `.meta`
+
+这些文件有 UUID 引用，直接改容易造成资源导入失败。需要改场景/预制体时用 Cocos MCP 工具。
+
+普通 `.ts/.js/.md` 可以正常补丁编辑。
+
+---
+
+## 7. 验证建议
+
+按风险选择验证：
 
 ```bash
-# 错误：
-grep -r "loadMeta" cloudfunctions/
-
-# 正确：
-grep "loadMeta" cloudfunctions/common/pve/PveMeta.js
-# 或排除副本：
-grep -r "loadMeta" cloudfunctions/ --glob '!cloudfunctions/*/common/**'
+npm run typecheck
+npm run test:pve
 ```
 
-### 陷阱 2：在 view 里持有状态
+针对持久逐层远征，优先跑：
 
-```typescript
-// 错误：
-class PveHudView {
-  private _currentHp = 0;  // 不要在 view 里维护游戏状态
-}
-
-// 正确：
-class PveHudView {
-  refresh(state: ExpeditionState) {
-    this._hpLabel.string = String(state.player.hp);  // 每次从 state 读
-  }
-}
-```
-
-### 陷阱 3：在 core 里直接 Math.random()
-
-```typescript
-// 错误（破坏确定性，云端无法复算）：
-const roll = Math.random();
-
-// 正确：
-const roll = state.floorState.rng.next();  // 使用 state 里的 rng 实例
-```
-
-### 陷阱 4：core 函数修改入参 state
-
-```typescript
-// 错误（引用相同对象，导致历史状态污染）：
-function playerAttack(state: ExpeditionState, ...) {
-  state.player.hp -= damage;  // 直接修改！
-  return { state, events };
-}
-
-// 正确（深拷贝或结构展开）：
-function playerAttack(state: ExpeditionState, ...) {
-  const newPlayer = { ...state.player, hp: state.player.hp - damage };
-  const newState = { ...state, player: newPlayer };
-  return { state: newState, events };
-}
-```
-
-### 陷阱 5：在 controller 里写玩法逻辑
-
-```typescript
-// 错误：ExpeditionController 里直接计算伤害
-_tapAttack() {
-  const damage = this._state.player.attack * 1.5;  // 逻辑不该在这里
-}
-
-// 正确：委托给 core
-_tapAttack() {
-  const { state, events } = playerAttack(this._state, targetPos);
-  this._state = state;
-  this._replayEvents(events);
-}
-```
-
-### 陷阱 6：混淆两个「事件系统」
-
-- `PveEvent[]`（`PveTypes.ts`）：core 函数返回的副作用数组，表示"这次操作发生了什么"，是**数据**。
-- `EventBus`（`core/EventBus.ts`）：框架级发布订阅，用于跨场景/跨模块通知，是**通信机制**。
-
-PVE 内部逻辑只用 `PveEvent[]`，不用 `EventBus`。
-
-### 陷阱 7：以为 Boss 逻辑只在 bosses/ 目录
-
-Boss 的狂暴 **HP 阈值检测**和**变体被击中副作用**都在 `CombatSystem.ts` 的 `resolveHit()` 里，不在 `bosses/` 里。
-
-```
-# 排查 Boss 行为时，这两处必须同时看：
-assets/scripts/pve/core/CombatSystem.ts      ← resolveHit() 含阈值检测 + 变体副作用
-assets/scripts/pve/core/bosses/{BossName}.ts ← 阈值触发后的状态变更（下一怪物回合）
-```
-
-### 陷阱 8：以为词条效果在 AnimaSystem 里触发
-
-词条**写入** → `AnimaSystem.applyStrengthen()`  
-词条**触发** → `CombatSystem.ts`（直接调用 `StrengthenEffects` 里的函数）
-
-"词条没生效"的 Bug 去 `AnimaSystem.ts` 是找不到的，要去 `CombatSystem.ts`。
-
-### 陷阱 9：灵气强化以为由 Controller 调用 addAnima
-
-`addAnima` 在 **Core 内部**（`CombatSystem` → `LootSystem` → `AnimaSystem.addAnima`）调用并 push `STRENGTHEN_TRIGGERED` event，Controller 只消费这个 event 展示弹窗。
-
-```typescript
-// 错误理解：Controller 收到灵气事件后调用 addAnima
-_replayEvents(events) {
-  if (event.type === 'ANIMA_GAIN') addAnima(this._state, event.amount);  // 不需要
-}
-
-// 正确：addAnima 已在 Core 里完成，Controller 只需响应 STRENGTHEN_TRIGGERED
-_replayEvents(events) {
-  if (event.type === 'STRENGTHEN_TRIGGERED') this._showPicker(event.choices);
-}
+```bash
+npx jest --roots test/pve --runTestsByPath test/pve/Chapter1Floor1to7.test.ts test/pve/Chapter1ExpeditionFactory.test.ts test/pve/PersistentExpeditionRuntime.test.ts test/pve/PersistentFloorFlow.test.ts --runInBand
 ```
 
 ---
 
-## 六、新功能开发流程
+## 8. 文档同步
 
-1. **查 PROJECT_NAVIGATION.md** — 确认影响哪些系统
-2. **查 CALL_FLOW.md** — 理解相关调用链，找到注入点
-3. **查 design.md** — 确认需求是否已在设计文档中定义
-4. **修改 core 层** — 纯函数，加对应的 `PveEvent` 类型
-5. **修改 controller 层** — 在 `_replayEvents` 里加新事件的 case
-6. **修改 view 层** — 按事件更新渲染
-7. **跑测试** — `npm run test:pve`
-8. **同步文档** — 更新 design.md（如有玩法变更）
+改 PVE 玩法规则时，同步：
 
----
+- `specs/260712-pve-persistent-floor-progression/design.md`
+- 必要时同步 `specs/260608-pve-destiny-expedition/design.md`
 
-## 七、全局搜索的正确使用
-
-全局搜索只用于：
-- 导航文档中没有覆盖的边缘系统
-- 查找某个具体 event type 的所有消费方
-- 确认某个常量被哪些文件引用
-
-```bash
-# PVE 客户端搜索（排除测试和 node_modules）：
-grep -r "KEYWORD" assets/scripts/pve/ --include="*.ts"
-
-# 云函数搜索（排除同步副本）：
-grep -r "KEYWORD" cloudfunctions/common/ --include="*.js"
-
-# 全项目 TS 搜索：
-grep -r "KEYWORD" assets/scripts/ --include="*.ts"
-```
-
-**不要**把 `cloudfunctions/` 整个目录作为搜索范围，会命中 8 份重复文件。
+已失效的玩法文档必须删除；当前规则只写入对应主设计文档。
