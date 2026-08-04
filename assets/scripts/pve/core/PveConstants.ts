@@ -391,6 +391,14 @@ export const CHAPTER1_BOSS_ROCK_COUNT = 5;
 export const CHAPTER1_BLAST_TURN_LIMIT = 7;
 /** 第 6 层：第 3 波起，刷出后若未清完，经过该玩家回合数强制刷下一波。 */
 export const CHAPTER1_WAVE_FORCE_SPAWN_TURNS = 4;
+/** 第 4 层目标哨兵：怪物回合向逃离点移动格数。 */
+export const CHAPTER1_CHASE_SENTINEL_MOVE = 3;
+/** 第 4 层目标哨兵：被命中且存活时立刻朝逃离点逃离格数。 */
+export const CHAPTER1_CHASE_SENTINEL_HIT_FLEE = 2;
+/** 第 4 层目标哨兵 HP（追逃目标耐久，避免一步一刀秒杀）。 */
+export const CHAPTER1_CHASE_SENTINEL_HP = 150;
+/** 第 4 层哨兵首次呼喊时，其余守卫向玩家冲锋格数。 */
+export const CHAPTER1_CHASE_INTERCEPT_RUSH = 3;
 /** 鐭冲潡 HP锛堝彲鐮村潖锛岀帺瀹舵櫘鏀诲彲鍑荤锛夈€?*/
 export const ROCK_HP = 350;
 /** 澧炴彺鍙疯姣忔鍙敜鍝ュ竷鏋楁垬澹暟锛堥潪鐙傛毚锛夈€?*/

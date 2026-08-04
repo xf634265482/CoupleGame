@@ -69,7 +69,7 @@ describe('Chapter 1 official ExpeditionState factory', () => {
     expect(states[3]!.floorState.entities.filter((entity) => entity.type === 'ESCAPE_MARKER')).toHaveLength(1);
     expect(states[3]!.floorState.entities.filter((entity) => entity.type === 'EXIT')).toHaveLength(0);
     const sentinel = states[3]!.floorState.monsters.find((monster) => monster.id === 'GOBLIN_SENTINEL');
-    expect(sentinel).toMatchObject({ maxHp: 90, attack: 0, range: 0, aggroRadius: 3, aiState: 'FLEE' });
+    expect(sentinel).toMatchObject({ maxHp: 150, attack: 0, range: 0, aggroRadius: 4, aiState: 'FLEE' });
     const warrior = states[0]!.floorState.monsters.find((monster) => monster.id === 'f1_w1');
     expect(warrior).toMatchObject({ maxHp: 40, attack: 13, range: 1, aggroRadius: 3 });
     const chief = states[6]!.floorState.monsters.find((monster) => monster.bossId === 'GOBLIN_CHIEF');

@@ -47,14 +47,14 @@ export const CHAPTER1_FLOORS: Record<number, Chapter1FloorDefinition> = {
     c(0,7),c(1,7),c(4,7),c(5,7),c(6,7),c(7,7),c(8,7),c(9,7),c(10,7),
     c(0,5),c(1,5),c(2,5),c(3,5),c(4,5),c(5,5),c(6,5),c(9,5),c(10,5),
     c(0,3),c(1,3),c(2,3),c(5,3),c(6,3),c(7,3),c(8,3),c(9,3),c(10,3),
-  ],randomRockCandidates:[],randomRockCount:0,fixedMonsters:[
+  ],randomRockCandidates:[],randomRockCount:0,  fixedMonsters:[
     {id:'GOBLIN_SENTINEL',kind:'GOBLIN_SENTINEL',pos:c(1,9),role:'OBJECTIVE',rewardEligible:true},
-    // 守卫挡在玩家追击主路上，不堵死哨兵绕路缺口
-    {id:'f4_w1',kind:'GOBLIN_WARRIOR',pos:c(2,9),rewardEligible:true},
-    {id:'f4_w2',kind:'GOBLIN_WARRIOR',pos:c(4,6),rewardEligible:true},
-    {id:'f4_a1',kind:'GOBLIN_ARCHER',pos:c(8,6),rewardEligible:true},
-    {id:'f4_a2',kind:'GOBLIN_ARCHER',pos:c(6,4),rewardEligible:true},
-  ],randomMonsterPools:[['GOBLIN_WARRIOR']],minghenIds:['M08','M11','M12','M16'],equipmentIds:['钝铁斧','沙地靴','灵力宝珠','财运符'],optionalObjectiveIds:[],special:{messengerMove:2,unobstructedEscapeTurns:9,escapeMarkerX:10,escapeMarkerY:0} },
+    // 守卫卡在错口缺口附近，主动拦截追击玩家
+    {id:'f4_w1',kind:'GOBLIN_WARRIOR',pos:c(2,8),rewardEligible:true},
+    {id:'f4_w2',kind:'GOBLIN_WARRIOR',pos:c(7,6),rewardEligible:true},
+    {id:'f4_a1',kind:'GOBLIN_ARCHER',pos:c(8,4),rewardEligible:true},
+    {id:'f4_a2',kind:'GOBLIN_ARCHER',pos:c(3,4),rewardEligible:true},
+  ],randomMonsterPools:[['GOBLIN_WARRIOR']],minghenIds:['M08','M11','M12','M16'],equipmentIds:['钝铁斧','沙地靴','灵力宝珠','财运符'],optionalObjectiveIds:[],special:{messengerMove:3,unobstructedEscapeTurns:6,escapeMarkerX:10,escapeMarkerY:0} },
   5: { floor:5,name:'纰庣煶灏侀攣',size:9,fogMode:'NONE',objectiveKind:'BREAKTHROUGH',player:c(4,8),criticalTargets:[c(4,6),c(4,0)],exitCells:[],chestCandidates:[c(8,7),c(7,7)],fixedWalls:[c(2,1),c(2,2),c(2,4),c(2,5),c(6,2),c(6,3),c(6,5),c(4,1)],randomRockCandidates:[c(3,3),c(5,4),c(3,5)],randomRockCount:2,fixedMonsters:[{id:'f5_fire',kind:'FIRE_GOBLIN',pos:c(1,3),role:'ELITE',rewardEligible:true},{id:'f5_a1',kind:'GOBLIN_ARCHER',pos:c(4,4),rewardEligible:true},{id:'f5_a2',kind:'GOBLIN_ARCHER',pos:c(6,4),rewardEligible:true}],randomMonsterPools:[['GOBLIN_WARRIOR','GOBLIN_WARRIOR']],minghenIds:['M13','M14','M19'],equipmentIds:['铁战斧','铁制板甲','铁制战靴'],optionalObjectiveIds:[],special:{barrelInteractAp:1,blastInteractAp:1,blastTurnLimit:7} },
   6: { floor:6,name:'夜袭固守',size:9,fogMode:'NONE',objectiveKind:'WAVE_SURVIVAL',player:c(4,4),criticalTargets:[c(0,0),c(8,0),c(0,8),c(8,8)],exitCells:[],chestCandidates:[],fixedWalls:[c(2,3),c(6,3),c(2,5),c(6,5)],randomRockCandidates:[],randomRockCount:0,fixedMonsters:[],randomMonsterPools:[],minghenIds:['M17','M18','M20','M22'],equipmentIds:['铁制重盔','灵力宝珠','生锈短刃','皮革轻甲','旅行皮靴','铁制长矛','木矛','皮革头盔','精钢长枪','铁战斧','棉布软甲','铁制战盔','钝铁斧','沙地靴','财运符','铁制板甲','铁制战靴'],optionalObjectiveIds:[],special:{waveCount:5,prepareTurns:0,spawnAnimationMs:0,waveRushSteps:4,waveRushStepsLate:5,waveForceSpawnTurns:4} },
   7: { floor:7,name:'閰嬮暱澶ц惀',size:10,fogMode:'BOSS_FOG',objectiveKind:'BOSS',player:c(5,9),criticalTargets:[c(5,1)],exitCells:[],chestCandidates:[],fixedWalls:[c(3,4),c(4,4),c(6,4),c(7,4),c(5,6)],randomRockCandidates:[],randomRockCount:0,fixedMonsters:[{id:'GOBLIN_CHIEF',kind:'GOBLIN_CHIEF',pos:c(5,1),role:'BOSS',rewardEligible:true}],randomMonsterPools:[],minghenIds:['M21','M23','M24'],equipmentIds:['铁战斧','铁制板甲','铁制战靴','铁制重盔','灵力宝珠'],optionalObjectiveIds:[],special:{bossHp:660,enrageHp:170,heavyInterval:3,heavyWarningTurns:1,heavyRadius:4,summonNormal:1,summonEnraged:2,summonCap:8,safeRoutes:2} },

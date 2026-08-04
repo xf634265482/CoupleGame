@@ -77,6 +77,7 @@ import {
   STATIONARY_PRESSURE_DAMAGE_PER_STACK,
 } from './PveConstants';
 import { getBalancedActionCost, resolveProfessionBaseWithBalance } from './PveBalance';
+import { CHAPTER1_CHASE_SENTINEL_HIT_FLEE } from './PveConstants';
 import { makeGoblinWarrior, VARIANT_FIRE_GOBLIN, VARIANT_FROST_GOBLIN, VARIANT_GOBLIN_SENTINEL } from './Chapter1Monsters';
 import { VARIANT_DESERT_HOPPER_LIZARD, VARIANT_DUNE_SENTINEL, VARIANT_POISON_SCORPION } from './Chapter2Monsters';
 import { VARIANT_FROST_SPRITE, VARIANT_FROSTSPIKE_PORCUPINE, VARIANT_GLACIER_SHAPER } from './Chapter3Monsters';
@@ -254,35 +255,47 @@ function advanceGoblinSentinelAfterHit(state: ExpeditionState, monsterId: string
     return state;
   }
   const towardEscape = isChapter1Floor4ObjectiveSentinel(state, monster);
+  const fleeSteps = towardEscape ? CHAPTER1_CHASE_SENTINEL_HIT_FLEE : 1;
   const escape = towardEscape ? chapter1Floor4EscapeTarget(state.floorState) : null;
   const player = state.floorState.player;
-  const candidates = orthogonalSteps(monster.pos).sort((a, b) => {
-    const aBlocked = isMonsterLandingBlocked(state.floorState, a, monsterId);
-    const bBlocked = isMonsterLandingBlocked(state.floorState, b, monsterId);
-    if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
-    if (escape) {
-      const escapeDiff = manhattan(a, escape) - manhattan(b, escape);
-      if (escapeDiff !== 0) return escapeDiff;
+  let current = state;
+  for (let step = 0; step < fleeSteps; step += 1) {
+    const latest = current.floorState.monsters.find((m) => m.id === monsterId);
+    if (!latest || latest.aiState === 'DEAD' || latest.hp <= 0) break;
+    if (escape && latest.pos.x === escape.x && latest.pos.y === escape.y) {
+      events.push({ type: 'TARGET_ESCAPED', entityId: monsterId, pos: latest.pos });
+      break;
     }
-    const playerDiff = manhattan(b, player) - manhattan(a, player);
-    if (playerDiff !== 0) return playerDiff;
-    return a.x === b.x ? a.y - b.y : a.x - b.x;
-  });
-  const to = candidates.find((cell) => !isMonsterLandingBlocked(state.floorState, cell, monsterId));
-  if (!to) return state;
-  events.push({ type: 'MOVE', entityId: monsterId, from: monster.pos, to, apLeft: state.floorState.ap });
-  if (escape && to.x === escape.x && to.y === escape.y) {
-    events.push({ type: 'TARGET_ESCAPED', entityId: monsterId, pos: to });
+    const candidates = orthogonalSteps(latest.pos).sort((a, b) => {
+      const aBlocked = isMonsterLandingBlocked(current.floorState, a, monsterId);
+      const bBlocked = isMonsterLandingBlocked(current.floorState, b, monsterId);
+      if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+      if (escape) {
+        const escapeDiff = manhattan(a, escape) - manhattan(b, escape);
+        if (escapeDiff !== 0) return escapeDiff;
+      }
+      const playerDiff = manhattan(b, player) - manhattan(a, player);
+      if (playerDiff !== 0) return playerDiff;
+      return a.x === b.x ? a.y - b.y : a.x - b.x;
+    });
+    const to = candidates.find((cell) => !isMonsterLandingBlocked(current.floorState, cell, monsterId));
+    if (!to) break;
+    events.push({ type: 'MOVE', entityId: monsterId, from: latest.pos, to, apLeft: current.floorState.ap });
+    current = {
+      ...current,
+      floorState: {
+        ...current.floorState,
+        monsters: current.floorState.monsters.map((m) =>
+          m.id === monsterId ? { ...m, pos: to, aiState: 'FLEE' as const } : m,
+        ),
+      },
+    };
+    if (escape && to.x === escape.x && to.y === escape.y) {
+      events.push({ type: 'TARGET_ESCAPED', entityId: monsterId, pos: to });
+      break;
+    }
   }
-  return {
-    ...state,
-    floorState: {
-      ...state.floorState,
-      monsters: state.floorState.monsters.map((m) =>
-        m.id === monsterId ? { ...m, pos: to, aiState: 'FLEE' as const } : m,
-      ),
-    },
-  };
+  return current;
 }
 
 function isChapter1Floor4ObjectiveSentinel(state: ExpeditionState, monster: Monster): boolean {

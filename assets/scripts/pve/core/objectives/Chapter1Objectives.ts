@@ -97,7 +97,7 @@ export function createChaseObjective(): ObjectiveDefinition {
     floor: 4,
     kind: 'CHASE',
     title: '截获哨兵军令',
-    description: '在错口石墙间追上携令哨兵并击败它。守卫会阻挠追击；哨兵抵达闪烁逃离点即失败。',
+    description: '在错口石墙间追上携令哨兵并击败它。哨兵逃得很快，守卫会冲锋拦截；抵达闪烁逃离点即失败。',
     create: () => base(4, 'CHASE', 1, { targetId: 'GOBLIN_SENTINEL' }),
     apply(state, event) {
       const t = terminal(state, event);

@@ -30,6 +30,8 @@ import {
 import {
   ANIMA_BEETLE_TRAP_DURATION,
   ANIMA_ELF_TRAP_DURATION,
+  CHAPTER1_CHASE_INTERCEPT_RUSH,
+  CHAPTER1_CHASE_SENTINEL_MOVE,
   CHAPTER3_ICE_WALL_HP,
   CHAPTER3_CONTROL_RAGE_MOVE_BONUS,
   GLACIER_SHAPER_ICE_WALL_HP,
@@ -351,7 +353,7 @@ function chapter1Floor4EscapeTarget(floor: FloorState): Coord {
 function stepChapter1Floor4Sentinel(state: ExpeditionState, monsterId: string): ApplyResult {
   let current = withMonsterPatch(state, monsterId, { aiState: 'FLEE' });
   const events: PveEvent[] = [];
-  for (let step = 0; step < 2; step += 1) {
+  for (let step = 0; step < CHAPTER1_CHASE_SENTINEL_MOVE; step += 1) {
     const latest = current.floorState.monsters.find((m) => m.id === monsterId);
     if (!latest || latest.aiState === 'DEAD') break;
     const escape = chapter1Floor4EscapeTarget(current.floorState);
@@ -888,7 +890,20 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   if (monster.variantId === VARIANT_GOBLIN_SENTINEL && detectedPlayer) {
     const alertEvents: PveEvent[] = [];
     const alerted = applyMonsterAlert(state, monsterId, 'GOBLIN_SENTINEL', alertEvents);
-    if (alertEvents.length > 0) return { state: alerted, events: alertEvents };
+    if (alertEvents.length > 0) {
+      // 第 4 层：哨兵首次呼喊时，其余守卫立刻冲锋拦截追击玩家。
+      if (floor.floor === 4 && monsterId === 'GOBLIN_SENTINEL') {
+        const interceptorIds = livingEnemyMonsters(alerted.floorState)
+          .filter((entry) => entry.id !== monsterId)
+          .map((entry) => entry.id);
+        const rush = rushMonstersTowardPlayer(alerted, CHAPTER1_CHASE_INTERCEPT_RUSH, {
+          monsterIds: interceptorIds,
+          attackIfInRange: true,
+        });
+        return { state: rush.state, events: [...alertEvents, ...rush.events] };
+      }
+      return { state: alerted, events: alertEvents };
+    }
   }
   if (monster.variantId === VARIANT_DUNE_SENTINEL && detectedPlayer) {
     const alertEvents: PveEvent[] = [];
@@ -1040,6 +1055,14 @@ function stepOneMonsterCore(state: ExpeditionState, monsterId: string): ApplyRes
   // 第 12 层第 19 回合后追兵狂暴：移动翻倍。
   if (floor.floor === 12 && floor.timedEscapeEnraged) {
     maxMoveSteps *= 2;
+  }
+  // 第 4 层哨兵已呼喊期间：追逃守卫加速贴脸拦截。
+  if (
+    floor.floor === 4
+    && monsterId !== 'GOBLIN_SENTINEL'
+    && (floor.goblinSentinelAlertIds?.length ?? 0) > 0
+  ) {
+    maxMoveSteps = Math.max(maxMoveSteps, 2);
   }
   let current = withMonsterPatch(state, monsterId, { aiState: 'CHASE' });
   const allEvents: PveEvent[] = [];

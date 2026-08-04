@@ -3,7 +3,7 @@ import { stepMonsters } from '../../assets/scripts/pve/core/MonsterAI';
 import { makeEntity, makeExpeditionState, makeMonster } from './helpers';
 
 describe('goblin sentinel support / flee rules', () => {
-  it('floor 4 objective advances one step toward escape after surviving a hit', () => {
+  it('floor 4 objective advances two steps toward escape after surviving a hit', () => {
     const state = makeExpeditionState({
       floor: 4,
       floorOverrides: {
@@ -25,8 +25,8 @@ describe('goblin sentinel support / flee rules', () => {
 
     const result = playerAttack(state, 'GOBLIN_SENTINEL');
 
-    expect(result.state.floorState.monsters.find((m) => m.id === 'GOBLIN_SENTINEL')?.pos).toEqual({ x: 1, y: 5 });
-    expect(result.events.map((event) => event.type)).toEqual(['ATTACK', 'MOVE']);
+    expect(result.state.floorState.monsters.find((m) => m.id === 'GOBLIN_SENTINEL')?.pos).toEqual({ x: 1, y: 4 });
+    expect(result.events.filter((event) => event.type === 'MOVE')).toHaveLength(2);
   });
 
   it('any goblin sentinel flees one cell away from the player after a surviving hit', () => {

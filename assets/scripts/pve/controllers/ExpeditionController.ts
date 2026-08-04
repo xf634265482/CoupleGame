@@ -14,7 +14,6 @@ import { resolveAttackHitPos } from '../core/AttackPresentation';
 import {
   expandOrthogonalMoveSteps,
   isCellRevealed,
-  moveGhostRestoreMode,
   resolveMoveGhostAnimStart,
 } from '../core/MoveGhostVisibility';
 import {
@@ -714,11 +713,11 @@ export class ExpeditionController extends Component {
   private _pendingInteract = false;
   /** wx.onKeyDown 兜底是否已绑定（用于 onDestroy 对称解绑，见 onLoad 注释）。 */
   private _wxKeyBound = false;
-  /** 移动动画：key = "x,y"（from 坐标）→ { ghost 节点, to 目标格 }。
-   *  _spawnKillFloaters 写入，_playFxFor(MOVE) 消费。
-   *  _clearAllMoveGhosts 销毁幽灵时同步恢复目标格可见性，防止快速连点漏恢复。 */
+  /** 移动滑步：优先 tween 终点格真实 OccupantArt（必能看见）；克隆幽灵仅作兜底。 */
   private _moveGhosts = new Map<string, {
-    ghost: Node;
+    ghost: Node | null;
+    slideNode: Node | null;
+    slideRestPos: Vec3;
     current: Coord;
     finalTo: Coord;
     restoreBossIcon: boolean;
@@ -751,12 +750,6 @@ export class ExpeditionController extends Component {
   /** 本批已合并播过的撞碎 COLLISION ATTACK（避免二次远程弹道）。 */
   private _consumedCollisionAttacks = new Set<PveEvent>();
 
-  /**
-   * 移动幽灵结束：始终清掉 destination 的 occupant 隐藏标记。
-   * 战士重击击退进迷雾时若只「不激活」却不 clear suppression，
-   * `_hiddenOccupantCellKeys` 会永久残留 → 之后揭雾仍「数据在、图标不显示」（同锁链拉没角色 UI）。
-   * 迷雾格只清标记、不 active OccupantArt，避免雾里露出错误 sprite。
-   */
   private _restoreMoveGhostDestination(entry: {
     finalTo: Coord;
     restoreBossIcon: boolean;
@@ -764,11 +757,8 @@ export class ExpeditionController extends Component {
     const toRevealed = this._state
       ? isCellRevealed(this._state.floorState.revealed, entry.finalTo)
       : false;
-    if (moveGhostRestoreMode(toRevealed) === 'activate') {
-      this._map?.setOccupantVisible(entry.finalTo, true);
-    } else {
-      this._map?.clearOccupantVisibilitySuppression(entry.finalTo);
-    }
+    // 真身滑步模式不再预藏终点；仍清掉可能残留的 suppression，避免图标永久消失。
+    this._map?.clearOccupantVisibilitySuppression(entry.finalTo);
     if (entry.restoreBossIcon) {
       this._map?.setBossIconLocked(false);
       this._map?.setBossIconVisible(true);
@@ -779,22 +769,25 @@ export class ExpeditionController extends Component {
   private _clearMoveGhost(entityId: string): void {
     const entry = this._moveGhosts.get(entityId);
     if (!entry) return;
+    if (entry.slideNode?.isValid) {
+      Tween.stopAllByTarget(entry.slideNode);
+      entry.slideNode.setPosition(entry.slideRestPos);
+    }
     if (entry.ghost?.isValid) entry.ghost.destroy();
-    // 只恢复终点 occupant / boss 显隐。禁止在此 _refreshAll：
-    // 每次走路幽灵收尾都会再全图刷一遍，后期回合会明显叠卡（真机 apply.events 常到 100~200ms+）。
     this._restoreMoveGhostDestination(entry);
     this._moveGhosts.delete(entityId);
   }
 
   private _clearAllMoveGhosts(): void {
-    for (const entry of this._moveGhosts.values()) {
-      if (entry.ghost?.isValid) entry.ghost.destroy();
-      // _clearAllMoveGhosts 可能在 tween 完成前被调用（快速连点），必须清 suppression。
-      this._restoreMoveGhostDestination(entry);
+    for (const entityId of [...this._moveGhosts.keys()]) {
+      this._clearMoveGhost(entityId);
     }
-    this._moveGhosts.clear();
   }
 
+  /**
+   * 只登记「谁从哪滑到哪」。不克隆、不预藏——克隆幽灵在 Mask/层级下经常不可见。
+   * refresh 之后由 `_prepareMoveSlides` 把终点真身挪回起点再滑。
+   */
   private _registerMoveGhosts(
     oldState: ExpeditionState,
     events: PveEvent[],
@@ -818,7 +811,6 @@ export class ExpeditionController extends Component {
         pushStep(ev.monsterId, ev.from, ev.to);
         continue;
       }
-      // 命运镜像位移与普通 MOVE 同一套滑步，避免「镜像闪现、显得追击异常」。
       if (ev.type === 'MIRROR_MOVED') {
         pushStep(ev.mirrorId, ev.from, ev.to);
       }
@@ -827,63 +819,85 @@ export class ExpeditionController extends Component {
     for (const [entityId, steps] of stepsByEntity) {
       const pathFrom = steps[0]!.from;
       const finalTo = steps[steps.length - 1]!.to;
-      // 玩家始终播；怪物/镜像：终点或路径曾进视野才播，避免雾中空转拉长 _busy。
       const animFrom = entityId === 'PLAYER'
         ? pathFrom
         : resolveMoveGhostAnimStart(revealedForAnim, steps);
       if (!animFrom) continue;
+      if (animFrom.x === finalTo.x && animFrom.y === finalTo.y) continue;
 
       const oldMonster = oldState.floorState.monsters.find((monster) => monster.id === entityId);
-      const restoreBossIcon = Boolean(oldMonster?.bossId);
-      // refresh 之前：起点 OccupantArt 仍在；失败则怪图缓存 / 占位圆，保证必有滑步体。
-      let ghost: Node | null = this._map.cloneOccupantForFx(pathFrom, { allowInactiveWithFrame: true });
-      if (!ghost && restoreBossIcon) {
-        ghost = this._map.cloneBossIconForFx();
-      }
-      if (!ghost && oldMonster) {
-        ghost = this._map.cloneMonsterForFx(oldMonster);
-      }
-      if (!ghost) {
-        ghost = this._map.createMoveFxPlaceholder(
-          animFrom,
-          entityId === 'PLAYER' ? new Color(120, 200, 255, 220) : undefined,
-        );
-      }
-
-      // ★ 挂到场景根（与近战 lunge / 远程箭矢同一套）：
-      // 曾挂 MoveFxLayer(0×0 UITransform) + Content 本地坐标，在 FogMap Mask 下常不渲染，
-      // 只剩终点真身出现 → 观感就是「瞬移」。世界坐标换算后镜头滚动也正确。
-      ghost.setParent(this.node);
-      ghost.setSiblingIndex(-1);
-      ghost.active = true;
-      const opacity = ghost.getComponent(UIOpacity) || ghost.addComponent(UIOpacity);
-      opacity.opacity = 255;
-      ghost.setPosition(this._worldToFxLocal(this._map.getCellWorldPosition(animFrom)));
       this._moveGhosts.set(entityId, {
-        ghost,
+        ghost: null,
+        slideNode: null,
+        slideRestPos: new Vec3(0, 0, 0),
         current: animFrom,
         finalTo,
-        restoreBossIcon,
+        restoreBossIcon: Boolean(oldMonster?.bossId),
       });
     }
   }
 
-  /** 格子世界坐标 → ExpeditionController 本地（移动幽灵 / 与攻击 fx 一致）。 */
-  private _worldToFxLocal(world: Vec3): Vec3 {
-    const transform = this.node.getComponent(UITransform);
-    if (!transform) return new Vec3(world.x, world.y, world.z);
-    return transform.convertToNodeSpaceAR(world);
-  }
-
-  /** 确保移动幽灵在 UI 最上层可见；refresh 滚镜头后按当前格重钉世界坐标。 */
-  private _raiseMoveGhosts(): void {
+  /**
+   * refresh 之后立刻把终点 OccupantArt/Boss 图标钉回起点（同帧、不 yield），
+   * 再由 `_playEntityMovePath` 滑回落点。动的是已经在画的真节点，避免「看不见的幽灵」。
+   */
+  private _prepareMoveSlides(): void {
     if (!this._map) return;
-    for (const entry of this._moveGhosts.values()) {
-      if (!entry.ghost?.isValid) continue;
-      entry.ghost.active = true;
-      entry.ghost.setParent(this.node);
-      entry.ghost.setSiblingIndex(-1);
-      entry.ghost.setPosition(this._worldToFxLocal(this._map.getCellWorldPosition(entry.current)));
+    for (const [entityId, entry] of this._moveGhosts) {
+      let slideNode: Node | null = null;
+      let rest = new Vec3(0, 0, 0);
+      let startLocal: Vec3 | null = null;
+
+      if (entry.restoreBossIcon) {
+        const boss = this._map.getBossIconNode();
+        if (boss?.isValid && boss.active) {
+          slideNode = boss;
+          rest = boss.position.clone();
+          const fromPos = this._map.computeBossIconLocalPos(entry.current);
+          startLocal = new Vec3(fromPos.x, fromPos.y, 0);
+          this._map.setBossIconLocked(true);
+        }
+      }
+
+      if (!slideNode) {
+        const art = this._map.getOccupantArtAt(entry.finalTo);
+        if (art?.isValid) {
+          const sp = art.getComponent(Sprite);
+          if (!art.active && sp?.spriteFrame) art.active = true;
+          const parent = art.parent;
+          const parentUt = parent?.getComponent(UITransform);
+          if (art.active && parent && parentUt) {
+            slideNode = art;
+            rest = art.position.clone();
+            const fromWp = this._map.getCellWorldPosition(entry.current);
+            const fromLocal = parentUt.convertToNodeSpaceAR(fromWp);
+            // 保留贴底偏移（rest.y），只平移格子中心差。
+            startLocal = new Vec3(fromLocal.x, fromLocal.y + rest.y, 0);
+          }
+        }
+      }
+
+      if (slideNode && startLocal) {
+        Tween.stopAllByTarget(slideNode);
+        slideNode.setPosition(startLocal);
+        entry.slideNode = slideNode;
+        entry.slideRestPos = rest;
+        entry.ghost = null;
+        continue;
+      }
+
+      // 真身拿不到（异步贴图未就绪等）：退回场景根上的占位圆，用与近战相同的「世界坐标当本地」算法。
+      const ghost = this._map.createMoveFxPlaceholder(
+        entry.current,
+        entityId === 'PLAYER' ? new Color(120, 200, 255, 220) : undefined,
+      );
+      const fromWp = this._map.getCellWorldPosition(entry.current);
+      ghost.setParent(this.node);
+      ghost.setSiblingIndex(-1);
+      ghost.setPosition(fromWp.x, fromWp.y, 0);
+      entry.ghost = ghost;
+      entry.slideNode = ghost;
+      entry.slideRestPos = this._map.getCellWorldPosition(entry.finalTo);
     }
   }
 
@@ -896,9 +910,32 @@ export class ExpeditionController extends Component {
     return this._playEntityMovePath([ev]);
   }
 
+  private _tweenNodePosition(node: Node, to: Vec3, dur: number): Promise<void> {
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = (force: boolean) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(fallbackTimer);
+        this._trackedTimeouts.delete(fallbackTimer);
+        if (force && node.isValid) node.setPosition(to.x, to.y, to.z);
+        resolve();
+      };
+      const fallbackTimer = this._trackTimeout(() => finish(true), dur * 1000 + 200);
+      if (!node.isValid) {
+        finish(true);
+        return;
+      }
+      Tween.stopAllByTarget(node);
+      tween(node)
+        .to(dur, { position: new Vec3(to.x, to.y, to.z) }, { easing: 'sineInOut' })
+        .call(() => finish(false))
+        .start();
+    });
+  }
+
   /**
-   * 同一实体路径：多格先拆成正交单格，再逐步 await 滑步。
-   * 单格固定 MOVE_CELL_DURATION_SEC + sineInOut（匀速进出，避免 quadOut 前冲像瞬移）。
+   * 同一实体：多格拆单格，逐步把 slideNode（真 OccupantArt / 兜底幽灵）滑到下一格。
    */
   private async _playEntityMovePath(
     stepsInput: Array<{ entityId: string; from: Coord; to: Coord }> | {
@@ -928,26 +965,18 @@ export class ExpeditionController extends Component {
 
     const entityId = steps[0]!.entityId;
     const entry = this._moveGhosts.get(entityId);
-    if (!entry?.ghost?.isValid) {
-      if (entry) this._clearMoveGhost(entityId);
+    if (!entry) return;
+
+    if (!entry.slideNode?.isValid) {
+      this._prepareMoveSlides();
+    }
+    const node = entry.slideNode;
+    if (!node?.isValid) {
+      this._clearMoveGhost(entityId);
       return;
     }
 
     if (entityId === 'PLAYER') playSfx(SFX_IDS.PLAYER_MOVE);
-    if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
-      this._map.setOccupantVisible(entry.finalTo, false);
-    }
-    if (entry.restoreBossIcon) {
-      this._map.setBossIconVisible(false);
-      this._map.setBossIconLocked(true);
-    }
-
-    const ghost = entry.ghost;
-    ghost.setParent(this.node);
-    ghost.setSiblingIndex(-1);
-    ghost.active = true;
-    const opacity = ghost.getComponent(UIOpacity) || ghost.addComponent(UIOpacity);
-    opacity.opacity = 255;
 
     let playSteps = steps;
     const cur = entry.current;
@@ -957,7 +986,6 @@ export class ExpeditionController extends Component {
       );
       if (startIdx > 0) playSteps = steps.slice(startIdx);
     }
-    // 多格 MOVE（collapse / 冲锋）拆成单格；已是单格则保持一步。
     const unitSteps: Array<{ from: Coord; to: Coord }> = [];
     for (const step of playSteps) {
       const expanded = expandOrthogonalMoveSteps(step.from, step.to);
@@ -966,44 +994,40 @@ export class ExpeditionController extends Component {
     }
     if (unitSteps.length === 0) return;
 
-    const dur = MOVE_CELL_DURATION_SEC;
-    for (const step of unitSteps) {
-      if (!ghost.isValid) break;
-      // 每步独立 tween：上一步必须先停干净，再从 from 滑到 to。
-      Tween.stopAllByTarget(ghost);
-      if (this._state && isCellRevealed(this._state.floorState.revealed, entry.finalTo)) {
-        this._map.setOccupantVisible(entry.finalTo, false);
+    const usingGhostFallback = entry.ghost !== null && node === entry.ghost;
+    const parentUt = !usingGhostFallback
+      ? node.parent?.getComponent(UITransform) ?? null
+      : null;
+
+    const targetPosFor = (cell: Coord, isFinal: boolean): Vec3 => {
+      if (usingGhostFallback) {
+        const wp = this._map!.getCellWorldPosition(cell);
+        return new Vec3(wp.x, wp.y, 0);
       }
-      // refresh/镜头之后再取世界坐标，保证大地图滚动后仍对准格子。
-      const fromLocal = this._worldToFxLocal(this._map.getCellWorldPosition(step.from));
-      const toLocal = this._worldToFxLocal(this._map.getCellWorldPosition(step.to));
-      ghost.setPosition(fromLocal.x, fromLocal.y, 0);
-      ghost.setSiblingIndex(-1);
-      await new Promise<void>((resolve) => {
-        let finished = false;
-        const finish = (forceStop: boolean) => {
-          if (finished) return;
-          finished = true;
-          clearTimeout(fallbackTimer);
-          this._trackedTimeouts.delete(fallbackTimer);
-          if (forceStop && ghost.isValid) {
-            ghost.setPosition(toLocal.x, toLocal.y, 0);
-          }
-          resolve();
-        };
-        const fallbackTimer = this._trackTimeout(() => finish(true), dur * 1000 + 180);
-        if (!ghost.isValid) {
-          finish(true);
-          return;
-        }
-        tween(ghost)
-          .to(dur, { position: new Vec3(toLocal.x, toLocal.y, 0) }, { easing: 'sineInOut' })
-          .call(() => finish(false))
-          .start();
-      });
+      if (isFinal) return entry.slideRestPos.clone();
+      if (entry.restoreBossIcon) {
+        const p = this._map!.computeBossIconLocalPos(cell);
+        return new Vec3(p.x, p.y, 0);
+      }
+      if (!parentUt) return entry.slideRestPos.clone();
+      const local = parentUt.convertToNodeSpaceAR(this._map!.getCellWorldPosition(cell));
+      return new Vec3(local.x, local.y + entry.slideRestPos.y, 0);
+    };
+
+    const dur = MOVE_CELL_DURATION_SEC;
+    for (let i = 0; i < unitSteps.length; i += 1) {
+      const step = unitSteps[i]!;
+      if (!node.isValid) break;
+      const isFinal = step.to.x === entry.finalTo.x && step.to.y === entry.finalTo.y;
+      const fromPos = targetPosFor(step.from, false);
+      // 非最后一格的 from 也要用格子坐标；若已在正确位置可跳过重钉。
+      node.setPosition(fromPos.x, fromPos.y, fromPos.z);
+      const toPos = targetPosFor(step.to, isFinal);
+      await this._tweenNodePosition(node, toPos, dur);
       entry.current = { x: step.to.x, y: step.to.y };
     }
 
+    if (node.isValid) node.setPosition(entry.slideRestPos);
     const last = unitSteps[unitSteps.length - 1]!;
     if (last.to.x === entry.finalTo.x && last.to.y === entry.finalTo.y) {
       this._clearMoveGhost(entityId);
@@ -2075,7 +2099,8 @@ export class ExpeditionController extends Component {
       );
       if (sentinel && escape) {
         const dist = Math.abs(sentinel.pos.x - escape.pos.x) + Math.abs(sentinel.pos.y - escape.pos.y);
-        const moves = Math.max(1, Math.ceil(dist / 2));
+        const move = 3;
+        const moves = Math.max(1, Math.ceil(dist / move));
         pressureLines.push(`逃离约 ${moves} 回合`);
       }
     }
@@ -3055,28 +3080,20 @@ export class ExpeditionController extends Component {
     // fx 死亡退场：必须在 state 切换 + _refreshAll 之前，用旧 state 找怪物坐标。
     this._spawnKillFloaters(this._state, result.events);
 
-    // ★ 移动幽灵必须在 refresh 之前完成：
-    // 1) 从旧格克隆贴图  2) 写入隐藏标记  3) refresh 才不会把怪「瞬移」画到终点
+    // ★ 只登记移动计划（不克隆、不预藏）。克隆幽灵在 Mask 下经常不可见。
     this._registerMoveGhosts(this._state, result.events, result.state.floorState.revealed);
-    for (const entry of this._moveGhosts.values()) {
-      const toRevealed = isCellRevealed(result.state.floorState.revealed, entry.finalTo);
-      if (toRevealed) this._map?.setOccupantVisible(entry.finalTo, false);
-      if (entry.restoreBossIcon) {
-        this._map?.setBossIconVisible(false);
-        this._map?.setBossIconLocked(true);
-      }
-    }
 
     this._state = result.state;
     this._rebuildInputHints();
     const tRefresh = perfNow();
     this._refreshAll();
     perfMark('apply.refreshAll', tRefresh, `events=${result.events.length}`);
-    this._raiseMoveGhosts();
+    // refresh 同帧把终点真身钉回起点，随后事件回放再滑到落点。
+    this._prepareMoveSlides();
 
     const tEvents = perfNow();
     await this._playEvents(result.events);
-    // 兜底：回放结束务必解开 boss 锁、清幽灵隐藏，避免 Occupant 永久消失被误读成「怪不追了」。
+    // 兜底：回放结束复位滑步节点、解锁 Boss。
     this._clearAllMoveGhosts();
     this._map?.setBossIconLocked(false);
     perfMark('apply.events', tEvents);
@@ -3358,7 +3375,8 @@ export class ExpeditionController extends Component {
     const dist = manhattan(attackerPos, hitPos);
     // 怪物优先 OccupantArt / MOVE ghost；地形用 EntityArt（击碎后可能已空）。
     let targetNode = monster
-      ? (this._moveGhosts.get(ev.targetId)?.ghost
+      ? (this._moveGhosts.get(ev.targetId)?.slideNode
+        ?? this._moveGhosts.get(ev.targetId)?.ghost
         ?? this._map.getOccupantArtAt(hitPos)
         ?? this._map.getOccupantArtAt(monster.pos))
       : (this._map.getEntityArtAt(hitPos) ?? this._map.getEntityArtAt(entity!.pos));
@@ -3431,7 +3449,8 @@ export class ExpeditionController extends Component {
       const monster = this._state.floorState.monsters.find((m) => m.id === hit.targetId);
       if (!monster) continue;
       const pos = resolveAttackHitPos(this._playbackEvents, hit.targetId, monster.pos) ?? monster.pos;
-      const node = this._moveGhosts.get(hit.targetId)?.ghost
+      const node = this._moveGhosts.get(hit.targetId)?.slideNode
+        ?? this._moveGhosts.get(hit.targetId)?.ghost
         ?? this._map.getOccupantArtAt(pos)
         ?? this._map.getOccupantArtAt(monster.pos);
       if (!node?.isValid) continue;
@@ -3644,24 +3663,9 @@ export class ExpeditionController extends Component {
         Effects.slowMotion(0.3, 1.2);
         break;
       }
-      // ── 玩家移动：pre-clone 幽灵滑到新格（0.15s quadOut） ──
-      case 'MOVE': {
-        if (ev.entityId !== 'PLAYER') break;
-        playSfx(SFX_IDS.PLAYER_MOVE);
-        const key = `${ev.from.x},${ev.from.y}`;
-        const entry = this._moveGhosts.get(key);
-        if (!entry?.ghost?.isValid) break;
-        // _refreshAll 已在 _playEvents 之前完成，此处拿到的是滚动后世界坐标，
-        // ghost 父节点是 Canvas 根（世界原点），local == world，方向与格子严格一致。
-        const fromWp = this._map.getCellWorldPosition(ev.from);
-        const toWp = this._map.getCellWorldPosition(ev.to);
-        entry.ghost.setPosition(fromWp.x, fromWp.y, 0);
-        tween(entry.ghost)
-          .to(0.15, { position: new Vec3(toWp.x, toWp.y, 0) }, { easing: 'quadOut' })
-          .call(() => this._clearMoveGhost(key))
-          .start();
+      // MOVE 滑步由 `_playMoveBatch` / `_playEntityMovePath` 负责，这里不再重复播。
+      case 'MOVE':
         break;
-      }
       // ── 灼烧上身（熔岩领主专属）：橙红 flash ──
       case 'BURN_APPLIED': {
         const node = this._map.getOccupantArtAt(this._state.floorState.player);

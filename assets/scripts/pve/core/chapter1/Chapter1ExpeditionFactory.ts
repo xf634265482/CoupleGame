@@ -9,7 +9,7 @@ import {
   makeSpiritRat,
 } from '../Chapter1Monsters';
 import { createFogGrid, revealAround } from '../FogSystem';
-import { bossChapterScaling, MONSTER_BASE } from '../PveConstants';
+import { bossChapterScaling, CHAPTER1_CHASE_SENTINEL_HP, MONSTER_BASE } from '../PveConstants';
 import {
   getBalanceSnapshot,
   getPlayerBalanceConfig,
@@ -74,6 +74,22 @@ export function createChapter1Monster(spawn: Chapter1MonsterSpawn): Monster {
   }
   if (spawn.role === 'OBJECTIVE') {
     monster = { ...monster, aiState: 'FLEE' };
+  }
+  if (spawn.kind === 'GOBLIN_SENTINEL' && spawn.role === 'OBJECTIVE') {
+    monster = {
+      ...monster,
+      hp: CHAPTER1_CHASE_SENTINEL_HP,
+      maxHp: CHAPTER1_CHASE_SENTINEL_HP,
+      aggroRadius: Math.max(monster.aggroRadius, 4),
+    };
+  }
+  // 第 4 层追逃守卫：高仇恨、开局追击，便于拦截贴着哨兵输出的玩家。
+  if (spawn.id.startsWith('f4_') && spawn.kind !== 'GOBLIN_SENTINEL') {
+    monster = {
+      ...monster,
+      aggroRadius: Math.max(monster.aggroRadius, 8),
+      aiState: 'CHASE',
+    };
   }
   if (!spawn.rewardEligible) {
     monster = { ...monster, summoned: true };
